@@ -40,8 +40,10 @@ export const SnapshotI32 = {
   /** High and low half of the 64 bit world state hash (F3 overlay). */
   StateHashHi: 8,
   StateHashLo: 9,
+  /** Bumped whenever the ground changed; the renderer rebuilds its tiles then. */
+  MapRevision: 10,
 } as const;
-export const SNAPSHOT_I32_COUNT = 10;
+export const SNAPSHOT_I32_COUNT = 12;
 
 /**
  * Float fields of one slot. Money is an exact integer number of cents; it lives

@@ -237,6 +237,44 @@ The Tauri template ships `crate-type = ["staticlib", "cdylib", "rlib"]` for
 mobile targets. This game is desktop only, and the two extra artefacts cost
 about a gigabyte of build output for nothing.
 
+### D-032 The tile layers live in a SharedArrayBuffer
+
+`TileMap` allocates one shared buffer and lays every layer out inside it, so the
+renderer reads the map in place instead of receiving a nine megabyte copy on
+every change. The worker owns the write side, the main thread only reads, and a
+`revision` counter published through the snapshot tells the renderer when to
+rebuild its sprites - comparing megabytes of terrain per frame would cost more
+than drawing it.
+
+### D-033 The tile artwork is generated at startup, not baked at build time
+
+Section 16.2 asks for procedurally generated sprites and proposes a build step
+that writes PNG atlases. The same procedural code runs at startup into one
+canvas instead: no PNG encoder, no atlas manifest, no build step to keep in
+sync, and the whole set costs about twenty milliseconds. The atlas is drawn at
+twice the zoom-1 size because downscaling looks good and upscaling does not. If
+load time ever matters the identical function can move to build time.
+
+### D-034 A terraform action may only drag a bounded amount of earth
+
+Because neighbouring corners must stay within one level of each other (D-018),
+raising a corner on a hillside drags every corner further down the slope - on a
+uniform hillside that chain reaches the bottom of the hill, so one click would
+relandscape a valley. `MAX_TERRAFORM_CORNERS` caps it at 60, which still allows
+raising a corner four levels out of flat ground (a 7 x 7 cone of 49 corners) and
+refuses anything larger with its own message. Every refusal names its actual
+cause - height limit, built-up ground, or too much earth - because a single
+generic "not possible here" leaves the player guessing (section 17.3).
+
+### D-035 The map view survives being unmounted mid-initialisation
+
+`Application.init` is asynchronous and React's StrictMode unmounts on every
+mount, so `dispose()` regularly arrives while the WebGL context is still being
+created. Destroying an uninitialised Application throws and took the whole React
+tree down. Disposal that arrives early is now recorded and carried out by
+`attach` when it finishes. This is not a StrictMode quirk - it would happen on
+any remount.
+
 ### D-031 The app reports its startup environment to the shell
 
 `startup_report` prints version, `crossOriginIsolated`, SharedArrayBuffer

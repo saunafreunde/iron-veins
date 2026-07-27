@@ -57,6 +57,20 @@
   "ui.mapgen.phase.6": "Checking the starting conditions",
   "ui.mapgen.retry": "Seed was unplayable, attempt {attempt}",
 
+  "ui.tile.title": "Terrain",
+  "ui.tile.none": "Point at the map.",
+  "ui.tile.position": "Position",
+  "ui.tile.height": "Height level",
+  "ui.tile.terrain": "Ground",
+  "ui.tile.town": "Town",
+  "ui.tile.openCountry": "open country",
+
+  "ui.tool.select": "Select",
+  "ui.tool.raise": "Raise",
+  "ui.tool.lower": "Lower",
+  "ui.tool.level": "Level",
+  "ui.tool.costHint": "{amount} per moved corner and level. Right mouse pans, wheel zooms.",
+
   "ui.system.title": "System status",
   "ui.system.map": "Map",
   "ui.system.towns": "Towns / industries",
@@ -89,6 +103,7 @@
   "terraform.reject.atLimit": "The height limit of the map is reached here.",
   "terraform.reject.occupied": "Roads, buildings or an industry stand on this ground.",
   "terraform.reject.tooExpensive": "Moving this much earth costs more than the balance.",
+  "terraform.reject.tooMuchEarth": "Too much surrounding ground would have to move with it. Work outwards from level ground.",
 
   "terrain.water": "Water",
   "terrain.coast": "Coast",

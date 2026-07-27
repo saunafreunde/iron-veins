@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { MAX_HEIGHT, SEA_LEVEL, TERRAFORM_COST_PER_STEP_CT } from '../../src/sim/constants';
+import {
+  MAX_HEIGHT,
+  MAX_TERRAFORM_CORNERS,
+  SEA_LEVEL,
+  TERRAFORM_COST_PER_STEP_CT,
+} from '../../src/sim/constants';
 import { TileMap } from '../../src/sim/map/TileMap';
 import { Terrain } from '../../src/sim/map/terrain';
 import {
@@ -62,6 +67,34 @@ describe('raising and lowering', () => {
     const second = applyTerraform(map, 16, 16, TerraformDirection.Raise);
     expect(second.changedCorners).toBeGreaterThan(1);
     expect(second.costCt).toBe(second.changedCorners * TERRAFORM_COST_PER_STEP_CT);
+  });
+
+  it('refuses to drag more earth than one action may move', () => {
+    const map = flatMap();
+    // Each level of the cone needs the next ring of corners: 1, 9, 25, 49, 81.
+    // The fifth one is over the cap and has to be refused - otherwise a single
+    // click could relandscape a whole valley.
+    for (let level = 0; level < 4; level++) {
+      expect(applyTerraform(map, 16, 16, TerraformDirection.Raise).ok).toBe(true);
+    }
+    expect(map.cornerHeight[map.cornerIndex(16, 16)]).toBe(PLATEAU + 4);
+
+    const fifth = estimateTerraform(map, 16, 16, TerraformDirection.Raise);
+    expect(fifth.ok).toBe(false);
+    expect(fifth.reasonKey).toBe('terraform.reject.tooMuchEarth');
+    expect(MAX_TERRAFORM_CORNERS).toBeLessThan(81);
+    expect(MAX_TERRAFORM_CORNERS).toBeGreaterThanOrEqual(49);
+  });
+
+  it('blames occupied ground rather than the height limit', () => {
+    const map = flatMap();
+    // A step down next to a road: raising drags the lower corner, which is
+    // blocked by the road tile.
+    map.cornerHeight[map.cornerIndex(20, 20)] = PLATEAU - 1;
+    map.roadBits[map.tileIndex(19, 19)] = RoadBit.East;
+
+    const result = estimateTerraform(map, 21, 21, TerraformDirection.Raise);
+    if (!result.ok) expect(result.reasonKey).not.toBe('terraform.reject.atLimit');
   });
 
   it('refuses to go above the height limit', () => {

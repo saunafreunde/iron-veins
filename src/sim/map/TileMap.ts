@@ -43,23 +43,69 @@ export class TileMap {
   /** 1 for water connected to the map border, 0 for inland lakes. Derived. */
   readonly oceanMask: Uint8Array;
 
-  constructor(size: number) {
+  /**
+   * All layers live in one SharedArrayBuffer so the renderer can read the map
+   * directly instead of receiving a copy per change. The worker owns the write
+   * side; the main thread only ever reads.
+   */
+  readonly buffer: SharedArrayBuffer;
+
+  /**
+   * Bumped whenever the ground changes. The renderer rebuilds its tile sprites
+   * when this differs from what it last drew, which is far cheaper than
+   * comparing megabytes of terrain.
+   */
+  revision = 0;
+
+  constructor(size: number, buffer?: SharedArrayBuffer) {
     this.size = size;
     const tiles = size * size;
     const corners = (size + 1) * (size + 1);
+    const fresh = buffer === undefined;
 
-    this.cornerHeight = new Uint8Array(corners);
-    // Terrain.Water is 0, so a zero-filled array would be an all-sea world and
-    // every later step that skips water would skip everything. A fresh map is
-    // flat grassland until the hydrology step floods it.
-    this.terrain = new Uint8Array(tiles).fill(Terrain.Grass);
-    this.roadBits = new Uint8Array(tiles);
-    this.townId = new Int16Array(tiles).fill(-1);
-    this.industryId = new Int16Array(tiles).fill(-1);
-    this.buildingKind = new Uint8Array(tiles);
-    this.buildingLevel = new Uint8Array(tiles);
-    this.landmassId = new Int32Array(tiles).fill(-1);
-    this.oceanMask = new Uint8Array(tiles);
+    this.buffer = buffer ?? new SharedArrayBuffer(TileMap.bufferBytes(size));
+
+    // Wider elements come first so every view starts on its natural alignment.
+    let offset = 0;
+    this.landmassId = new Int32Array(this.buffer, offset, tiles);
+    offset += tiles * 4;
+    this.townId = new Int16Array(this.buffer, offset, tiles);
+    offset += tiles * 2;
+    this.industryId = new Int16Array(this.buffer, offset, tiles);
+    offset += tiles * 2;
+    this.cornerHeight = new Uint8Array(this.buffer, offset, corners);
+    offset += corners;
+    this.terrain = new Uint8Array(this.buffer, offset, tiles);
+    offset += tiles;
+    this.roadBits = new Uint8Array(this.buffer, offset, tiles);
+    offset += tiles;
+    this.buildingKind = new Uint8Array(this.buffer, offset, tiles);
+    offset += tiles;
+    this.buildingLevel = new Uint8Array(this.buffer, offset, tiles);
+    offset += tiles;
+    this.oceanMask = new Uint8Array(this.buffer, offset, tiles);
+
+    if (fresh) {
+      // Terrain.Water is 0, so a zero-filled array would be an all-sea world
+      // and every later step that skips water would skip everything. A fresh
+      // map is flat grassland until the hydrology step floods it.
+      this.terrain.fill(Terrain.Grass);
+      this.townId.fill(-1);
+      this.industryId.fill(-1);
+      this.landmassId.fill(-1);
+    }
+  }
+
+  /** Byte size of the shared buffer for a map of this edge length. */
+  static bufferBytes(size: number): number {
+    const tiles = size * size;
+    const corners = (size + 1) * (size + 1);
+    return tiles * 8 + corners + tiles * 5;
+  }
+
+  /** Read-side view on a map the worker owns. */
+  static fromBuffer(size: number, buffer: SharedArrayBuffer): TileMap {
+    return new TileMap(size, buffer);
   }
 
   get tileCount(): number {

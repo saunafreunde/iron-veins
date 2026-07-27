@@ -166,11 +166,46 @@ body {
   color: var(--text-muted);
 }
 
-.workspace__panels {
+/* Map mode: the canvas takes everything the sidebar does not. */
+.workspace--map {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: 1fr 320px;
+  padding: 0;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.mapcanvas {
+  position: relative;
+  overflow: hidden;
+  background: #11161c;
+  cursor: crosshair;
+}
+
+.mapcanvas canvas {
+  display: block;
+}
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
   gap: var(--gap);
-  align-items: start;
+  padding: var(--gap);
+  overflow-y: auto;
+  border-left: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.button--active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #1a1a1a;
+  font-weight: 600;
+}
+
+.progress {
+  width: 100%;
+  height: 6px;
 }
 
 .panel {

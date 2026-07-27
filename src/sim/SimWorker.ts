@@ -89,6 +89,7 @@ function publishSnapshot(current: World, sink: SnapshotWriter): void {
   i32[SnapshotI32.SimRateCentiHz] = simRateCentiHz;
   i32[SnapshotI32.StateHashHi] = stateHashHi;
   i32[SnapshotI32.StateHashLo] = stateHashLo;
+  i32[SnapshotI32.MapRevision] = current.map.revision;
 
   const f64 = sink.draftF64;
   f64[SnapshotF64.CashCt] = current.company.cashCt;
@@ -199,8 +200,22 @@ function startGame(message: Extract<MainToWorkerMessage, { type: 'init' }>): voi
     companyName: world.company.name,
     companyColorIndex: world.company.colorIndex,
     mapSize: world.map.size,
+    mapBuffer: world.map.buffer,
     townCount: world.towns.length,
     industryCount: world.industries.length,
+    towns: world.towns.map((town) => ({
+      id: town.id,
+      name: town.name,
+      x: town.x,
+      y: town.y,
+      sizeClass: town.sizeClass,
+    })),
+    industries: world.industries.map((industry) => ({
+      id: industry.id,
+      type: industry.type,
+      x: industry.x,
+      y: industry.y,
+    })),
   });
 }
 

@@ -1,6 +1,11 @@
 import { create } from 'zustand';
 import { setLocale as applyLocale, type Locale } from '../i18n';
+import type { TileInfo } from '../render/MapView';
+import type { IndustryMarker, TownMarker } from '../shared/protocol';
 import type { MapGenPhase } from '../sim/mapgen';
+
+/** What a left click on the map does. */
+export type Tool = 'none' | 'raise' | 'lower' | 'level';
 
 /** The part of the store that is refreshed from the shared snapshot buffer. */
 export interface SnapshotValues {
@@ -11,6 +16,7 @@ export interface SnapshotValues {
   speedIndex: number;
   commandsExecuted: number;
   simRateCentiHz: number;
+  mapRevision: number;
   cashCt: number;
   loanCt: number;
   loanLimitCt: number;
@@ -28,6 +34,14 @@ export interface SimUiState extends SnapshotValues {
   mapSize: number;
   townCount: number;
   industryCount: number;
+  /** Shared tile layers, handed over by the worker once the map exists. */
+  mapBuffer: SharedArrayBuffer | null;
+  towns: readonly TownMarker[];
+  industries: readonly IndustryMarker[];
+  hoveredTile: TileInfo | null;
+  selectedTile: TileInfo | null;
+  /** Active construction tool; decides what a left click does. */
+  tool: Tool;
   companyName: string;
   companyColorIndex: number;
   appVersion: string;
@@ -44,7 +58,15 @@ export interface SimUiState extends SnapshotValues {
   applySnapshot: (values: SnapshotValues) => void;
   setLocale: (locale: Locale) => void;
   setGenerating: (phase: MapGenPhase, attempt: number) => void;
-  setWorldSummary: (mapSize: number, townCount: number, industryCount: number) => void;
+  setWorld: (world: {
+    mapSize: number;
+    mapBuffer: SharedArrayBuffer;
+    towns: readonly TownMarker[];
+    industries: readonly IndustryMarker[];
+  }) => void;
+  setHoveredTile: (tile: TileInfo | null) => void;
+  setSelectedTile: (tile: TileInfo | null) => void;
+  setTool: (tool: Tool) => void;
   setReady: (seed: number) => void;
   setCompany: (name: string, colorIndex: number) => void;
   setPlatform: (appVersion: string, isDesktop: boolean) => void;
@@ -62,6 +84,7 @@ export const useSimStore = create<SimUiState>((set) => ({
   speedIndex: 0,
   commandsExecuted: 0,
   simRateCentiHz: 0,
+  mapRevision: 0,
   cashCt: 0,
   loanCt: 0,
   loanLimitCt: 0,
@@ -75,6 +98,12 @@ export const useSimStore = create<SimUiState>((set) => ({
   mapSize: 0,
   townCount: 0,
   industryCount: 0,
+  mapBuffer: null,
+  towns: [],
+  industries: [],
+  hoveredTile: null,
+  selectedTile: null,
+  tool: 'none',
   companyName: '',
   companyColorIndex: 0,
   appVersion: '',
@@ -91,8 +120,18 @@ export const useSimStore = create<SimUiState>((set) => ({
     set({ locale });
   },
   setGenerating: (phase, attempt) => set({ generatingPhase: phase, generatingAttempt: attempt }),
-  setWorldSummary: (mapSize, townCount, industryCount) =>
-    set({ mapSize, townCount, industryCount }),
+  setWorld: (world) =>
+    set({
+      mapSize: world.mapSize,
+      mapBuffer: world.mapBuffer,
+      towns: world.towns,
+      industries: world.industries,
+      townCount: world.towns.length,
+      industryCount: world.industries.length,
+    }),
+  setHoveredTile: (tile) => set({ hoveredTile: tile }),
+  setSelectedTile: (tile) => set({ selectedTile: tile }),
+  setTool: (tool) => set({ tool }),
   setReady: (seed) => set({ ready: true, seed, generatingPhase: null }),
   setCompany: (name, colorIndex) => set({ companyName: name, companyColorIndex: colorIndex }),
   setPlatform: (appVersion, isDesktop) => set({ appVersion, isDesktop }),

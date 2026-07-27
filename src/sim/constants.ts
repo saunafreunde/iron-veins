@@ -167,6 +167,24 @@ export const TERRAFORM_ROCK_SURCHARGE = 2.5;
 /** Multiplier applied when the affected tile is water (reclamation). */
 export const TERRAFORM_WATER_SURCHARGE = 4.0;
 
+/**
+ * Largest number of corners one terraform action may move.
+ *
+ * Because neighbouring corners must stay within one level of each other,
+ * raising a corner on a hillside drags every corner further down the slope with
+ * it - on a uniform hillside that chain runs to the bottom of the hill. Without
+ * a cap a single click would relandscape a whole valley. 24 corners is roughly
+ * a two tile radius: enough to smooth a bumpy building site, far too little to
+ * move a mountain, and the player shapes larger areas by working outwards from
+ * flat ground, which is how it reads in play anyway.
+ *
+ * The value is set so that raising one corner four levels out of flat ground
+ * still works: that cone is 7 x 7 = 49 corners. A fifth level would need 81 and
+ * is refused, as is any drag along a hillside - that spreads in two dimensions
+ * and passes the cap after a handful of tiles.
+ */
+export const MAX_TERRAFORM_CORNERS = 60;
+
 // ------------------------------------------------------------ simulation clock
 
 /** Fixed simulation frequency. [Hz] */

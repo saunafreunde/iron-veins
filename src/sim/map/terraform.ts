@@ -1,5 +1,6 @@
 import {
   MAX_HEIGHT,
+  MAX_TERRAFORM_CORNERS,
   SEA_LEVEL,
   TERRAFORM_COST_PER_STEP_CT,
   TERRAFORM_ROCK_SURCHARGE,
@@ -29,6 +30,7 @@ export const TerraformReason = {
   AtLimit: 'terraform.reject.atLimit',
   Occupied: 'terraform.reject.occupied',
   TooExpensive: 'terraform.reject.tooExpensive',
+  TooMuchEarth: 'terraform.reject.tooMuchEarth',
 } as const;
 
 export interface TerraformResult {
@@ -85,22 +87,32 @@ function cornerIsFree(map: TileMap, x: number, y: number): boolean {
   return true;
 }
 
+/** Either the corners an operation would move, or why it cannot happen. */
+type AffectedResult =
+  | { readonly ok: true; readonly corners: number[] }
+  | { readonly ok: false; readonly reasonKey: string };
+
 /**
  * Collect every corner that has to move so that `x, y` can go one level in
- * `direction` without breaking the invariant. Returns null when the move is
- * impossible; the returned indices are unique.
+ * `direction` without breaking the invariant.
+ *
+ * Every refusal names its own cause: hitting the height limit, running into
+ * built-up ground, or dragging more earth than one action may move. A single
+ * generic "not possible here" would leave the player guessing (section 17.3).
  */
 function collectAffected(
   map: TileMap,
   x: number,
   y: number,
   direction: TerraformDirection,
-): number[] | null {
+): AffectedResult {
   const stride = map.size + 1;
   const heights = map.cornerHeight;
   const start = y * stride + x;
   const target = heights[start]! + direction;
-  if (target < 0 || target > MAX_HEIGHT) return null;
+  if (target < 0 || target > MAX_HEIGHT) {
+    return { ok: false, reasonKey: TerraformReason.AtLimit };
+  }
 
   const affected: number[] = [start];
   const seen = new Set<number>([start]);
@@ -131,15 +143,22 @@ function collectAffected(
         if (!needsToMove) continue;
 
         const neighbourTarget = neighbourHeight + direction;
-        if (neighbourTarget < 0 || neighbourTarget > MAX_HEIGHT) return null;
-        if (!cornerIsFree(map, nx, ny)) return null;
+        if (neighbourTarget < 0 || neighbourTarget > MAX_HEIGHT) {
+          return { ok: false, reasonKey: TerraformReason.AtLimit };
+        }
+        if (!cornerIsFree(map, nx, ny)) {
+          return { ok: false, reasonKey: TerraformReason.Occupied };
+        }
+        if (affected.length >= MAX_TERRAFORM_CORNERS) {
+          return { ok: false, reasonKey: TerraformReason.TooMuchEarth };
+        }
 
         seen.add(neighbour);
         affected.push(neighbour);
       }
     }
   }
-  return affected;
+  return { ok: true, corners: affected };
 }
 
 /** Recompute water, coast and the derived layers after the shoreline moved. */
@@ -210,10 +229,10 @@ export function estimateTerraform(
   }
 
   const affected = collectAffected(map, x, y, direction);
-  if (affected === null) {
+  if (!affected.ok) {
     return {
       ok: false,
-      reasonKey: TerraformReason.AtLimit,
+      reasonKey: affected.reasonKey,
       costCt: 0,
       changedCorners: 0,
       changedShoreline: false,
@@ -222,8 +241,8 @@ export function estimateTerraform(
 
   return {
     ok: true,
-    costCt: priceFor(affected.length, surchargeAt(map, x, y)),
-    changedCorners: affected.length,
+    costCt: priceFor(affected.corners.length, surchargeAt(map, x, y)),
+    changedCorners: affected.corners.length,
     changedShoreline: false,
   };
 }
@@ -241,16 +260,19 @@ export function applyTerraform(
   const estimate = estimateTerraform(map, x, y, direction);
   if (!estimate.ok) return estimate;
 
-  const affected = collectAffected(map, x, y, direction)!;
-  for (const corner of affected) {
+  const affected = collectAffected(map, x, y, direction);
+  if (!affected.ok) return { ...estimate, ok: false, reasonKey: affected.reasonKey };
+
+  for (const corner of affected.corners) {
     map.cornerHeight[corner] = map.cornerHeight[corner]! + direction;
   }
+  map.revision++;
 
-  const changedShoreline = refreshShoreline(map, affected);
+  const changedShoreline = refreshShoreline(map, affected.corners);
   return {
     ok: true,
     costCt: estimate.costCt,
-    changedCorners: affected.length,
+    changedCorners: affected.corners.length,
     changedShoreline,
   };
 }

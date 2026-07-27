@@ -3,6 +3,8 @@ import { LOCALES, t } from '../i18n';
 import { MAPGEN_PHASE_COUNT } from '../sim/mapgen';
 import { CompanyPanel } from './CompanyPanel';
 import { FinancePanel } from './FinancePanel';
+import { MapCanvas } from './MapCanvas';
+import { TilePanel } from './TilePanel';
 import type { SimClient } from './SimClient';
 import { StatusBar } from './StatusBar';
 import { SystemPanel } from './SystemPanel';
@@ -95,22 +97,25 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
     <div className="app">
       <StatusBar client={client} />
 
-      <main className="workspace">
-        <div className="workspace__intro">
-          <h1>{t('app.title')}</h1>
-          <p>{t('app.tagline')}</p>
-        </div>
-
-        {!ready && <MapGenProgress />}
-
-        {ready && (
-          <div className="workspace__panels">
+      {ready ? (
+        <main className="workspace workspace--map">
+          <MapCanvas client={client} />
+          <aside className="sidebar">
+            <TilePanel />
             <CompanyPanel client={client} />
             <FinancePanel client={client} />
             <SystemPanel />
+          </aside>
+        </main>
+      ) : (
+        <main className="workspace">
+          <div className="workspace__intro">
+            <h1>{t('app.title')}</h1>
+            <p>{t('app.tagline')}</p>
           </div>
-        )}
-      </main>
+          <MapGenProgress />
+        </main>
+      )}
 
       <footer className="appbar">
         <span className="appbar__label">{t('ui.locale.label')}</span>

@@ -16,6 +16,22 @@ import type { MapGenPhase } from '../sim/mapgen';
  * SharedArrayBuffer snapshot.
  */
 
+/** Everything the renderer needs to label a town, without shipping the object. */
+export interface TownMarker {
+  readonly id: number;
+  readonly name: string;
+  readonly x: number;
+  readonly y: number;
+  readonly sizeClass: number;
+}
+
+export interface IndustryMarker {
+  readonly id: number;
+  readonly type: number;
+  readonly x: number;
+  readonly y: number;
+}
+
 export type MainToWorkerMessage =
   | {
       readonly type: 'init';
@@ -38,8 +54,12 @@ export type WorkerToMainMessage =
       readonly companyName: string;
       readonly companyColorIndex: number;
       readonly mapSize: number;
+      /** Shared tile layers - the renderer reads them in place, never a copy. */
+      readonly mapBuffer: SharedArrayBuffer;
       readonly townCount: number;
       readonly industryCount: number;
+      readonly towns: readonly TownMarker[];
+      readonly industries: readonly IndustryMarker[];
     }
   | { readonly type: 'companyChanged'; readonly name: string; readonly colorIndex: number }
   | { readonly type: 'commandRejected'; readonly reasonKey: string }

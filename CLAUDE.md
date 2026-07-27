@@ -116,8 +116,21 @@ tools. Both are installed (Rust 1.97.1, VS 2022 Build Tools, Windows SDK
 10.0.26100). If a shell reports `cargo` missing, its environment predates the
 install - prepend `%USERPROFILE%\.cargo\bin` to PATH.
 
+## Rendering
+
+- The tile layers live in a SharedArrayBuffer the worker owns; `src/render`
+  reads them in place through `TileMap.fromBuffer` and never writes.
+- Sprites are rebuilt only when the visible tile range, the zoom or the map
+  revision changed - never per frame.
+- Draw order runs along the diagonals `(x + y)`; a tile's road, building and
+  industry sprites follow immediately after its ground.
+- The tile artwork is generated at startup by `render/TerrainAtlas.ts`. No
+  binary art in the repository.
+
 ## Milestone status
 
-M0 done. M1 world generation done (terrain, hydrology, climate, towns,
-industries, terraforming, save v2). Remaining in M1: the isometric renderer,
-camera, minimap, mouse picking and the terrain sprite bake step.
+M0 done. M1 done: world generation, terraforming, save v2, isometric renderer
+with camera, zoom, height-correct picking and the terrain atlas.
+Next: M2 - passenger generation, road building, bus depots and stops, vehicle
+pathfinding and orders, the payment formula and the first balancing test.
+Still missing from M1 and to be picked up with M2's UI work: the minimap.

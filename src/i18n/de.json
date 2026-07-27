@@ -57,6 +57,20 @@
   "ui.mapgen.phase.6": "Prüfung der Startbedingungen",
   "ui.mapgen.retry": "Seed war unspielbar, Versuch {attempt}",
 
+  "ui.tile.title": "Gelände",
+  "ui.tile.none": "Zeige mit der Maus auf die Karte.",
+  "ui.tile.position": "Position",
+  "ui.tile.height": "Höhenstufe",
+  "ui.tile.terrain": "Untergrund",
+  "ui.tile.town": "Stadt",
+  "ui.tile.openCountry": "freies Land",
+
+  "ui.tool.select": "Auswahl",
+  "ui.tool.raise": "Anheben",
+  "ui.tool.lower": "Absenken",
+  "ui.tool.level": "Planieren",
+  "ui.tool.costHint": "{amount} je bewegter Ecke und Höhenstufe. Rechte Maustaste schwenkt, Mausrad zoomt.",
+
   "ui.system.title": "Systemstatus",
   "ui.system.map": "Karte",
   "ui.system.towns": "Städte / Industrien",
@@ -89,6 +103,7 @@
   "terraform.reject.atLimit": "Hier ist die Höhengrenze der Karte erreicht.",
   "terraform.reject.occupied": "Auf diesem Gelände stehen Straßen, Gebäude oder eine Industrie.",
   "terraform.reject.tooExpensive": "Die Erdbewegung ist teurer als der Kontostand.",
+  "terraform.reject.tooMuchEarth": "Dafür müsste zu viel Gelände ringsum mitbewegt werden. Arbeite dich von flachem Boden aus vor.",
 
   "terrain.water": "Wasser",
   "terrain.coast": "Küste",

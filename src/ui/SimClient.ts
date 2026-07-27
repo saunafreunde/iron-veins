@@ -121,7 +121,12 @@ export class SimClient {
         return;
       case 'ready':
         store.setCompany(message.companyName, message.companyColorIndex);
-        store.setWorldSummary(message.mapSize, message.townCount, message.industryCount);
+        store.setWorld({
+          mapSize: message.mapSize,
+          mapBuffer: message.mapBuffer,
+          towns: message.towns,
+          industries: message.industries,
+        });
         store.setReady(seed);
         return;
       case 'companyChanged':
@@ -150,6 +155,7 @@ export class SimClient {
       speedIndex: i32[SnapshotI32.SpeedIndex]!,
       commandsExecuted: i32[SnapshotI32.CommandsExecuted]!,
       simRateCentiHz: i32[SnapshotI32.SimRateCentiHz]!,
+      mapRevision: i32[SnapshotI32.MapRevision]!,
       cashCt: f64[SnapshotF64.CashCt]!,
       loanCt: f64[SnapshotF64.LoanCt]!,
       loanLimitCt: f64[SnapshotF64.LoanLimitCt]!,
