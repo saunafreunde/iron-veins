@@ -133,7 +133,113 @@ forbidden and are enforced by ESLint.
 ### D-017 Cross-origin isolation is configured in both environments, verified in one
 
 `vite.config.ts` sets COOP/COEP for dev and preview; `tauri.conf.json` sets the
-same pair under `app.security.headers`. The browser side is verified - the app
-reports "SharedArrayBuffer available (cross-origin isolated)". The Tauri side
-could **not** be verified because Rust and the MSVC build tools are not
-installed on this machine; it is the first thing to check once they are.
+same pair under `app.security.headers`. **Verified in both on 2026-07-27**: the
+desktop build logs
+`startup version=0.1.0 crossOriginIsolated=true sharedArrayBuffer=true`
+from inside WebView2.
+
+---
+
+## M1 - world and presentation (2026-07-28)
+
+### D-018 There are no steep slopes
+
+The map keeps the invariant that no two corners of a tile - including the
+diagonal pair - differ by more than one height level. That reduces the slope
+alphabet from the classic 19 shapes to 16, and removes a special case from
+rendering, pathfinding, vehicle physics and the terraform tool at once. With a
+height step of 8 m over a 50 m tile the terrain still climbs at 16 %, which is
+far steeper than anything a train can use.
+
+### D-019 Rivers do not carve the terrain
+
+Section 6.3 asks rivers to cut one level into the ground. That is structurally
+incompatible with D-018: lowering one corner forces every corner exactly one
+level above it to follow, and on a uniform hillside that chain runs to the
+summit - one river would drop a whole mountain range by a level, two dozen would
+flatten the map. Rivers therefore flow through the valleys that erosion already
+cut. The result looks the same and the invariant survives.
+
+### D-020 Sinks are filled iteratively, and leftovers become lakes
+
+Instead of a priority-flood with a heap, depressions are raised by repeated
+neighbour passes; with 16 height levels that converges in a handful of rounds.
+Whatever is still a sink after the pass limit ends the river in a lake, which is
+a good map feature rather than a failure.
+
+### D-021 The height field fades out at the map border
+
+Without an edge falloff the terrain runs off the map and there is no ocean at
+all, which makes "ocean versus inland lake" meaningless - and that distinction
+decides where harbours and offshore industries may go in M7. The outer 12 % of
+the map fades into the sea.
+
+### D-022 Unsupplyable factories are removed, not left standing
+
+The generator proves that every processing industry can be reached by a supplier
+of each of its inputs on the same land mass. It first tries to add the missing
+supplier, and removes the factory when that is impossible. Both phases run to a
+fixed point, because an added supplier can need supplying itself and a removed
+one can strand a factory that was already checked. A steel mill that can never
+receive coal is not a difficulty setting, it is scenery that misleads the player.
+
+### D-023 Place names are generated from syllables
+
+A fixed name list repeats visibly at 140 towns per map and would have to be
+maintained per language. Ninety syllables produce over fifty thousand names.
+Names are world state, so they are identical in every UI language - a town
+cannot be called Eichenfeld in German and something else in English.
+
+### D-024 Two state digests instead of one
+
+`hashWorld` covers the tile layers and is what the determinism suite compares.
+`hashWorldLive` skips them and feeds the F3 overlay. Hashing nine megabytes of
+map every game day would cost more than the entire simulation, and at 20x speed
+a game day passes twice a second.
+
+### D-025 Derived map layers are recomputed on load, not stored
+
+Land mass labels and the ocean mask follow from the terrain, so the save file
+does not carry them. That removes 5 MB per 1024 map and, more importantly,
+removes the possibility of a save whose labels disagree with its terrain.
+
+### D-026 Save version 2 has no migration from version 1
+
+A version 1 world had no map at all. A migration could only invent one, and
+handing the player a world that is not the one they saved is worse than an
+honest refusal. Version 1 existed for a single milestone and was never
+distributed. From the first released build onwards every bump gets a real
+migration - the mechanism itself stays covered by the injected-registry test.
+
+### D-027 The save validator accepts any power-of-two map size
+
+`MAP_SIZES` is the list the start menu offers; the validator's job is to reject
+corrupt data, not menu choices. It accepts square power-of-two maps from 64 to
+2048, which keeps the fast 128-tile test worlds loadable.
+
+### D-028 Levelling takes a budget instead of being priced afterwards
+
+Flattening a tile is a sequence of single-corner steps whose cost only becomes
+known as it goes. Pricing it after the fact would move ground the player cannot
+pay for. `levelTile` therefore checks the remaining balance before every
+individual step and stops in front of the first one it cannot afford.
+
+### D-029 Vite must not watch src-tauri
+
+The rust build writes into `src-tauri/target` while chokidar is walking it, and
+node throws `EBUSY` on the half written executable, which kills the whole dev
+command. `server.watch.ignored` excludes the directory; nothing under it can
+trigger a front end reload anyway.
+
+### D-030 The shell library is an rlib only
+
+The Tauri template ships `crate-type = ["staticlib", "cdylib", "rlib"]` for
+mobile targets. This game is desktop only, and the two extra artefacts cost
+about a gigabyte of build output for nothing.
+
+### D-031 The app reports its startup environment to the shell
+
+`startup_report` prints version, `crossOriginIsolated`, SharedArrayBuffer
+availability and the WebView user agent to stdout. It is the first thing a bug
+report needs, and it is how failure #12 was actually verified rather than
+assumed.

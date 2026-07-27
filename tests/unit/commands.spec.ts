@@ -10,6 +10,7 @@ import {
 import {
   COMPANY_COLOR_COUNT,
   Difficulty,
+  MapClimate,
   LOAN_MIN_LIMIT_CT,
   LOAN_STEP_CT,
   MAX_COMPANY_NAME_LENGTH,
@@ -18,10 +19,15 @@ import {
 } from '../../src/sim/constants';
 import { World } from '../../src/sim/World';
 
+/** Small map: these tests exercise commands, not terrain. */
+const TEST_MAP_SIZE = 128;
+
 function newWorld(): World {
-  return new World({
+  return World.create({
     seed: 1,
     difficulty: Difficulty.Normal,
+    climate: MapClimate.Temperate,
+    mapSize: TEST_MAP_SIZE,
     companyName: 'Testbahn',
     companyColorIndex: 0,
   });

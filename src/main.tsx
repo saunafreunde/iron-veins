@@ -1,8 +1,8 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { t } from './i18n';
-import { getPlatformInfo } from './platform/Platform';
-import { Difficulty } from './sim/constants';
+import { getPlatformInfo, reportStartupDiagnostics } from './platform/Platform';
+import { DEFAULT_MAP_SIZE, Difficulty, MapClimate } from './sim/constants';
 import { App } from './ui/App';
 import { SimClient } from './ui/SimClient';
 import { useSimStore } from './ui/store';
@@ -23,12 +23,20 @@ client.start({
   // and everything downstream of it is derived deterministically.
   seed: Math.floor(Math.random() * 0x1_0000_0000),
   difficulty: Difficulty.Normal,
+  climate: MapClimate.Temperate,
+  mapSize: DEFAULT_MAP_SIZE,
   companyName: t('ui.defaultCompanyName'),
   companyColorIndex: 1,
 });
 
-void getPlatformInfo().then((info) => {
+void getPlatformInfo().then(async (info) => {
   useSimStore.getState().setPlatform(info.appVersion, info.isDesktop);
+  await reportStartupDiagnostics({
+    appVersion: info.appVersion,
+    crossOriginIsolated: window.crossOriginIsolated,
+    sharedMemory: typeof SharedArrayBuffer !== 'undefined',
+    userAgent: navigator.userAgent,
+  });
 });
 
 createRoot(container).render(

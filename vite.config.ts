@@ -30,6 +30,12 @@ export default defineConfig({
     port: 5183,
     strictPort: true,
     headers: crossOriginIsolation,
+    watch: {
+      // The rust build writes into src-tauri/target while the watcher is
+      // walking it, and node throws EBUSY on the half written executable.
+      // Nothing under src-tauri can trigger a front end reload anyway.
+      ignored: ['**/src-tauri/**'],
+    },
   },
   preview: {
     port: 5184,

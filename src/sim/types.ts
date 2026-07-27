@@ -1,4 +1,4 @@
-import type { Difficulty } from './constants';
+import type { Difficulty, MapClimate } from './constants';
 
 /** The four 32 bit words of the xoshiro128** generator, as unsigned integers. */
 export type RngState = readonly [number, number, number, number];
@@ -38,6 +38,9 @@ export interface GameDate {
 export interface NewGameParams {
   readonly seed: number;
   readonly difficulty: Difficulty;
+  readonly climate: MapClimate;
+  /** Map edge length in tiles, one of MAP_SIZES. */
+  readonly mapSize: number;
   readonly companyName: string;
   readonly companyColorIndex: number;
 }

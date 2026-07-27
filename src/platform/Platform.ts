@@ -29,3 +29,28 @@ export async function getPlatformInfo(): Promise<PlatformInfo> {
   const { getVersion } = await import('@tauri-apps/api/app');
   return { isDesktop: true, appVersion: await getVersion() };
 }
+
+/** Environment facts worth having in the log of every bug report. */
+export interface StartupDiagnostics {
+  readonly appVersion: string;
+  /** False means no SharedArrayBuffer, which means the game cannot run. */
+  readonly crossOriginIsolated: boolean;
+  readonly sharedMemory: boolean;
+  readonly userAgent: string;
+}
+
+/**
+ * Hand the diagnostics to the shell so they end up in its stdout. In the
+ * browser there is no shell to talk to - the system panel shows the same facts
+ * on screen instead.
+ */
+export async function reportStartupDiagnostics(diagnostics: StartupDiagnostics): Promise<void> {
+  if (!hasTauriRuntime()) return;
+  const { invoke } = await import('@tauri-apps/api/core');
+  await invoke('startup_report', {
+    appVersion: diagnostics.appVersion,
+    crossOriginIsolated: diagnostics.crossOriginIsolated,
+    sharedMemory: diagnostics.sharedMemory,
+    userAgent: diagnostics.userAgent,
+  });
+}

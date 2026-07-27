@@ -3,7 +3,14 @@ import { CommandQueue } from '../../src/sim/commands/queue';
 import { decodeSave, encodeSave } from '../../src/sim/save/serialize';
 import { hashWorld, World } from '../../src/sim/World';
 import fixture from './fixtures/m0-commands.json';
-import { advance, createScenario, parseScenarioFixture, type Scenario } from './runner';
+import {
+  advance,
+  createScenario,
+  parseScenarioFixture,
+  SCENARIO_COMPANY_NAME,
+  SCENARIO_MAP_SIZE,
+  type Scenario,
+} from './runner';
 
 /**
  * Section 19.3. This suite runs from M0 onwards and must never be red:
@@ -87,10 +94,12 @@ describe('determinism', () => {
 
     const replayQueue = new CommandQueue();
     replayQueue.loadLog(original.queue.log, 0);
-    const replayWorld = new World({
+    const replayWorld = World.create({
       seed: SEED,
       difficulty: original.world.difficulty,
-      companyName: 'Iron Veins Reference Co.',
+      climate: original.world.climate,
+      mapSize: SCENARIO_MAP_SIZE,
+      companyName: SCENARIO_COMPANY_NAME,
       companyColorIndex: 1,
     });
     while (replayWorld.tick < TOTAL_TICKS) replayWorld.step(replayQueue, null);

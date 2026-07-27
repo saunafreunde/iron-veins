@@ -9,6 +9,9 @@ export function SystemPanel(): ReactElement {
   const commandsExecuted = useSimStore((s) => s.commandsExecuted);
   const simRateCentiHz = useSimStore((s) => s.simRateCentiHz);
   const stateHash = useSimStore((s) => s.stateHash);
+  const mapSize = useSimStore((s) => s.mapSize);
+  const townCount = useSimStore((s) => s.townCount);
+  const industryCount = useSimStore((s) => s.industryCount);
   const isDesktop = useSimStore((s) => s.isDesktop);
   const sharedMemoryAvailable = useSimStore((s) => s.sharedMemoryAvailable);
   const showDebug = useSimStore((s) => s.showDebug);
@@ -25,6 +28,18 @@ export function SystemPanel(): ReactElement {
           <dt>{t('ui.system.simRate')}</dt>
           <dd className="value value--mono">
             {t('ui.system.simRateValue', { rate: (simRateCentiHz / 100).toFixed(1) })}
+          </dd>
+        </div>
+        <div>
+          <dt>{t('ui.system.map')}</dt>
+          <dd className="value value--mono">
+            {mapSize} x {mapSize}
+          </dd>
+        </div>
+        <div>
+          <dt>{t('ui.system.towns')}</dt>
+          <dd className="value value--mono">
+            {formatInteger(townCount)} / {formatInteger(industryCount)}
           </dd>
         </div>
         <div>

@@ -1,6 +1,8 @@
 import { CommandKind, type Command, type CommandEnvelope } from '../commands/types';
-import { COMPANY_COLOR_COUNT, Difficulty } from '../constants';
-import type { WorldStateData } from '../World';
+import { COMPANY_COLOR_COUNT, Difficulty, MapClimate } from '../constants';
+import { INDUSTRY_TYPE_COUNT, type Industry } from '../industry/types';
+import { TownSize, type Town } from '../town/types';
+import type { TileMapData, WorldStateData } from '../World';
 import type { CompanyState, RngState } from '../types';
 
 /** Four byte marker at the start of every save payload. */
@@ -12,8 +14,15 @@ export const SAVE_MAGIC = 'IRVN';
  * Rule (section 19.1, failure #11): every change to the shape of the simulation
  * state bumps this number AND adds a migration under ./migrations. Skipping the
  * migration once makes every older save unloadable forever.
+ *
+ * Version 2 (M1) added the map, the towns and the industries. No migration from
+ * version 1 is registered: a version 1 world had no map at all, so a migration
+ * could only invent one, and handing the player a world that is not the one
+ * they saved is worse than refusing to load it. Version 1 existed for a single
+ * milestone and was never distributed. From the first released build onwards
+ * every bump gets a real migration.
  */
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
 
 /** File extension used for manual and automatic saves. */
 export const SAVE_EXTENSION = '.ironsave';
@@ -113,6 +122,93 @@ function parseDifficulty(value: unknown, path: string): Difficulty {
   return int;
 }
 
+function parseClimate(value: unknown, path: string): MapClimate {
+  const int = asInt(value, path);
+  if (
+    int !== MapClimate.Temperate &&
+    int !== MapClimate.Arctic &&
+    int !== MapClimate.Tropical &&
+    int !== MapClimate.Desert
+  ) {
+    throw new SaveFormatError(`${path}: ${int} is not a known climate`);
+  }
+  return int;
+}
+
+function asBytes(value: unknown, path: string, expectedLength: number): Uint8Array {
+  if (!(value instanceof Uint8Array)) {
+    throw new SaveFormatError(`${path}: expected a byte array`);
+  }
+  if (value.length !== expectedLength) {
+    throw new SaveFormatError(
+      `${path}: expected ${expectedLength} bytes for this map size, got ${value.length}`,
+    );
+  }
+  return value;
+}
+
+function parseTileMap(value: unknown, path: string, mapSize: number): TileMapData {
+  const raw = asRecord(value, path);
+  const tiles = mapSize * mapSize;
+  const corners = (mapSize + 1) * (mapSize + 1);
+
+  return {
+    cornerHeight: asBytes(raw['cornerHeight'], `${path}.cornerHeight`, corners),
+    terrain: asBytes(raw['terrain'], `${path}.terrain`, tiles),
+    roadBits: asBytes(raw['roadBits'], `${path}.roadBits`, tiles),
+    townId: asBytes(raw['townId'], `${path}.townId`, tiles * 2),
+    industryId: asBytes(raw['industryId'], `${path}.industryId`, tiles * 2),
+    buildingKind: asBytes(raw['buildingKind'], `${path}.buildingKind`, tiles),
+    buildingLevel: asBytes(raw['buildingLevel'], `${path}.buildingLevel`, tiles),
+  };
+}
+
+function parseTowns(value: unknown, path: string): Town[] {
+  const entries = asArray(value, path);
+  const towns: Town[] = [];
+  for (let i = 0; i < entries.length; i++) {
+    const raw = asRecord(entries[i], `${path}[${i}]`);
+    const sizeClass = asInt(raw['sizeClass'], `${path}[${i}].sizeClass`);
+    if (
+      sizeClass !== TownSize.City &&
+      sizeClass !== TownSize.Town &&
+      sizeClass !== TownSize.Village
+    ) {
+      throw new SaveFormatError(`${path}[${i}].sizeClass: ${sizeClass} is not a known town size`);
+    }
+    towns.push({
+      id: asInt(raw['id'], `${path}[${i}].id`),
+      name: asString(raw['name'], `${path}[${i}].name`),
+      x: asInt(raw['x'], `${path}[${i}].x`),
+      y: asInt(raw['y'], `${path}[${i}].y`),
+      sizeClass,
+      population: asInt(raw['population'], `${path}[${i}].population`),
+      radius: asInt(raw['radius'], `${path}[${i}].radius`),
+    });
+  }
+  return towns;
+}
+
+function parseIndustries(value: unknown, path: string): Industry[] {
+  const entries = asArray(value, path);
+  const industries: Industry[] = [];
+  for (let i = 0; i < entries.length; i++) {
+    const raw = asRecord(entries[i], `${path}[${i}]`);
+    const type = asInt(raw['type'], `${path}[${i}].type`);
+    if (type < 0 || type >= INDUSTRY_TYPE_COUNT) {
+      throw new SaveFormatError(`${path}[${i}].type: ${type} is not a known industry`);
+    }
+    industries.push({
+      id: asInt(raw['id'], `${path}[${i}].id`),
+      type: type as Industry['type'],
+      x: asInt(raw['x'], `${path}[${i}].x`),
+      y: asInt(raw['y'], `${path}[${i}].y`),
+      landmassId: asInt(raw['landmassId'], `${path}[${i}].landmassId`),
+    });
+  }
+  return industries;
+}
+
 function parseCommand(value: unknown, path: string): Command {
   const raw = asRecord(value, path);
   const kind = asInt(raw['kind'], `${path}.kind`);
@@ -128,6 +224,24 @@ function parseCommand(value: unknown, path: string): Command {
       return { kind: CommandKind.TakeLoan, amountCt: asInt(raw['amountCt'], `${path}.amountCt`) };
     case CommandKind.RepayLoan:
       return { kind: CommandKind.RepayLoan, amountCt: asInt(raw['amountCt'], `${path}.amountCt`) };
+    case CommandKind.RaiseLand:
+      return {
+        kind: CommandKind.RaiseLand,
+        x: asInt(raw['x'], `${path}.x`),
+        y: asInt(raw['y'], `${path}.y`),
+      };
+    case CommandKind.LowerLand:
+      return {
+        kind: CommandKind.LowerLand,
+        x: asInt(raw['x'], `${path}.x`),
+        y: asInt(raw['y'], `${path}.y`),
+      };
+    case CommandKind.LevelLand:
+      return {
+        kind: CommandKind.LevelLand,
+        x: asInt(raw['x'], `${path}.x`),
+        y: asInt(raw['y'], `${path}.y`),
+      };
     default:
       throw new SaveFormatError(`${path}.kind: ${kind} is not a known command`);
   }
@@ -173,12 +287,27 @@ export function parseSaveFile(value: unknown): SaveFile {
   }
 
   const stateRaw = asRecord(raw['state'], 'save.state');
+  // The validator guards against corrupt data, not against menu choices: it
+  // accepts any square power-of-two map, which keeps small test worlds loadable
+  // while still rejecting a size that would make the layer lengths nonsense.
+  const mapSize = asInt(stateRaw['mapSize'], 'save.state.mapSize');
+  if (mapSize < 64 || mapSize > 2048 || (mapSize & (mapSize - 1)) !== 0) {
+    throw new SaveFormatError(
+      `save.state.mapSize: ${mapSize} is not a power of two between 64 and 2048`,
+    );
+  }
+
   const state: WorldStateData = {
     tick: asInt(stateRaw['tick'], 'save.state.tick'),
     seed: asInt(stateRaw['seed'], 'save.state.seed'),
     difficulty: parseDifficulty(stateRaw['difficulty'], 'save.state.difficulty'),
+    climate: parseClimate(stateRaw['climate'], 'save.state.climate'),
+    mapSize,
     rng: parseRngState(stateRaw['rng'], 'save.state.rng'),
     company: parseCompany(stateRaw['company'], 'save.state.company'),
+    map: parseTileMap(stateRaw['map'], 'save.state.map', mapSize),
+    towns: parseTowns(stateRaw['towns'], 'save.state.towns'),
+    industries: parseIndustries(stateRaw['industries'], 'save.state.industries'),
   };
 
   const tick = asInt(raw['tick'], 'save.tick');

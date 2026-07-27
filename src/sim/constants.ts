@@ -14,6 +14,159 @@ export const HEIGHT_STEP_M = 8;
 /** Number of distinct terrain height levels (0..15). */
 export const HEIGHT_LEVELS = 16;
 
+/** Highest usable height level. */
+export const MAX_HEIGHT = HEIGHT_LEVELS - 1;
+
+/**
+ * Height level of the sea surface. Everything at or below it is water, so the
+ * playable land occupies levels 4..15.
+ */
+export const SEA_LEVEL = 3;
+
+/** Selectable map edge lengths in tiles. */
+export const MAP_SIZES = [256, 512, 1024, 2048] as const;
+
+/** Default map edge length - 1024 tiles is 51.2 x 51.2 km. */
+export const DEFAULT_MAP_SIZE = 1024;
+
+// ------------------------------------------------------------ map generation
+
+/** Octaves of the base height noise. */
+export const TERRAIN_NOISE_OCTAVES = 6;
+
+/** Amplitude ratio between two successive octaves. */
+export const TERRAIN_NOISE_PERSISTENCE = 0.5;
+
+/** Frequency ratio between two successive octaves. */
+export const TERRAIN_NOISE_LACUNARITY = 2.0;
+
+/** Wavelength of the first octave, as a fraction of the map edge. */
+export const TERRAIN_NOISE_BASE_WAVELENGTH = 0.35;
+
+/**
+ * Fraction of the map edge over which the height field fades into the sea, so
+ * the playable area is bounded by ocean instead of running off the border.
+ */
+export const MAP_EDGE_FALLOFF = 0.12;
+
+/** Thermal erosion passes applied to the raw height field. */
+export const EROSION_PASSES = 40;
+
+/** Steepest slope erosion leaves standing: one height level per tile. */
+export const EROSION_TALUS = 1 / HEIGHT_LEVELS;
+
+/** Fraction of the excess height moved downhill per erosion pass. */
+export const EROSION_RATE = 0.5;
+
+// -------------------------------------------------------------- climate
+
+/**
+ * One climate per game, chosen in the start menu - never mixed on one map.
+ * A single map that contains arctic, desert and jungle at once reads as noise
+ * and makes the industry chains impossible to reason about.
+ */
+export const MapClimate = {
+  Temperate: 0,
+  Arctic: 1,
+  Tropical: 2,
+  Desert: 3,
+} as const;
+export type MapClimate = (typeof MapClimate)[keyof typeof MapClimate];
+
+/** Sea level temperature at the middle of the map, per climate. [degC] */
+export const CLIMATE_BASE_TEMPERATURE_C: readonly number[] = [12, -6, 26, 24];
+
+/** Temperature spread between the northern and southern map edge. [degC] */
+export const CLIMATE_LATITUDE_RANGE_C: readonly number[] = [16, 12, 8, 10];
+
+/** Shift applied to the moisture field, per climate. [0..1] */
+export const CLIMATE_MOISTURE_BIAS: readonly number[] = [0, -0.05, 0.25, -0.35];
+
+/** Temperature drop per height level. [degC] */
+export const TEMPERATURE_LAPSE_C_PER_LEVEL = 1;
+
+/** Wavelength of the moisture noise, as a fraction of the map edge. */
+export const MOISTURE_NOISE_WAVELENGTH = 0.25;
+
+export const MOISTURE_NOISE_OCTAVES = 4;
+
+/** Biome thresholds, read top to bottom in climate.ts. */
+export const SNOW_TEMPERATURE_C = 0;
+export const ALPINE_TEMPERATURE_C = 5;
+export const DESERT_TEMPERATURE_C = 26;
+export const DESERT_MOISTURE_MAX = 0.35;
+export const MARSH_MOISTURE_MIN = 0.78;
+export const FOREST_MOISTURE_MIN = 0.55;
+export const GRASS_MOISTURE_MIN = 0.32;
+
+/** Height level above which bare rock and snow take over regardless of climate. */
+export const ALPINE_HEIGHT = 13;
+
+/** River sources per map, scaled between these bounds by map area. */
+export const RIVER_SOURCES_MIN = 12;
+export const RIVER_SOURCES_MAX = 25;
+
+/** Lowest height level that may spawn a river source. */
+export const RIVER_SOURCE_MIN_HEIGHT = 10;
+
+/** Catchment thresholds at which a river widens to 2 and 3 tiles. */
+export const RIVER_WIDTH_2_CATCHMENT = 3;
+export const RIVER_WIDTH_3_CATCHMENT = 8;
+
+/** One town per this many tiles, clamped to the bounds below. */
+export const TILES_PER_TOWN = 7_500;
+export const TOWN_COUNT_MIN = 40;
+export const TOWN_COUNT_MAX = 140;
+
+/** Poisson disc radius between two town centres. [tiles] */
+export const TOWN_MIN_DISTANCE = 24;
+
+/** A town centre may not sit on ground steeper than this. [height levels] */
+export const TOWN_MAX_SLOPE = 1;
+
+/** Share of cities / towns / villages, and their starting population. */
+export const TOWN_SIZE_SHARES = [0.08, 0.25, 0.67] as const;
+export const TOWN_START_POPULATION = [8_000, 2_500, 400] as const;
+
+/** Half width of the initial built-up area per town size. [tiles] */
+export const TOWN_START_RADIUS = [10, 6, 3] as const;
+
+/** Spacing of the main roads inside a town. [tiles] */
+export const TOWN_MAIN_ROAD_SPACING_MIN = 6;
+export const TOWN_MAIN_ROAD_SPACING_MAX = 9;
+
+/** Steepest ground a town road may climb. [height levels per tile] */
+export const TOWN_ROAD_MAX_SLOPE = 2;
+
+/** One industry per this many tiles. */
+export const TILES_PER_INDUSTRY = 6_000;
+
+/** Minimum distance between two industries. [tiles] */
+export const INDUSTRY_MIN_DISTANCE = 8;
+
+/** A generated map must offer a starting pair of towns this far apart. [tiles] */
+export const START_PAIR_MIN_DISTANCE = 20;
+export const START_PAIR_MAX_DISTANCE = 60;
+
+/** How many consecutive seeds are tried before generation gives up. */
+export const MAPGEN_MAX_SEED_RETRIES = 20;
+
+// ------------------------------------------------------------- terraforming
+
+/**
+ * Cost of moving one tile corner by one height level. Chosen so that levelling
+ * a hill for a station costs noticeably less than routing around it, but
+ * flattening a mountain range is never the cheap option.
+ * [cent per corner per level]
+ */
+export const TERRAFORM_COST_PER_STEP_CT = 250 * 100;
+
+/** Multiplier applied when the affected tile is rock. */
+export const TERRAFORM_ROCK_SURCHARGE = 2.5;
+
+/** Multiplier applied when the affected tile is water (reclamation). */
+export const TERRAFORM_WATER_SURCHARGE = 4.0;
+
 // ------------------------------------------------------------ simulation clock
 
 /** Fixed simulation frequency. [Hz] */

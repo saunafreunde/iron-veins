@@ -1,6 +1,6 @@
 import { CommandQueue } from '../../src/sim/commands/queue';
 import { CommandKind, type Command } from '../../src/sim/commands/types';
-import { Difficulty } from '../../src/sim/constants';
+import { Difficulty, MapClimate } from '../../src/sim/constants';
 import { hashWorld, World } from '../../src/sim/World';
 
 /** One entry of a recorded scenario: a command and the tick it runs on. */
@@ -74,16 +74,27 @@ function parseCommand(raw: unknown, index: number): Command {
   }
 }
 
+/**
+ * Map size used by the determinism scenarios. Small enough that generating a
+ * world several times per test run stays fast, large enough to contain towns,
+ * industries and a coastline.
+ */
+export const SCENARIO_MAP_SIZE = 128;
+
+export const SCENARIO_COMPANY_NAME = 'Iron Veins Reference Co.';
+
 /** Build a world and pre-load the whole command script into its queue. */
 export function createScenario(
   seed: number,
   script: readonly ScheduledCommand[],
   difficulty: Difficulty = Difficulty.Normal,
 ): Scenario {
-  const world = new World({
+  const world = World.create({
     seed,
     difficulty,
-    companyName: 'Iron Veins Reference Co.',
+    climate: MapClimate.Temperate,
+    mapSize: SCENARIO_MAP_SIZE,
+    companyName: SCENARIO_COMPANY_NAME,
     companyColorIndex: 1,
   });
   const queue = new CommandQueue();

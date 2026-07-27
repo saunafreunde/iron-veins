@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { setLocale as applyLocale, type Locale } from '../i18n';
+import type { MapGenPhase } from '../sim/mapgen';
 
 /** The part of the store that is refreshed from the shared snapshot buffer. */
 export interface SnapshotValues {
@@ -20,6 +21,13 @@ export interface SimUiState extends SnapshotValues {
   locale: Locale;
   ready: boolean;
   seed: number;
+  /** Set while the map is being generated, null once the world is ready. */
+  generatingPhase: MapGenPhase | null;
+  /** How many seeds had to be rejected before a playable map came out. */
+  generatingAttempt: number;
+  mapSize: number;
+  townCount: number;
+  industryCount: number;
   companyName: string;
   companyColorIndex: number;
   appVersion: string;
@@ -35,6 +43,8 @@ export interface SimUiState extends SnapshotValues {
 
   applySnapshot: (values: SnapshotValues) => void;
   setLocale: (locale: Locale) => void;
+  setGenerating: (phase: MapGenPhase, attempt: number) => void;
+  setWorldSummary: (mapSize: number, townCount: number, industryCount: number) => void;
   setReady: (seed: number) => void;
   setCompany: (name: string, colorIndex: number) => void;
   setPlatform: (appVersion: string, isDesktop: boolean) => void;
@@ -60,6 +70,11 @@ export const useSimStore = create<SimUiState>((set) => ({
   locale: 'de',
   ready: false,
   seed: 0,
+  generatingPhase: null,
+  generatingAttempt: 0,
+  mapSize: 0,
+  townCount: 0,
+  industryCount: 0,
   companyName: '',
   companyColorIndex: 0,
   appVersion: '',
@@ -75,7 +90,10 @@ export const useSimStore = create<SimUiState>((set) => ({
     applyLocale(locale);
     set({ locale });
   },
-  setReady: (seed) => set({ ready: true, seed }),
+  setGenerating: (phase, attempt) => set({ generatingPhase: phase, generatingAttempt: attempt }),
+  setWorldSummary: (mapSize, townCount, industryCount) =>
+    set({ mapSize, townCount, industryCount }),
+  setReady: (seed) => set({ ready: true, seed, generatingPhase: null }),
   setCompany: (name, colorIndex) => set({ companyName: name, companyColorIndex: colorIndex }),
   setPlatform: (appVersion, isDesktop) => set({ appVersion, isDesktop }),
   setSharedMemoryAvailable: (available) => set({ sharedMemoryAvailable: available }),

@@ -96,17 +96,28 @@ npm run icons            # regenerate src-tauri/icons from tools/make-icons.mjs
 npm run tauri dev        # desktop shell - needs the Rust toolchain
 ```
 
+## Map model
+
+- Heights live on a `(size+1)^2` CORNER grid; a tile owns the four corners
+  around it. `+x` runs to the lower right on screen, `+y` to the lower left, so
+  the corner called North really is the top one.
+- **Invariant:** no two corners of a tile differ by more than one level. That
+  gives exactly 16 slopes and no steep-slope special cases. Every routine that
+  moves ground has to restore it (`TileMap.enforceSlopeInvariant`, or the
+  cascade inside `map/terraform.ts`).
+- A tile is water when even its highest corner is at or below `SEA_LEVEL`.
+- `landmassId` and `oceanMask` are derived: recomputed on load and after a
+  terraform that moved the shoreline, never serialised.
+
 ## Environment note
 
-`npm run tauri dev` / `npm run tauri build` need Rust and the MSVC build tools,
-which are **not installed on this machine** as of 2026-07-27:
-
-```bash
-winget install --id Rustlang.Rustup -e && winget install --id Microsoft.VisualStudio.2022.BuildTools -e
-```
-
-Everything else (dev server, build, tests) runs without them.
+`npm run tauri dev` and `npm run tauri build` need Rust and the MSVC build
+tools. Both are installed (Rust 1.97.1, VS 2022 Build Tools, Windows SDK
+10.0.26100). If a shell reports `cargo` missing, its environment predates the
+install - prepend `%USERPROFILE%\.cargo\bin` to PATH.
 
 ## Milestone status
 
-M0 done. Next: M1 (map generation, isometric renderer, camera, terraforming).
+M0 done. M1 world generation done (terrain, hydrology, climate, towns,
+industries, terraforming, save v2). Remaining in M1: the isometric renderer,
+camera, minimap, mouse picking and the terrain sprite bake step.

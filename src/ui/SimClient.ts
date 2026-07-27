@@ -1,7 +1,7 @@
 import type { MainToWorkerMessage, WorkerToMainMessage } from '../shared/protocol';
 import { createSnapshotBuffer, SnapshotF64, SnapshotI32, SnapshotReader } from '../shared/snapshot';
 import type { Command } from '../sim/commands/types';
-import type { Difficulty } from '../sim/constants';
+import type { Difficulty, MapClimate } from '../sim/constants';
 import { useSimStore } from './store';
 
 /**
@@ -15,6 +15,8 @@ import { useSimStore } from './store';
 export interface StartGameOptions {
   readonly seed: number;
   readonly difficulty: Difficulty;
+  readonly climate: MapClimate;
+  readonly mapSize: number;
   readonly companyName: string;
   readonly companyColorIndex: number;
 }
@@ -74,6 +76,8 @@ export class SimClient {
       buffer,
       seed: options.seed,
       difficulty: options.difficulty,
+      climate: options.climate,
+      mapSize: options.mapSize,
       companyName: options.companyName,
       companyColorIndex: options.companyColorIndex,
     });
@@ -112,8 +116,12 @@ export class SimClient {
   private handleWorkerMessage(message: WorkerToMainMessage, seed: number): void {
     const store = useSimStore.getState();
     switch (message.type) {
+      case 'generating':
+        store.setGenerating(message.phase, message.seedAttempt);
+        return;
       case 'ready':
         store.setCompany(message.companyName, message.companyColorIndex);
+        store.setWorldSummary(message.mapSize, message.townCount, message.industryCount);
         store.setReady(seed);
         return;
       case 'companyChanged':

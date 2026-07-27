@@ -1,5 +1,6 @@
 import { useEffect, useRef, type ReactElement } from 'react';
 import { LOCALES, t } from '../i18n';
+import { MAPGEN_PHASE_COUNT } from '../sim/mapgen';
 import { CompanyPanel } from './CompanyPanel';
 import { FinancePanel } from './FinancePanel';
 import type { SimClient } from './SimClient';
@@ -9,6 +10,26 @@ import { useSimStore } from './store';
 
 /** How long a rejection toast stays on screen. [ms] */
 const TOAST_LIFETIME_MS = 4000;
+
+/**
+ * Map generation takes seconds on a large map, and it runs inside the worker,
+ * so the phases arrive as messages rather than as a progress bar the UI drives.
+ */
+function MapGenProgress(): ReactElement {
+  useSimStore((s) => s.locale);
+  const phase = useSimStore((s) => s.generatingPhase);
+  const attempt = useSimStore((s) => s.generatingAttempt);
+
+  const done = phase === null ? 0 : phase + 1;
+  return (
+    <section className="panel panel--wide">
+      <h2 className="panel__title">{t('ui.mapgen.title')}</h2>
+      <p>{phase === null ? t('ui.mapgen.starting') : t(`ui.mapgen.phase.${phase}`)}</p>
+      <progress className="progress" value={done} max={MAPGEN_PHASE_COUNT} />
+      {attempt > 0 && <p className="panel__hint">{t('ui.mapgen.retry', { attempt })}</p>}
+    </section>
+  );
+}
 
 export function App({ client }: { readonly client: SimClient }): ReactElement {
   const locale = useSimStore((s) => s.locale);
@@ -79,6 +100,8 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
           <h1>{t('app.title')}</h1>
           <p>{t('app.tagline')}</p>
         </div>
+
+        {!ready && <MapGenProgress />}
 
         {ready && (
           <div className="workspace__panels">

@@ -46,7 +46,20 @@
   "ui.finance.repay": "Tilgen ({amount})",
   "ui.finance.interestHint": "Zinsen werden zum Monatsende gebucht.",
 
+  "ui.mapgen.title": "Karte wird erzeugt",
+  "ui.mapgen.starting": "Vorbereitung …",
+  "ui.mapgen.phase.0": "Relief und Erosion",
+  "ui.mapgen.phase.1": "Meeresspiegel",
+  "ui.mapgen.phase.2": "Flüsse und Landmassen",
+  "ui.mapgen.phase.3": "Klimazonen",
+  "ui.mapgen.phase.4": "Städte",
+  "ui.mapgen.phase.5": "Industrien",
+  "ui.mapgen.phase.6": "Prüfung der Startbedingungen",
+  "ui.mapgen.retry": "Seed war unspielbar, Versuch {attempt}",
+
   "ui.system.title": "Systemstatus",
+  "ui.system.map": "Karte",
+  "ui.system.towns": "Städte / Industrien",
   "ui.system.tick": "Tick",
   "ui.system.simRate": "Sim-Takt",
   "ui.system.simRateValue": "{rate} Hz",
@@ -69,5 +82,22 @@
   "cmd.reject.nameTooLong": "Der Firmenname ist zu lang.",
   "cmd.reject.invalidColor": "Diese Firmenfarbe gibt es nicht.",
   "cmd.reject.creditLimitReached": "Der Kreditrahmen ist ausgeschöpft.",
-  "cmd.reject.nothingToRepay": "Es gibt nichts zu tilgen, oder der Kontostand reicht nicht."
+  "cmd.reject.nothingToRepay": "Es gibt nichts zu tilgen, oder der Kontostand reicht nicht.",
+  "cmd.reject.insufficientFunds": "Der Kontostand reicht für diese Maßnahme nicht aus.",
+
+  "terraform.reject.outOfRange": "Dieser Punkt liegt außerhalb der Karte.",
+  "terraform.reject.atLimit": "Hier ist die Höhengrenze der Karte erreicht.",
+  "terraform.reject.occupied": "Auf diesem Gelände stehen Straßen, Gebäude oder eine Industrie.",
+  "terraform.reject.tooExpensive": "Die Erdbewegung ist teurer als der Kontostand.",
+
+  "terrain.water": "Wasser",
+  "terrain.coast": "Küste",
+  "terrain.grass": "Wiese",
+  "terrain.field": "Acker",
+  "terrain.forest": "Wald",
+  "terrain.rock": "Fels",
+  "terrain.snow": "Schnee",
+  "terrain.desert": "Wüste",
+  "terrain.marsh": "Moor",
+  "terrain.townGround": "Stadtboden"
 }

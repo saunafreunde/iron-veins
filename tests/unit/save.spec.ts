@@ -3,7 +3,7 @@ import { zlibSync } from 'fflate';
 import { describe, expect, it } from 'vitest';
 import { CommandQueue } from '../../src/sim/commands/queue';
 import { CommandKind } from '../../src/sim/commands/types';
-import { Difficulty, LOAN_STEP_CT, TICKS_PER_MONTH } from '../../src/sim/constants';
+import { Difficulty, LOAN_STEP_CT, MapClimate, TICKS_PER_MONTH } from '../../src/sim/constants';
 import { SAVE_MAGIC, SAVE_VERSION, SaveFormatError } from '../../src/sim/save/format';
 import { migrateSavePayload, type SaveMigration } from '../../src/sim/save/migrations';
 import { decodeSave, encodeSave } from '../../src/sim/save/serialize';
@@ -11,10 +11,14 @@ import { hashWorld, World } from '../../src/sim/World';
 
 const GAME_VERSION = '0.1.0';
 
+const TEST_MAP_SIZE = 128;
+
 function playedWorld(): { world: World; queue: CommandQueue } {
-  const world = new World({
+  const world = World.create({
     seed: 987_654,
     difficulty: Difficulty.Hard,
+    climate: MapClimate.Temperate,
+    mapSize: TEST_MAP_SIZE,
     companyName: 'Nordbahn',
     companyColorIndex: 2,
   });
@@ -60,11 +64,17 @@ describe('save round trip', () => {
     expect(hashWorld(loaded.world)).toBe(hashWorld(world));
   });
 
-  it('compresses the payload', () => {
+  it('compresses the tile layers substantially', () => {
     const { world, queue } = playedWorld();
     const bytes = encodeSave(world, queue, GAME_VERSION);
+
+    const tiles = TEST_MAP_SIZE * TEST_MAP_SIZE;
+    const corners = (TEST_MAP_SIZE + 1) * (TEST_MAP_SIZE + 1);
+    // cornerHeight + 4 single-byte layers + 2 two-byte layers
+    const rawLayerBytes = corners + tiles * 4 + tiles * 4;
+
     expect(bytes.byteLength).toBeGreaterThan(0);
-    expect(bytes.byteLength).toBeLessThan(4096);
+    expect(bytes.byteLength).toBeLessThan(rawLayerBytes / 4);
   });
 });
 
@@ -146,8 +156,9 @@ describe('save migrations', () => {
     );
   });
 
-  it('has no registered migrations while the format is at version 1', () => {
-    // Guard against silently shipping SAVE_VERSION bumps without a migration.
-    expect(SAVE_VERSION).toBe(1);
+  it('pins the current save version', () => {
+    // Bumping SAVE_VERSION has to be a conscious act, because from the first
+    // released build onwards it also requires a migration.
+    expect(SAVE_VERSION).toBe(2);
   });
 });

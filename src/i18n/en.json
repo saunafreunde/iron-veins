@@ -46,7 +46,20 @@
   "ui.finance.repay": "Repay ({amount})",
   "ui.finance.interestHint": "Interest is booked at the end of each month.",
 
+  "ui.mapgen.title": "Generating the map",
+  "ui.mapgen.starting": "Preparing ...",
+  "ui.mapgen.phase.0": "Relief and erosion",
+  "ui.mapgen.phase.1": "Sea level",
+  "ui.mapgen.phase.2": "Rivers and land masses",
+  "ui.mapgen.phase.3": "Climate zones",
+  "ui.mapgen.phase.4": "Towns",
+  "ui.mapgen.phase.5": "Industries",
+  "ui.mapgen.phase.6": "Checking the starting conditions",
+  "ui.mapgen.retry": "Seed was unplayable, attempt {attempt}",
+
   "ui.system.title": "System status",
+  "ui.system.map": "Map",
+  "ui.system.towns": "Towns / industries",
   "ui.system.tick": "Tick",
   "ui.system.simRate": "Sim rate",
   "ui.system.simRateValue": "{rate} Hz",
@@ -69,5 +82,22 @@
   "cmd.reject.nameTooLong": "The company name is too long.",
   "cmd.reject.invalidColor": "That company colour does not exist.",
   "cmd.reject.creditLimitReached": "The credit line is exhausted.",
-  "cmd.reject.nothingToRepay": "There is nothing to repay, or the balance is too low."
+  "cmd.reject.nothingToRepay": "There is nothing to repay, or the balance is too low.",
+  "cmd.reject.insufficientFunds": "The balance is not enough for this operation.",
+
+  "terraform.reject.outOfRange": "That point is outside the map.",
+  "terraform.reject.atLimit": "The height limit of the map is reached here.",
+  "terraform.reject.occupied": "Roads, buildings or an industry stand on this ground.",
+  "terraform.reject.tooExpensive": "Moving this much earth costs more than the balance.",
+
+  "terrain.water": "Water",
+  "terrain.coast": "Coast",
+  "terrain.grass": "Grass",
+  "terrain.field": "Farmland",
+  "terrain.forest": "Forest",
+  "terrain.rock": "Rock",
+  "terrain.snow": "Snow",
+  "terrain.desert": "Desert",
+  "terrain.marsh": "Marsh",
+  "terrain.townGround": "Town ground"
 }

@@ -10,6 +10,9 @@ export const CommandKind = {
   SetCompanyColor: 2,
   TakeLoan: 3,
   RepayLoan: 4,
+  RaiseLand: 5,
+  LowerLand: 6,
+  LevelLand: 7,
 } as const;
 export type CommandKind = (typeof CommandKind)[keyof typeof CommandKind];
 
@@ -35,8 +38,34 @@ export interface RepayLoanCommand {
   readonly amountCt: number;
 }
 
+/** Raise or lower one map corner by one height level. */
+export interface RaiseLandCommand {
+  readonly kind: typeof CommandKind.RaiseLand;
+  readonly x: number;
+  readonly y: number;
+}
+
+export interface LowerLandCommand {
+  readonly kind: typeof CommandKind.LowerLand;
+  readonly x: number;
+  readonly y: number;
+}
+
+/** Flatten one tile down to its lowest corner. */
+export interface LevelLandCommand {
+  readonly kind: typeof CommandKind.LevelLand;
+  readonly x: number;
+  readonly y: number;
+}
+
 export type Command =
-  SetCompanyNameCommand | SetCompanyColorCommand | TakeLoanCommand | RepayLoanCommand;
+  | SetCompanyNameCommand
+  | SetCompanyColorCommand
+  | TakeLoanCommand
+  | RepayLoanCommand
+  | RaiseLandCommand
+  | LowerLandCommand
+  | LevelLandCommand;
 
 /** A command bound to the exact tick at which it is executed. */
 export interface CommandEnvelope {
@@ -63,5 +92,6 @@ export const RejectReason = {
   InvalidColor: 'cmd.reject.invalidColor',
   CreditLimitReached: 'cmd.reject.creditLimitReached',
   NothingToRepay: 'cmd.reject.nothingToRepay',
+  InsufficientFunds: 'cmd.reject.insufficientFunds',
 } as const;
 export type RejectReason = (typeof RejectReason)[keyof typeof RejectReason];

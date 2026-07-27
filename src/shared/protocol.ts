@@ -1,5 +1,6 @@
 import type { Command } from '../sim/commands/types';
-import type { Difficulty } from '../sim/constants';
+import type { Difficulty, MapClimate } from '../sim/constants';
+import type { MapGenPhase } from '../sim/mapgen';
 
 /**
  * Message contract between the main thread and the simulation worker.
@@ -21,6 +22,8 @@ export type MainToWorkerMessage =
       readonly buffer: SharedArrayBuffer;
       readonly seed: number;
       readonly difficulty: Difficulty;
+      readonly climate: MapClimate;
+      readonly mapSize: number;
       readonly companyName: string;
       readonly companyColorIndex: number;
     }
@@ -29,7 +32,15 @@ export type MainToWorkerMessage =
   | { readonly type: 'shutdown' };
 
 export type WorkerToMainMessage =
-  | { readonly type: 'ready'; readonly companyName: string; readonly companyColorIndex: number }
+  | { readonly type: 'generating'; readonly phase: MapGenPhase; readonly seedAttempt: number }
+  | {
+      readonly type: 'ready';
+      readonly companyName: string;
+      readonly companyColorIndex: number;
+      readonly mapSize: number;
+      readonly townCount: number;
+      readonly industryCount: number;
+    }
   | { readonly type: 'companyChanged'; readonly name: string; readonly colorIndex: number }
   | { readonly type: 'commandRejected'; readonly reasonKey: string }
   | { readonly type: 'error'; readonly message: string };

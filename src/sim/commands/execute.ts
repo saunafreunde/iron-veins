@@ -1,5 +1,6 @@
 import { COMPANY_COLOR_COUNT, MAX_COMPANY_NAME_LENGTH } from '../constants';
 import { repayLoan, takeLoan } from '../economy/company';
+import { applyTerraform, estimateTerraform, levelTile, TerraformDirection } from '../map/terraform';
 import type { World } from '../World';
 import { ACCEPTED, CommandKind, RejectReason, type Command, type CommandOutcome } from './types';
 
@@ -40,5 +41,43 @@ export function executeCommand(world: World, command: Command): CommandOutcome {
       if (repaid === 0) return { ok: false, reasonKey: RejectReason.NothingToRepay };
       return ACCEPTED;
     }
+
+    case CommandKind.RaiseLand:
+      return terraform(world, command.x, command.y, TerraformDirection.Raise);
+
+    case CommandKind.LowerLand:
+      return terraform(world, command.x, command.y, TerraformDirection.Lower);
+
+    case CommandKind.LevelLand: {
+      const result = levelTile(world.map, command.x, command.y, world.company.cashCt);
+      if (!result.ok) return { ok: false, reasonKey: result.reasonKey ?? '' };
+      chargeCompany(world, result.costCt);
+      return ACCEPTED;
+    }
   }
+}
+
+/** Shared body of the raise and lower commands. */
+function terraform(
+  world: World,
+  x: number,
+  y: number,
+  direction: TerraformDirection,
+): CommandOutcome {
+  const estimate = estimateTerraform(world.map, x, y, direction);
+  if (!estimate.ok) return { ok: false, reasonKey: estimate.reasonKey ?? '' };
+  if (estimate.costCt > world.company.cashCt) {
+    return { ok: false, reasonKey: RejectReason.InsufficientFunds };
+  }
+
+  const result = applyTerraform(world.map, x, y, direction);
+  if (!result.ok) return { ok: false, reasonKey: result.reasonKey ?? '' };
+  chargeCompany(world, result.costCt);
+  return ACCEPTED;
+}
+
+/** Book a construction expense against cash and the running annual profit. */
+function chargeCompany(world: World, amountCt: number): void {
+  world.company.cashCt -= amountCt;
+  world.company.profitThisYearCt -= amountCt;
 }

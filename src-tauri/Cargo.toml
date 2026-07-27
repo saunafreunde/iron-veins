@@ -8,9 +8,12 @@ rust-version = "1.77.2"
 
 # The binary is a thin wrapper around the library so the same entry point can be
 # reused if a second target (installer helper, headless replay) is ever added.
+# Desktop only, so plain rlib: the staticlib/cdylib pair that the Tauri template
+# ships for mobile targets costs about a gigabyte of build artefacts here and
+# buys nothing.
 [lib]
 name = "iron_veins_lib"
-crate-type = ["staticlib", "cdylib", "rlib"]
+crate-type = ["rlib"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

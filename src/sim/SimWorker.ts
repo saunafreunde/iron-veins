@@ -10,7 +10,7 @@ import {
   TICK_MS,
 } from './constants';
 import { loanLimitCt } from './economy/company';
-import { hashWorld, World } from './World';
+import { hashWorldLive, World } from './World';
 
 /**
  * Worker entry point and tick scheduler.
@@ -65,7 +65,8 @@ const outcomeSink = (_envelope: CommandEnvelope, outcome: CommandOutcome): void 
 };
 
 function refreshStateHash(current: World): void {
-  const digest = hashWorld(current);
+  // The live digest deliberately skips the tile layers - see hashWorldLive.
+  const digest = hashWorldLive(current);
   stateHashHi = Number.parseInt(digest.slice(0, 8), 16) | 0;
   stateHashLo = Number.parseInt(digest.slice(8, 16), 16) | 0;
   lastHashedTick = current.tick;
@@ -160,12 +161,21 @@ function runFrame(): void {
 }
 
 function startGame(message: Extract<MainToWorkerMessage, { type: 'init' }>): void {
-  world = new World({
-    seed: message.seed,
-    difficulty: message.difficulty,
-    companyName: message.companyName,
-    companyColorIndex: message.companyColorIndex,
-  });
+  // Map generation takes seconds on a 1024 map, so the phases are reported to
+  // the UI while they run.
+  world = World.create(
+    {
+      seed: message.seed,
+      difficulty: message.difficulty,
+      climate: message.climate,
+      mapSize: message.mapSize,
+      companyName: message.companyName,
+      companyColorIndex: message.companyColorIndex,
+    },
+    (phase, seedAttempt) => {
+      scope.postMessage({ type: 'generating', phase, seedAttempt });
+    },
+  );
   queue = new CommandQueue();
   writer = new SnapshotWriter(message.buffer);
 
@@ -188,6 +198,9 @@ function startGame(message: Extract<MainToWorkerMessage, { type: 'init' }>): voi
     type: 'ready',
     companyName: world.company.name,
     companyColorIndex: world.company.colorIndex,
+    mapSize: world.map.size,
+    townCount: world.towns.length,
+    industryCount: world.industries.length,
   });
 }
 
