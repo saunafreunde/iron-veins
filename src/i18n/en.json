@@ -1,0 +1,73 @@
+{
+  "app.title": "Iron Veins",
+  "app.tagline": "Building a transport empire, 1950 to 2050",
+
+  "ui.defaultCompanyName": "Iron Veins Transport Co.",
+
+  "ui.status.company": "Company",
+  "ui.status.date": "Date",
+  "ui.status.cash": "Balance",
+  "ui.status.loan": "Loan",
+  "ui.status.speed": "Speed",
+  "ui.status.version": "Version {version}",
+
+  "ui.speed.pause": "Pause",
+  "ui.speed.x1": "1x",
+  "ui.speed.x2": "2x",
+  "ui.speed.x5": "5x",
+  "ui.speed.x20": "20x",
+
+  "ui.date.format": "{month} {day}, {year}",
+
+  "ui.month.1": "January",
+  "ui.month.2": "February",
+  "ui.month.3": "March",
+  "ui.month.4": "April",
+  "ui.month.5": "May",
+  "ui.month.6": "June",
+  "ui.month.7": "July",
+  "ui.month.8": "August",
+  "ui.month.9": "September",
+  "ui.month.10": "October",
+  "ui.month.11": "November",
+  "ui.month.12": "December",
+
+  "ui.company.title": "Company",
+  "ui.company.name": "Name",
+  "ui.company.color": "Colour",
+  "ui.company.rename": "Rename",
+
+  "ui.finance.title": "Finances",
+  "ui.finance.cash": "Balance",
+  "ui.finance.loan": "Loan",
+  "ui.finance.limit": "Credit line",
+  "ui.finance.free": "Available credit",
+  "ui.finance.borrow": "Borrow ({amount})",
+  "ui.finance.repay": "Repay ({amount})",
+  "ui.finance.interestHint": "Interest is booked at the end of each month.",
+
+  "ui.system.title": "System status",
+  "ui.system.tick": "Tick",
+  "ui.system.simRate": "Sim rate",
+  "ui.system.simRateValue": "{rate} Hz",
+  "ui.system.seed": "Map seed",
+  "ui.system.commands": "Commands executed",
+  "ui.system.stateHash": "State hash",
+  "ui.system.shell": "Environment",
+  "ui.system.shellDesktop": "Desktop (Tauri)",
+  "ui.system.shellBrowser": "Browser",
+  "ui.system.isolation": "SharedArrayBuffer",
+  "ui.system.isolationOk": "available (cross-origin isolated)",
+  "ui.system.isolationMissing": "unavailable - COOP/COEP headers missing",
+
+  "ui.locale.label": "Language",
+  "ui.debug.toggle": "Debug overlay (F3)",
+
+  "ui.error.title": "The simulation could not be started",
+
+  "cmd.reject.nameEmpty": "The company name must not be empty.",
+  "cmd.reject.nameTooLong": "The company name is too long.",
+  "cmd.reject.invalidColor": "That company colour does not exist.",
+  "cmd.reject.creditLimitReached": "The credit line is exhausted.",
+  "cmd.reject.nothingToRepay": "There is nothing to repay, or the balance is too low."
+}

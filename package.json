@@ -1,0 +1,46 @@
+{
+  "name": "iron-veins",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Iron Veins - a modern transport tycoon",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "test:unit": "vitest run tests/unit",
+    "test:determinism": "vitest run tests/determinism",
+    "icons": "node tools/make-icons.mjs",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@msgpack/msgpack": "^3.0.0",
+    "@tauri-apps/api": "^2.0.0",
+    "fflate": "^0.8.2",
+    "pixi.js": "^8.0.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "zustand": "^5.0.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.0.0",
+    "@tauri-apps/cli": "^2.0.0",
+    "@types/node": "^22.0.0",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.0",
+    "eslint": "^9.0.0",
+    "eslint-config-prettier": "^9.1.0",
+    "globals": "^15.0.0",
+    "prettier": "^3.3.0",
+    "typescript": "^5.6.0",
+    "typescript-eslint": "^8.0.0",
+    "vite": "^5.4.0",
+    "vitest": "^2.1.0"
+  }
+}

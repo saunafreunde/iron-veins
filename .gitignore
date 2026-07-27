@@ -1,0 +1,7 @@
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+.vite/
+src-tauri/target/
+src-tauri/gen/

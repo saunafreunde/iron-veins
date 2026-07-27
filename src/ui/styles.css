@@ -1,0 +1,322 @@
+/* Interface chrome. Colours mirror src/shared/palette.ts (section 16.3). */
+
+:root {
+  --surface: #1c2128;
+  --card: #262c34;
+  --border: #39414c;
+  --text: #e6e9ee;
+  --text-muted: #9aa3ae;
+  --accent: #f08020;
+  --success: #4caf7d;
+  --warning: #e0b040;
+  --danger: #d9534f;
+
+  --radius: 6px;
+  --gap: 12px;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--surface);
+  color: var(--text);
+  font-family:
+    'Segoe UI',
+    system-ui,
+    -apple-system,
+    sans-serif;
+  font-size: 14px;
+  overflow: hidden;
+}
+
+.app {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  height: 100%;
+}
+
+/* ------------------------------------------------------------- status bar */
+
+.statusbar {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 8px 16px;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+}
+
+.statusbar__brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 220px;
+}
+
+.statusbar__swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  border: 1px solid rgb(0 0 0 / 40%);
+}
+
+.statusbar__company {
+  font-weight: 600;
+}
+
+.statusbar__facts {
+  display: flex;
+  gap: 24px;
+  margin: 0;
+}
+
+.statusbar__facts dt,
+.readout dt {
+  color: var(--text-muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.statusbar__facts dd,
+.readout dd {
+  margin: 2px 0 0;
+}
+
+.statusbar__speed {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.statusbar__version {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+/* --------------------------------------------------------------- controls */
+
+.speed,
+.button,
+.chip {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 6px 12px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.speed:hover,
+.button:hover:not(:disabled),
+.chip:hover {
+  border-color: var(--accent);
+}
+
+.speed--active,
+.chip--active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #1a1a1a;
+  font-weight: 600;
+}
+
+.button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.button-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ---------------------------------------------------------------- content */
+
+.workspace {
+  padding: 24px;
+  overflow: auto;
+}
+
+.workspace__intro h1 {
+  margin: 0 0 4px;
+  font-size: 26px;
+  letter-spacing: 0.02em;
+}
+
+.workspace__intro p {
+  margin: 0 0 24px;
+  color: var(--text-muted);
+}
+
+.workspace__panels {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--gap);
+  align-items: start;
+}
+
+.panel {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.panel__title {
+  margin: 0;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+.panel__hint {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.readout {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.value {
+  font-variant-numeric: tabular-nums;
+}
+
+.value--mono {
+  font-family: 'Cascadia Mono', 'Consolas', monospace;
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.value--danger {
+  color: var(--danger);
+}
+
+.value--warning {
+  color: var(--warning);
+}
+
+.value--success {
+  color: var(--success);
+}
+
+/* ------------------------------------------------------------------ forms */
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.field__label {
+  color: var(--text-muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.field__label--spaced {
+  margin-top: 6px;
+}
+
+.field__input {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font: inherit;
+  padding: 6px 8px;
+}
+
+.swatches {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.swatch {
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius);
+  border: 2px solid transparent;
+  cursor: pointer;
+}
+
+.swatch--active {
+  border-color: var(--text);
+}
+
+/* ------------------------------------------------------------ app bar etc */
+
+.appbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: var(--card);
+  border-top: 1px solid var(--border);
+}
+
+.appbar__label {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.toast {
+  position: fixed;
+  bottom: 64px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--danger);
+  color: #fff;
+  padding: 10px 16px;
+  border-radius: var(--radius);
+  box-shadow: 0 6px 20px rgb(0 0 0 / 45%);
+}
+
+.fatal {
+  max-width: 720px;
+  margin: 80px auto;
+  padding: 24px;
+  background: var(--card);
+  border: 1px solid var(--danger);
+  border-radius: var(--radius);
+}
+
+.fatal h1 {
+  margin-top: 0;
+  font-size: 20px;
+  color: var(--danger);
+}
+
+.fatal__message {
+  font-family: 'Cascadia Mono', 'Consolas', monospace;
+  font-size: 13px;
+  color: var(--text-muted);
+}

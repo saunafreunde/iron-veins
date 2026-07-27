@@ -1,0 +1,23 @@
+[
+  { "tick": 0, "command": { "kind": 1, "name": "Eisenadern Nord" } },
+  { "tick": 1, "command": { "kind": 2, "colorIndex": 3 } },
+  { "tick": 250, "command": { "kind": 3, "amountCt": 5000000 } },
+  { "tick": 3000, "command": { "kind": 3, "amountCt": 12500000 } },
+  { "tick": 6001, "command": { "kind": 3, "amountCt": 20000000 } },
+  { "tick": 6500, "command": { "kind": 3, "amountCt": 1000000 } },
+  { "tick": 9000, "command": { "kind": 4, "amountCt": 4000000 } },
+  { "tick": 12000, "command": { "kind": 2, "colorIndex": 6 } },
+  { "tick": 15000, "command": { "kind": 4, "amountCt": 999999 } },
+  { "tick": 18000, "command": { "kind": 3, "amountCt": 3000000 } },
+  { "tick": 21000, "command": { "kind": 1, "name": "Eisenadern Nord AG" } },
+  { "tick": 24000, "command": { "kind": 4, "amountCt": 30000000 } },
+  { "tick": 27000, "command": { "kind": 3, "amountCt": 30000000 } },
+  { "tick": 30000, "command": { "kind": 2, "colorIndex": 0 } },
+  { "tick": 33000, "command": { "kind": 4, "amountCt": 10000000 } },
+  { "tick": 36000, "command": { "kind": 3, "amountCt": 10000000 } },
+  { "tick": 39000, "command": { "kind": 1, "name": "IV Nord" } },
+  { "tick": 42000, "command": { "kind": 4, "amountCt": 20000000 } },
+  { "tick": 45000, "command": { "kind": 3, "amountCt": 5000000 } },
+  { "tick": 48000, "command": { "kind": 2, "colorIndex": 7 } },
+  { "tick": 49999, "command": { "kind": 4, "amountCt": 1000000 } }
+]
