@@ -9,7 +9,9 @@ import type { RailType, TrackDir } from '../map/track';
 import {
   buildRailStop,
   buildStationModule,
+  buildAirport,
   buildWaterStop,
+  buyAircraft,
   buyShip,
   buildSignal,
   demolishSignal,
@@ -106,6 +108,12 @@ export function executeCommand(world: World, command: Command): CommandOutcome {
 
     case CommandKind.BuildRailStop:
       return buildRailStop(world, command.x, command.y, command.moduleKind as ModuleKind);
+
+    case CommandKind.BuildAirport:
+      return buildAirport(world, command.x, command.y, command.moduleKind as ModuleKind);
+
+    case CommandKind.BuyAircraft:
+      return buyAircraft(world, command.x, command.y, command.specId);
 
     case CommandKind.BuildWaterStop:
       return buildWaterStop(world, command.x, command.y, command.moduleKind as ModuleKind);

@@ -2,6 +2,8 @@ import { bookExpense } from '../economy/company';
 import {
   AUTO_SIGNAL_STATION_RADIUS,
   CANOPY_COST_CT,
+  AIRPORT_COST_CT,
+  AIRPORT_UPKEEP_CT,
   QUAY_COST_CT,
   QUAY_UPKEEP_CT,
   SHIP_DEPOT_COST_CT,
@@ -57,6 +59,7 @@ import {
 } from '../map/track';
 import { planTrack } from '../net/trackBuilder';
 import {
+  airportSize,
   isSupportModule,
   isWaterModule,
   ModuleKind,
@@ -513,6 +516,7 @@ function attachModule(world: World, module: StationModule): Station {
       buildingsCovered: 0,
       acceptedCargo: 0,
       servedIndustries: [],
+      runwayFreeTick: [],
     };
     world.stations.push(station);
   } else {
@@ -638,6 +642,88 @@ function touchesShore(map: TileMap, x: number, y: number): boolean {
     }
   }
   return false;
+}
+
+/**
+ * Build an airport (section 10), in one of the three sizes of M7.
+ *
+ * The three sizes are three module KINDS rather than one kind with a size
+ * field: `StationModule` is {kind, tile, x, y} and nothing else, and giving it
+ * per-module data for one field would change the saved shape of every module in
+ * the game (DECISIONS.md D-099). It occupies ONE tile for the same reason -
+ * `stationAt`, `recomputeCentre` and `platformLength` all index a module by a
+ * single tile, and a multi-tile footprint would have to teach all three.
+ *
+ * An aircraft is bought here too: an airport is its own shed.
+ */
+export function buildAirport(world: World, x: number, y: number, kind: ModuleKind): CommandOutcome {
+  const size = airportSize(kind);
+  if (size < 0) return reject(RejectReason.UnknownModule);
+  if (!world.map.contains(x, y)) return reject(RejectReason.OutsideMap);
+
+  const map = world.map;
+  const tile = map.tileIndex(x, y);
+  if (stationAt(world, tile) !== null) return reject(RejectReason.Occupied);
+  if (
+    map.terrain[tile] === Terrain.Water ||
+    map.roadBits[tile] !== 0 ||
+    map.trackBits[tile] !== 0 ||
+    map.buildingKind[tile] !== 0 ||
+    map.industryId[tile] !== -1
+  ) {
+    return reject(RejectReason.GroundNotClear);
+  }
+  // A runway needs flat ground. This is the one build in the game that refuses
+  // a slope outright rather than working around it.
+  if (map.slopeAt(x, y) !== 0) return reject(RejectReason.TooSteep);
+
+  const chargeCt = world.costCt(AIRPORT_COST_CT[size]!);
+  if (chargeCt > world.company.cashCt) return reject(RejectReason.InsufficientFunds);
+
+  attachModule(world, { kind, tileIndex: tile, x, y });
+
+  bookExpense(world.company, chargeCt);
+  world.company.infrastructureUpkeepPerYearCt += AIRPORT_UPKEEP_CT[size]!;
+  world.company.fixedAssetsCt += chargeCt;
+  map.revision++;
+  return ACCEPTED;
+}
+
+/** Buy an aircraft at an airport. */
+export function buyAircraft(
+  world: World,
+  airportX: number,
+  airportY: number,
+  specId: number,
+): CommandOutcome {
+  if (!world.map.contains(airportX, airportY)) return reject(RejectReason.OutsideMap);
+  const tile = world.map.tileIndex(airportX, airportY);
+
+  const station = stationAt(world, tile);
+  const here = station?.modules.find((m) => m.tileIndex === tile);
+  if (here === undefined || airportSize(here.kind) < 0) return reject(RejectReason.NeedsDepot);
+
+  const spec = vehicleSpec(specId);
+  if (spec.kind !== VehicleKind.Aircraft) return reject(RejectReason.WrongVehicleKind);
+
+  const year = world.date.year;
+  if (year < spec.introYear || year > spec.retireYear) return reject(RejectReason.NotAvailableYet);
+  const chargeCt = world.costCt(spec.priceCt);
+  if (chargeCt > world.company.cashCt) return reject(RejectReason.InsufficientFunds);
+
+  const id = world.vehicles.create(
+    specId,
+    world.playerCompanyId,
+    tile,
+    world.tick,
+    defaultCargo(spec),
+  );
+  if (id === -1) return reject(RejectReason.TooManyVehicles);
+
+  bookExpense(world.company, chargeCt);
+  world.company.vehicleUpkeepPerYearCt += spec.upkeepCtPerYear;
+  world.company.fixedAssetsCt += chargeCt;
+  return ACCEPTED;
 }
 
 /**

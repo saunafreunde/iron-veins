@@ -1382,3 +1382,43 @@ shoreline rules, the renderer and the pathfinder.
 
 That is not work M7 can absorb honestly, so it is not started. It is recorded
 here as the one thing in M7's sentence that is not delivered.
+
+### D-098 An aircraft flies along a path of adjacent tiles
+
+Section 8.4 says an aircraft flies direct, and it does - `flightPath` is a
+Bresenham walk from one airport to the other over whatever is in between, with
+no search and nothing to search.
+
+What it produces is a path of ADJACENT tiles, and that is the whole reason it
+exists. Everything downstream measures a step from the delta between two path
+entries, walks one tile per boundary crossing, and sends (tile, next tile,
+progress) to the renderer. Handing those consumers two endpoints instead would
+mean a second motion model, a second snapshot shape, a second thing for the save
+to carry and a second thing to keep correct - to save an array that is at most a
+few thousand integers.
+
+The cost is that a flight is bounded by `MAX_PATH_TILES`. On the map sizes this
+game offers that is not reached; if it ever is, the aircraft is refused its route
+and says so, which is the same failure any other vehicle has when it cannot get
+somewhere.
+
+### D-099 Three airport sizes are three module kinds, each on one tile
+
+`StationModule` is `{kind, tileIndex, x, y}` and nothing else. Giving it a size
+field for the sake of airports would change the saved shape of every module in
+the game and give every other kind a field that means nothing to it.
+
+They also occupy ONE tile each rather than a footprint. `stationAt`,
+`recomputeCentre` and `platformLength` all index a module by a single tile; a
+multi-tile module would have to teach all three about footprints, and the three
+sizes are already expressible as three sets of numbers - runways, turnround time
+and price.
+
+What a bigger airport buys is measured rather than asserted: the test flies the
+same three aircraft into an airstrip and into an international airport and
+compares the time they spend circling.
+
+The holding stack of section 8.4 is bounded at four, and the bound is enforced
+where an aircraft can be refused kindly: BEFORE it takes off. An aircraft already
+in the air is never turned away, because that would mean inventing fuel
+exhaustion and a way for a player to lose a vehicle to a rule they could not see.

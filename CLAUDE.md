@@ -339,6 +339,29 @@ Inflation is fixed at new-game time, saved and hashed, and applies to costs as
 well as fares (D-092) - including in the build preview, or the preview and the
 bill disagree from game year two.
 
+## M7 - water and air
+
+Two more modes, and the cheapest of the four milestones so far - because M5's
+cargo routing never asked what kind of vehicle was carrying a parcel. A ship
+joins a chain with no changes to the routing at all.
+
+- **a quay does not move the station centre** (D-095). The centre is what the
+  catchment is measured from; a berth reaching into deep water drags a port's
+  catchment off the shore, and a harbour beside a coal mine can lose the mine.
+- **ships get plain A*, not the flow field of 8.4** (D-094). Shorelines MOVE
+  when a canal is dug, and a stale flow field routes ships into land that is no
+  longer there - silently.
+- **an aircraft flies a path of ADJACENT tiles** (D-098). Every consumer
+  downstream measures a step from the delta between two entries; endpoints would
+  mean a second motion model, snapshot and save.
+- **a hull and a wing have no rolling resistance.** Their drag is in the fluid,
+  which the drag term carries. Charging a ship road friction puts a hundred
+  kilonewtons on a vehicle that has none.
+- **canals already worked and locks cannot exist** (D-097). Lowering land below
+  sea level floods it; a ship sails up the result. But water IS "terrain at or
+  below sea level", so the game has exactly one water surface and a lock has no
+  second level to connect. That is the one thing in M7's sentence not delivered.
+
 ## Still outstanding
 
 - The **minimap** (owed since M1) and **vehicle selection on the map** (M2).

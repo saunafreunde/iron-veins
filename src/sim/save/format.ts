@@ -39,9 +39,10 @@ export const SAVE_MAGIC = 'IRVN';
  * closure and the three support modules of section 10, 12 the bankruptcy
  * countdown of section 14.2, 13 the accounts of section 14.1, 14 the traction
  * work each vehicle has done since its last energy bill, 15 the inflation
- * setting of section 14.2 and the auto-renewal switch of 11.3.
+ * setting of section 14.2 and the auto-renewal switch of 11.3, 16 the runway
+ * occupancy of section 8.4.
  */
-export const SAVE_VERSION = 15;
+export const SAVE_VERSION = 16;
 
 /** File extension used for manual and automatic saves. */
 export const SAVE_EXTENSION = '.ironsave';
@@ -417,6 +418,22 @@ function parseCommand(value: unknown, path: string): Command {
           asInt(id, `${path}.specIds[${i}]`),
         ),
       };
+    case CommandKind.BuildAirport:
+      return {
+        kind: CommandKind.BuildAirport,
+        x: asInt(raw['x'], `${path}.x`),
+        y: asInt(raw['y'], `${path}.y`),
+        moduleKind: asInt(raw['moduleKind'], `${path}.moduleKind`),
+      };
+
+    case CommandKind.BuyAircraft:
+      return {
+        kind: CommandKind.BuyAircraft,
+        x: asInt(raw['x'], `${path}.x`),
+        y: asInt(raw['y'], `${path}.y`),
+        specId: asInt(raw['specId'], `${path}.specId`),
+      };
+
     case CommandKind.BuildWaterStop:
       return {
         kind: CommandKind.BuildWaterStop,

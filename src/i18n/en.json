@@ -147,7 +147,7 @@
   "cmd.reject.outsideMap": "That is outside the map.",
   "cmd.reject.onWater": "Nothing can be built on water here.",
   "cmd.reject.occupied": "This ground is already taken.",
-  "cmd.reject.tooSteep": "The ground is too steep for a road.",
+  "cmd.reject.tooSteep": "A runway needs level ground.",
   "cmd.reject.nothingToDo": "There is nothing to do here.",
   "cmd.reject.needsRoad": "A stop needs a road underneath it.",
   "cmd.reject.needsTrack": "A platform or engine shed needs track underneath.",
@@ -415,5 +415,12 @@
   "ui.tool.priceQuay": "Quay: {amount} - on water at the shore",
   "ui.tool.priceShipDepot": "Shipyard: {amount} - where ships are built",
   "cmd.reject.needsWater": "A quay has to stand on a water tile.",
-  "cmd.reject.needsShore": "A quay needs land on one of its sides."
+  "cmd.reject.needsShore": "A quay needs land on one of its sides.",
+  "ui.tool.airstrip": "Airstrip",
+  "ui.tool.airport": "Airport",
+  "ui.tool.intlAirport": "International airport",
+  "ui.tool.priceAirstrip": "Airstrip: {amount} - 1 runway, level ground",
+  "ui.tool.priceAirport": "Airport: {amount} - 2 runways",
+  "ui.tool.priceIntlAirport": "International: {amount} - 4 runways, fastest turnround",
+  "veh.state.holding": "Holding"
 }

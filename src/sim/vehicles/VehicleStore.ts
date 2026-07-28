@@ -37,6 +37,8 @@ export const VehicleState = {
   NoRoute: 7,
   /** Held at a signal: the section ahead belongs to another train. */
   WaitingForPath: 8,
+  /** Circling: every runway at the destination is busy (section 8.4). */
+  Holding: 9,
 } as const;
 export type VehicleState = (typeof VehicleState)[keyof typeof VehicleState];
 
@@ -51,6 +53,7 @@ export const VEHICLE_STATE_KEYS: readonly string[] = [
   'veh.state.inDepot',
   'veh.state.noRoute',
   'veh.state.waitingForPath',
+  'veh.state.holding',
 ];
 
 export const OrderLoad = {

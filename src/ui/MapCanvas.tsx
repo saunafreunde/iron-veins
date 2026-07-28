@@ -68,6 +68,30 @@ function commandForClick(tool: Tool, tile: TileInfo): Command | null {
         y: tile.y,
         moduleKind: ModuleKind.RailDepot,
       };
+    case 'airstrip':
+      return {
+        kind: CommandKind.BuildAirport,
+        x: tile.x,
+        y: tile.y,
+        moduleKind: ModuleKind.Airstrip,
+      };
+
+    case 'airport':
+      return {
+        kind: CommandKind.BuildAirport,
+        x: tile.x,
+        y: tile.y,
+        moduleKind: ModuleKind.Airport,
+      };
+
+    case 'intlairport':
+      return {
+        kind: CommandKind.BuildAirport,
+        x: tile.x,
+        y: tile.y,
+        moduleKind: ModuleKind.InternationalAirport,
+      };
+
     case 'quay':
       return {
         kind: CommandKind.BuildWaterStop,

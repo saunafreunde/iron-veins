@@ -31,6 +31,8 @@ export const CommandKind = {
   SetAutoRenew: 23,
   BuildWaterStop: 24,
   BuyShip: 25,
+  BuildAirport: 26,
+  BuyAircraft: 27,
 } as const;
 export type CommandKind = (typeof CommandKind)[keyof typeof CommandKind];
 
@@ -182,6 +184,23 @@ export interface BuyTrainCommand {
   readonly specIds: readonly number[];
 }
 
+/** Build an airport, in one of the three sizes of section 10. */
+export interface BuildAirportCommand {
+  readonly kind: typeof CommandKind.BuildAirport;
+  readonly x: number;
+  readonly y: number;
+  /** A value of ModuleKind; one of the three airport kinds. */
+  readonly moduleKind: number;
+}
+
+/** Buy an aircraft at an airport. */
+export interface BuyAircraftCommand {
+  readonly kind: typeof CommandKind.BuyAircraft;
+  readonly x: number;
+  readonly y: number;
+  readonly specId: number;
+}
+
 /** Place a quay or a ship shed on a water tile that touches the shore. */
 export interface BuildWaterStopCommand {
   readonly kind: typeof CommandKind.BuildWaterStop;
@@ -252,6 +271,8 @@ export interface RefitVehicleCommand {
 }
 
 export type Command =
+  | BuildAirportCommand
+  | BuyAircraftCommand
   | BuildWaterStopCommand
   | BuyShipCommand
   | SetAutoRenewCommand

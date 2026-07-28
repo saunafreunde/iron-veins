@@ -714,6 +714,15 @@ export const DRAG_TRAIN = 5.5;
 export const DRAG_ROAD = 3.2;
 export const DRAG_SHIP = 40.0;
 
+/**
+ * Air resistance of an aircraft. [kg/m]
+ *
+ * Low against a ship's forty, and it has to be: the term is k * v^2 and an
+ * airliner's v is two hundred and fifty metres a second against a coaster's
+ * six. At a ship's coefficient an aircraft would need three gigawatts to move.
+ */
+export const DRAG_AIR = 0.9;
+
 /** Braking deceleration by vehicle class. [m/s^2] */
 export const BRAKE_FREIGHT = 0.6;
 export const BRAKE_PASSENGER = 1.0;
@@ -978,6 +987,48 @@ export const QUAY_UPKEEP_CT = 2_200 * CENTS_PER_EURO;
 
 export const SHIP_DEPOT_COST_CT = 34_000 * CENTS_PER_EURO;
 export const SHIP_DEPOT_UPKEEP_CT = 2_600 * CENTS_PER_EURO;
+
+/**
+ * The three airport sizes of M7, indexed by AirportSize.
+ *
+ * They differ in what they cost, how many aircraft can be worked at once, and
+ * how long a landing occupies the runway. An airstrip is a field with a shed;
+ * an international airport is an investment that only pays with a real network
+ * behind it - which is the decision the three sizes exist to pose.
+ */
+export const AIRPORT_COST_CT: readonly number[] = [
+  48_000 * CENTS_PER_EURO,
+  140_000 * CENTS_PER_EURO,
+  340_000 * CENTS_PER_EURO,
+];
+
+export const AIRPORT_UPKEEP_CT: readonly number[] = [
+  4_200 * CENTS_PER_EURO,
+  11_000 * CENTS_PER_EURO,
+  24_000 * CENTS_PER_EURO,
+];
+
+/** Runways, and therefore aircraft that can be on the ground at once. */
+export const AIRPORT_RUNWAYS: readonly number[] = [1, 2, 4];
+
+/**
+ * Ticks one landing occupies a runway (section 8.4).
+ *
+ * A bigger airport turns an aircraft round faster because it has the taxiways
+ * and the stands to do it, not because its runway is shorter.
+ */
+export const AIRPORT_RUNWAY_TICKS: readonly number[] = [120, 90, 60];
+
+/**
+ * Aircraft that may hold over one airport before the rest are turned away
+ * (section 8.4 gives four).
+ *
+ * A holding aircraft burns fuel and earns nothing, which is the pressure that
+ * makes a second runway worth buying. Beyond the stack an aircraft simply waits
+ * where it is rather than vanishing - there is no fuel exhaustion in this game
+ * and inventing one would be a punishment nobody asked for.
+ */
+export const AIRPORT_HOLDING_SLOTS = 4;
 
 /** A freight terminal multiplies the time a stop takes by this (section 10). */
 export const FREIGHT_TERMINAL_LOAD_FACTOR = 1 / 1.5;

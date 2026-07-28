@@ -147,7 +147,7 @@
   "cmd.reject.outsideMap": "Das liegt außerhalb der Karte.",
   "cmd.reject.onWater": "Auf Wasser lässt sich hier nichts bauen.",
   "cmd.reject.occupied": "Dieses Gelände ist bereits belegt.",
-  "cmd.reject.tooSteep": "Das Gelände ist für eine Straße zu steil.",
+  "cmd.reject.tooSteep": "Eine Landebahn braucht ebenes Gelände.",
   "cmd.reject.nothingToDo": "Hier gibt es nichts zu tun.",
   "cmd.reject.needsRoad": "Eine Haltestelle braucht eine Straße darunter.",
   "cmd.reject.needsTrack": "Ein Bahnsteig oder Bahndepot braucht ein Gleis darunter.",
@@ -415,5 +415,12 @@
   "ui.tool.priceQuay": "Kai: {amount} — auf Wasser am Ufer",
   "ui.tool.priceShipDepot": "Werft: {amount} — hier werden Schiffe gebaut",
   "cmd.reject.needsWater": "Ein Kai muss auf einer Wasserkachel stehen.",
-  "cmd.reject.needsShore": "Ein Kai braucht Land an einer seiner Seiten."
+  "cmd.reject.needsShore": "Ein Kai braucht Land an einer seiner Seiten.",
+  "ui.tool.airstrip": "Landeplatz",
+  "ui.tool.airport": "Flughafen",
+  "ui.tool.intlAirport": "Großflughafen",
+  "ui.tool.priceAirstrip": "Landeplatz: {amount} — 1 Bahn, flaches Gelände",
+  "ui.tool.priceAirport": "Flughafen: {amount} — 2 Bahnen",
+  "ui.tool.priceIntlAirport": "Großflughafen: {amount} — 4 Bahnen, schnellste Abfertigung",
+  "veh.state.holding": "Warteschleife"
 }

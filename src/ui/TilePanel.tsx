@@ -4,6 +4,7 @@ import type { IndustryMarker, StationMarker } from '../shared/protocol';
 import {
   AUTO_SIGNAL_SPACING_TILES,
   CANOPY_COST_CT,
+  AIRPORT_COST_CT,
   INDUSTRY_CLOSURE_MONTHS,
   QUAY_COST_CT,
   SHIP_DEPOT_COST_CT,
@@ -35,6 +36,9 @@ const TOOLS: ReadonlyArray<{ readonly id: Tool; readonly labelKey: string }> = [
   { id: 'platform', labelKey: 'ui.tool.platform' },
   { id: 'raildepot', labelKey: 'ui.tool.railDepot' },
   { id: 'quay', labelKey: 'ui.tool.quay' },
+  { id: 'airstrip', labelKey: 'ui.tool.airstrip' },
+  { id: 'airport', labelKey: 'ui.tool.airport' },
+  { id: 'intlairport', labelKey: 'ui.tool.intlAirport' },
   { id: 'shipdepot', labelKey: 'ui.tool.shipDepot' },
   { id: 'freightterminal', labelKey: 'ui.tool.freightTerminal' },
   { id: 'canopy', labelKey: 'ui.tool.canopy' },
@@ -71,6 +75,12 @@ function priceHint(tool: Tool, year: number): string {
       return t('ui.tool.pricePlatform', { amount: formatMoney(at(RAIL_PLATFORM_COST_CT)) });
     case 'raildepot':
       return t('ui.tool.priceRailDepot', { amount: formatMoney(at(RAIL_DEPOT_COST_CT)) });
+    case 'airstrip':
+      return t('ui.tool.priceAirstrip', { amount: formatMoney(at(AIRPORT_COST_CT[0]!)) });
+    case 'airport':
+      return t('ui.tool.priceAirport', { amount: formatMoney(at(AIRPORT_COST_CT[1]!)) });
+    case 'intlairport':
+      return t('ui.tool.priceIntlAirport', { amount: formatMoney(at(AIRPORT_COST_CT[2]!)) });
     case 'quay':
       return t('ui.tool.priceQuay', { amount: formatMoney(at(QUAY_COST_CT)) });
     case 'shipdepot':

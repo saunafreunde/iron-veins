@@ -2,7 +2,7 @@ import type { ReactElement } from 'react';
 import { formatMoney, t } from '../i18n';
 import { CommandKind } from '../sim/commands/types';
 import { DEADLOCK_WARN_TICKS, TICK_SECONDS, MAX_TRAIN_LENGTH_M } from '../sim/constants';
-import { ModuleKind } from '../sim/station/types';
+import { isAirModule, ModuleKind } from '../sim/station/types';
 import {
   availableRailVehicles,
   availableVehicles,
@@ -176,10 +176,12 @@ export function FleetPanel({ client }: { readonly client: SimClient }): ReactEle
   const isRoadDepot = moduleHere?.kind === ModuleKind.RoadDepot;
   const isRailDepot = moduleHere?.kind === ModuleKind.RailDepot;
   const isShipyard = moduleHere?.kind === ModuleKind.ShipDepot;
+  const isAirport = moduleHere !== undefined && isAirModule(moduleHere.kind);
 
   const selected = fleet.find((vehicle) => vehicle.id === selectedVehicleId);
   const buyable = availableVehicles(VehicleKind.Road, year);
   const buyableShips = availableVehicles(VehicleKind.Ship, year);
+  const buyableAircraft = availableVehicles(VehicleKind.Aircraft, year);
 
   const appendOrder = (): void => {
     if (selected === undefined || station === undefined) return;
@@ -254,7 +256,32 @@ export function FleetPanel({ client }: { readonly client: SimClient }): ReactEle
         </>
       )}
 
-      {!isRoadDepot && !isRailDepot && !isShipyard && (
+      {isAirport && (
+        <>
+          <span className="field__label">{t('ui.fleet.buyHere')}</span>
+          <div className="button-row">
+            {buyableAircraft.map((spec) => (
+              <button
+                key={spec.id}
+                type="button"
+                className="button"
+                onClick={() =>
+                  client.send({
+                    kind: CommandKind.BuyAircraft,
+                    x: selectedTile!.x,
+                    y: selectedTile!.y,
+                    specId: spec.id,
+                  })
+                }
+              >
+                {t(spec.nameKey)} ({formatMoney(spec.priceCt)})
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+
+      {!isRoadDepot && !isRailDepot && !isShipyard && !isAirport && (
         <p className="panel__hint">{t('ui.fleet.selectDepot')}</p>
       )}
 

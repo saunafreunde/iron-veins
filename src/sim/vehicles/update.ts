@@ -10,6 +10,10 @@ import { Cargo } from '../cargo/types';
 import {
   BRAKE_REACTION_SECONDS,
   CURVE_LOOKAHEAD_MAX_NODES,
+  AIRPORT_HOLDING_SLOTS,
+  AIRPORT_RUNWAY_TICKS,
+  AIRPORT_RUNWAYS,
+  DRAG_AIR,
   DRAG_ROAD,
   DRAG_SHIP,
   DRAG_TRAIN,
@@ -42,7 +46,15 @@ import { bookRevenue } from '../economy/company';
 import { serviceVehicle } from './lifecycle';
 import { deliverToIndustry } from '../industry/production';
 import { isOneWay, signalDirection, signalKind, SignalKind } from '../map/signals';
-import { hasModule, ModuleKind, platformLength, type Station } from '../station/types';
+import { flightPath } from '../net/airPath';
+import {
+  hasModule,
+  isAirModule,
+  ModuleKind,
+  platformLength,
+  stationAirportSize,
+  type Station,
+} from '../station/types';
 import type { World } from '../World';
 import { holdBody, releaseAll, releaseBehind, tryClaim } from './reservations';
 import { pathDirection, pathStepM, routeLengthM } from './route';
@@ -71,6 +83,7 @@ const REPATH_INTERVAL_TICKS = 100;
 function moduleServes(moduleKind: number, vehicleKind: number): boolean {
   if (vehicleKind === VehicleKind.Train) return moduleKind === ModuleKind.RailPlatform;
   if (vehicleKind === VehicleKind.Ship) return moduleKind === ModuleKind.Quay;
+  if (vehicleKind === VehicleKind.Aircraft) return isAirModule(moduleKind);
   return moduleKind === ModuleKind.BusStop || moduleKind === ModuleKind.LorryBay;
 }
 
@@ -148,9 +161,10 @@ function occupiedByAnother(world: World, tile: number, id: number): boolean {
  */
 function gradePermille(world: World, id: number): number {
   const vehicles = world.vehicles;
-  // The sea is flat. Reading the ground under a ship would find the sea bed and
-  // drag the ship up the shoreline it is moored against.
-  if (vehicles.kind[id] === VehicleKind.Ship) return 0;
+  // The sea is flat and so is the sky. Reading the ground under either would
+  // find the sea bed or a mountain the aircraft is flying comfortably over.
+  const mode = vehicles.kind[id];
+  if (mode === VehicleKind.Ship || mode === VehicleKind.Aircraft) return 0;
 
   const index = vehicles.pathIndex[id]!;
   if (index + 1 >= vehicles.pathLength[id]!) return 0;
@@ -264,10 +278,17 @@ function stepPhysics(world: World, id: number, braking: boolean, speedLimit: num
   // A hull has no wheels: its resistance is all in the water, which the drag
   // term already carries. Charging it road rolling resistance as well would put
   // a hundred kilonewtons of friction on a ship that has none.
-  const ship = vehicles.kind[id] === VehicleKind.Ship;
-  const rollingCoefficient = ship ? 0 : rail ? ROLLING_RESISTANCE_RAIL : ROLLING_RESISTANCE_ROAD;
+  const mode = vehicles.kind[id]!;
+  const ship = mode === VehicleKind.Ship;
+  const flying = mode === VehicleKind.Aircraft;
+  // Neither a hull nor a wing touches the ground: their resistance is all in
+  // the fluid, which the drag term carries. An aircraft's drag coefficient is
+  // low because it is written against a speed an order of magnitude higher.
+  const rollingCoefficient =
+    ship || flying ? 0 : rail ? ROLLING_RESISTANCE_RAIL : ROLLING_RESISTANCE_ROAD;
   const rolling = rollingCoefficient * mass * GRAVITY;
-  const drag = (ship ? DRAG_SHIP : rail ? DRAG_TRAIN : DRAG_ROAD) * speed * speed;
+  const dragCoefficient = flying ? DRAG_AIR : ship ? DRAG_SHIP : rail ? DRAG_TRAIN : DRAG_ROAD;
+  const drag = dragCoefficient * speed * speed;
   const grade = mass * GRAVITY * (gradePermille(world, id) / 1000);
   const brake = braking ? mass * vehicles.brakeMs2[id]! : 0;
 
@@ -307,19 +328,21 @@ function routeTo(world: World, id: number, targetTile: number): boolean {
 
   const kind = vehicles.kind[id];
   const length =
-    kind === VehicleKind.Ship
-      ? world.waterPathfinder.find(world.map, vehicles.tileIndex[id]!, targetTile, path)
-      : kind === VehicleKind.Train
-        ? world.railPathfinder.find(
-            world.map,
-            vehicles.tileIndex[id]!,
-            targetTile,
-            vehicles.maxSpeedMs[id]!,
-            vehicles.lateralAccel[id]!,
-            vehicles.needsCatenary[id] === 1,
-            path,
-          )
-        : world.roadPathfinder.find(world.map, vehicles.tileIndex[id]!, targetTile, path);
+    kind === VehicleKind.Aircraft
+      ? flightPath(world.map, vehicles.tileIndex[id]!, targetTile, path)
+      : kind === VehicleKind.Ship
+        ? world.waterPathfinder.find(world.map, vehicles.tileIndex[id]!, targetTile, path)
+        : kind === VehicleKind.Train
+          ? world.railPathfinder.find(
+              world.map,
+              vehicles.tileIndex[id]!,
+              targetTile,
+              vehicles.maxSpeedMs[id]!,
+              vehicles.lateralAccel[id]!,
+              vehicles.needsCatenary[id] === 1,
+              path,
+            )
+          : world.roadPathfinder.find(world.map, vehicles.tileIndex[id]!, targetTile, path);
 
   if (length === 0) {
     vehicles.pathLength[id] = 0;
@@ -373,6 +396,12 @@ function advanceOrder(world: World, id: number): void {
   }
 
   vehicles.orderIndex[id] = (vehicles.orderIndex[id]! + 1) % orders.length;
+  // An aircraft waits on the ground rather than joining a full holding stack.
+  if (!mayDepart(world, id)) {
+    vehicles.state[id] = VehicleState.Loading;
+    vehicles.loadTicks[id] = MIN_STATION_STOP_TICKS;
+    return;
+  }
   const target = orderTargetTile(world, id);
   if (target === -1 || !routeTo(world, id, target)) {
     vehicles.state[id] = VehicleState.NoRoute;
@@ -514,6 +543,83 @@ export function platformShare(world: World, id: number, station: Station): numbe
   if (trainTiles <= platform) return 1;
 
   return (platform / trainTiles) * (1 - PLATFORM_OVERHANG_PENALTY);
+}
+
+/**
+ * The runway queue and the holding stack of section 8.4.
+ *
+ * An airport has one runway per size step, and a landing occupies one for a
+ * while. An aircraft that finds them all busy HOLDS - it circles, earning
+ * nothing, which is the pressure that makes a second runway worth buying rather
+ * than a punishment for its own sake.
+ *
+ * The stack is bounded at four positions. Beyond that an aircraft is not
+ * refused in the air, which would mean inventing fuel exhaustion; it is refused
+ * BEFORE it leaves and waits on the ground, where waiting is free. That is the
+ * same limit, expressed at the only point where it can be enforced kindly.
+ */
+function runwaysOf(station: Station): number {
+  const size = stationAirportSize(station);
+  return size < 0 ? 0 : (AIRPORT_RUNWAYS[size] ?? 0);
+}
+
+/** Take a runway if one is free; false when they are all busy. */
+function claimRunway(world: World, station: Station): boolean {
+  const runways = runwaysOf(station);
+  if (runways === 0) return true;
+
+  // Grown lazily: a station gains runways when a bigger airport is built beside
+  // it, and the saved list is whatever it had at the time.
+  while (station.runwayFreeTick.length < runways) station.runwayFreeTick.push(0);
+
+  let earliest = -1;
+  for (let i = 0; i < runways; i++) {
+    if (station.runwayFreeTick[i]! > world.tick) continue;
+    if (earliest < 0 || station.runwayFreeTick[i]! < station.runwayFreeTick[earliest]!) {
+      earliest = i;
+    }
+  }
+  if (earliest < 0) return false;
+
+  const size = stationAirportSize(station);
+  station.runwayFreeTick[earliest] = world.tick + (AIRPORT_RUNWAY_TICKS[size] ?? 0);
+  return true;
+}
+
+/** How many aircraft are already circling over this station. */
+function holdingOver(world: World, stationId: number): number {
+  const vehicles = world.vehicles;
+  let count = 0;
+
+  for (let id = 0; id < vehicles.count; id++) {
+    if (vehicles.alive[id] !== 1) continue;
+    if (vehicles.state[id] !== VehicleState.Holding) continue;
+    const orders = vehicles.orders[id]!;
+    if (orders.length === 0) continue;
+    if (orders[vehicles.orderIndex[id]! % orders.length]!.targetId === stationId) count++;
+  }
+  return count;
+}
+
+/**
+ * May this aircraft set off for its next stop?
+ *
+ * Only if there is room in the stack over the airport it is heading for. An
+ * aircraft held on the ground costs nothing; one held in the air over a full
+ * airport is the queue the limit exists to bound.
+ */
+function mayDepart(world: World, id: number): boolean {
+  const vehicles = world.vehicles;
+  if (vehicles.kind[id] !== VehicleKind.Aircraft) return true;
+
+  const orders = vehicles.orders[id]!;
+  if (orders.length === 0) return true;
+  const order = orders[vehicles.orderIndex[id]! % orders.length]!;
+  if (order.target !== OrderTarget.Station) return true;
+
+  const station = world.stations[order.targetId];
+  if (station === undefined || runwaysOf(station) === 0) return true;
+  return holdingOver(world, station.id) < AIRPORT_HOLDING_SLOTS;
 }
 
 /** True when the vehicle has taken on everything it can carry. */
@@ -721,6 +827,24 @@ function stepVehicle(world: World, id: number): void {
       return;
     }
 
+    case VehicleState.Holding: {
+      // Circling costs a tick of everybody's time and nothing else; the moment
+      // a runway frees, the aircraft lands and is served.
+      const orders = vehicles.orders[id]!;
+      const order = orders[vehicles.orderIndex[id]! % orders.length];
+      const station = order === undefined ? undefined : world.stations[order.targetId];
+      if (station === undefined) {
+        advanceOrder(world, id);
+        return;
+      }
+      if (!claimRunway(world, station)) return;
+
+      const units = serveStation(world, id, station);
+      vehicles.loadTicks[id] = Math.max(MIN_STATION_STOP_TICKS, units * LOAD_TICKS_PER_UNIT);
+      vehicles.state[id] = VehicleState.Loading;
+      return;
+    }
+
     case VehicleState.WaitingForPath: {
       // Retried every tick rather than on the repath cadence: a failed claim
       // is a handful of array reads, and a train sitting at a signal that
@@ -837,6 +961,11 @@ function stepVehicle(world: World, id: number): void {
       const station = world.stations[order.targetId];
       if (station === undefined) {
         advanceOrder(world, id);
+        return;
+      }
+      // An aircraft may not land until a runway is free; until then it holds.
+      if (vehicles.kind[id] === VehicleKind.Aircraft && !claimRunway(world, station)) {
+        vehicles.state[id] = VehicleState.Holding;
         return;
       }
       const units = serveStation(world, id, station);

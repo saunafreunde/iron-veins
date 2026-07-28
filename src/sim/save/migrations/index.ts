@@ -393,6 +393,28 @@ const v14_to_v15: SaveMigration = (payload) => {
 };
 
 /**
+ * M7 gave stations a runway occupancy list. A version 15 world had no airports,
+ * so every station starts with none - which is also what a station without an
+ * airport has after the change.
+ */
+const v15_to_v16: SaveMigration = (payload) => {
+  const inner = state(payload);
+  const stations = inner['stations'];
+  if (!Array.isArray(stations)) throw new SaveFormatError('save.state.stations: expected an array');
+
+  return {
+    ...payload,
+    state: {
+      ...inner,
+      stations: stations.map((station) => ({
+        ...(station as Record<string, unknown>),
+        runwayFreeTick: [],
+      })),
+    },
+  };
+};
+
+/**
  * Registry keyed by the version a migration reads (section 19.1).
  *
  * There is deliberately no entry for 1 -> 2: a version 1 world had no map at
@@ -413,6 +435,7 @@ export const SAVE_MIGRATIONS: ReadonlyMap<number, SaveMigration> = new Map<numbe
   [12, v12_to_v13],
   [13, v13_to_v14],
   [14, v14_to_v15],
+  [15, v15_to_v16],
 ]);
 
 /**

@@ -43,10 +43,48 @@ export const ModuleKind = {
   Quay: 8,
   /** Where ships are built and serviced. */
   ShipDepot: 9,
+  /** The three airport sizes of section 10. Aircraft are bought here too. */
+  Airstrip: 10,
+  Airport: 11,
+  InternationalAirport: 12,
 } as const;
 export type ModuleKind = (typeof ModuleKind)[keyof typeof ModuleKind];
 
-export const MODULE_KIND_COUNT = 10;
+export const MODULE_KIND_COUNT = 13;
+
+/** True for the three airport kinds. */
+export function isAirModule(kind: number): boolean {
+  return (
+    kind === ModuleKind.Airstrip ||
+    kind === ModuleKind.Airport ||
+    kind === ModuleKind.InternationalAirport
+  );
+}
+
+/**
+ * Size index of an airport, 0 to 2, or -1 for anything else.
+ *
+ * The three sizes are three module KINDS rather than one kind with a size
+ * field, because `StationModule` is {kind, tile, x, y} and nothing else - and
+ * giving it per-module data for the sake of one field would change the save
+ * shape of every module in the game.
+ */
+export function airportSize(kind: number): number {
+  if (kind === ModuleKind.Airstrip) return 0;
+  if (kind === ModuleKind.Airport) return 1;
+  if (kind === ModuleKind.InternationalAirport) return 2;
+  return -1;
+}
+
+/** The biggest airport at this station, or -1 when it has none. */
+export function stationAirportSize(station: Station): number {
+  let best = -1;
+  for (const module of station.modules) {
+    const size = airportSize(module.kind);
+    if (size > best) best = size;
+  }
+  return best;
+}
 
 /** True for the module kinds that stand on water. */
 export function isWaterModule(kind: number): boolean {
@@ -112,6 +150,15 @@ export interface Station {
   acceptedCargo: number;
   /** Ids of the industries inside the catchment, ascending. Derived likewise. */
   servedIndustries: number[];
+
+  /**
+   * Tick each runway is free again, one entry per runway (section 8.4).
+   *
+   * Empty for a station with no airport. An aircraft that finds every runway
+   * busy holds; the length of this array is what a bigger airport buys, and it
+   * is why an international airport is worth its price.
+   */
+  runwayFreeTick: number[];
 }
 
 /** Does the station have at least one module of this kind? */
