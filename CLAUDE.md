@@ -144,16 +144,21 @@ install - prepend `%USERPROFILE%\.cargo\bin` to PATH.
 
 ## Milestone status
 
-M0, M1 and the simulation half of M2 are done: world generation, terraforming,
-isometric renderer, and the full economic loop of town output, stations, road
-vehicles, orders and revenue, with balancing scenario 1 in band (payback in
-game year 3).
+M0, M1 and M2 are done. A bus line can be built, crewed and run entirely from
+the interface, and balancing scenario 1 is in band (payback in game year 3).
 
-**Open in M2, and the next thing to build:** the loop has no user interface yet.
-The map draws terrain, roads and buildings, but not stations or moving vehicles,
-and there are no build tools for road, stop, depot or buying a bus. Doing that
-needs a vehicle section in the snapshot buffer (positions per tick), sprites for
-stations and vehicles, and the tool handling in `TilePanel`. The minimap is
-still outstanding from M1 and belongs in the same pass.
+**Still outstanding, to pick up with M3:**
 
-Then M3 (rail) onwards.
+- The **minimap** (owed since M1).
+- Vehicle **hover and selection on the map** - the fleet list is the only way
+  to select one at the moment.
+- The other **balancing scenarios** of section 19.4. Only scenario 1 exists;
+  scenarios 2, 3 and 5 need rail and industry, scenario 4 (bankruptcy from
+  doing nothing) could be written now.
+- The **lorry, tanker and mail van prices** are first-draft numbers. They move
+  cargo that does not exist before M5, so calibrating them now would be tuning
+  against a guess (DECISIONS.md D-041).
+
+Then M3: track building with the route assistant, bridges, tunnels, stations
+with platform modules, train composition, the longitudinal solver on rails,
+train pathfinding and electrification.
