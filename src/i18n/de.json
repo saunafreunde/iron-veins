@@ -348,5 +348,7 @@
   "ui.industry.closureWarning": "Seit {months} Monaten holt niemand etwas ab — schließt in {left} Monaten.",
   "ui.industry.closed": "Stillgelegt.",
   "ui.industry.storeFull": "Lager voll — Produktion auf 25 %.",
-  "ui.tool.autoSignal": "Signale automatisch, alle {spacing} Felder"
+  "ui.tool.autoSignal": "Signale automatisch, alle {spacing} Felder",
+  "ui.finance.inDebt": "Seit {months} Monaten im Minus — Zwangsversteigerung in {left} Monaten.",
+  "ui.finance.bankrupt": "Firma abgewickelt. Die Flotte wurde versteigert."
 }

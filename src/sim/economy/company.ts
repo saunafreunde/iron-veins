@@ -1,4 +1,5 @@
 import {
+  BANKRUPTCY_WARNING_MONTHS,
   COMPANY_COLOR_COUNT,
   LOAN_INTEREST_RATE_PER_YEAR,
   LOAN_LIMIT_ASSET_FACTOR,
@@ -29,7 +30,30 @@ export function createCompany(
     revenueThisMonthCt: 0,
     expensesThisMonthCt: 0,
     upkeepPerYearCt: 0,
+    monthsInDebt: 0,
+    bankrupt: false,
   };
+}
+
+/**
+ * Count a month closed in the red, and say what it means (section 14.2).
+ *
+ * Returns the number of consecutive months the company has now been overdrawn,
+ * so the caller can decide between a warning and a winding-up. Nothing is
+ * decided here: this function knows about money and not about fleets.
+ */
+export function reviewSolvency(company: CompanyState): number {
+  if (company.cashCt >= 0) {
+    company.monthsInDebt = 0;
+    return 0;
+  }
+  company.monthsInDebt++;
+  return company.monthsInDebt;
+}
+
+/** True once the company has been overdrawn long enough to be warned. */
+export function isInTrouble(company: CompanyState): boolean {
+  return company.monthsInDebt >= BANKRUPTCY_WARNING_MONTHS;
 }
 
 /** Book a one-off expense against cash and the running annual profit. */

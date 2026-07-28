@@ -53,6 +53,8 @@ export interface SnapshotValues {
   loanCt: number;
   loanLimitCt: number;
   stateHash: string;
+  /** Consecutive months in the red; the bankruptcy countdown of 14.2. */
+  monthsInDebt: number;
 }
 
 export interface SimUiState extends SnapshotValues {
@@ -141,6 +143,7 @@ export const useSimStore = create<SimUiState>((set) => ({
   loanCt: 0,
   loanLimitCt: 0,
   stateHash: '0000000000000000',
+  monthsInDebt: 0,
 
   locale: 'de',
   ready: false,

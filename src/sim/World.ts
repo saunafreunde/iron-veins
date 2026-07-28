@@ -20,6 +20,7 @@ import {
 } from './economy/company';
 import { LinkGraph, type CargoLinkSave } from './cargo/linkGraph';
 import { refreshCargoRouting } from './cargo/routing';
+import { reviewBankruptcy } from './economy/bankruptcy';
 import { RailPathfinder } from './net/railPath';
 import { ReservationTable } from './net/reservations';
 import { BlockIndex } from './signals/blocks';
@@ -237,6 +238,8 @@ export class World {
       produceIndustryCargo(this);
       growTowns(this);
       closeMonth(this.company);
+      // Last, so the month it judges is the one that has just been booked.
+      reviewBankruptcy(this);
     }
     if (this.tick % TICKS_PER_YEAR === 0) {
       closeFinancialYear(this.company);
@@ -350,6 +353,8 @@ export class World {
     world.company.revenueThisMonthCt = data.company.revenueThisMonthCt;
     world.company.expensesThisMonthCt = data.company.expensesThisMonthCt;
     world.company.upkeepPerYearCt = data.company.upkeepPerYearCt;
+    world.company.monthsInDebt = data.company.monthsInDebt;
+    world.company.bankrupt = data.company.bankrupt;
     return world;
   }
 }
@@ -415,6 +420,7 @@ function hashDynamicState(h: Fnv1a64, world: World): void {
   h.int(c.profitThisYearCt);
   h.int(c.lastYearProfitCt);
   h.int(c.fixedAssetsCt);
+  h.u32(c.monthsInDebt).u32(c.bankrupt ? 1 : 0);
 
   h.u32(world.towns.length);
   for (let i = 0; i < world.towns.length; i++) {

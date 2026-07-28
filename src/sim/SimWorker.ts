@@ -13,6 +13,7 @@ import {
 import { CommandQueue } from './commands/queue';
 import type { CommandEnvelope, CommandOutcome } from './commands/types';
 import {
+  BANKRUPTCY_MONTHS,
   MAX_TICK,
   MAX_TICKS_PER_FRAME,
   SPEED_FACTORS,
@@ -265,6 +266,9 @@ function publishSnapshot(current: World, sink: SnapshotWriter): void {
 
   i32[SnapshotI32.VehicleCount] = writeVehicles(current, sink.draftVehicles);
   i32[SnapshotI32.ReservedCount] = writeReserved(current, sink.draftReserved);
+  i32[SnapshotI32.MonthsInDebt] = current.company.bankrupt
+    ? BANKRUPTCY_MONTHS
+    : current.company.monthsInDebt;
 
   sink.publish();
 

@@ -2,12 +2,10 @@ import type { Cargo } from '../cargo/types';
 import { depositAtStation } from '../cargo/routing';
 import {
   INDUSTRY_CLOSURE_MONTHS,
-  INDUSTRY_DECLINE_RATIO,
   INDUSTRY_FULL_STORE_RATE,
   INDUSTRY_GROWTH_RATIO,
   INDUSTRY_INPUT_PER_BATCH,
   INDUSTRY_LEVEL_MAX,
-  INDUSTRY_LEVEL_MIN,
   INDUSTRY_LEVEL_STEP,
   INDUSTRY_OUTPUT_PER_BATCH,
   INDUSTRY_SERVICE_WINDOW_MONTHS,
@@ -190,8 +188,13 @@ export function collectIndustryOutput(world: World): void {
         shipped += depositAtStation(world, station, spec.outputs[slot]!, offered * share);
       }
 
-      setOutputStock(industry, slot, available - offered);
-      if (slot === 0) industry.collectedThisMonth += shipped;
+      // What the stations had room for is deliberately NOT booked as
+      // collection: an industry is judged on what left on a VEHICLE, not on
+      // what was set down on a platform (D-085). The figure is still worth
+      // having - it is the difference between "nobody collects" and "the
+      // station is full" - so it goes back into the yard rather than being
+      // lost.
+      setOutputStock(industry, slot, available - offered + (offered - shipped));
     }
   }
 }
@@ -215,16 +218,23 @@ export function reviewIndustries(world: World): void {
     }
 
     const produced = industry.producedThisMonth;
-    // An industry that made nothing is dormant, not neglected. A steel mill
-    // nobody has ever supplied would otherwise spend its first two years
-    // failing to be collected from and then close - taking every factory on
-    // the map with it in the first two game years.
-    if (produced <= 0) {
+    // An industry that made nothing AND has nothing standing in its yard is
+    // dormant, not neglected. A steel mill nobody has ever supplied would
+    // otherwise spend its first two years failing to be collected from and
+    // then close - taking every factory on the map with it inside two game
+    // years.
+    //
+    // The second half of that test is what makes the difference: a mine whose
+    // yard is full has throttled itself to a standstill (section 7.3), so it
+    // produces nothing either - and it is the very case the closure rule is
+    // about.
+    const idle = produced <= 0 && outputStock(industry, 0) <= 0 && outputStock(industry, 1) <= 0;
+    if (idle) {
       industry.collectedThisMonth = 0;
       industry.monthsSinceLevelChange++;
       continue;
     }
-    const ratio = industry.collectedThisMonth / produced;
+    const ratio = produced > 0 ? industry.collectedThisMonth / produced : 0;
 
     // The twelve month window of section 7.3, kept as one running number rather
     // than a ring of twelve figures (DECISIONS.md D-079).
@@ -242,17 +252,20 @@ export function reviewIndustries(world: World): void {
     else industry.monthsWithoutCollection++;
 
     industry.monthsSinceLevelChange++;
-    if (industry.monthsSinceLevelChange >= window) {
-      let level = industry.productionLevel;
-      if (industry.serviceAverage >= INDUSTRY_GROWTH_RATIO) level += INDUSTRY_LEVEL_STEP;
-      else if (industry.serviceAverage <= INDUSTRY_DECLINE_RATIO) level -= INDUSTRY_LEVEL_STEP;
-
-      if (level < INDUSTRY_LEVEL_MIN) level = INDUSTRY_LEVEL_MIN;
-      if (level > INDUSTRY_LEVEL_MAX) level = INDUSTRY_LEVEL_MAX;
-      if (level !== industry.productionLevel) {
-        industry.productionLevel = level;
-        industry.monthsSinceLevelChange = 0;
-      }
+    if (
+      industry.monthsSinceLevelChange >= window &&
+      industry.serviceAverage >= INDUSTRY_GROWTH_RATIO
+    ) {
+      // Section 7.3 moves the level in ONE direction: good service expands a
+      // works, and nothing shrinks it. A decline rule used to sit here and it
+      // had to go (DECISIONS.md D-086): what a line can carry away is bounded
+      // by the collection gate, so a brand new line - whose station has not
+      // been visited yet and is therefore rated low - drove every industry it
+      // served straight to the floor before it had a chance to prove itself.
+      // Neglect is punished by the closure clock, which is what the spec uses.
+      const level = industry.productionLevel + INDUSTRY_LEVEL_STEP;
+      industry.productionLevel = level > INDUSTRY_LEVEL_MAX ? INDUSTRY_LEVEL_MAX : level;
+      industry.monthsSinceLevelChange = 0;
     }
 
     industry.producedThisMonth = 0;

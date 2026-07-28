@@ -29,9 +29,10 @@ export const SAVE_MAGIC = 'IRVN';
  * reservation indices a train carries, 8 industry production and the town
  * delivery counters, 9 the block claim and the deadlock clock, 10 the cargo
  * destinations and the measured connection table of section 7.4, 11 industry
- * closure and the three support modules of section 10.
+ * closure and the three support modules of section 10, 12 the bankruptcy
+ * countdown of section 14.2.
  */
-export const SAVE_VERSION = 11;
+export const SAVE_VERSION = 12;
 
 /** File extension used for manual and automatic saves. */
 export const SAVE_EXTENSION = '.ironsave';
@@ -141,6 +142,8 @@ function parseCompany(value: unknown, path: string): CompanyState {
     fixedAssetsCt: asInt(raw['fixedAssetsCt'], `${path}.fixedAssetsCt`),
     revenueThisMonthCt: asInt(raw['revenueThisMonthCt'], `${path}.revenueThisMonthCt`),
     expensesThisMonthCt: asInt(raw['expensesThisMonthCt'], `${path}.expensesThisMonthCt`),
+    monthsInDebt: asInt(raw['monthsInDebt'], `${path}.monthsInDebt`),
+    bankrupt: asBoolean(raw['bankrupt'], `${path}.bankrupt`),
     upkeepPerYearCt: asInt(raw['upkeepPerYearCt'], `${path}.upkeepPerYearCt`),
   };
 }

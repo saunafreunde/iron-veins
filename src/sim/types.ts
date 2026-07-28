@@ -28,6 +28,16 @@ export interface CompanyState {
   expensesThisMonthCt: number;
   /** Yearly upkeep of everything owned, recomputed on every build. [cent] */
   upkeepPerYearCt: number;
+  /**
+   * Consecutive months closed with a negative balance (section 14.2).
+   *
+   * Three of them is a warning, twelve is the end of the game. It counts
+   * MONTHS and not ticks because that is what the rule says and because a
+   * company that dips below zero for an afternoon has not failed.
+   */
+  monthsInDebt: number;
+  /** True once the company has been wound up. The game is over. */
+  bankrupt: boolean;
 }
 
 /** Calendar position derived from a tick count. */

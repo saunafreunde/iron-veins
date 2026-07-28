@@ -185,6 +185,7 @@ export class SimClient {
       loanCt: f64[SnapshotF64.LoanCt]!,
       loanLimitCt: f64[SnapshotF64.LoanLimitCt]!,
       stateHash: hexWord(i32[SnapshotI32.StateHashHi]!) + hexWord(i32[SnapshotI32.StateHashLo]!),
+      monthsInDebt: i32[SnapshotI32.MonthsInDebt]!,
     });
   };
 }

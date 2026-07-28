@@ -6,6 +6,7 @@ import {
   TICKS_PER_DAY,
 } from '../constants';
 import { stationAccepts } from '../industry/catchment';
+import { industrySpec } from '../industry/types';
 import type { Station } from '../station/types';
 import { OrderTarget } from '../vehicles/VehicleStore';
 import type { World } from '../World';
@@ -121,8 +122,43 @@ export function loadFromStation(
   if (allowed === null) return 0;
 
   const moved = transferCargo(station.waiting, world.vehicles.cargo[id]!, cargo, space, allowed);
-  if (moved > 0) compactStacks(station.waiting);
+  if (moved > 0) {
+    compactStacks(station.waiting);
+    creditCollection(world, station, cargo, moved);
+  }
   return moved;
+}
+
+/**
+ * Book cargo that has just been carried away against the industries that made
+ * it (section 7.3: "at least 80 % ABTRANSPORT over twelve months").
+ *
+ * Carried away, not handed to a station. Crediting the deposit instead makes
+ * the growth signal meaningless: an industry then reads full service while its
+ * output rots on a platform nobody calls at, grows on the strength of it, and
+ * makes still more of what cannot be moved. Measured on the coal line of
+ * scenario 2, that alone doubled the mine to 190 % while the train it fed was
+ * carrying six month old coal at the decay floor (DECISIONS.md D-085).
+ *
+ * Split evenly between the works at this station that make this cargo, which is
+ * as fair as it can be without tracking which yard each parcel came out of.
+ */
+function creditCollection(world: World, station: Station, cargo: Cargo, amount: number): void {
+  let producers = 0;
+  for (const industryId of station.servedIndustries) {
+    const industry = world.industries[industryId];
+    if (industry === undefined || !industry.open) continue;
+    if (industrySpec(industry.type).outputs.includes(cargo)) producers++;
+  }
+  if (producers === 0) return;
+
+  const share = amount / producers;
+  for (const industryId of station.servedIndustries) {
+    const industry = world.industries[industryId];
+    if (industry === undefined || !industry.open) continue;
+    if (!industrySpec(industry.type).outputs.includes(cargo)) continue;
+    industry.collectedThisMonth += share;
+  }
 }
 
 /** What is to become of a parcel the vehicle is carrying at this stop. */

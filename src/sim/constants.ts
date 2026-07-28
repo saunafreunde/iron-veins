@@ -304,6 +304,17 @@ export const LOAN_LIMIT_PROFIT_FACTOR = 2.5;
 /** ... plus 0.3x the book value of the fixed assets. */
 export const LOAN_LIMIT_ASSET_FACTOR = 0.3;
 
+/**
+ * Bankruptcy, per section 14.2: three months in the red is a warning, twelve
+ * is a forced auction of the fleet and the end of the game. [months]
+ *
+ * The gap between the two is the point. A company that has one bad winter gets
+ * a year to trade out of it; one that never does is wound up, and the fleet is
+ * sold rather than vanishing, so the player can see what it was worth.
+ */
+export const BANKRUPTCY_WARNING_MONTHS = 3;
+export const BANKRUPTCY_MONTHS = 12;
+
 /** Nominal annual interest rate per difficulty, booked monthly. [1/year] */
 export const LOAN_INTEREST_RATE_PER_YEAR: readonly number[] = [0.04, 0.04, 0.065];
 
@@ -476,21 +487,24 @@ export const INDUSTRY_OUTPUT_PER_BATCH: readonly (readonly number[])[] = [
  * nothing, so a line that was abandoned can be picked up again.
  */
 export const INDUSTRY_LEVEL_START = 100;
-export const INDUSTRY_LEVEL_MIN = 25;
 export const INDUSTRY_LEVEL_MAX = 200;
 /** One expansion, in percentage points of the base rate (section 7.3). */
 export const INDUSTRY_LEVEL_STEP = 10;
 
 /**
- * Share of what was produced that has to be collected for the level to move.
+ * Share of what an industry produced that has to be CARRIED AWAY for it to
+ * expand (section 7.3).
  *
- * The ratio divides by the UNGATED production, so an industry served by a
- * station rated 50 can never exceed 0.5 and can never reach the growth
- * threshold. That single choice is the death spiral of section 10.1 applied to
- * freight: a second train pays for itself in tonnage, not just in trips.
+ * The ratio divides by the ungated production and counts only what left on a
+ * vehicle, so it is bounded above by the collection gate - which is the station
+ * rating. Reaching 80 % therefore means a station rated 80 or better, and that
+ * takes a line with several vehicles on it. That is the death spiral of section
+ * 10.1 applied to freight, pointing upwards: a second train pays for itself in
+ * tonnage and not only in trips.
+ *
+ * There is deliberately no threshold below which a works SHRINKS - see D-086.
  */
 export const INDUSTRY_GROWTH_RATIO = 0.8;
-export const INDUSTRY_DECLINE_RATIO = 0.35;
 
 /**
  * Months of service the expansion rule judges, and the window the running
@@ -568,15 +582,31 @@ export const STATION_JOIN_DISTANCE = 4;
 /** Station rating starts here before any of the terms are added. */
 export const STATION_RATING_BASE = 25;
 
-/** Waiting-time term: full marks below this age, zero above the second. [days] */
-export const RATING_WAIT_GOOD_DAYS = 2;
-export const RATING_WAIT_BAD_DAYS = 20;
+/**
+ * Waiting-time term: full marks below this age, zero above the second. [days]
+ *
+ * Recalibrated against balancing scenarios 2 and 3, which is what these numbers
+ * are for. One day is ten seconds of real time and a vehicle covers 150 to 200
+ * metres in it, so a 25 tile line is a TWENTY DAY round trip - cargo that is
+ * two days old has essentially just been made, and nothing on any line in this
+ * game is ever collected that fresh. Ten days is "the next vehicle took it",
+ * forty-five is "three round trips went past without anybody calling".
+ */
+export const RATING_WAIT_GOOD_DAYS = 10;
+export const RATING_WAIT_BAD_DAYS = 45;
 export const RATING_WAIT_MAX = 30;
 
-/** Frequency term: vehicle visits counted over this window. [days] */
+/**
+ * Frequency term: vehicle visits counted over this window. [days]
+ *
+ * Same recalibration, and the same reason. Forty visits in twenty days is two a
+ * day, which the time model makes physically impossible - a single vehicle on a
+ * 25 tile line manages ONE. Four is a four-vehicle line, and that is what full
+ * marks should mean.
+ */
 export const RATING_FREQUENCY_WINDOW_DAYS = 20;
 export const RATING_FREQUENCY_MAX = 20;
-export const RATING_FREQUENCY_SATURATION_VISITS = 40;
+export const RATING_FREQUENCY_SATURATION_VISITS = 4;
 
 export const RATING_EQUIPMENT_MAX = 15;
 

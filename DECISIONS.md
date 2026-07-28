@@ -1104,3 +1104,101 @@ that is correct rather than a defect: twenty trains on a single-track one-way
 ring is a queue, the warning is meant to show the player exactly that, and the
 answer is to double-track the line. A deadlock is a state that never resolves,
 and there is none.
+
+### D-085 An industry is judged on what LEFT ON A VEHICLE, not on what reached a platform
+
+Found by balancing scenario 2 and it is the most consequential thing in it.
+
+`collectedThisMonth` was credited when the collection gate handed output to a
+station. The growth ratio of 7.3 is therefore "did a station take it", which a
+station always does - so an industry read full service while its output rotted on
+a platform nobody called at, grew on the strength of that, and made still more of
+what could not be moved. Measured on the coal line: the mine doubled itself to
+190 % while the one train it fed carried six month old coal at the decay floor.
+
+Collection is now booked in `loadFromStation`, when a vehicle actually takes the
+cargo, split evenly between the works at that station which make it. What the
+gate offered but nobody took goes back into the yard, where the player can see
+it.
+
+The consequence is the one the design wants: the achievable ratio is bounded
+above by the station rating, so reaching the 80 % expansion threshold means a
+station rated 80 or better, and that takes a line with several vehicles on it.
+A second train pays for itself in tonnage.
+
+### D-086 An industry never shrinks - the closure clock is what punishes neglect
+
+Section 7.3 moves the production level in ONE direction: good service expands a
+works, and nothing in the spec shrinks one. A decline rule was here anyway, as an
+undocumented departure, and D-085 turned it into a trap.
+
+The arithmetic: what can be carried away is bounded by the collection gate, which
+is the station rating divided by a hundred. A line that has just been built has a
+station nobody has visited yet, so it is rated around 30 - and the decline
+threshold sat at 0.35. Every new freight line therefore drove the industry it
+served to the floor before it had a chance to prove itself, and it never
+recovered, because a floor-level works cannot fill the trains that would raise
+its rating.
+
+Removed. Neglect is punished by the closure clock of 7.3, which is what the spec
+uses and which scenario 6 measures.
+
+### D-087 The rating terms and the freight tariffs, recalibrated against scenarios 2 and 3
+
+Two findings, both of them the reason section 19.4 exists.
+
+**The station rating was calibrated for a cadence the time model forbids.** One
+game day is ten seconds of real time and a vehicle covers about 150 metres in it,
+so a 25 tile line is a TWENTY DAY round trip and one vehicle makes ONE visit in
+the twenty day rating window. The frequency term saturated at forty visits - two
+a day, which nothing in this game can ever do - and the waiting-time term gave
+full marks only to cargo under two days old, which no line ever collects. Both
+scored every station in the game at about a third of the marks available.
+
+Saturation is now four visits (a four-vehicle line) and the waiting term is good
+at ten days and zero at forty-five. Scenario 1 is unmoved by it, because for a
+town the rating only redistributes a fixed output; for an industry it is a CAP,
+which is why it mattered so much here.
+
+**The freight tariffs were still an order of magnitude too low.** D-066 raised
+them fourfold against a closed-form ceiling test I wrote myself, because this
+scenario did not exist yet. The ceiling assumes a vehicle runs continuously at
+capacity; a real coal train makes 1.3 round trips a month over 45 tiles, and
+measured that way the line earned 6.4 k EUR a year against 18.6 k of upkeep - it
+could not have paid for itself at any line length or over any number of years.
+
+Every freight rate is multiplied by ten. Passengers and mail are untouched, which
+is what keeps scenario 1 where it was. The two scenarios agree with each other at
+that factor, which is the real test of a calibration: scenario 2 pays back in
+game year 6 against a band of 4 to 7, and scenario 3 earns 166 k EUR a year
+against a band of 80 k to 200 k.
+
+The invented band in `tariff.spec.ts` was replaced by a COMPARISON - road freight
+must be worth less per euro of upkeep than rail freight - because an absolute
+band there competes with the scenario the spec names as the authority.
+
+### D-088 What scenario 4 can actually measure, and what it cannot
+
+"Passively doing nothing with the starting capital, ten years: bankrupt between
+year 6 and 9 - upkeep eats the capital."
+
+Taken literally this is not satisfiable and cannot be made so. A company that
+owns nothing has no upkeep; its cash never moves, and it sits on 500.000 EUR for
+ever. Making it fail would need a fixed company overhead, and section 14.1 lists
+no such account - every cost in it belongs to an asset. An overhead big enough to
+burn 500.000 EUR in six years is 60 k to 100 k a year, which would swamp the
+8 k a year bus line of scenario 1 and break that scenario instead.
+
+So the scenario is read as: a player who spends their capital on a network and
+then stops playing it. That is what "Unterhalt frisst Kapital" describes, and it
+makes the band pin something real - the RATIO of yearly upkeep to purchase price
+across the whole catalogue. Years to ruin is `(1 - f) / (u x f)` for an invested
+share `f` at an upkeep rate `u`; the fixture invests six tenths, the catalogue's
+rate comes out at 8.1 %, and the company is wound up in game year 9.
+
+That is the top of the band rather than the middle of it, and it is worth saying
+so: the measurement is sound but it has little room above it, and a catalogue
+change that lowers upkeep will push it out. The bankruptcy rule of 14.2 itself -
+three months in the red is a warning, twelve is a forced auction of the fleet -
+was missing entirely and is implemented here rather than being deferred to M6,
+because none of this is measurable without it.

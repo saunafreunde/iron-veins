@@ -163,7 +163,7 @@ describe('save migrations', () => {
   it('pins the current save version', () => {
     // Bumping SAVE_VERSION has to be a conscious act, because from the first
     // released build onwards it also requires a migration.
-    expect(SAVE_VERSION).toBe(11);
+    expect(SAVE_VERSION).toBe(12);
   });
 
   it('has a real migration for every step from version 2 on', () => {
@@ -185,6 +185,7 @@ describe('the registered migrations', () => {
         towns: [],
         industries: [],
         vehicles: [],
+        company: {},
       },
     };
   }
@@ -199,6 +200,7 @@ describe('the registered migrations', () => {
     expect(map['railType']).toEqual(new Uint8Array(64 * 64));
     expect(map['structure']).toEqual(new Uint8Array(64 * 64));
     expect(map['signal']).toEqual(new Uint8Array(64 * 64));
+    expect((state['company'] as Record<string, unknown>)['bankrupt']).toBe(false);
     expect(migrated['saveVersion']).toBe(SAVE_VERSION);
   });
 

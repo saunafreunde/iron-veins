@@ -7,11 +7,9 @@ import { CommandKind, type Command } from '../../src/sim/commands/types';
 import {
   Difficulty,
   INDUSTRY_BASE_OUTPUT_PER_MONTH,
-  INDUSTRY_DECLINE_RATIO,
   INDUSTRY_GROWTH_RATIO,
   INDUSTRY_INPUT_PER_BATCH,
   INDUSTRY_SERVICE_WINDOW_MONTHS,
-  INDUSTRY_LEVEL_MIN,
   INDUSTRY_LEVEL_START,
   INDUSTRY_LEVEL_STEP,
   INDUSTRY_OUTPUT_PER_BATCH,
@@ -269,7 +267,7 @@ describe('the production level', () => {
 
   it('does not move inside the dead band', () => {
     const { b, mine } = levelBench();
-    const middle = (INDUSTRY_GROWTH_RATIO + INDUSTRY_DECLINE_RATIO) / 2;
+    const middle = INDUSTRY_GROWTH_RATIO / 2;
     for (let month = 0; month < 12; month++) {
       mine.producedThisMonth = 100;
       mine.collectedThisMonth = 100 * middle;
@@ -278,16 +276,19 @@ describe('the production level', () => {
     expect(mine.productionLevel).toBe(INDUSTRY_LEVEL_START);
   });
 
-  it('runs a badly served industry down to the floor and no further', () => {
+  it('never shrinks a badly served industry - the closure clock punishes it', () => {
     const { b, mine } = levelBench();
-    // Something leaves every month, so the works never counts as abandoned -
-    // it is just never worth much. Eight steps of ten points, a year apart.
+    // Something leaves every month, so the works never counts as abandoned; it
+    // is just never worth much. Section 7.3 moves the level in one direction
+    // only, and a decline rule here drove every new line's industry to the
+    // floor before the line had a chance to prove itself (D-086).
     for (let month = 0; month < 12 * 12; month++) {
       mine.producedThisMonth = 100;
       mine.collectedThisMonth = 1;
       reviewIndustries(b.world);
     }
-    expect(mine.productionLevel).toBe(INDUSTRY_LEVEL_MIN);
+    expect(mine.productionLevel).toBe(INDUSTRY_LEVEL_START);
+    expect(mine.open).toBe(true);
   });
 
   it('resets the monthly counters whatever it decides', () => {
@@ -330,13 +331,19 @@ describe('a mine and a power plant', () => {
     run(b, { kind: CommandKind.SetVehicleRunning, vehicleId: 0, running: true });
 
     const cashBefore = b.world.company.cashCt;
-    // Not a whole number of months: the monthly review resets the counters, so
-    // sampling exactly on a month boundary would read zero.
-    days(b, 95);
+    // The monthly counters are reset by the review, and a lorry on a 26 tile
+    // haul calls about once a fortnight - so whether THIS month has a
+    // collection in it yet depends on where in the month the sample falls.
+    // The peak over the run is the honest measure.
+    let peakCollected = 0;
+    for (let day = 0; day < 95; day++) {
+      days(b, 1);
+      if (mine.collectedThisMonth > peakCollected) peakCollected = mine.collectedThisMonth;
+    }
 
     // The mine made coal, the lorry carried it, the plant burnt it.
-    expect(mine.producedThisMonth).toBeGreaterThan(0);
-    expect(mine.collectedThisMonth).toBeGreaterThan(0);
+    expect(mine.outputStock0 + mine.producedThisMonth).toBeGreaterThan(0);
+    expect(peakCollected).toBeGreaterThan(0);
     expect(b.world.vehicles.earnedCt[0]!).toBeGreaterThan(0);
     expect(b.world.company.cashCt).toBeGreaterThan(cashBefore - 100_000_000);
     expect(plant.inputStock0 + plant.producedThisMonth).toBeGreaterThan(0);

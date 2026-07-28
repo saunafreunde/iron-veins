@@ -271,6 +271,34 @@ const v10_to_v11: SaveMigration = (payload) => {
 };
 
 /**
+ * M6 work brought the bankruptcy countdown of section 14.2 forward, because
+ * balancing scenario 4 cannot be measured without it.
+ *
+ * A version 11 world had no countdown. Every company in one is entered as
+ * solvent and not overdrawn, which is what "this rule did not exist yet"
+ * means - a company that happens to be in the red gets its twelve months from
+ * the moment the save is loaded rather than being wound up on the spot.
+ */
+const v11_to_v12: SaveMigration = (payload) => {
+  const inner = state(payload);
+  const company = inner['company'];
+  if (typeof company !== 'object' || company === null || Array.isArray(company)) {
+    throw new SaveFormatError('save.state.company: expected an object');
+  }
+  return {
+    ...payload,
+    state: {
+      ...inner,
+      company: {
+        ...(company as Record<string, unknown>),
+        monthsInDebt: 0,
+        bankrupt: false,
+      },
+    },
+  };
+};
+
+/**
  * Registry keyed by the version a migration reads (section 19.1).
  *
  * There is deliberately no entry for 1 -> 2: a version 1 world had no map at
@@ -287,6 +315,7 @@ export const SAVE_MIGRATIONS: ReadonlyMap<number, SaveMigration> = new Map<numbe
   [8, v8_to_v9],
   [9, v9_to_v10],
   [10, v10_to_v11],
+  [11, v11_to_v12],
 ]);
 
 /**

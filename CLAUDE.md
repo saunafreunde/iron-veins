@@ -147,7 +147,28 @@ install - prepend `%USERPROFILE%\.cargo\bin` to PATH.
   the 10 % floor. If a line earns little, check the queue length first.
 - **The balancing tests own the constants.** When `npm run test:balance` leaves
   its band, the tables in `constants.ts` and `vehicles/catalog.ts` change, never
-  the test. The bus line scenario prints why it earns what it earns.
+  the test. Every scenario prints why it earns what it earns.
+
+  Five of the six scenarios of section 19.4 exist and are in band. What each one
+  actually holds in place is worth knowing before changing a number:
+
+  | Scenario | Band | Measured | What it pins |
+  | --- | --- | --- | --- |
+  | 1 bus line | payback 2-4 yr | year 3 | the passenger and mail rates |
+  | 2 coal train | payback 4-7 yr | year 6 | **the freight rates** (D-087) |
+  | 3 wood chain | 80-200 k/yr | 166 k | that a full chain is worth building |
+  | 4 idle company | bankrupt yr 6-9 | year 9 | **upkeep as a share of price** |
+  | 6 mine closure | 24 +/- 1 months | month 25 | the closure clock on the calendar |
+
+  Scenario 5 (an AI company alone on a 512 map) belongs to M8, which is where AI
+  companies arrive.
+
+- **An industry is judged on what left ON A VEHICLE**, never on what a station
+  took (D-085). Crediting the deposit makes the growth signal meaningless: a
+  works then reads full service while its output rots on a platform.
+- **Nothing shrinks an industry.** The level moves one way; neglect is punished
+  by the closure clock (D-086). A decline rule drove every new line's industry
+  to the floor before the line could prove itself.
 
 ## Milestone status
 
@@ -282,9 +303,6 @@ industry clock (7.3) and the station modules (10).
 
 Still open across both, and none of it is M4 or M5:
 
-- **Balancing scenarios 2, 3, 4 and 6** of section 19.4. The chain scenarios own
-  the freight figures that M5 set by first draft (D-066), and scenario 2 is the
-  authority the spec names for exactly those numbers.
 - **The news log** (section 15, due with M8). Until it exists, an industry's
   closure warning is visible only in the tile panel and a stuck train only in
   the fleet list and the F3 overlay.

@@ -71,15 +71,22 @@ describe('the revenue ceiling of every vehicle', () => {
     expect(failures, 'vehicles that cannot pay their own upkeep at any line length').toEqual([]);
   });
 
-  it('leaves road freight marginal and rail freight worth building', () => {
-    // This is the shape the design wants, stated as a test rather than left to
-    // two tables nobody compared: a lorry can be run at a profit on a short,
-    // well served haul, and a train is where freight actually pays.
+  it('leaves road freight worth less per euro of upkeep than rail freight', () => {
+    // This is the shape the design wants: a lorry can be run at a profit on a
+    // short, well served haul, and a train is where bulk freight actually pays.
+    //
+    // It is a COMPARISON and no longer a band. The absolute level of the
+    // freight tariffs belongs to balancing scenario 2, which section 19.4 names
+    // as the authority over exactly those numbers; an invented band here would
+    // fight it, and did (DECISIONS.md D-087).
     const lorry = VEHICLE_SPECS.find((s) => s.nameKey === 'veh.lorry_bulk1')!;
+    const wagon = VEHICLE_SPECS.find((s) => s.nameKey === 'veh.wagon_open1')!;
+
     const lorryRatio = ceilingRevenueCtPerYear(lorry) / lorry.upkeepCtPerYear;
+    const wagonRatio = ceilingRevenueCtPerYear(wagon) / wagon.upkeepCtPerYear;
 
     expect(lorryRatio).toBeGreaterThan(MIN_ROAD_RATIO);
-    expect(lorryRatio).toBeLessThan(MIN_CEILING_RATIO);
+    expect(lorryRatio).toBeLessThan(wagonRatio);
   });
 
   it('makes a plausible freight train pay for itself', () => {

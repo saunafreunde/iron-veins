@@ -1,6 +1,7 @@
 import { CommandQueue } from '../../src/sim/commands/queue';
 import { CommandKind, type Command } from '../../src/sim/commands/types';
 import { Difficulty, MapClimate, TICKS_PER_YEAR } from '../../src/sim/constants';
+import { industrySpec, type Industry } from '../../src/sim/industry/types';
 import { TileMap } from '../../src/sim/map/TileMap';
 import { Terrain } from '../../src/sim/map/terrain';
 import { ModuleKind } from '../../src/sim/station/types';
@@ -67,23 +68,62 @@ function placeTown(map: TileMap, town: Town): void {
   }
 }
 
-export interface TwoTownScenario {
+/** Anything the shared helpers below can drive. */
+export interface Scenario {
   readonly world: World;
   readonly queue: CommandQueue;
+}
+
+export interface TwoTownScenario extends Scenario {
   readonly townA: Town;
   readonly townB: Town;
 }
 
-/** Flat map with two towns `distance` tiles apart on the same row. */
-export function twoTownScenario(population: number, distance: number): TwoTownScenario {
-  const map = new TileMap(SCENARIO_SIZE);
+/**
+ * Flat grassland with hand-placed towns and industries, and nothing random.
+ *
+ * The chain scenarios need a coal mine exactly 45 tiles from a power plant, or
+ * a forest, a sawmill and a furniture works in a line - which no generated map
+ * will ever offer. Building the ground by hand is what keeps the measurement
+ * about the economy rather than about which seed the test drew.
+ */
+export function flatScenario(
+  size: number,
+  towns: Town[],
+  industries: Industry[],
+  seed = 9,
+): Scenario {
+  const map = new TileMap(size);
   map.cornerHeight.fill(GROUND_HEIGHT);
   map.terrain.fill(Terrain.Grass);
 
-  const y = SCENARIO_SIZE >> 1;
-  const startX = (SCENARIO_SIZE - distance) >> 1;
+  for (const town of towns) placeTown(map, town);
+  for (const industry of industries) {
+    const footprint = industrySpec(industry.type).footprint;
+    for (let dy = 0; dy < footprint; dy++) {
+      for (let dx = 0; dx < footprint; dx++) {
+        map.industryId[map.tileIndex(industry.x + dx, industry.y + dy)] = industry.id;
+      }
+    }
+  }
 
-  const makeTown = (id: number, x: number, name: string): Town => ({
+  const world = World.fromGenerated(
+    {
+      seed,
+      difficulty: Difficulty.Normal,
+      climate: MapClimate.Temperate,
+      mapSize: size,
+      companyName: 'Balancing AG',
+      companyColorIndex: 1,
+    },
+    { map, towns, industries, seedUsed: seed },
+  );
+  return { world, queue: new CommandQueue() };
+}
+
+/** A town of `population` at (x, y), laid out the way placeTown expects. */
+export function makeTown(id: number, x: number, y: number, population: number, name: string): Town {
+  return {
     id,
     name,
     x,
@@ -95,30 +135,22 @@ export function twoTownScenario(population: number, distance: number): TwoTownSc
     transportedThisMonth: 0,
     goodsDeliveredThisMonth: 0,
     foodDeliveredThisMonth: 0,
-  });
+  };
+}
 
-  const townA = makeTown(0, startX, 'Westheim');
-  const townB = makeTown(1, startX + distance, 'Ostheim');
-  placeTown(map, townA);
-  placeTown(map, townB);
+/** Flat map with two towns `distance` tiles apart on the same row. */
+export function twoTownScenario(population: number, distance: number): TwoTownScenario {
+  const y = SCENARIO_SIZE >> 1;
+  const startX = (SCENARIO_SIZE - distance) >> 1;
+  const townA = makeTown(0, startX, y, population, 'Westheim');
+  const townB = makeTown(1, startX + distance, y, population, 'Ostheim');
 
-  const world = World.fromGenerated(
-    {
-      seed: 1,
-      difficulty: Difficulty.Normal,
-      climate: MapClimate.Temperate,
-      mapSize: SCENARIO_SIZE,
-      companyName: 'Balancing AG',
-      companyColorIndex: 1,
-    },
-    { map, towns: [townA, townB], industries: [], seedUsed: 1 },
-  );
-
-  return { world, queue: new CommandQueue(), townA, townB };
+  const scenario = flatScenario(SCENARIO_SIZE, [townA, townB], [], 1);
+  return { ...scenario, townA, townB };
 }
 
 /** Execute a command immediately, and fail loudly if the world refuses it. */
-export function apply(scenario: TwoTownScenario, command: Command): void {
+export function apply(scenario: Scenario, command: Command): void {
   scenario.queue.enqueue(command, scenario.world.tick);
   let rejected: string | null = null;
   scenario.world.drainCommands(scenario.queue, (_envelope, outcome) => {
@@ -192,7 +224,7 @@ export function buildBusLine(scenario: TwoTownScenario, specId: number, busCount
 }
 
 /** Run `years` game years, returning the company balance at each year end. */
-export function runYears(scenario: TwoTownScenario, years: number): number[] {
+export function runYears(scenario: Scenario, years: number): number[] {
   const balances: number[] = [];
   for (let year = 0; year < years; year++) {
     for (let tick = 0; tick < TICKS_PER_YEAR; tick++) {

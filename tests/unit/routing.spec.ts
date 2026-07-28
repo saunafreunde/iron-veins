@@ -273,10 +273,13 @@ describe('a lorry feeding a freight train', () => {
     let carriedBackwards = false;
 
     for (let tick = 0; tick < 120 * TICKS_PER_DAY; tick++) {
+      // Vehicles move BEFORE the tick counter advances, so a payment made
+      // during this step was stamped with the tick as it is right now.
+      const stamp = world.tick;
       world.step(bench.queue, null);
 
-      if (lorryPaidTick < 0 && vehicles.earnedCt[0]! > 0) lorryPaidTick = world.tick;
-      if (trainPaidTick < 0 && vehicles.earnedCt[1]! > 0) trainPaidTick = world.tick;
+      if (lorryPaidTick < 0 && vehicles.earnedCt[0]! > 0) lorryPaidTick = stamp;
+      if (trainPaidTick < 0 && vehicles.earnedCt[1]! > 0) trainPaidTick = stamp;
 
       // Set down at the transfer point: it keeps where it came from and where
       // it is going, and it has been paid for as far as here.

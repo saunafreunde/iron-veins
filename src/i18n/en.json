@@ -348,5 +348,7 @@
   "ui.industry.closureWarning": "Nothing collected for {months} months - closes in {left}.",
   "ui.industry.closed": "Closed down.",
   "ui.industry.storeFull": "Store full - production down to 25 %.",
-  "ui.tool.autoSignal": "Signal automatically, every {spacing} tiles"
+  "ui.tool.autoSignal": "Signal automatically, every {spacing} tiles",
+  "ui.finance.inDebt": "In the red for {months} months - forced auction in {left}.",
+  "ui.finance.bankrupt": "Company wound up. The fleet has been auctioned."
 }

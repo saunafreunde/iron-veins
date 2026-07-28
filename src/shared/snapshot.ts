@@ -12,7 +12,7 @@
  * refuses to interpret a buffer written by a different layout.
  */
 
-export const SNAPSHOT_LAYOUT_VERSION = 4;
+export const SNAPSHOT_LAYOUT_VERSION = 5;
 
 /** Header fields, shared by both slots. */
 export const SnapshotHeader = {
@@ -46,6 +46,8 @@ export const SnapshotI32 = {
   VehicleCount: 11,
   /** How many entries of the reservation block are in use. */
   ReservedCount: 12,
+  /** Consecutive months closed in the red; 0 when solvent (section 14.2). */
+  MonthsInDebt: 13,
 } as const;
 
 /**
