@@ -5,6 +5,8 @@ import {
   AUTO_SIGNAL_SPACING_TILES,
   CANOPY_COST_CT,
   INDUSTRY_CLOSURE_MONTHS,
+  QUAY_COST_CT,
+  SHIP_DEPOT_COST_CT,
   INDUSTRY_WARNING_MONTHS,
   COLD_STORE_COST_CT,
   FREIGHT_TERMINAL_COST_CT,
@@ -32,6 +34,8 @@ const TOOLS: ReadonlyArray<{ readonly id: Tool; readonly labelKey: string }> = [
   { id: 'depot', labelKey: 'ui.tool.depot' },
   { id: 'platform', labelKey: 'ui.tool.platform' },
   { id: 'raildepot', labelKey: 'ui.tool.railDepot' },
+  { id: 'quay', labelKey: 'ui.tool.quay' },
+  { id: 'shipdepot', labelKey: 'ui.tool.shipDepot' },
   { id: 'freightterminal', labelKey: 'ui.tool.freightTerminal' },
   { id: 'canopy', labelKey: 'ui.tool.canopy' },
   { id: 'coldstore', labelKey: 'ui.tool.coldStore' },
@@ -67,6 +71,10 @@ function priceHint(tool: Tool, year: number): string {
       return t('ui.tool.pricePlatform', { amount: formatMoney(at(RAIL_PLATFORM_COST_CT)) });
     case 'raildepot':
       return t('ui.tool.priceRailDepot', { amount: formatMoney(at(RAIL_DEPOT_COST_CT)) });
+    case 'quay':
+      return t('ui.tool.priceQuay', { amount: formatMoney(at(QUAY_COST_CT)) });
+    case 'shipdepot':
+      return t('ui.tool.priceShipDepot', { amount: formatMoney(at(SHIP_DEPOT_COST_CT)) });
     case 'freightterminal':
       return t('ui.tool.priceFreightTerminal', {
         amount: formatMoney(at(FREIGHT_TERMINAL_COST_CT)),

@@ -9,6 +9,8 @@ import type { RailType, TrackDir } from '../map/track';
 import {
   buildRailStop,
   buildStationModule,
+  buildWaterStop,
+  buyShip,
   buildSignal,
   demolishSignal,
   buildRoad,
@@ -104,6 +106,12 @@ export function executeCommand(world: World, command: Command): CommandOutcome {
 
     case CommandKind.BuildRailStop:
       return buildRailStop(world, command.x, command.y, command.moduleKind as ModuleKind);
+
+    case CommandKind.BuildWaterStop:
+      return buildWaterStop(world, command.x, command.y, command.moduleKind as ModuleKind);
+
+    case CommandKind.BuyShip:
+      return buyShip(world, command.x, command.y, command.specId);
 
     case CommandKind.SetAutoRenew:
       world.company.autoRenew = command.enabled;

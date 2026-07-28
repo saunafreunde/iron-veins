@@ -1,5 +1,6 @@
 import { Cargo } from '../cargo/types';
 import { RAIL_SPECS } from './railCatalog';
+import { AIRCRAFT_SPECS, SHIP_SPECS } from './waterCatalog';
 import { kmh, RailRole, VehicleKind, type VehicleSpec } from './spec';
 
 /**
@@ -648,7 +649,12 @@ const ROAD_SPECS: readonly VehicleSpec[] = [
 ];
 
 /** Every buildable vehicle of every mode, in one list. */
-export const VEHICLE_SPECS: readonly VehicleSpec[] = [...ROAD_SPECS, ...RAIL_SPECS];
+export const VEHICLE_SPECS: readonly VehicleSpec[] = [
+  ...ROAD_SPECS,
+  ...RAIL_SPECS,
+  ...SHIP_SPECS,
+  ...AIRCRAFT_SPECS,
+];
 
 const SPEC_BY_ID = new Map<number, VehicleSpec>(VEHICLE_SPECS.map((spec) => [spec.id, spec]));
 

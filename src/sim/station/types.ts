@@ -39,10 +39,19 @@ export const ModuleKind = {
   Canopy: 6,
   /** Cold store: perishable cargo does not spoil at this station at all. */
   ColdStore: 7,
+  /** One berth, built on a water tile that touches the shore (section 10). */
+  Quay: 8,
+  /** Where ships are built and serviced. */
+  ShipDepot: 9,
 } as const;
 export type ModuleKind = (typeof ModuleKind)[keyof typeof ModuleKind];
 
-export const MODULE_KIND_COUNT = 8;
+export const MODULE_KIND_COUNT = 10;
+
+/** True for the module kinds that stand on water. */
+export function isWaterModule(kind: number): boolean {
+  return kind === ModuleKind.Quay || kind === ModuleKind.ShipDepot;
+}
 
 /**
  * Modules that stand beside the line rather than on it.
@@ -171,17 +180,37 @@ export function inCatchment(station: Station, x: number, y: number): boolean {
   return dx * dx + dy * dy <= radius * radius;
 }
 
-/** Recompute the centre after modules were added or removed. */
+/**
+ * Recompute the centre after modules were added or removed.
+ *
+ * Modules that stand on water are left OUT of the average. The centre is what
+ * the catchment is measured from, and a quay reaching out to deep water would
+ * otherwise drag a port's catchment off the shore and out to sea - a harbour
+ * built beside a coal mine could lose the mine by having its berth built one
+ * tile too far out (DECISIONS.md D-095). A port that is nothing BUT water
+ * modules falls back to averaging them, because something has to be the centre.
+ */
 export function recomputeCentre(station: Station): void {
   if (station.modules.length === 0) return;
+
   let sumX = 0;
   let sumY = 0;
+  let counted = 0;
   for (const module of station.modules) {
+    if (isWaterModule(module.kind)) continue;
     sumX += module.x;
     sumY += module.y;
+    counted++;
   }
-  station.x = Math.round(sumX / station.modules.length);
-  station.y = Math.round(sumY / station.modules.length);
+  if (counted === 0) {
+    for (const module of station.modules) {
+      sumX += module.x;
+      sumY += module.y;
+    }
+    counted = station.modules.length;
+  }
+  station.x = Math.round(sumX / counted);
+  station.y = Math.round(sumY / counted);
 }
 
 /** Drop visits that fell out of the frequency window. */

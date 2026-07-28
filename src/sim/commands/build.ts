@@ -2,6 +2,10 @@ import { bookExpense } from '../economy/company';
 import {
   AUTO_SIGNAL_STATION_RADIUS,
   CANOPY_COST_CT,
+  QUAY_COST_CT,
+  QUAY_UPKEEP_CT,
+  SHIP_DEPOT_COST_CT,
+  SHIP_DEPOT_UPKEEP_CT,
   CANOPY_UPKEEP_CT,
   COLD_STORE_COST_CT,
   COLD_STORE_UPKEEP_CT,
@@ -36,6 +40,7 @@ import {
   SIGNAL_KIND_COUNT,
   SIGNAL_TRACK_DEGREE,
 } from '../map/signals';
+import type { TileMap } from '../map/TileMap';
 import { Structure, structureUpkeepCt } from '../map/structures';
 import { slopeRise, Terrain } from '../map/terrain';
 import {
@@ -53,6 +58,7 @@ import {
 import { planTrack } from '../net/trackBuilder';
 import {
   isSupportModule,
+  isWaterModule,
   ModuleKind,
   recomputeCentre,
   type Station,
@@ -581,6 +587,105 @@ export function buildRailStop(
 }
 
 /**
+ * Place a quay or a ship shed on the water (section 10).
+ *
+ * The tile must be water and must TOUCH the shore. Both halves matter: a berth
+ * in the middle of a lake serves nothing, and the shoreline test is also what
+ * stops a player quietly building a port on the far side of an ocean nothing
+ * can reach - a quay is where land meets water, which is what a port is.
+ *
+ * Unlike every other module this one stands on a tile the catchment deliberately
+ * does not measure from (D-095).
+ */
+export function buildWaterStop(
+  world: World,
+  x: number,
+  y: number,
+  kind: ModuleKind,
+): CommandOutcome {
+  if (!isWaterModule(kind)) return reject(RejectReason.UnknownModule);
+  if (!world.map.contains(x, y)) return reject(RejectReason.OutsideMap);
+
+  const map = world.map;
+  const tile = map.tileIndex(x, y);
+  if (map.terrain[tile] !== Terrain.Water) return reject(RejectReason.NeedsWater);
+  if (stationAt(world, tile) !== null) return reject(RejectReason.Occupied);
+  if (!touchesShore(map, x, y)) return reject(RejectReason.NeedsShore);
+
+  const cost = kind === ModuleKind.ShipDepot ? SHIP_DEPOT_COST_CT : QUAY_COST_CT;
+  const upkeep = kind === ModuleKind.ShipDepot ? SHIP_DEPOT_UPKEEP_CT : QUAY_UPKEEP_CT;
+  const chargeCt = world.costCt(cost);
+  if (chargeCt > world.company.cashCt) return reject(RejectReason.InsufficientFunds);
+
+  attachModule(world, { kind, tileIndex: tile, x, y });
+
+  bookExpense(world.company, chargeCt);
+  world.company.infrastructureUpkeepPerYearCt += upkeep;
+  world.company.fixedAssetsCt += chargeCt;
+  map.revision++;
+  return ACCEPTED;
+}
+
+/** Does this water tile have land on one of its eight sides? */
+function touchesShore(map: TileMap, x: number, y: number): boolean {
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) {
+      if (dx === 0 && dy === 0) continue;
+      const nx = x + dx;
+      const ny = y + dy;
+      if (!map.contains(nx, ny)) continue;
+      if (map.terrain[map.tileIndex(nx, ny)] !== Terrain.Water) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Buy a ship at a shed (section 11.5).
+ *
+ * The same shape as `buyRoadVehicle` - the depot check, the mode check, the
+ * calendar and the money - which is the point: a ship is a vehicle and nothing
+ * downstream of here needs to know it floats.
+ */
+export function buyShip(
+  world: World,
+  depotX: number,
+  depotY: number,
+  specId: number,
+): CommandOutcome {
+  if (!world.map.contains(depotX, depotY)) return reject(RejectReason.OutsideMap);
+  const tile = world.map.tileIndex(depotX, depotY);
+
+  const station = stationAt(world, tile);
+  const isDepot =
+    station !== null &&
+    station.modules.some((m) => m.tileIndex === tile && m.kind === ModuleKind.ShipDepot);
+  if (!isDepot) return reject(RejectReason.NeedsDepot);
+
+  const spec = vehicleSpec(specId);
+  if (spec.kind !== VehicleKind.Ship) return reject(RejectReason.WrongVehicleKind);
+
+  const year = world.date.year;
+  if (year < spec.introYear || year > spec.retireYear) return reject(RejectReason.NotAvailableYet);
+  const chargeCt = world.costCt(spec.priceCt);
+  if (chargeCt > world.company.cashCt) return reject(RejectReason.InsufficientFunds);
+
+  const id = world.vehicles.create(
+    specId,
+    world.playerCompanyId,
+    tile,
+    world.tick,
+    defaultCargo(spec),
+  );
+  if (id === -1) return reject(RejectReason.TooManyVehicles);
+
+  bookExpense(world.company, chargeCt);
+  world.company.vehicleUpkeepPerYearCt += spec.upkeepCtPerYear;
+  world.company.fixedAssetsCt += chargeCt;
+  return ACCEPTED;
+}
+
+/**
  * Place a crane, a canopy or a cold store beside a station (section 10).
  *
  * These three stand on the goods yard rather than on the line, so they need
@@ -750,8 +855,13 @@ function standsInDepot(world: World, vehicleId: number): boolean {
 
   const station = stationAt(world, vehicles.tileIndex[vehicleId]!);
   if (station === null) return false;
+  const kind = vehicles.kind[vehicleId];
   const wanted =
-    vehicles.kind[vehicleId] === VehicleKind.Train ? ModuleKind.RailDepot : ModuleKind.RoadDepot;
+    kind === VehicleKind.Train
+      ? ModuleKind.RailDepot
+      : kind === VehicleKind.Ship
+        ? ModuleKind.ShipDepot
+        : ModuleKind.RoadDepot;
   for (const module of station.modules) {
     if (module.tileIndex === vehicles.tileIndex[vehicleId] && module.kind === wanted) return true;
   }

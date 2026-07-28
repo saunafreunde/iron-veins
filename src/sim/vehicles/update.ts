@@ -11,6 +11,7 @@ import {
   BRAKE_REACTION_SECONDS,
   CURVE_LOOKAHEAD_MAX_NODES,
   DRAG_ROAD,
+  DRAG_SHIP,
   DRAG_TRAIN,
   FREIGHT_TERMINAL_LOAD_FACTOR,
   GRAVITY,
@@ -69,6 +70,7 @@ const REPATH_INTERVAL_TICKS = 100;
 /** True for module kinds that vehicles of this mode can call at. */
 function moduleServes(moduleKind: number, vehicleKind: number): boolean {
   if (vehicleKind === VehicleKind.Train) return moduleKind === ModuleKind.RailPlatform;
+  if (vehicleKind === VehicleKind.Ship) return moduleKind === ModuleKind.Quay;
   return moduleKind === ModuleKind.BusStop || moduleKind === ModuleKind.LorryBay;
 }
 
@@ -101,16 +103,38 @@ export function stationAccessTile(station: Station, vehicleKind: number): number
  */
 function platformFor(world: World, id: number, station: Station): number {
   const kind = world.vehicles.kind[id]!;
-  if (kind !== VehicleKind.Train) return stationAccessTile(station, kind);
+  // Trains and ships both queue for a berth; a bus stop holds as many buses as
+  // turn up. Giving ships the platform rule from the start avoids repeating
+  // D-049 - the second quay of a port would otherwise be worthless.
+  if (kind !== VehicleKind.Train && kind !== VehicleKind.Ship) {
+    return stationAccessTile(station, kind);
+  }
 
   let first = -1;
+  let free = -1;
   for (const module of station.modules) {
     if (!moduleServes(module.kind, kind)) continue;
     if (first < 0) first = module.tileIndex;
-    const owner = world.reservations.ownerOf(module.tileIndex);
-    if (owner === -1 || owner === id) return module.tileIndex;
+    if (free >= 0) continue;
+    // A ship claims no track, so "taken" means another ship is standing there.
+    const taken =
+      kind === VehicleKind.Ship
+        ? occupiedByAnother(world, module.tileIndex, id)
+        : world.reservations.ownerOf(module.tileIndex) !== -1 &&
+          world.reservations.ownerOf(module.tileIndex) !== id;
+    if (!taken) free = module.tileIndex;
   }
-  return first;
+  return free >= 0 ? free : first;
+}
+
+/** Is some other vehicle standing on this tile? Used for berths. */
+function occupiedByAnother(world: World, tile: number, id: number): boolean {
+  const vehicles = world.vehicles;
+  for (let other = 0; other < vehicles.count; other++) {
+    if (other === id || vehicles.alive[other] !== 1) continue;
+    if (vehicles.tileIndex[other] === tile) return true;
+  }
+  return false;
 }
 
 /**
@@ -124,6 +148,10 @@ function platformFor(world: World, id: number, station: Station): number {
  */
 function gradePermille(world: World, id: number): number {
   const vehicles = world.vehicles;
+  // The sea is flat. Reading the ground under a ship would find the sea bed and
+  // drag the ship up the shoreline it is moored against.
+  if (vehicles.kind[id] === VehicleKind.Ship) return 0;
+
   const index = vehicles.pathIndex[id]!;
   if (index + 1 >= vehicles.pathLength[id]!) return 0;
 
@@ -233,8 +261,13 @@ function stepPhysics(world: World, id: number, braking: boolean, speedLimit: num
   const traction = braking
     ? 0
     : Math.min(vehicles.tractiveN[id]!, vehicles.powerW[id]! / Math.max(speed, 1));
-  const rolling = (rail ? ROLLING_RESISTANCE_RAIL : ROLLING_RESISTANCE_ROAD) * mass * GRAVITY;
-  const drag = (rail ? DRAG_TRAIN : DRAG_ROAD) * speed * speed;
+  // A hull has no wheels: its resistance is all in the water, which the drag
+  // term already carries. Charging it road rolling resistance as well would put
+  // a hundred kilonewtons of friction on a ship that has none.
+  const ship = vehicles.kind[id] === VehicleKind.Ship;
+  const rollingCoefficient = ship ? 0 : rail ? ROLLING_RESISTANCE_RAIL : ROLLING_RESISTANCE_ROAD;
+  const rolling = rollingCoefficient * mass * GRAVITY;
+  const drag = (ship ? DRAG_SHIP : rail ? DRAG_TRAIN : DRAG_ROAD) * speed * speed;
   const grade = mass * GRAVITY * (gradePermille(world, id) / 1000);
   const brake = braking ? mass * vehicles.brakeMs2[id]! : 0;
 
@@ -272,18 +305,21 @@ function routeTo(world: World, id: number, targetTile: number): boolean {
   // The old claim is about to lose the route it was expressed in terms of.
   releaseAll(world, id);
 
+  const kind = vehicles.kind[id];
   const length =
-    vehicles.kind[id] === VehicleKind.Train
-      ? world.railPathfinder.find(
-          world.map,
-          vehicles.tileIndex[id]!,
-          targetTile,
-          vehicles.maxSpeedMs[id]!,
-          vehicles.lateralAccel[id]!,
-          vehicles.needsCatenary[id] === 1,
-          path,
-        )
-      : world.roadPathfinder.find(world.map, vehicles.tileIndex[id]!, targetTile, path);
+    kind === VehicleKind.Ship
+      ? world.waterPathfinder.find(world.map, vehicles.tileIndex[id]!, targetTile, path)
+      : kind === VehicleKind.Train
+        ? world.railPathfinder.find(
+            world.map,
+            vehicles.tileIndex[id]!,
+            targetTile,
+            vehicles.maxSpeedMs[id]!,
+            vehicles.lateralAccel[id]!,
+            vehicles.needsCatenary[id] === 1,
+            path,
+          )
+        : world.roadPathfinder.find(world.map, vehicles.tileIndex[id]!, targetTile, path);
 
   if (length === 0) {
     vehicles.pathLength[id] = 0;

@@ -417,6 +417,22 @@ function parseCommand(value: unknown, path: string): Command {
           asInt(id, `${path}.specIds[${i}]`),
         ),
       };
+    case CommandKind.BuildWaterStop:
+      return {
+        kind: CommandKind.BuildWaterStop,
+        x: asInt(raw['x'], `${path}.x`),
+        y: asInt(raw['y'], `${path}.y`),
+        moduleKind: asInt(raw['moduleKind'], `${path}.moduleKind`),
+      };
+
+    case CommandKind.BuyShip:
+      return {
+        kind: CommandKind.BuyShip,
+        x: asInt(raw['x'], `${path}.x`),
+        y: asInt(raw['y'], `${path}.y`),
+        specId: asInt(raw['specId'], `${path}.specId`),
+      };
+
     case CommandKind.SetAutoRenew:
       return {
         kind: CommandKind.SetAutoRenew,

@@ -68,6 +68,22 @@ function commandForClick(tool: Tool, tile: TileInfo): Command | null {
         y: tile.y,
         moduleKind: ModuleKind.RailDepot,
       };
+    case 'quay':
+      return {
+        kind: CommandKind.BuildWaterStop,
+        x: tile.x,
+        y: tile.y,
+        moduleKind: ModuleKind.Quay,
+      };
+
+    case 'shipdepot':
+      return {
+        kind: CommandKind.BuildWaterStop,
+        x: tile.x,
+        y: tile.y,
+        moduleKind: ModuleKind.ShipDepot,
+      };
+
     case 'freightterminal':
       return {
         kind: CommandKind.BuildStationModule,

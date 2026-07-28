@@ -175,9 +175,11 @@ export function FleetPanel({ client }: { readonly client: SimClient }): ReactEle
       : station.modules.find((m) => m.x === selectedTile.x && m.y === selectedTile.y);
   const isRoadDepot = moduleHere?.kind === ModuleKind.RoadDepot;
   const isRailDepot = moduleHere?.kind === ModuleKind.RailDepot;
+  const isShipyard = moduleHere?.kind === ModuleKind.ShipDepot;
 
   const selected = fleet.find((vehicle) => vehicle.id === selectedVehicleId);
   const buyable = availableVehicles(VehicleKind.Road, year);
+  const buyableShips = availableVehicles(VehicleKind.Ship, year);
 
   const appendOrder = (): void => {
     if (selected === undefined || station === undefined) return;
@@ -227,7 +229,34 @@ export function FleetPanel({ client }: { readonly client: SimClient }): ReactEle
         <TrainBuilder client={client} x={selectedTile.x} y={selectedTile.y} />
       )}
 
-      {!isRoadDepot && !isRailDepot && <p className="panel__hint">{t('ui.fleet.selectDepot')}</p>}
+      {isShipyard && (
+        <>
+          <span className="field__label">{t('ui.fleet.buyHere')}</span>
+          <div className="button-row">
+            {buyableShips.map((spec) => (
+              <button
+                key={spec.id}
+                type="button"
+                className="button"
+                onClick={() =>
+                  client.send({
+                    kind: CommandKind.BuyShip,
+                    x: selectedTile!.x,
+                    y: selectedTile!.y,
+                    specId: spec.id,
+                  })
+                }
+              >
+                {t(spec.nameKey)} ({formatMoney(spec.priceCt)})
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+
+      {!isRoadDepot && !isRailDepot && !isShipyard && (
+        <p className="panel__hint">{t('ui.fleet.selectDepot')}</p>
+      )}
 
       {fleet.length === 0 ? (
         <p className="panel__hint">{t('ui.fleet.empty')}</p>

@@ -881,6 +881,15 @@ export const MAX_BLOCK_CLAIM_TILES = 4_096;
  */
 export const DEADLOCK_WARN_TICKS = 1_200;
 
+/**
+ * Node budget for one ship search.
+ *
+ * Larger than the road budget because open water is an eight-connected graph
+ * with no roads to funnel the search: a strait a hundred tiles away is reached
+ * by expanding a fan, not a corridor.
+ */
+export const MAX_WATER_SEARCH_NODES = 40_000;
+
 /** Default spacing when the assistant signals a route for you. [tiles] */
 export const AUTO_SIGNAL_SPACING_TILES = 12;
 
@@ -956,6 +965,19 @@ export const CANOPY_UPKEEP_CT = 700 * CENTS_PER_EURO;
 
 export const COLD_STORE_COST_CT = 12_000 * CENTS_PER_EURO;
 export const COLD_STORE_UPKEEP_CT = 2_100 * CENTS_PER_EURO;
+
+/**
+ * The water modules of section 10.
+ *
+ * A quay is dearer than a rail platform and much dearer than a lorry bay: it is
+ * built into the sea bed, and a port is meant to be a commitment rather than
+ * something dotted along a coast. The shed is where ships are bought.
+ */
+export const QUAY_COST_CT = 26_000 * CENTS_PER_EURO;
+export const QUAY_UPKEEP_CT = 2_200 * CENTS_PER_EURO;
+
+export const SHIP_DEPOT_COST_CT = 34_000 * CENTS_PER_EURO;
+export const SHIP_DEPOT_UPKEEP_CT = 2_600 * CENTS_PER_EURO;
 
 /** A freight terminal multiplies the time a stop takes by this (section 10). */
 export const FREIGHT_TERMINAL_LOAD_FACTOR = 1 / 1.5;

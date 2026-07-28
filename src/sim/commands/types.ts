@@ -29,6 +29,8 @@ export const CommandKind = {
   RefitVehicle: 21,
   BuildStationModule: 22,
   SetAutoRenew: 23,
+  BuildWaterStop: 24,
+  BuyShip: 25,
 } as const;
 export type CommandKind = (typeof CommandKind)[keyof typeof CommandKind];
 
@@ -180,6 +182,23 @@ export interface BuyTrainCommand {
   readonly specIds: readonly number[];
 }
 
+/** Place a quay or a ship shed on a water tile that touches the shore. */
+export interface BuildWaterStopCommand {
+  readonly kind: typeof CommandKind.BuildWaterStop;
+  readonly x: number;
+  readonly y: number;
+  /** A value of ModuleKind; only Quay and ShipDepot are accepted. */
+  readonly moduleKind: number;
+}
+
+/** Buy a ship at a ship shed. */
+export interface BuyShipCommand {
+  readonly kind: typeof CommandKind.BuyShip;
+  readonly x: number;
+  readonly y: number;
+  readonly specId: number;
+}
+
 /**
  * Turn automatic vehicle renewal on or off (section 11.3).
  *
@@ -233,6 +252,8 @@ export interface RefitVehicleCommand {
 }
 
 export type Command =
+  | BuildWaterStopCommand
+  | BuyShipCommand
   | SetAutoRenewCommand
   | RefitVehicleCommand
   | BuildStationModuleCommand
@@ -291,6 +312,8 @@ export const RejectReason = {
   NeedsRoad: 'cmd.reject.needsRoad',
   NeedsTrack: 'cmd.reject.needsTrack',
   NeedsStation: 'cmd.reject.needsStation',
+  NeedsWater: 'cmd.reject.needsWater',
+  NeedsShore: 'cmd.reject.needsShore',
   GroundNotClear: 'cmd.reject.groundNotClear',
   NotPlainTrack: 'cmd.reject.notPlainTrack',
   SignalOnStructure: 'cmd.reject.signalOnStructure',

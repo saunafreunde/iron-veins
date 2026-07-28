@@ -25,6 +25,8 @@ export type Tool =
   | 'raildepot'
   | 'signal'
   | 'pathsignal'
+  | 'quay'
+  | 'shipdepot'
   | 'freightterminal'
   | 'canopy'
   | 'coldstore';

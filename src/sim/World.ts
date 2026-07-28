@@ -25,6 +25,7 @@ import { bookDepreciation } from './economy/depreciation';
 import { bookMonthlyEnergy } from './economy/energy';
 import { costFactor, inflatedCostCt } from './cargo/payment';
 import { RailPathfinder } from './net/railPath';
+import { WaterPathfinder } from './net/waterPath';
 import { ReservationTable } from './net/reservations';
 import { BlockIndex } from './signals/blocks';
 import { RoadPathfinder } from './net/roadPath';
@@ -137,6 +138,12 @@ export class World {
   readonly roadPathfinder: RoadPathfinder;
   readonly railPathfinder: RailPathfinder;
   /**
+   * A* over water for ships. Plain A* rather than the flow field of 8.4 - see
+   * DECISIONS.md D-094 for why the optimisation is not worth its correctness
+   * cost until ship counts demand it.
+   */
+  readonly waterPathfinder: WaterPathfinder;
+  /**
    * Which train holds which piece of track. Derived from the per-vehicle
    * reservation indices plus each train's saved route, so it is never
    * serialised and never hashed - it is rebuilt on load, exactly as the land
@@ -172,6 +179,7 @@ export class World {
     this.industries = generated.industries;
     this.roadPathfinder = new RoadPathfinder(generated.map.tileCount);
     this.railPathfinder = new RailPathfinder(generated.map.tileCount);
+    this.waterPathfinder = new WaterPathfinder(generated.map.tileCount);
     this.reservations = new ReservationTable(generated.map.tileCount);
     this.blocks = new BlockIndex(generated.map.tileCount);
   }

@@ -1305,3 +1305,80 @@ A vehicle that needs catenary never replaces one that does not: the line it runs
 on may have no wires, and stranding a fleet is worse than an old fleet. The old
 vehicle is sold through the ordinary command, so its track claim is released
 (the D-057 class of bug) and its book value moves exactly as it would by hand.
+
+### D-094 Ships get plain A*, not the flow field section 8.4 asks for
+
+Section 8.4 specifies "A* over water tiles with a precomputed flow field per
+port, recomputed only when a port is built". `waterPath.ts` is plain A*.
+
+The flow field is an optimisation for many ships sharing few ports. What it buys
+is amortising one search across a fleet; what it costs is a second structure
+that has to stay correct against every terraform that moves a shoreline - and
+shorelines move, because lowering land below sea level floods it and that is how
+a canal is dug. A stale flow field would route ships into land that is no longer
+there, and it would do it silently.
+
+The search it replaces is the very algorithm the road vehicles already run, over
+a graph of the same size, with the same workspaces and the same budget. If ship
+counts ever make it necessary, the thing to replace is the search - not to wrap
+it in a cache that can go wrong.
+
+### D-095 A quay does not move the station's centre
+
+Every other module is averaged into `station.x/y`, and that centre is what the
+CATCHMENT is measured from - which industries a station serves, which houses it
+covers, what cargo it accepts.
+
+A quay stands out in the water, sometimes several tiles from the shore. Averaged
+in, it drags the whole catchment seaward: a harbour built beside a coal mine can
+lose the mine by having its berth placed one tile too far out, and the player has
+no way to see why. Water modules are therefore left out of the average, and a
+port made of nothing but water modules falls back to averaging them because
+something has to be the centre.
+
+The consequence is worth knowing when reading a payment: a ship is paid from and
+to the station CENTRE, which is on the shore, not from the berth it actually tied
+up at. That is the same rule every other mode is billed by.
+
+### D-096 The aircraft capacities are not seat counts
+
+The first draft of the aircraft catalogue used real seat counts - forty-four for
+a 1950 propliner. The tariff diagnostic immediately failed three of them: their
+ceiling revenue was below their own upkeep, so they could not have been operated
+at a profit on any route of any length.
+
+The cause is that this game's passenger unit is not one person. A 1950 BUS
+carries a hundred and fifty of them. The aircraft figures are scaled to the unit
+the rest of the catalogue uses, which is what makes them comparable.
+
+The same pass cut air freight hard. Written at realistic volumes it had a ceiling
+three hundred times its upkeep - a licence to print money rather than the
+premium, low-volume niche air freight is meant to be.
+
+### D-097 Locks are not implementable in this map model, and canals need no command
+
+Section 10 and the M7 brief both name canals and locks. One of them already
+works and the other cannot.
+
+**Canals already work.** Lowering land below sea level floods it - `applyTerraform`
+moves the corners, `refreshShoreline` turns the tile into water and re-runs the
+ocean and land-mass labelling, and `tests/unit/terraform.spec.ts` has pinned
+exactly that since M1. A canal is dug with the ordinary lower-land tool and a
+ship will sail up it, because a canal at sea level is indistinguishable from the
+sea. No new command is needed and none is added.
+
+What a player cannot do is dig a canal ACROSS a ridge. The slope invariant drags
+a cone of surrounding corners down with every corner lowered, and
+MAX_TERRAFORM_CORNERS caps one action at sixty - so a cutting through high ground
+is refused. That is a real limitation and it is the invariant working as
+designed, not a bug to be tuned away.
+
+**Locks cannot exist here.** Water is defined as terrain at or below SEA_LEVEL,
+so the game has exactly ONE water surface. A lock is a device for moving a boat
+between two water levels; there is no second level for it to connect. Building
+one would mean a second water surface in the map model - a change of the same
+magnitude as bridges and tunnels were in M3, touching the height field, the
+shoreline rules, the renderer and the pathfinder.
+
+That is not work M7 can absorb honestly, so it is not started. It is recorded
+here as the one thing in M7's sentence that is not delivered.
