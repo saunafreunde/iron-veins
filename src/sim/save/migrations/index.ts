@@ -223,7 +223,10 @@ const v9_to_v10: SaveMigration = (payload) => {
       cargoLinks: [],
       stations: stations.map((station) => ({
         ...(station as Record<string, unknown>),
-        waiting: stacks((station as Record<string, unknown>)['waiting'], 'save.state.stations[].waiting'),
+        waiting: stacks(
+          (station as Record<string, unknown>)['waiting'],
+          'save.state.stations[].waiting',
+        ),
       })),
       vehicles: vehicles.map((vehicle) => ({
         ...(vehicle as Record<string, unknown>),

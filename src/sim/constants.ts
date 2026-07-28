@@ -582,6 +582,7 @@ export const RATING_EQUIPMENT_MAX = 15;
 
 /** A canopy is worth this much of the equipment term on its own (section 10). */
 export const RATING_CANOPY_BONUS = 8;
+
 export const RATING_RELIABILITY_MAX = 10;
 export const RATING_OVERFLOW_PENALTY_MAX = 15;
 
@@ -784,6 +785,16 @@ export const DEADLOCK_WARN_TICKS = 1_200;
 
 /** Default spacing when the assistant signals a route for you. [tiles] */
 export const AUTO_SIGNAL_SPACING_TILES = 12;
+
+/**
+ * How close a station has to be for automatic signalling to place a PATH
+ * signal rather than a block signal. [tiles]
+ *
+ * A station throat is the one shape where two trains can cross on routes that
+ * never touch, and a block signal there would take the whole throat for one of
+ * them (section 9.4).
+ */
+export const AUTO_SIGNAL_STATION_RADIUS = 4;
 
 /**
  * Bound on the backward walk that finds the tiles a train's body still covers.

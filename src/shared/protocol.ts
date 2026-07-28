@@ -75,6 +75,13 @@ export interface VehicleMarker {
   /** Fastest the whole vehicle may run, curves aside. [m/s] */
   readonly maxSpeedMs: number;
   readonly lengthM: number;
+  /** Tile it stands on; the overlay marks it when it is stuck. */
+  readonly tileIndex: number;
+  /**
+   * Ticks it has been held at a signal without getting anywhere, or 0.
+   * Past DEADLOCK_WARNING_TICKS it counts as stuck (section 9.3).
+   */
+  readonly waitingTicks: number;
 }
 
 export type MainToWorkerMessage =

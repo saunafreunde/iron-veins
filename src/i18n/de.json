@@ -330,7 +330,7 @@
   "signal.pathEntry": "Einfahr-Pfadsignal",
   "cmd.reject.unknownSignal": "Diesen Signaltyp gibt es nicht.",
   "cmd.reject.signalNeedsDirection": "Ein einseitiges Signal muss entlang des Gleises zeigen.",
-  "ui.fleet.stuck": "Steht seit {days} Tagen am Signal — mögliche Verklemmung.",
+  "ui.fleet.stuck": "Steht seit {minutes} min fest",
   "ui.tool.freightTerminal": "Frachtterminal",
   "ui.tool.canopy": "Überdachung",
   "ui.tool.coldStore": "Kühlhalle",
@@ -347,5 +347,6 @@
   "ui.industry.service": "Abtransport (12 Monate)",
   "ui.industry.closureWarning": "Seit {months} Monaten holt niemand etwas ab — schließt in {left} Monaten.",
   "ui.industry.closed": "Stillgelegt.",
-  "ui.industry.storeFull": "Lager voll — Produktion auf 25 %."
+  "ui.industry.storeFull": "Lager voll — Produktion auf 25 %.",
+  "ui.tool.autoSignal": "Signale automatisch, alle {spacing} Felder"
 }

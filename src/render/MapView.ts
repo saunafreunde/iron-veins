@@ -1,9 +1,15 @@
 import { Application, Container, Graphics, Rectangle, Sprite, Texture } from 'pixi.js';
 import type { IndustryMarker, StationMarker, TownMarker } from '../shared/protocol';
-import { SNAPSHOT_VEHICLE_STRIDE, SnapshotVehicle } from '../shared/snapshot';
+import {
+  SNAPSHOT_RESERVED_STRIDE,
+  SNAPSHOT_VEHICLE_STRIDE,
+  SnapshotReserved,
+  SnapshotVehicle,
+} from '../shared/snapshot';
 import { MAX_HEIGHT } from '../sim/constants';
 import type { TileMap } from '../sim/map/TileMap';
 import { Terrain } from '../sim/map/terrain';
+import { BlockIndex } from '../sim/signals/blocks';
 import { HEIGHT_PX, pickTile, TILE_H, TILE_W, tileToWorld } from './projection';
 import { ATLAS_SCALE, buildTerrainAtlas, type AtlasFrame, type TerrainAtlas } from './TerrainAtlas';
 
@@ -23,6 +29,16 @@ export const DEFAULT_ZOOM_INDEX = 2;
 
 /** Extra tiles drawn beyond the viewport, covering tall ground at the edges. */
 const CULL_MARGIN = MAX_HEIGHT + 4;
+
+/**
+ * Colours the F3 overlay cycles through for blocks and for the trains holding
+ * them. Eight hues far enough apart that two touching blocks are never the same
+ * colour by accident, taken from the same colour-blind safe palette the company
+ * colours use.
+ */
+const BLOCK_COLOURS: readonly number[] = [
+  0xe69f00, 0x56b4e9, 0x009e73, 0xf0e442, 0x0072b2, 0xd55e00, 0xcc79a7, 0x999999,
+];
 
 /** Below this zoom the map is drawn as a plain overview: no roads, no houses. */
 const DETAIL_ZOOM_MIN = 0.5;
@@ -94,6 +110,14 @@ export class MapView {
 
   private hovered: { x: number; y: number } | null = null;
   private selected: { x: number; y: number } | null = null;
+
+  /** F3: the block and reservation overlay of section 9.3. */
+  private blockOverlay = false;
+  private reservedSource: (() => { data: Int32Array; count: number }) | null = null;
+  private readonly blocks = new BlockIndex(0);
+  private deadlockTiles: readonly number[] = [];
+  /** Frame counter, so the deadlock marker blinks without a wall clock. */
+  private blink = 0;
 
   /** True once the WebGL context exists; false again after dispose. */
   private live = false;
@@ -184,6 +208,21 @@ export class MapView {
    */
   setVehicleSource(source: () => { data: Int32Array; count: number }): void {
     this.vehicleSource = source;
+  }
+
+  /** Where the F3 overlay reads the claimed track from. */
+  setReservedSource(source: () => { data: Int32Array; count: number }): void {
+    this.reservedSource = source;
+  }
+
+  /** Turn the block overlay on or off (F3). */
+  setBlockOverlay(on: boolean): void {
+    this.blockOverlay = on;
+  }
+
+  /** Tiles of trains that have been stuck long enough to count (section 9.3). */
+  setDeadlockTiles(tiles: readonly number[]): void {
+    this.deadlockTiles = tiles;
   }
 
   get zoom(): number {
@@ -630,9 +669,11 @@ export class MapView {
     this.previewRoute = tiles;
   }
 
-  /** Cursor highlight, selection marker and the build preview. */
+  /** Cursor highlight, selection marker, build preview and the F3 overlay. */
   private drawOverlay(map: TileMap): void {
     this.overlay.clear();
+    this.blink++;
+    if (this.blockOverlay) this.drawBlocks(map);
 
     const preview = this.previewRoute;
     if (preview !== null && preview.length > 1) {
@@ -662,6 +703,82 @@ export class MapView {
         .lineTo(centre.x, centre.y)
         .stroke({ width: 2 / this.zoom, color: colour, alpha });
     }
+  }
+
+  /**
+   * The block overlay of section 9.3, which ships in the release build because
+   * it is the only way anybody learns what a signal actually does.
+   *
+   * Three things, drawn only for the tiles on screen: which block a piece of
+   * track belongs to, whether a train holds it, and - blinking yellow - any
+   * train that has been standing at a red long enough to count as stuck.
+   *
+   * The block index is rebuilt on the main thread from the shared map buffer.
+   * It is derived state, so this is the same computation the simulation does
+   * and not a second copy of the truth.
+   */
+  private drawBlocks(map: TileMap): void {
+    this.blocks.refresh(map);
+    const bounds = this.visibleTileBounds(map.size);
+    const width = 1.5 / this.zoom;
+
+    for (let y = bounds.minY; y <= bounds.maxY; y++) {
+      for (let x = bounds.minX; x <= bounds.maxX; x++) {
+        if (x < 0 || y < 0 || x >= map.size || y >= map.size) continue;
+        const tile = y * map.size + x;
+        if (map.trackBits[tile] === 0) continue;
+
+        const block = this.blocks.blockAt(tile);
+        if (block < 0) continue;
+        const centre = tileToWorld(x, y, map.railHeight(x, y));
+        this.diamond(centre.x, centre.y);
+        this.overlay.stroke({
+          width,
+          color: BLOCK_COLOURS[block % BLOCK_COLOURS.length]!,
+          alpha: 0.5,
+        });
+      }
+    }
+
+    // Claimed track on top, in the holder's own colour and filled, so a claim
+    // reads as "occupied" rather than as another block boundary.
+    const reserved = this.reservedSource?.() ?? null;
+    if (reserved !== null) {
+      for (let i = 0; i < reserved.count; i++) {
+        const base = i * SNAPSHOT_RESERVED_STRIDE;
+        const tile = reserved.data[base + SnapshotReserved.Tile]!;
+        const x = tile % map.size;
+        const y = (tile / map.size) | 0;
+        if (x < bounds.minX || x > bounds.maxX || y < bounds.minY || y > bounds.maxY) continue;
+
+        const owner = reserved.data[base + SnapshotReserved.VehicleId]!;
+        const centre = tileToWorld(x, y, map.railHeight(x, y));
+        this.diamond(centre.x, centre.y);
+        this.overlay.fill({ color: BLOCK_COLOURS[owner % BLOCK_COLOURS.length]!, alpha: 0.35 });
+      }
+    }
+
+    // And the deadlock markers, blinking so they cannot be missed. No auto-fix:
+    // a deadlock is a player mistake and has to stay visible (section 9.3).
+    if ((this.blink >> 4) % 2 === 0) {
+      for (const tile of this.deadlockTiles) {
+        const x = tile % map.size;
+        const y = (tile / map.size) | 0;
+        const centre = tileToWorld(x, y, map.railHeight(x, y));
+        this.diamond(centre.x, centre.y);
+        this.overlay.stroke({ width: 4 / this.zoom, color: 0xffd24a, alpha: 1 });
+      }
+    }
+  }
+
+  /** Trace the diamond of one tile onto the overlay. */
+  private diamond(x: number, y: number): void {
+    this.overlay
+      .moveTo(x, y)
+      .lineTo(x + TILE_W / 2, y + TILE_H / 2)
+      .lineTo(x, y + TILE_H)
+      .lineTo(x - TILE_W / 2, y + TILE_H / 2)
+      .lineTo(x, y);
   }
 
   /** Town labels for the minimap and the town list. */

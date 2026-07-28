@@ -1,11 +1,10 @@
-import type {
-  IndustryMarker,
-  MainToWorkerMessage,
-  WorkerToMainMessage,
-} from '../shared/protocol';
+import type { IndustryMarker, MainToWorkerMessage, WorkerToMainMessage } from '../shared/protocol';
 import {
+  SNAPSHOT_MAX_RESERVED_TILES,
   SNAPSHOT_MAX_VEHICLES,
+  SNAPSHOT_RESERVED_STRIDE,
   SNAPSHOT_VEHICLE_STRIDE,
+  SnapshotReserved,
   SnapshotF64,
   SnapshotI32,
   SnapshotVehicle,
@@ -164,6 +163,9 @@ function postFleet(current: World): void {
       consist: [...vehicles.consist[id]!],
       maxSpeedMs: vehicles.maxSpeedMs[id]!,
       lengthM: vehicles.lengthM[id]!,
+      tileIndex: vehicles.tileIndex[id]!,
+      waitingTicks:
+        vehicles.waitingSinceTick[id]! < 0 ? 0 : current.tick - vehicles.waitingSinceTick[id]!,
     });
   }
   scope.postMessage({ type: 'fleetChanged', vehicles: markers });
@@ -209,6 +211,34 @@ function writeVehicles(current: World, block: Int32Array): number {
   return written;
 }
 
+/**
+ * Which tiles the trains hold, for the F3 overlay of section 9.3.
+ *
+ * The reservation table itself is derived state keyed by tile, so it is not
+ * walked here - the per-train range is, which is both cheaper and exactly what
+ * the overlay wants to colour.
+ */
+function writeReserved(current: World, block: Int32Array): number {
+  const vehicles = current.vehicles;
+  let written = 0;
+
+  for (let id = 0; id < vehicles.count && written < SNAPSHOT_MAX_RESERVED_TILES; id++) {
+    if (vehicles.alive[id] !== 1) continue;
+    const to = vehicles.reservedToIndex[id]!;
+    if (to < 0) continue;
+
+    const path = vehicles.paths[id]!;
+    for (let index = vehicles.reservedFromIndex[id]!; index <= to; index++) {
+      if (written >= SNAPSHOT_MAX_RESERVED_TILES) break;
+      const base = written * SNAPSHOT_RESERVED_STRIDE;
+      block[base + SnapshotReserved.Tile] = path[index]!;
+      block[base + SnapshotReserved.VehicleId] = id;
+      written++;
+    }
+  }
+  return written;
+}
+
 function publishSnapshot(current: World, sink: SnapshotWriter): void {
   if (current.tick - lastHashedTick >= STATE_HASH_INTERVAL_TICKS || lastHashedTick < 0) {
     refreshStateHash(current);
@@ -234,6 +264,7 @@ function publishSnapshot(current: World, sink: SnapshotWriter): void {
   f64[SnapshotF64.LoanLimitCt] = loanLimitCt(current.company);
 
   i32[SnapshotI32.VehicleCount] = writeVehicles(current, sink.draftVehicles);
+  i32[SnapshotI32.ReservedCount] = writeReserved(current, sink.draftReserved);
 
   sink.publish();
 

@@ -2,6 +2,7 @@ import type { ReactElement } from 'react';
 import { formatMoney, t } from '../i18n';
 import type { IndustryMarker, StationMarker } from '../shared/protocol';
 import {
+  AUTO_SIGNAL_SPACING_TILES,
   CANOPY_COST_CT,
   INDUSTRY_CLOSURE_MONTHS,
   INDUSTRY_WARNING_MONTHS,
@@ -108,6 +109,8 @@ export function TilePanel(): ReactElement {
   const selected = useSimStore((s) => s.selectedTile);
   const tool = useSimStore((s) => s.tool);
   const setTool = useSimStore((s) => s.setTool);
+  const autoSignal = useSimStore((s) => s.autoSignal);
+  const setAutoSignal = useSimStore((s) => s.setAutoSignal);
   const towns = useSimStore((s) => s.towns);
   const stations = useSimStore((s) => s.stations);
   const industries = useSimStore((s) => s.industries);
@@ -148,6 +151,16 @@ export function TilePanel(): ReactElement {
         ))}
       </div>
       <p className="panel__hint">{priceHint(tool)}</p>
+      {tool === 'track' && (
+        <label className="panel__hint">
+          <input
+            type="checkbox"
+            checked={autoSignal}
+            onChange={(event) => setAutoSignal(event.target.checked)}
+          />{' '}
+          {t('ui.tool.autoSignal', { spacing: AUTO_SIGNAL_SPACING_TILES })}
+        </label>
+      )}
       {(tool === 'road' || tool === 'track') && (
         <p className="panel__hint">
           {roadAnchor === null

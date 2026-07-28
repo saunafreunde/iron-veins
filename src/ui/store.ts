@@ -74,6 +74,8 @@ export interface SimUiState extends SnapshotValues {
   selectedTile: TileInfo | null;
   /** Active construction tool; decides what a left click does. */
   tool: Tool;
+  /** Section 9.4: signal a dragged route automatically while laying it. */
+  autoSignal: boolean;
   stations: readonly StationMarker[];
   fleet: readonly VehicleMarker[];
   selectedVehicleId: number | null;
@@ -107,6 +109,7 @@ export interface SimUiState extends SnapshotValues {
   setHoveredTile: (tile: TileInfo | null) => void;
   setSelectedTile: (tile: TileInfo | null) => void;
   setTool: (tool: Tool) => void;
+  setAutoSignal: (on: boolean) => void;
   setStations: (stations: readonly StationMarker[]) => void;
   setIndustries: (industries: readonly IndustryMarker[]) => void;
   setFleet: (vehicles: readonly VehicleMarker[]) => void;
@@ -153,6 +156,7 @@ export const useSimStore = create<SimUiState>((set) => ({
   hoveredTile: null,
   selectedTile: null,
   tool: 'none',
+  autoSignal: false,
   stations: [],
   fleet: [],
   selectedVehicleId: null,
@@ -187,6 +191,7 @@ export const useSimStore = create<SimUiState>((set) => ({
   setHoveredTile: (tile) => set({ hoveredTile: tile }),
   setSelectedTile: (tile) => set({ selectedTile: tile }),
   setTool: (tool) => set({ tool, roadAnchor: null, trackPreview: null }),
+  setAutoSignal: (autoSignal) => set({ autoSignal }),
   setIndustries: (industries) => set({ industries }),
   setTrackPreview: (preview) => set({ trackPreview: preview }),
   setStations: (stations) => set({ stations }),

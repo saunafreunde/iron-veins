@@ -87,6 +87,7 @@ export function executeCommand(world: World, command: Command): CommandOutcome {
         command.y2,
         command.railType as RailType,
         command.assistant,
+        command.signalSpacing,
       );
 
     case CommandKind.DemolishTrack:

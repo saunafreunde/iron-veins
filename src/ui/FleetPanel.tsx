@@ -1,7 +1,7 @@
 import type { ReactElement } from 'react';
 import { formatMoney, t } from '../i18n';
 import { CommandKind } from '../sim/commands/types';
-import { MAX_TRAIN_LENGTH_M } from '../sim/constants';
+import { DEADLOCK_WARN_TICKS, TICK_SECONDS, MAX_TRAIN_LENGTH_M } from '../sim/constants';
 import { ModuleKind } from '../sim/station/types';
 import {
   availableRailVehicles,
@@ -245,9 +245,19 @@ export function FleetPanel({ client }: { readonly client: SimClient }): ReactEle
                   {vehicle.consist.length > 1 &&
                     ` ${t('ui.fleet.plusWagons', { count: vehicle.consist.length - 1 })}`}
                 </span>
-                <span className="row__meta">
-                  {t(VEHICLE_STATE_KEYS[vehicle.state] ?? '')} · {vehicle.cargoUnits}/
-                  {vehicle.capacity} · {kmh(vehicle.maxSpeedMs)} km/h ·{' '}
+                <span
+                  className={
+                    vehicle.waitingTicks >= DEADLOCK_WARN_TICKS
+                      ? 'row__meta value--danger'
+                      : 'row__meta'
+                  }
+                >
+                  {vehicle.waitingTicks >= DEADLOCK_WARN_TICKS
+                    ? t('ui.fleet.stuck', {
+                        minutes: Math.round((vehicle.waitingTicks * TICK_SECONDS) / 60),
+                      })
+                    : t(VEHICLE_STATE_KEYS[vehicle.state] ?? '')}{' '}
+                  · {vehicle.cargoUnits}/{vehicle.capacity} · {kmh(vehicle.maxSpeedMs)} km/h ·{' '}
                   {formatMoney(vehicle.earnedCt)}
                 </span>
               </button>

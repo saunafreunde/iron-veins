@@ -16,6 +16,7 @@ import {
   GRAVITY,
   HEIGHT_STEP_M,
   LOAD_TICKS_PER_UNIT,
+  MAX_VEHICLES,
   MIN_STATION_STOP_TICKS,
   ROLLING_RESISTANCE_RAIL,
   ROLLING_RESISTANCE_ROAD,
@@ -81,6 +82,33 @@ export function stationAccessTile(station: Station, vehicleKind: number): number
     if (moduleServes(module.kind, vehicleKind)) return module.tileIndex;
   }
   return -1;
+}
+
+/**
+ * Which platform of a station this particular train should head for.
+ *
+ * Every train being sent to the station's FIRST platform was the limitation
+ * recorded as D-049, and it is what made a second platform worthless: two
+ * trains queued for one tile while the other stood empty. A train now takes the
+ * first platform nobody else holds, and falls back to the first of all of them
+ * when they are all busy - it will wait either way, but it waits in the right
+ * place and the station's capacity is real (DECISIONS.md D-080).
+ *
+ * Deterministic: the modules are in build order and the reservation table is a
+ * pure function of state, so two runs pick the same platform.
+ */
+function platformFor(world: World, id: number, station: Station): number {
+  const kind = world.vehicles.kind[id]!;
+  if (kind !== VehicleKind.Train) return stationAccessTile(station, kind);
+
+  let first = -1;
+  for (const module of station.modules) {
+    if (!moduleServes(module.kind, kind)) continue;
+    if (first < 0) first = module.tileIndex;
+    const owner = world.reservations.ownerOf(module.tileIndex);
+    if (owner === -1 || owner === id) return module.tileIndex;
+  }
+  return first;
 }
 
 /**
@@ -269,7 +297,7 @@ function orderTargetTile(world: World, id: number): number {
   if (order.target === OrderTarget.Depot) return order.targetId;
 
   const station = world.stations[order.targetId];
-  return station === undefined ? -1 : stationAccessTile(station, vehicles.kind[id]!);
+  return station === undefined ? -1 : platformFor(world, id, station);
 }
 
 /**
@@ -540,176 +568,238 @@ function mayEnter(world: World, id: number, next: number): boolean {
 export function updateVehicles(world: World): void {
   const vehicles = world.vehicles;
 
+  // Whoever has waited longest asks first (section 9.3, DECISIONS.md D-081).
+  //
+  // Without this, a contested section always goes to the lowest id, because
+  // that is the order this loop happens to run in - and on a busy ring the
+  // trains at the back of the queue starve while the ones at the front take
+  // the same section lap after lap. Order is a pure function of state, so two
+  // runs still produce the same world.
+  const waiting = waitingOrder(world);
+  for (let i = 0; i < waiting.count; i++) stepVehicle(world, waiting.ids[i]!);
+
   for (let id = 0; id < vehicles.count; id++) {
     if (vehicles.alive[id] !== 1) continue;
+    if (waiting.pending[id] === 1) continue;
+    stepVehicle(world, id);
+  }
+}
 
-    switch (vehicles.state[id]) {
-      case VehicleState.Stopped:
-      case VehicleState.InDepot:
-        continue;
+/** Trains held at a signal, longest wait first. Scratch, reused every tick. */
+const waitingIds = new Int32Array(MAX_VEHICLES);
+const waitingSince = new Int32Array(MAX_VEHICLES);
+const waitingPending = new Uint8Array(MAX_VEHICLES);
 
-      case VehicleState.NoRoute: {
-        // Retry occasionally rather than every tick: a stranded vehicle must
-        // not turn into a pathfinding load on the whole simulation.
-        if (world.tick % REPATH_INTERVAL_TICKS !== id % REPATH_INTERVAL_TICKS) continue;
-        const target = orderTargetTile(world, id);
-        if (target !== -1 && routeTo(world, id, target)) {
-          vehicles.state[id] = VehicleState.Driving;
-        }
-        continue;
-      }
+function waitingOrder(world: World): {
+  ids: Int32Array;
+  pending: Uint8Array;
+  count: number;
+} {
+  const vehicles = world.vehicles;
+  waitingPending.fill(0, 0, vehicles.count);
+  let count = 0;
 
-      case VehicleState.BrokenDown: {
-        vehicles.breakdownTicks[id] = vehicles.breakdownTicks[id]! - 1;
-        if (vehicles.breakdownTicks[id]! <= 0) vehicles.state[id] = VehicleState.Driving;
-        continue;
-      }
+  for (let id = 0; id < vehicles.count; id++) {
+    if (vehicles.alive[id] !== 1) continue;
+    if (vehicles.state[id] !== VehicleState.WaitingForPath) continue;
 
-      case VehicleState.Loading: {
-        vehicles.loadTicks[id] = vehicles.loadTicks[id]! - 1;
-        if (vehicles.loadTicks[id]! > 0) continue;
-
-        const orders = vehicles.orders[id]!;
-        const order = orders[vehicles.orderIndex[id]! % orders.length];
-        if (order !== undefined && order.load === OrderLoad.Full && !isFull(world, id)) {
-          vehicles.state[id] = VehicleState.WaitingForCargo;
-          continue;
-        }
-        advanceOrder(world, id);
-        continue;
-      }
-
-      case VehicleState.WaitingForCargo: {
-        const orders = vehicles.orders[id]!;
-        const order = orders[vehicles.orderIndex[id]! % orders.length];
-        const station = order === undefined ? undefined : world.stations[order.targetId];
-        if (station === undefined) {
-          advanceOrder(world, id);
-          continue;
-        }
-        const cargo = vehicles.refitCargo[id]! as Cargo;
-        const space = vehicles.capacityUnits[id]! - amountOf(vehicles.cargo[id]!, cargo);
-        if (space > 0 && loadFromStation(world, id, station, cargo, space) > 0) {
-          vehicles.refreshAggregate(id);
-        }
-        if (isFull(world, id)) advanceOrder(world, id);
-        continue;
-      }
-
-      case VehicleState.WaitingForPath: {
-        // Retried every tick rather than on the repath cadence: a failed claim
-        // is a handful of array reads, and a train sitting at a signal that
-        // went green five real seconds ago is the sort of thing players notice.
-        if (vehicles.pathLength[id]! === 0) {
-          vehicles.state[id] = VehicleState.NoRoute;
-          continue;
-        }
-        if (vehicles.reservedToIndex[id]! < 0) holdBody(world, id);
-        if (mayEnter(world, id, vehicles.pathIndex[id]! + 1)) {
-          vehicles.state[id] = VehicleState.Driving;
-          vehicles.waitingSinceTick[id] = -1;
-        }
-        continue;
-      }
-
-      case VehicleState.Driving:
-      case VehicleState.Braking: {
-        if (vehicles.pathLength[id]! === 0) {
-          vehicles.state[id] = VehicleState.NoRoute;
-          continue;
-        }
-
-        const train = vehicles.kind[id] === VehicleKind.Train;
-        if (train) {
-          claimAhead(world, id);
-          // Whatever the signals say, the train owns the ground under itself.
-          if (vehicles.reservedToIndex[id]! < 0) holdBody(world, id);
-        }
-        const limit = train ? trainSpeedLimit(world, id) : vehicles.maxSpeedMs[id]!;
-
-        const remaining = remainingDistanceM(world, id);
-        const braking =
-          remaining <= brakingDistanceM(vehicles.speedMs[id]!, vehicles.brakeMs2[id]!);
-        vehicles.state[id] = braking ? VehicleState.Braking : VehicleState.Driving;
-        stepPhysics(world, id, braking, limit);
-
-        // Walk forward over as many tiles as this tick covered.
-        const path = vehicles.paths[id]!;
-        const size = world.map.size;
-        let held = false;
-
-        for (;;) {
-          const index = vehicles.pathIndex[id]!;
-          if (index + 1 >= vehicles.pathLength[id]!) break;
-          const step = pathStepM(path, index, size);
-          if (vehicles.progressM[id]! < step) break;
-
-          // The gate: a train may cross into a section only while it holds it.
-          // The braking term above normally has it standing here already; this
-          // is the backstop that makes the guarantee independent of how far the
-          // lookahead reached.
-          if (train && !mayEnter(world, id, index + 1)) {
-            if (vehicles.waitingSinceTick[id]! < 0) vehicles.waitingSinceTick[id] = world.tick;
-            const stopAt = step - SIGNAL_STOP_OFFSET_M;
-            if (vehicles.progressM[id]! > stopAt) vehicles.progressM[id] = stopAt;
-            vehicles.speedMs[id] = 0;
-            vehicles.state[id] = VehicleState.WaitingForPath;
-            held = true;
-            break;
-          }
-
-          vehicles.progressM[id] = vehicles.progressM[id]! - step;
-          vehicles.routeRemainingM[id] = vehicles.routeRemainingM[id]! - step;
-          vehicles.pathIndex[id] = index + 1;
-          vehicles.tileIndex[id] = path[index + 1]!;
-        }
-        if (held) continue;
-        if (train) {
-          vehicles.waitingSinceTick[id] = -1;
-          releaseBehind(world, id);
-        }
-
-        const atEnd = vehicles.pathIndex[id]! + 1 >= vehicles.pathLength[id]!;
-        if (!atEnd) continue;
-
-        vehicles.progressM[id] = 0;
-        if (vehicles.speedMs[id]! > STOPPED_SPEED_MS) continue; // still rolling out
-
-        vehicles.speedMs[id] = 0;
-        vehicles.pathLength[id] = 0;
-        vehicles.routeRemainingM[id] = 0;
-        // The route is gone, so the claim expressed in its indices has to go
-        // with it - otherwise a train standing at a platform holds its whole
-        // approach for the rest of the game.
-        releaseAll(world, id);
-
-        const orders = vehicles.orders[id]!;
-        const order = orders[vehicles.orderIndex[id]! % orders.length];
-        if (order === undefined) {
-          vehicles.state[id] = VehicleState.Stopped;
-          continue;
-        }
-        if (order.target === OrderTarget.Depot) {
-          vehicles.state[id] = VehicleState.InDepot;
-          continue;
-        }
-
-        const station = world.stations[order.targetId];
-        if (station === undefined) {
-          advanceOrder(world, id);
-          continue;
-        }
-        const units = serveStation(world, id, station);
-        const perUnit = hasModule(station, ModuleKind.FreightTerminal)
-          ? LOAD_TICKS_PER_UNIT * FREIGHT_TERMINAL_LOAD_FACTOR
-          : LOAD_TICKS_PER_UNIT;
-        vehicles.loadTicks[id] = Math.max(MIN_STATION_STOP_TICKS, units * perUnit);
-        vehicles.state[id] = VehicleState.Loading;
-        continue;
-      }
-
-      default:
-        continue;
+    // Insertion sort: earliest wait first, ties on the id so the order is a
+    // total one. The list is the handful of trains actually standing at a red,
+    // never the whole fleet, so this stays cheap.
+    const since = vehicles.waitingSinceTick[id]!;
+    let at = count;
+    while (at > 0 && waitingSince[at - 1]! > since) {
+      waitingIds[at] = waitingIds[at - 1]!;
+      waitingSince[at] = waitingSince[at - 1]!;
+      at--;
     }
+    waitingIds[at] = id;
+    waitingSince[at] = since;
+    waitingPending[id] = 1;
+    count++;
+  }
+  return { ids: waitingIds, pending: waitingPending, count };
+}
+
+/** Advance one vehicle by one tick. */
+function stepVehicle(world: World, id: number): void {
+  const vehicles = world.vehicles;
+  switch (vehicles.state[id]) {
+    case VehicleState.Stopped:
+    case VehicleState.InDepot:
+      return;
+
+    case VehicleState.NoRoute: {
+      // Retry occasionally rather than every tick: a stranded vehicle must
+      // not turn into a pathfinding load on the whole simulation.
+      if (world.tick % REPATH_INTERVAL_TICKS !== id % REPATH_INTERVAL_TICKS) return;
+      const target = orderTargetTile(world, id);
+      if (target !== -1 && routeTo(world, id, target)) {
+        vehicles.state[id] = VehicleState.Driving;
+      }
+      return;
+    }
+
+    case VehicleState.BrokenDown: {
+      vehicles.breakdownTicks[id] = vehicles.breakdownTicks[id]! - 1;
+      if (vehicles.breakdownTicks[id]! <= 0) vehicles.state[id] = VehicleState.Driving;
+      return;
+    }
+
+    case VehicleState.Loading: {
+      vehicles.loadTicks[id] = vehicles.loadTicks[id]! - 1;
+      if (vehicles.loadTicks[id]! > 0) return;
+
+      const orders = vehicles.orders[id]!;
+      const order = orders[vehicles.orderIndex[id]! % orders.length];
+      if (order !== undefined && order.load === OrderLoad.Full && !isFull(world, id)) {
+        vehicles.state[id] = VehicleState.WaitingForCargo;
+        return;
+      }
+      advanceOrder(world, id);
+      return;
+    }
+
+    case VehicleState.WaitingForCargo: {
+      const orders = vehicles.orders[id]!;
+      const order = orders[vehicles.orderIndex[id]! % orders.length];
+      const station = order === undefined ? undefined : world.stations[order.targetId];
+      if (station === undefined) {
+        advanceOrder(world, id);
+        return;
+      }
+      const cargo = vehicles.refitCargo[id]! as Cargo;
+      const space = vehicles.capacityUnits[id]! - amountOf(vehicles.cargo[id]!, cargo);
+      if (space > 0 && loadFromStation(world, id, station, cargo, space) > 0) {
+        vehicles.refreshAggregate(id);
+      }
+      if (isFull(world, id)) advanceOrder(world, id);
+      return;
+    }
+
+    case VehicleState.WaitingForPath: {
+      // Retried every tick rather than on the repath cadence: a failed claim
+      // is a handful of array reads, and a train sitting at a signal that
+      // went green five real seconds ago is the sort of thing players notice.
+      if (vehicles.pathLength[id]! === 0) {
+        vehicles.state[id] = VehicleState.NoRoute;
+        return;
+      }
+      if (vehicles.reservedToIndex[id]! < 0) holdBody(world, id);
+      if (mayEnter(world, id, vehicles.pathIndex[id]! + 1)) {
+        vehicles.state[id] = VehicleState.Driving;
+        vehicles.waitingSinceTick[id] = -1;
+      }
+      return;
+    }
+
+    case VehicleState.Driving:
+    case VehicleState.Braking: {
+      if (vehicles.pathLength[id]! === 0) {
+        vehicles.state[id] = VehicleState.NoRoute;
+        return;
+      }
+
+      const train = vehicles.kind[id] === VehicleKind.Train;
+      if (train) {
+        claimAhead(world, id);
+        // Whatever the signals say, the train owns the ground under itself.
+        if (vehicles.reservedToIndex[id]! < 0) holdBody(world, id);
+      }
+      const limit = train ? trainSpeedLimit(world, id) : vehicles.maxSpeedMs[id]!;
+
+      const remaining = remainingDistanceM(world, id);
+      const braking = remaining <= brakingDistanceM(vehicles.speedMs[id]!, vehicles.brakeMs2[id]!);
+      vehicles.state[id] = braking ? VehicleState.Braking : VehicleState.Driving;
+      stepPhysics(world, id, braking, limit);
+
+      // Walk forward over as many tiles as this tick covered.
+      const path = vehicles.paths[id]!;
+      const size = world.map.size;
+      let held = false;
+
+      for (;;) {
+        const index = vehicles.pathIndex[id]!;
+        if (index + 1 >= vehicles.pathLength[id]!) break;
+        const step = pathStepM(path, index, size);
+        if (vehicles.progressM[id]! < step) break;
+
+        // The gate: a train may cross into a section only while it holds it.
+        // The braking term above normally has it standing here already; this
+        // is the backstop that makes the guarantee independent of how far the
+        // lookahead reached.
+        if (train && !mayEnter(world, id, index + 1)) {
+          if (vehicles.waitingSinceTick[id]! < 0) vehicles.waitingSinceTick[id] = world.tick;
+          const stopAt = step - SIGNAL_STOP_OFFSET_M;
+          if (vehicles.progressM[id]! > stopAt) vehicles.progressM[id] = stopAt;
+          vehicles.speedMs[id] = 0;
+          vehicles.state[id] = VehicleState.WaitingForPath;
+          held = true;
+          break;
+        }
+
+        vehicles.progressM[id] = vehicles.progressM[id]! - step;
+        vehicles.routeRemainingM[id] = vehicles.routeRemainingM[id]! - step;
+        vehicles.pathIndex[id] = index + 1;
+        vehicles.tileIndex[id] = path[index + 1]!;
+      }
+      if (held) return;
+      if (train) {
+        // A train standing still that holds nothing beyond its own body is
+        // going nowhere, and the deadlock clock has to see it. Watching only
+        // the tile-advance gate misses this case entirely: a train whose
+        // section is never granted never crosses a tile boundary, so it stalls
+        // in DRIVING at zero speed and the clock never starts - which is how
+        // four trains sat in their sheds for a whole run with the warning
+        // reading zero (DECISIONS.md D-083).
+        const stalled =
+          vehicles.reservedToIndex[id]! <= vehicles.pathIndex[id]! &&
+          vehicles.speedMs[id]! < STOPPED_SPEED_MS;
+        if (!stalled) vehicles.waitingSinceTick[id] = -1;
+        else if (vehicles.waitingSinceTick[id]! < 0) vehicles.waitingSinceTick[id] = world.tick;
+        releaseBehind(world, id);
+      }
+
+      const atEnd = vehicles.pathIndex[id]! + 1 >= vehicles.pathLength[id]!;
+      if (!atEnd) return;
+
+      vehicles.progressM[id] = 0;
+      if (vehicles.speedMs[id]! > STOPPED_SPEED_MS) return; // still rolling out
+
+      vehicles.speedMs[id] = 0;
+      vehicles.pathLength[id] = 0;
+      vehicles.routeRemainingM[id] = 0;
+      // The route is gone, so the claim expressed in its indices has to go
+      // with it - otherwise a train standing at a platform holds its whole
+      // approach for the rest of the game.
+      releaseAll(world, id);
+
+      const orders = vehicles.orders[id]!;
+      const order = orders[vehicles.orderIndex[id]! % orders.length];
+      if (order === undefined) {
+        vehicles.state[id] = VehicleState.Stopped;
+        return;
+      }
+      if (order.target === OrderTarget.Depot) {
+        vehicles.state[id] = VehicleState.InDepot;
+        return;
+      }
+
+      const station = world.stations[order.targetId];
+      if (station === undefined) {
+        advanceOrder(world, id);
+        return;
+      }
+      const units = serveStation(world, id, station);
+      const perUnit = hasModule(station, ModuleKind.FreightTerminal)
+        ? LOAD_TICKS_PER_UNIT * FREIGHT_TERMINAL_LOAD_FACTOR
+        : LOAD_TICKS_PER_UNIT;
+      vehicles.loadTicks[id] = Math.max(MIN_STATION_STOP_TICKS, units * perUnit);
+      vehicles.state[id] = VehicleState.Loading;
+      return;
+    }
+
+    default:
+      return;
   }
 }

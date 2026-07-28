@@ -333,6 +333,7 @@ function parseCommand(value: unknown, path: string): Command {
         y2: asInt(raw['y2'], `${path}.y2`),
         railType: asInt(raw['railType'], `${path}.railType`),
         assistant: asBoolean(raw['assistant'], `${path}.assistant`),
+        signalSpacing: asInt(raw['signalSpacing'], `${path}.signalSpacing`),
       };
     case CommandKind.DemolishTrack:
       return {

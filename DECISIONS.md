@@ -1001,3 +1001,106 @@ Consequences worth knowing:
   that has a route but is slow to move keeps the old ten percent a day decay and
   no penalty: a station nobody serves is a different failure from a station
   nobody could ever serve.
+
+### D-079 The twelve month service window is one number, not a ring of twelve
+
+Section 7.3 expands an industry that had "at least 80 % collected over twelve
+months". The literal implementation is a ring of twelve monthly ratios per
+industry; what is built is a running average of the same window, kept as one
+number, because that is all the rule ever asks it.
+
+The one thing that needed care: while the window is still filling, the average
+is a TRUE mean of the months so far, and only afterwards a rolling one. Started
+in its rolling form from zero, twelve perfect months average 0.65 - so an
+industry served faultlessly from the day it opened could not expand for two
+game years, and the rule would have looked broken while being implemented
+exactly as written.
+
+### D-080 A train picks a platform, rather than every train being sent to the first
+
+D-049 recorded that a station always sends every train to its first platform
+tile, and that a second platform therefore bought nothing. It does now: a train
+heads for the first platform no other train holds, and falls back to the first
+of them when they are all busy.
+
+It waits either way, but it waits in the right place, and a station with two
+platforms genuinely works two trains. The choice is deterministic - the modules
+are in build order and the reservation table is a pure function of state.
+
+### D-081 Whoever has waited longest asks for a section first
+
+The tick loop ran vehicles in id order, so a contested section always went to
+the lowest id - not by design but because that is the order the loop happened
+to take. On a busy line the trains at the back of a queue starve.
+
+Trains held at a signal are now stepped first, longest wait first, and the rest
+follow in id order. The ordering is a pure function of state, so determinism is
+untouched. It is a fairness fix and not a throughput one: measured on the
+regression network it was worth about eight ticks, and what actually mattered
+was the network's shape (D-082).
+
+### D-082 What the regression network needed was a better railway, not better signals
+
+Three attempts, and only the third was the real answer.
+
+**A priority reservation, tried and REVERTED.** A train past a fairness
+threshold marked the tile it needed and nobody else could claim it. It made
+things strictly worse - 3_540 ticks became 8_341 - because priority marks
+compose into cycles: A is owed a tile held by B, B is owed a tile behind A, and
+now neither may be granted. It is out of the tree; the mechanism is recorded
+here so nobody rebuilds it.
+
+**What was actually wrong was the fixture.** Two shapes in it were things no
+player would build, and both were mine:
+
+* every platform stood on the through line, so a train loading stopped every
+  train behind it. Stations now sit on passing loops and the ring stays clear;
+* twenty trains shared one shed on a spur that CROSSED the ring. A train
+  crossing a saturated one-way line never gets a gap at all, and a queue twenty
+  deep at a single merge never drains. There are four sheds now, one hanging off
+  each loop, and each MERGES rather than crosses.
+
+**And one signal placement rule that is worth knowing.** A signal has to sit
+immediately past every merge. Without it the section a train leaving a shed
+must be granted runs from the shed, through the junction, and along the ring to
+the next signal - and a ring carrying twenty trains never leaves that much free
+at once. Adding four signals took the worst standstill from "never leaves the
+shed at all" to 3_300 ticks.
+
+Measured, in order: 8_391 (D-073, before body exclusivity) -> 5_488 -> 3_540
+(loops) -> stations all reachable, every train out of its shed, worst standstill
+3_300 and every one of them resolves.
+
+### D-083 The deadlock clock could not see a train that never reached a signal
+
+Found by the same work, and it is the more important half of it.
+
+`waitingSinceTick` was set only where the tile-advance gate refused a train. A
+train whose section is never granted never crosses a tile boundary, so it sits
+in DRIVING at zero speed, holding nothing but its own body - and the clock never
+started. Four trains sat in their sheds for an entire ten thousand tick run
+while the warning read zero.
+
+The clock now also starts when a train is standing still and holds nothing
+beyond its own body, and it is cleared only when the train is genuinely moving.
+That is what a deadlock warning is for, and without it the metric was lying by
+omission - every earlier number in D-082 was measured with this blind spot in
+place.
+
+### D-084 What the regression network asserts, and what "no deadlock" means
+
+Section 19.5 asks for zero collisions and zero deadlocks. Both are now asserted
+as things that can be measured:
+
+* **no collisions** - every tile a train holds is held by it alone, checked
+  every tick for every train;
+* **no deadlocks** - no train is ever permanently stuck. The worst continuous
+  standstill of a train that is trying to move is 3_300 ticks and it resolves;
+  all twenty leave their sheds, none ends in "no route", and three runs are
+  bit-identical.
+
+A standstill of 3_300 ticks is longer than the 1_200 tick warning of 9.3, and
+that is correct rather than a defect: twenty trains on a single-track one-way
+ring is a queue, the warning is meant to show the player exactly that, and the
+answer is to double-track the line. A deadlock is a state that never resolves,
+and there is none.

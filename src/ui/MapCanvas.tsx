@@ -6,6 +6,7 @@ import { TileMap } from '../sim/map/TileMap';
 import { SignalKind } from '../sim/map/signals';
 import { RailType, TrackDir } from '../sim/map/track';
 import { planTrack } from '../sim/net/trackBuilder';
+import { AUTO_SIGNAL_SPACING_TILES, DEADLOCK_WARN_TICKS } from '../sim/constants';
 import { ModuleKind } from '../sim/station/types';
 import type { SimClient } from './SimClient';
 import { useSimStore, type Tool } from './store';
@@ -123,6 +124,8 @@ export function MapCanvas({ client }: { readonly client: SimClient }): ReactElem
   const mapRef = useRef<TileMap | null>(null);
 
   const mapBuffer = useSimStore((s) => s.mapBuffer);
+  const showDebug = useSimStore((s) => s.showDebug);
+  const fleet = useSimStore((s) => s.fleet);
   const mapSize = useSimStore((s) => s.mapSize);
   const towns = useSimStore((s) => s.towns);
   const industries = useSimStore((s) => s.industries);
@@ -199,6 +202,7 @@ export function MapCanvas({ client }: { readonly client: SimClient }): ReactElem
           y2: tile.y,
           railType: RailType.Plain,
           assistant: true,
+          signalSpacing: state.autoSignal ? AUTO_SIGNAL_SPACING_TILES : 0,
         });
         state.setRoadAnchor(null);
         view.setPreviewRoute(null);
@@ -228,6 +232,7 @@ export function MapCanvas({ client }: { readonly client: SimClient }): ReactElem
     };
 
     view.setVehicleSource(() => client.readVehicles());
+    view.setReservedSource(() => client.readReserved());
     void view.attach(host);
 
     return () => {
@@ -255,6 +260,19 @@ export function MapCanvas({ client }: { readonly client: SimClient }): ReactElem
     const hex = COMPANY_COLORS[companyColorIndex] ?? '#f08020';
     viewRef.current?.setCompanyColor(Number.parseInt(hex.slice(1), 16));
   }, [companyColorIndex]);
+
+  useEffect(() => {
+    viewRef.current?.setBlockOverlay(showDebug);
+  }, [showDebug]);
+
+  useEffect(() => {
+    // The deadlock markers of section 9.3. The clock lives per vehicle in the
+    // simulation; nothing else surfaces it until the news log of M8.
+    const stuck = fleet
+      .filter((vehicle) => vehicle.waitingTicks >= DEADLOCK_WARN_TICKS)
+      .map((vehicle) => vehicle.tileIndex);
+    viewRef.current?.setDeadlockTiles(stuck);
+  }, [fleet]);
 
   return <div className="mapcanvas" ref={hostRef} />;
 }

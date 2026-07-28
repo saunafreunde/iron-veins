@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { CommandQueue } from '../../src/sim/commands/queue';
 import { CommandKind, type Command } from '../../src/sim/commands/types';
 import {
+  AUTO_SIGNAL_SPACING_TILES,
   Difficulty,
   MapClimate,
   MAX_TRAIN_LENGTH_M,
@@ -12,7 +13,7 @@ import {
   TILE_SIZE_M,
 } from '../../src/sim/constants';
 import { TileMap } from '../../src/sim/map/TileMap';
-import { SignalKind, signalKind } from '../../src/sim/map/signals';
+import { SignalKind, signalDirection, signalKind } from '../../src/sim/map/signals';
 import { Terrain } from '../../src/sim/map/terrain';
 import { hasEdge, RailType, trackDegree, TrackDir } from '../../src/sim/map/track';
 import { ReservationTable } from '../../src/sim/net/reservations';
@@ -84,6 +85,7 @@ function layTrack(bench: Bench, x1: number, y1: number, x2: number, y2: number):
     y2,
     railType: RailType.Plain,
     assistant: false,
+    signalSpacing: 0,
   });
 }
 
@@ -199,6 +201,7 @@ describe('where a signal may stand', () => {
       y2: 10,
       railType: RailType.Plain,
       assistant: true,
+      signalSpacing: 0,
     });
 
     expect(
@@ -728,5 +731,99 @@ describe('two trains following each other', () => {
     expect(vehicles.tileIndex[1]).toBe(far);
     expect(vehicles.state[0]).not.toBe(VehicleState.NoRoute);
     expect(vehicles.state[1]).not.toBe(VehicleState.NoRoute);
+  });
+});
+
+describe('automatic signalling', () => {
+  it('signals a dragged route at the chosen spacing, facing the way it was drawn', () => {
+    const bench = flatWorld();
+    const world = bench.world;
+    const map = world.map;
+
+    run(bench, {
+      kind: CommandKind.BuildTrack,
+      x1: 10,
+      y1: 40,
+      x2: 70,
+      y2: 40,
+      railType: RailType.Plain,
+      assistant: false,
+      signalSpacing: AUTO_SIGNAL_SPACING_TILES,
+    });
+
+    const placed: number[] = [];
+    for (let x = 10; x <= 70; x++) {
+      const packed = map.signal[map.tileIndex(x, 40)]!;
+      if (signalKind(packed) === SignalKind.None) continue;
+      placed.push(x);
+      // One way, and facing east - which is the way the line was drawn.
+      expect(signalKind(packed)).toBe(SignalKind.BlockOneWay);
+      expect(signalDirection(packed)).toBe(TrackDir.East);
+    }
+
+    expect(placed.length).toBeGreaterThan(3);
+    for (let i = 1; i < placed.length; i++) {
+      expect(placed[i]! - placed[i - 1]!).toBe(AUTO_SIGNAL_SPACING_TILES);
+    }
+  });
+
+  it('places a path signal where the line runs into a station', () => {
+    const bench = flatWorld();
+    const world = bench.world;
+
+    run(bench, {
+      kind: CommandKind.BuildTrack,
+      x1: 10,
+      y1: 40,
+      x2: 40,
+      y2: 40,
+      railType: RailType.Plain,
+      assistant: false,
+      signalSpacing: 0,
+    });
+    // A platform right where the next automatic signal would fall.
+    run(bench, {
+      kind: CommandKind.BuildRailStop,
+      x: 23,
+      y: 40,
+      moduleKind: ModuleKind.RailPlatform,
+    });
+
+    run(bench, {
+      kind: CommandKind.BuildTrack,
+      x1: 10,
+      y1: 41,
+      x2: 40,
+      y2: 41,
+      railType: RailType.Plain,
+      assistant: false,
+      signalSpacing: AUTO_SIGNAL_SPACING_TILES,
+    });
+
+    // The signal twelve tiles along the second line lands beside the platform,
+    // which is a station throat - and a throat wants a path signal, not a block
+    // signal that would take the whole of it for one train (section 9.4).
+    const atThroat = world.map.signal[world.map.tileIndex(22, 41)]!;
+    expect(signalKind(atThroat)).toBe(SignalKind.PathEntry);
+  });
+
+  it('leaves the route alone when the player did not ask for signals', () => {
+    const bench = flatWorld();
+    run(bench, {
+      kind: CommandKind.BuildTrack,
+      x1: 10,
+      y1: 40,
+      x2: 70,
+      y2: 40,
+      railType: RailType.Plain,
+      assistant: false,
+      signalSpacing: 0,
+    });
+
+    for (let x = 10; x <= 70; x++) {
+      expect(signalKind(bench.world.map.signal[bench.world.map.tileIndex(x, 40)]!)).toBe(
+        SignalKind.None,
+      );
+    }
   });
 });

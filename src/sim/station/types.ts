@@ -53,7 +53,9 @@ export const MODULE_KIND_COUNT = 8;
  */
 export function isSupportModule(kind: number): boolean {
   return (
-    kind === ModuleKind.FreightTerminal || kind === ModuleKind.Canopy || kind === ModuleKind.ColdStore
+    kind === ModuleKind.FreightTerminal ||
+    kind === ModuleKind.Canopy ||
+    kind === ModuleKind.ColdStore
   );
 }
 

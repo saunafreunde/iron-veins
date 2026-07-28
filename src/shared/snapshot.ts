@@ -12,7 +12,7 @@
  * refuses to interpret a buffer written by a different layout.
  */
 
-export const SNAPSHOT_LAYOUT_VERSION = 3;
+export const SNAPSHOT_LAYOUT_VERSION = 4;
 
 /** Header fields, shared by both slots. */
 export const SnapshotHeader = {
@@ -44,8 +44,19 @@ export const SnapshotI32 = {
   MapRevision: 10,
   /** How many entries of the vehicle block are in use. */
   VehicleCount: 11,
+  /** How many entries of the reservation block are in use. */
+  ReservedCount: 12,
 } as const;
-export const SNAPSHOT_I32_COUNT = 12;
+
+/**
+ * Length of the integer block, rounded UP to an even count.
+ *
+ * The Float64 block starts immediately after it, and a Float64Array view has to
+ * begin on an eight byte boundary - so an odd number of Int32 fields would make
+ * the whole snapshot unconstructable. Adding a field here means checking this
+ * number, not only the enum above.
+ */
+export const SNAPSHOT_I32_COUNT = 14;
 
 /**
  * Float fields of one slot. Money is an exact integer number of cents; it lives
@@ -87,11 +98,31 @@ export const SnapshotVehicle = {
 } as const;
 export const SNAPSHOT_VEHICLE_STRIDE = 5;
 
+/**
+ * Track claims the F3 overlay may draw in one tick (section 9.3).
+ *
+ * The overlay is a learning tool and ships in the release build, so the tiles
+ * trains hold have to reach the renderer somehow. A pair per claimed tile is
+ * the cheapest honest way: sixteen kilobytes covers a network with several
+ * hundred trains on it, and beyond that the overlay simply stops drawing rather
+ * than the simulation slowing down.
+ */
+export const SNAPSHOT_MAX_RESERVED_TILES = 4_096;
+
+/** Fields per claimed tile. */
+export const SnapshotReserved = {
+  Tile: 0,
+  /** Vehicle holding it; the overlay colours by it. */
+  VehicleId: 1,
+} as const;
+export const SNAPSHOT_RESERVED_STRIDE = 2;
+
 const HEADER_BYTES = HEADER_I32_COUNT * 4;
 const STATUS_I32_BYTES = SNAPSHOT_I32_COUNT * 4;
 const STATUS_F64_BYTES = SNAPSHOT_F64_COUNT * 8;
 const VEHICLE_BYTES = SNAPSHOT_MAX_VEHICLES * SNAPSHOT_VEHICLE_STRIDE * 4;
-const SLOT_BYTES = STATUS_I32_BYTES + STATUS_F64_BYTES + VEHICLE_BYTES;
+const RESERVED_BYTES = SNAPSHOT_MAX_RESERVED_TILES * SNAPSHOT_RESERVED_STRIDE * 4;
+const SLOT_BYTES = STATUS_I32_BYTES + STATUS_F64_BYTES + VEHICLE_BYTES + RESERVED_BYTES;
 
 export const SNAPSHOT_BYTES = HEADER_BYTES + 2 * SLOT_BYTES;
 
@@ -115,6 +146,14 @@ function vehicleView(buffer: SharedArrayBuffer, slot: number): Int32Array {
   );
 }
 
+function reservedView(buffer: SharedArrayBuffer, slot: number): Int32Array {
+  return new Int32Array(
+    buffer,
+    slotByteOffset(slot) + STATUS_I32_BYTES + STATUS_F64_BYTES + VEHICLE_BYTES,
+    SNAPSHOT_MAX_RESERVED_TILES * SNAPSHOT_RESERVED_STRIDE,
+  );
+}
+
 /** Allocate a correctly sized, cross-origin-isolated snapshot buffer. */
 export function createSnapshotBuffer(): SharedArrayBuffer {
   return new SharedArrayBuffer(SNAPSHOT_BYTES);
@@ -126,6 +165,7 @@ export class SnapshotWriter {
   private readonly i32Slots: readonly [Int32Array, Int32Array];
   private readonly f64Slots: readonly [Float64Array, Float64Array];
   private readonly vehicleSlots: readonly [Int32Array, Int32Array];
+  private readonly reservedSlots: readonly [Int32Array, Int32Array];
   private generation = 0;
 
   constructor(readonly buffer: SharedArrayBuffer) {
@@ -133,6 +173,7 @@ export class SnapshotWriter {
     this.i32Slots = [i32View(buffer, 0), i32View(buffer, 1)];
     this.f64Slots = [f64View(buffer, 0), f64View(buffer, 1)];
     this.vehicleSlots = [vehicleView(buffer, 0), vehicleView(buffer, 1)];
+    this.reservedSlots = [reservedView(buffer, 0), reservedView(buffer, 1)];
     Atomics.store(this.header, SnapshotHeader.LayoutVersion, SNAPSHOT_LAYOUT_VERSION);
     Atomics.store(this.header, SnapshotHeader.Generation, 0);
   }
@@ -152,6 +193,11 @@ export class SnapshotWriter {
     return this.vehicleSlots[(this.generation + 1) & 1]!;
   }
 
+  /** Claimed-tile block of the slot currently being filled. */
+  get draftReserved(): Int32Array {
+    return this.reservedSlots[(this.generation + 1) & 1]!;
+  }
+
   /** Make the drafted slot visible to the reader. */
   publish(): void {
     this.generation++;
@@ -165,6 +211,7 @@ export class SnapshotReader {
   private readonly i32Slots: readonly [Int32Array, Int32Array];
   private readonly f64Slots: readonly [Float64Array, Float64Array];
   private readonly vehicleSlots: readonly [Int32Array, Int32Array];
+  private readonly reservedSlots: readonly [Int32Array, Int32Array];
   /** 0 means "nothing published yet"; the writer starts publishing at 1. */
   private lastGeneration = 0;
 
@@ -173,6 +220,7 @@ export class SnapshotReader {
     this.i32Slots = [i32View(buffer, 0), i32View(buffer, 1)];
     this.f64Slots = [f64View(buffer, 0), f64View(buffer, 1)];
     this.vehicleSlots = [vehicleView(buffer, 0), vehicleView(buffer, 1)];
+    this.reservedSlots = [reservedView(buffer, 0), reservedView(buffer, 1)];
 
     const layout = Atomics.load(this.header, SnapshotHeader.LayoutVersion);
     if (layout !== 0 && layout !== SNAPSHOT_LAYOUT_VERSION) {
@@ -222,6 +270,16 @@ export class SnapshotReader {
     return {
       data: this.vehicleSlots[slot]!,
       count: this.i32Slots[slot]![SnapshotI32.VehicleCount]!,
+    };
+  }
+
+  /** Claimed tiles of the published tick, for the F3 overlay. */
+  currentReserved(): { readonly data: Int32Array; readonly count: number } {
+    const generation = this.peekGeneration();
+    const slot = generation & 1;
+    return {
+      data: this.reservedSlots[slot]!,
+      count: this.i32Slots[slot]![SnapshotI32.ReservedCount]!,
     };
   }
 }

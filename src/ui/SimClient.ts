@@ -96,6 +96,11 @@ export class SimClient {
     return this.reader?.currentVehicles() ?? { data: EMPTY_VEHICLES, count: 0 };
   }
 
+  /** Claimed track of the published tick, for the F3 overlay. */
+  readReserved(): { data: Int32Array; count: number } {
+    return this.reader?.currentReserved() ?? { data: EMPTY_VEHICLES, count: 0 };
+  }
+
   /** Change the simulation speed. Control traffic - never affects the result. */
   setSpeed(speedIndex: number): void {
     this.post({ type: 'setSpeed', speedIndex });

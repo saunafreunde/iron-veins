@@ -1,5 +1,6 @@
 import { bookExpense } from '../economy/company';
 import {
+  AUTO_SIGNAL_STATION_RADIUS,
   CANOPY_COST_CT,
   CANOPY_UPKEEP_CT,
   COLD_STORE_COST_CT,
@@ -225,6 +226,7 @@ export function buildTrack(
   y2: number,
   railType: RailType,
   assistant: boolean,
+  signalSpacing = 0,
 ): CommandOutcome {
   const planned = planTrack(world.map, x1, y1, x2, y2, railType, assistant);
   if (!planned.ok) return reject(planned.reasonKey);
@@ -290,7 +292,53 @@ export function buildTrack(
   world.company.upkeepPerYearCt += upkeepDelta;
   world.company.fixedAssetsCt += route.costCt;
   map.revision++;
+
+  if (signalSpacing > 0) autoSignal(world, route.tiles, signalSpacing);
   return ACCEPTED;
+}
+
+/**
+ * Automatic signalling along a route that has just been laid (section 9.4).
+ *
+ * One-way block signals every `spacing` tiles, facing the way the line was
+ * drawn, and a path signal where the line runs into a station instead - a
+ * station throat is exactly the shape path signals exist for.
+ *
+ * Every signal goes down through `buildSignal`, so the placement rules, the
+ * price and the upkeep are the same ones a player gets by hand. A tile that is
+ * not plain line, or one the company cannot afford, is simply skipped: the
+ * player can add it themselves, and refusing the whole route because one
+ * junction was in the way would be far worse.
+ */
+function autoSignal(world: World, tiles: readonly number[], spacing: number): void {
+  const map = world.map;
+
+  for (let i = spacing; i + 1 < tiles.length; i += spacing) {
+    const tile = tiles[i]!;
+    const direction = directionFromDelta(
+      (tiles[i + 1]! % map.size) - (tile % map.size),
+      ((tiles[i + 1]! / map.size) | 0) - ((tile / map.size) | 0),
+    );
+
+    const kind = nearStation(world, tile) ? SignalKind.PathEntry : SignalKind.BlockOneWay;
+    buildSignal(world, tile % map.size, (tile / map.size) | 0, kind, direction);
+  }
+}
+
+/** Is a station within a couple of tiles of this piece of line? */
+function nearStation(world: World, tile: number): boolean {
+  const map = world.map;
+  const x = tile % map.size;
+  const y = (tile / map.size) | 0;
+
+  for (const station of world.stations) {
+    for (const module of station.modules) {
+      const dx = module.x - x;
+      const dy = module.y - y;
+      if (dx * dx + dy * dy <= AUTO_SIGNAL_STATION_RADIUS * AUTO_SIGNAL_STATION_RADIUS) return true;
+    }
+  }
+  return false;
 }
 
 /** Remove the track from one tile, including the neighbours' connections. */

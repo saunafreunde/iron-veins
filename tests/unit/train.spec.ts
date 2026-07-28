@@ -118,6 +118,7 @@ function layTrack(
     y2,
     railType,
     assistant: false,
+    signalSpacing: 0,
   });
 }
 
@@ -317,6 +318,7 @@ describe('track upgrades', () => {
         y2: 10,
         railType: RailType.Plain,
         assistant: false,
+        signalSpacing: 0,
       }),
     ).toBe('cmd.reject.nothingToDo');
   });
@@ -459,6 +461,7 @@ describe('bridges and tunnels', () => {
       y2: 10,
       railType: RailType.Plain,
       assistant: true,
+      signalSpacing: 0,
     });
 
     expect(before - bench.world.company.cashCt).toBe(planned.route.costCt);
@@ -501,6 +504,7 @@ describe('bridges and tunnels', () => {
       y2: 10,
       railType: RailType.Plain,
       assistant: true,
+      signalSpacing: 0,
     });
     run(bench, {
       kind: CommandKind.BuildRailStop,
@@ -545,6 +549,7 @@ describe('bridges and tunnels', () => {
       y2: 10,
       railType: RailType.Plain,
       assistant: true,
+      signalSpacing: 0,
     });
 
     const map = bench.world.map;

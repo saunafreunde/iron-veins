@@ -132,6 +132,7 @@ function chain(withForest: boolean): Bench {
     y2: ROW,
     railType: RailType.Plain,
     assistant: false,
+    signalSpacing: 0,
   });
 
   // The two depots stand well clear of the stops, so they form sheds of their

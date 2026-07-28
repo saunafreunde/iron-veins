@@ -239,6 +239,18 @@ Every parcel knows where it is going, and no vehicle carries one anywhere else.
 Industries produce, accept and transform cargo on the calendar, and the loop
 closes back into town growth.
 
+- **production is MONTHLY, collection is DAILY.** Per-tick production is the
+  balancing mistake section 7.3 names by name; monthly collection would put a
+  month of output on a platform in one tick and leave it ageing for four weeks.
+- **review the month that ENDED, then produce for the next one.** The other way
+  round compares this month's production against last month's collection, and
+  every industry looks neglected for ever.
+- **an industry that produced nothing is dormant, not neglected.** Counting
+  those months towards the 24 month closure shuts every factory on the map
+  inside two game years, because a factory makes nothing until it is supplied.
+- stock capacity is eight months of the industry's OWN production; a flat cap
+  makes the small ones hoard and chokes the large ones.
+
 - the collection gate CAPS what leaves an industry by the rating of the stations
   serving it, weighted by the SHARE of the footprint they cover. A tile count
   saturates the gate and the rating stops mattering (D-063).
@@ -253,56 +265,32 @@ closes back into town growth.
 
 ## Measured against SPEC.md - what M4 and M5 still owe
 
-M4 and M5 were built before `SPEC.md` was in the repository, from the repo's own
-record plus genre convention. Against the actual text they are **partial**. This
-is the honest list, and it is work, not commentary.
+**M4 (section 9) is complete.** All four signal types, block segmentation, path
+versus block claiming, one-way signals the pathfinder respects, automatic
+signalling (9.4), the F3 block overlay (9.3) and the deadlock warning. The
+regression network of 19.5 runs twenty trains with zero collisions and nothing
+permanently stuck (D-084).
 
-**M4 (section 9 of SPEC.md).** Delivered: all four signal types, block
-segmentation, path versus block claiming, one-way signals the pathfinder
-respects, the deadlock clock, and the regression network of 19.5. Missing:
+Read D-082 before touching that fixture: what fixed it was the SHAPE of the
+railway - platforms on loops, sheds that merge instead of crossing, a signal
+immediately past every merge - and a priority-reservation scheme that composed
+into deadlock cycles is recorded there so nobody builds it again.
 
-- **THE DEFECT (D-073), which is why M4 is not signed off.** A train's body is
-  only exclusive where it has been granted a section, so two trains can still
-  stack on unsignalled track - most reliably at a depot - and once stacked
-  neither can ever claim again. The regression network reaches this state and
-  therefore asserts only half its criterion. The fix is to make a train's body
-  exclusive at all times, which changes unsignalled track for every existing
-  test and needs the depot case taught explicitly.
-- **Automatic signalling** when dragging a route (default every 12 tiles).
-- **The F3 overlay showing block boundaries, occupancy and reservations.** F3
-  currently shows the state hash only. The spec calls this overlay a *learning
-  tool* and requires it in the release build. The block index it needs now
-  exists and can be rebuilt on the main thread from the shared map buffer; the
-  reservations would have to travel in the snapshot.
-- **The deadlock WARNING.** The clock is recorded per train; nothing surfaces
-  it yet, because there is no message log until M8.
+**M5 (sections 7 and 10) is complete.** Production chains, the service gate,
+the monthly level, acceptance, town demand, refit, cargo routing (7.4), the
+industry clock (7.3) and the station modules (10).
 
-**M5 (sections 7 and 10 of SPEC.md).** Delivered: production, the service gate,
-the monthly level, acceptance, town demand, refit, and **cargo routing (7.4)**.
-Missing:
+Still open across both, and none of it is M4 or M5:
 
-- **Industry closure**: 24 months without collection closes an industry, with
-  warnings at 12 and 20 (D-069 records the cut; the spec asks for it).
-- **Output store full drops production to 25 %** with a log warning. Production
-  currently just stops.
-- **Primary industries fluctuate** +/-25 % on a five-year sine from the LUT.
-- **New industries appear** once per game year in under-served regions.
-- **Station modules**: freight terminal, canopy and cold store all exist in the
-  spec with concrete effects. Only stops, bays and depots are built.
-- **The expansion rule differs**: spec is +10 % at 80 % collected over 12
-  months; built is +25 points at 85 % with a 3-month dead band.
-- **Production is booked in 30 daily slices, not once per month** as section 7.3
-  requires. Defensible, but it is a departure and needs its own entry.
-
-**The freight recalibration (D-066) rests on a test I invented**, not on the
-mandated one. Section 19.4 makes balancing scenario 2 - coal mine to power
-plant, 45 tiles, one train of eight wagons, payback in 4 to 7 game years - the
-authority over exactly those numbers. Until that scenario exists, the freight
-figures are a considered guess.
-
-**Balancing scenarios still missing** (section 19.4): 2 (rail freight), 3 (full
-chain, 80k-200k EUR a year), 4 (bankruptcy from doing nothing, year 6 to 9), 5
-(AI company), 6 (mine closes after 24 months).
+- **Balancing scenarios 2, 3, 4 and 6** of section 19.4. The chain scenarios own
+  the freight figures that M5 set by first draft (D-066), and scenario 2 is the
+  authority the spec names for exactly those numbers.
+- **The news log** (section 15, due with M8). Until it exists, an industry's
+  closure warning is visible only in the tile panel and a stuck train only in
+  the fleet list and the F3 overlay.
+- **A reversing train** ("Wendezug") in the regression network. The pathfinder
+  refuses a 180 degree turn, so a train that runs round its own train is not
+  something the simulation can express yet.
 
 ## Still outstanding
 

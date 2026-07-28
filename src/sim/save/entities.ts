@@ -182,10 +182,7 @@ function decodeStacks(value: unknown, path: string): CargoStack[] {
       amount: num(raw['amount'], `${path}[${i}].amount`),
       createdTick: num(raw['createdTick'], `${path}[${i}].createdTick`),
       originStationId: int(raw['originStationId'], `${path}[${i}].originStationId`),
-      destinationStationId: int(
-        raw['destinationStationId'],
-        `${path}[${i}].destinationStationId`,
-      ),
+      destinationStationId: int(raw['destinationStationId'], `${path}[${i}].destinationStationId`),
       paidFromX: num(raw['paidFromX'], `${path}[${i}].paidFromX`),
       paidFromY: num(raw['paidFromY'], `${path}[${i}].paidFromY`),
     };

@@ -142,6 +142,15 @@ export interface BuildTrackCommand {
   readonly railType: number;
   /** False lays exactly the line the player drew (the manual mode of 8.2). */
   readonly assistant: boolean;
+  /**
+   * Spacing of automatic signalling, in tiles, or 0 for none (section 9.4).
+   *
+   * Carried by the command rather than read from a constant because the spec
+   * calls the spacing selectable: a replay has to lay the same signals the
+   * player did, and that is only true if the number they chose travels with
+   * the command.
+   */
+  readonly signalSpacing: number;
 }
 
 export interface DemolishTrackCommand {

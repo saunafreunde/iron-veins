@@ -94,6 +94,7 @@ function railStation(b: Bench, platforms: number): Station {
     y2: ROW,
     railType: RailType.Plain,
     assistant: false,
+    signalSpacing: 0,
   });
   for (let i = 0; i < platforms; i++) {
     must(b, {
@@ -175,7 +176,9 @@ describe('what the modules do', () => {
 
     // The extra module also nudges the module count term, so the canopy is
     // worth at least its eight points and a shade more.
-    expect(stationRating(station, b.world.tick)).toBeGreaterThanOrEqual(plain + RATING_CANOPY_BONUS);
+    expect(stationRating(station, b.world.tick)).toBeGreaterThanOrEqual(
+      plain + RATING_CANOPY_BONUS,
+    );
   });
 
   it('holds back a third of the spoilage under a canopy', () => {
@@ -262,6 +265,7 @@ describe('platform length', () => {
       y2: ROW,
       railType: RailType.Plain,
       assistant: false,
+      signalSpacing: 0,
     });
     must(b, {
       kind: CommandKind.BuildRailStop,

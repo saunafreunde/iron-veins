@@ -330,7 +330,7 @@
   "signal.pathEntry": "Entry path signal",
   "cmd.reject.unknownSignal": "There is no such signal type.",
   "cmd.reject.signalNeedsDirection": "A one-way signal has to face along its track.",
-  "ui.fleet.stuck": "Held at a signal for {days} days - possible deadlock.",
+  "ui.fleet.stuck": "Stuck for {minutes} min",
   "ui.tool.freightTerminal": "Freight terminal",
   "ui.tool.canopy": "Canopy",
   "ui.tool.coldStore": "Cold store",
@@ -347,5 +347,6 @@
   "ui.industry.service": "Collected (12 months)",
   "ui.industry.closureWarning": "Nothing collected for {months} months - closes in {left}.",
   "ui.industry.closed": "Closed down.",
-  "ui.industry.storeFull": "Store full - production down to 25 %."
+  "ui.industry.storeFull": "Store full - production down to 25 %.",
+  "ui.tool.autoSignal": "Signal automatically, every {spacing} tiles"
 }
