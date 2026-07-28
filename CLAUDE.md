@@ -159,6 +159,23 @@ the interface, and balancing scenario 1 is in band (payback in game year 3).
   cargo that does not exist before M5, so calibrating them now would be tuning
   against a guess (DECISIONS.md D-041).
 
-Then M3: track building with the route assistant, bridges, tunnels, stations
-with platform modules, train composition, the longitudinal solver on rails,
-train pathfinding and electrification.
+**M3 started.** Done: eight-direction track, the curve radius table of section
+8.1 with its speed limits, gradients, five rail types, the route assistant
+(A* over tile plus incoming direction, costs in metre equivalents), manual
+mode, the build preview, track rendering and save format v4.
+
+**Open in M3, in the order it should be built:**
+
+1. **Trains.** The vehicle store, the longitudinal solver and the state machine
+   already exist from M2 and are written for road vehicles; rails need the rail
+   coefficients, train composition (locomotive plus wagons, aggregated mass,
+   tractive effort and length) and the rail catalogue.
+2. **Train pathfinding** over the track graph, with the incoming direction as
+   part of the state - the assistant's search is the template.
+3. **Rail stations** with platform modules, and rail depots.
+4. **Electrification**: the rail type is already stored per tile; what is
+   missing is excluding unelectrified routes when an electric locomotive paths.
+5. **Bridges and tunnels**, which are also the two missing terms of the
+   assistant's cost function.
+
+Then M4 (signals) onwards.
