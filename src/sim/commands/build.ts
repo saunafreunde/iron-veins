@@ -1,6 +1,11 @@
 import { bookExpense } from '../economy/company';
 import {
   DEMOLITION_REFUND,
+  RAIL_DEPOT_COST_CT,
+  RAIL_DEPOT_UPKEEP_CT,
+  RAIL_PLATFORM_COST_CT,
+  RAIL_PLATFORM_UPKEEP_CT,
+  RESALE_SHARE,
   ROAD_COST_PER_TILE_CT,
   ROAD_DEPOT_COST_CT,
   ROAD_DEPOT_UPKEEP_CT,
@@ -8,6 +13,7 @@ import {
   ROAD_STOP_UPKEEP_CT,
   ROAD_UPKEEP_PER_TILE_CT,
   STATION_JOIN_DISTANCE,
+  TICKS_PER_YEAR,
   TOWN_ROAD_MAX_SLOPE,
 } from '../constants';
 import { slopeRise, Terrain } from '../map/terrain';
@@ -23,10 +29,11 @@ import {
   type TrackDir,
 } from '../map/track';
 import { planTrack } from '../net/trackBuilder';
-import { ModuleKind, recomputeCentre, type Station } from '../station/types';
+import { ModuleKind, recomputeCentre, type Station, type StationModule } from '../station/types';
 import { assignStationCatchment } from '../town/update';
 import { RoadBit } from '../town/types';
 import { defaultCargo, vehicleSpec, VehicleKind } from '../vehicles/catalog';
+import { aggregateConsist, consistDefaultCargo, validateConsist } from '../vehicles/consist';
 import { VehicleState } from '../vehicles/VehicleStore';
 import type { World } from '../World';
 import { ACCEPTED, RejectReason, type CommandOutcome } from './types';
@@ -189,10 +196,25 @@ export function buildTrack(
   if (!planned.ok) return reject(planned.reasonKey);
 
   const route = planned.route;
-  if (route.geometry.newTiles === 0) return reject(RejectReason.NothingToDo);
+  if (route.geometry.newTiles === 0 && route.upgradedTiles === 0) {
+    return reject(RejectReason.NothingToDo);
+  }
   if (route.costCt > world.company.cashCt) return reject(RejectReason.InsufficientFunds);
 
   const map = world.map;
+
+  // Upkeep is worked out before the type is overwritten, because a converted
+  // tile stops costing what the old type cost.
+  let upkeepDelta = 0;
+  for (const tile of route.tiles) {
+    const existing = map.railType[tile]!;
+    if (map.trackBits[tile] === 0) {
+      upkeepDelta += RAIL_TYPE_UPKEEP_CT[railType]!;
+    } else if (existing !== railType) {
+      upkeepDelta += RAIL_TYPE_UPKEEP_CT[railType]! - RAIL_TYPE_UPKEEP_CT[existing]!;
+    }
+  }
+
   for (let i = 0; i + 1 < route.tiles.length; i++) {
     const from = route.tiles[i]!;
     const to = route.tiles[i + 1]!;
@@ -208,7 +230,7 @@ export function buildTrack(
   }
 
   bookExpense(world.company, route.costCt);
-  world.company.upkeepPerYearCt += route.geometry.newTiles * RAIL_TYPE_UPKEEP_CT[railType]!;
+  world.company.upkeepPerYearCt += upkeepDelta;
   world.company.fixedAssetsCt += route.costCt;
   map.revision++;
   return ACCEPTED;
@@ -278,6 +300,39 @@ function joinTarget(world: World, x: number, y: number): Station | null {
   return best;
 }
 
+/**
+ * Add a module to the nearest station of the company, or open a new one.
+ * Shared by every mode, so a bus stop and a platform four tiles apart really do
+ * become one station with one cargo pool (section 10).
+ */
+function attachModule(world: World, module: StationModule): Station {
+  let station = joinTarget(world, module.x, module.y);
+
+  if (station === null) {
+    station = {
+      id: world.stations.length,
+      name: world.nextStationName(module.x, module.y),
+      ownerId: world.playerCompanyId,
+      modules: [module],
+      x: module.x,
+      y: module.y,
+      waiting: [],
+      visitTicks: [],
+      servedReliability: 0,
+      overflowUnits: 0,
+      townId: -1,
+      buildingsCovered: 0,
+    };
+    world.stations.push(station);
+  } else {
+    station.modules.push(module);
+  }
+
+  recomputeCentre(station);
+  assignStationCatchment(world, station);
+  return station;
+}
+
 /** Place a bus stop or lorry bay on an existing road tile. */
 export function buildRoadStop(
   world: World,
@@ -294,36 +349,94 @@ export function buildRoadStop(
   const upkeep = kind === ModuleKind.RoadDepot ? ROAD_DEPOT_UPKEEP_CT : ROAD_STOP_UPKEEP_CT;
   if (cost > world.company.cashCt) return reject(RejectReason.InsufficientFunds);
 
-  const module = { kind, tileIndex: tile, x, y };
-  let station = joinTarget(world, x, y);
-
-  if (station === null) {
-    station = {
-      id: world.stations.length,
-      name: world.nextStationName(x, y),
-      ownerId: world.playerCompanyId,
-      modules: [module],
-      x,
-      y,
-      waiting: [],
-      visitTicks: [],
-      servedReliability: 0,
-      overflowUnits: 0,
-      townId: -1,
-      buildingsCovered: 0,
-    };
-    world.stations.push(station);
-  } else {
-    station.modules.push(module);
-  }
-
-  recomputeCentre(station);
-  assignStationCatchment(world, station);
+  attachModule(world, { kind, tileIndex: tile, x, y });
 
   bookExpense(world.company, cost);
   world.company.upkeepPerYearCt += upkeep;
   world.company.fixedAssetsCt += cost;
   world.map.revision++;
+  return ACCEPTED;
+}
+
+/**
+ * Place a platform tile or a rail depot on existing track.
+ *
+ * A platform is built ON the track rather than beside it, so the tile keeps its
+ * rails and a train simply stops there. That is what lets a through station be
+ * a piece of a line instead of a terminus.
+ */
+export function buildRailStop(
+  world: World,
+  x: number,
+  y: number,
+  kind: ModuleKind,
+): CommandOutcome {
+  if (kind !== ModuleKind.RailPlatform && kind !== ModuleKind.RailDepot) {
+    return reject(RejectReason.UnknownModule);
+  }
+  if (!world.map.contains(x, y)) return reject(RejectReason.OutsideMap);
+
+  const tile = world.map.tileIndex(x, y);
+  if (world.map.trackBits[tile] === 0) return reject(RejectReason.NeedsTrack);
+  if (stationAt(world, tile) !== null) return reject(RejectReason.Occupied);
+
+  const cost = kind === ModuleKind.RailDepot ? RAIL_DEPOT_COST_CT : RAIL_PLATFORM_COST_CT;
+  const upkeep = kind === ModuleKind.RailDepot ? RAIL_DEPOT_UPKEEP_CT : RAIL_PLATFORM_UPKEEP_CT;
+  if (cost > world.company.cashCt) return reject(RejectReason.InsufficientFunds);
+
+  attachModule(world, { kind, tileIndex: tile, x, y });
+
+  bookExpense(world.company, cost);
+  world.company.upkeepPerYearCt += upkeep;
+  world.company.fixedAssetsCt += cost;
+  world.map.revision++;
+  return ACCEPTED;
+}
+
+/**
+ * Assemble a train in a rail depot (section 11.2).
+ *
+ * The whole train is bought in one go rather than unit by unit: its mass, its
+ * tractive effort and its top speed only mean anything as a composition, and a
+ * half-built train standing in a depot would be a state with no rules.
+ */
+export function buyTrain(
+  world: World,
+  depotX: number,
+  depotY: number,
+  specIds: readonly number[],
+): CommandOutcome {
+  if (!world.map.contains(depotX, depotY)) return reject(RejectReason.OutsideMap);
+  const tile = world.map.tileIndex(depotX, depotY);
+
+  const station = stationAt(world, tile);
+  const isDepot =
+    station !== null &&
+    station.modules.some((m) => m.tileIndex === tile && m.kind === ModuleKind.RailDepot);
+  if (!isDepot) return reject(RejectReason.NeedsRailDepot);
+
+  const problem = validateConsist(specIds, world.date.year);
+  if (problem !== null) return reject(problem);
+
+  const aggregate = aggregateConsist(specIds);
+  if (aggregate.priceCt > world.company.cashCt) return reject(RejectReason.InsufficientFunds);
+
+  const id = world.vehicles.create(
+    specIds[0]!,
+    world.playerCompanyId,
+    tile,
+    world.tick,
+    consistDefaultCargo(specIds),
+    specIds,
+  );
+  if (id === -1) return reject(RejectReason.TooManyVehicles);
+
+  world.vehicles.reliability[id] = aggregate.reliability0;
+  world.vehicles.state[id] = VehicleState.Stopped;
+
+  bookExpense(world.company, aggregate.priceCt);
+  world.company.upkeepPerYearCt += aggregate.upkeepCtPerYear;
+  world.company.fixedAssetsCt += aggregate.priceCt;
   return ACCEPTED;
 }
 
@@ -371,14 +484,21 @@ export function buyRoadVehicle(
 export function sellVehicle(world: World, vehicleId: number): CommandOutcome {
   if (!world.vehicles.isAlive(vehicleId)) return reject(RejectReason.NoSuchVehicle);
 
+  // A train is sold whole, so the price and the upkeep are those of the
+  // composition, not of the locomotive at its head.
+  const units = world.vehicles.consist[vehicleId]!;
   const spec = vehicleSpec(world.vehicles.specId[vehicleId]!);
-  const ageYears = (world.tick - world.vehicles.builtTick[vehicleId]!) / 72_000;
+  const priceCt = units.length > 0 ? aggregateConsist(units).priceCt : spec.priceCt;
+  const upkeepCt =
+    units.length > 0 ? aggregateConsist(units).upkeepCtPerYear : spec.upkeepCtPerYear;
+
+  const ageYears = (world.tick - world.vehicles.builtTick[vehicleId]!) / TICKS_PER_YEAR;
   const wear = Math.min(1, ageYears / spec.lifetimeYears);
-  const refund = Math.round(spec.priceCt * (1 - wear) * 0.6);
+  const refund = Math.round(priceCt * (1 - wear) * RESALE_SHARE);
 
   world.company.cashCt += refund;
-  world.company.upkeepPerYearCt -= spec.upkeepCtPerYear;
-  world.company.fixedAssetsCt -= spec.priceCt;
+  world.company.upkeepPerYearCt -= upkeepCt;
+  world.company.fixedAssetsCt -= priceCt;
   world.vehicles.destroy(vehicleId);
   return ACCEPTED;
 }

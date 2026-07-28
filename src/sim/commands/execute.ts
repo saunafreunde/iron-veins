@@ -5,10 +5,12 @@ import type { OrderLoad, OrderUnload } from '../vehicles/VehicleStore';
 import { OrderTarget, VehicleState, type Order } from '../vehicles/VehicleStore';
 import type { RailType } from '../map/track';
 import {
+  buildRailStop,
   buildRoad,
   buildRoadStop,
   buildTrack,
   buyRoadVehicle,
+  buyTrain,
   demolishRoad,
   demolishTrack,
   sellVehicle,
@@ -92,8 +94,14 @@ export function executeCommand(world: World, command: Command): CommandOutcome {
     case CommandKind.BuildRoadStop:
       return buildRoadStop(world, command.x, command.y, command.moduleKind as ModuleKind);
 
+    case CommandKind.BuildRailStop:
+      return buildRailStop(world, command.x, command.y, command.moduleKind as ModuleKind);
+
     case CommandKind.BuyRoadVehicle:
       return buyRoadVehicle(world, command.x, command.y, command.specId);
+
+    case CommandKind.BuyTrain:
+      return buyTrain(world, command.x, command.y, command.specIds);
 
     case CommandKind.SellVehicle:
       return sellVehicle(world, command.vehicleId);

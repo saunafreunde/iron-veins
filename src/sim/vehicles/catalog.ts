@@ -1,63 +1,30 @@
 import { Cargo } from '../cargo/types';
+import { RAIL_SPECS } from './railCatalog';
+import { kmh, RailRole, VehicleKind, type VehicleSpec } from './spec';
 
 /**
  * Vehicle catalogue - pure data (section 11.5).
  *
+ * The road table lives here, the rail table in ./railCatalog.ts; both use the
+ * shape defined in ./spec.ts, and this file is where they are joined into the
+ * one list everything else looks things up in. Water and air follow with their
+ * milestones the same way.
+ *
  * All names are invented type designations. No real manufacturer, series or
  * model name appears anywhere in this project; that is a legal requirement, not
  * a stylistic one.
- *
- * M2 ships the road vehicles. Rail, water and air catalogues follow with their
- * milestones, in the same table.
  */
 
-export const VehicleKind = {
-  Train: 0,
-  Road: 1,
-  Ship: 2,
-  Aircraft: 3,
-} as const;
-export type VehicleKind = (typeof VehicleKind)[keyof typeof VehicleKind];
+export { RailRole, VehicleKind } from './spec';
+export type { PowerSource, VehicleSpec } from './spec';
 
-export type PowerSource = 'steam' | 'diesel' | 'electric' | 'hydrogen' | 'battery';
-
-export interface VehicleSpec {
-  readonly id: number;
-  readonly nameKey: string;
-  readonly kind: VehicleKind;
-  readonly introYear: number;
-  readonly retireYear: number;
-  readonly priceCt: number;
-  readonly upkeepCtPerYear: number;
-  readonly massKg: number;
-  readonly lengthM: number;
-  /** Starting tractive effort. [N] */
-  readonly tractiveN: number;
-  readonly powerW: number;
-  readonly maxSpeedMs: number;
-  readonly capacity: Partial<Record<Cargo, number>>;
-  readonly refittable: readonly Cargo[];
-  readonly power: PowerSource;
-  readonly needsCatenary: boolean;
-  readonly hasCooling: boolean;
-  /** Reliability when new, 0..10000. */
-  readonly reliability0: number;
-  readonly lifetimeYears: number;
-  /** Emissions used by the environmental rating from 2000 on. [kg/km] */
-  readonly co2PerKm: number;
-}
-
-/** km/h to m/s, so the table can be written in the unit it is designed in. */
-function kmh(value: number): number {
-  return value / 3.6;
-}
-
-export const VEHICLE_SPECS: readonly VehicleSpec[] = [
+const ROAD_SPECS: readonly VehicleSpec[] = [
   // ------------------------------------------------------------ buses
   {
     id: 200,
     nameKey: 'veh.bus_o1',
     kind: VehicleKind.Road,
+    railRole: RailRole.None,
     introYear: 1950,
     retireYear: 1968,
     priceCt: 550_000,
@@ -80,6 +47,7 @@ export const VEHICLE_SPECS: readonly VehicleSpec[] = [
     id: 201,
     nameKey: 'veh.bus_o2',
     kind: VehicleKind.Road,
+    railRole: RailRole.None,
     introYear: 1962,
     retireYear: 1984,
     priceCt: 1_300_000,
@@ -102,6 +70,7 @@ export const VEHICLE_SPECS: readonly VehicleSpec[] = [
     id: 202,
     nameKey: 'veh.bus_o3',
     kind: VehicleKind.Road,
+    railRole: RailRole.None,
     introYear: 1979,
     retireYear: 2001,
     priceCt: 1_820_000,
@@ -124,6 +93,7 @@ export const VEHICLE_SPECS: readonly VehicleSpec[] = [
     id: 203,
     nameKey: 'veh.bus_articulated',
     kind: VehicleKind.Road,
+    railRole: RailRole.None,
     introYear: 1994,
     retireYear: 2024,
     priceCt: 2_760_000,
@@ -146,6 +116,7 @@ export const VEHICLE_SPECS: readonly VehicleSpec[] = [
     id: 204,
     nameKey: 'veh.bus_hybrid',
     kind: VehicleKind.Road,
+    railRole: RailRole.None,
     introYear: 2012,
     retireYear: 2038,
     priceCt: 3_360_000,
@@ -168,6 +139,7 @@ export const VEHICLE_SPECS: readonly VehicleSpec[] = [
     id: 205,
     nameKey: 'veh.bus_battery',
     kind: VehicleKind.Road,
+    railRole: RailRole.None,
     introYear: 2026,
     retireYear: 2050,
     priceCt: 4_200_000,
@@ -190,6 +162,7 @@ export const VEHICLE_SPECS: readonly VehicleSpec[] = [
     id: 206,
     nameKey: 'veh.bus_double',
     kind: VehicleKind.Road,
+    railRole: RailRole.None,
     introYear: 2035,
     retireYear: 2050,
     priceCt: 5_280_000,
@@ -214,6 +187,7 @@ export const VEHICLE_SPECS: readonly VehicleSpec[] = [
     id: 220,
     nameKey: 'veh.mail_van1',
     kind: VehicleKind.Road,
+    railRole: RailRole.None,
     introYear: 1950,
     retireYear: 1975,
     priceCt: 2_900_000,
@@ -236,6 +210,7 @@ export const VEHICLE_SPECS: readonly VehicleSpec[] = [
     id: 221,
     nameKey: 'veh.mail_van2',
     kind: VehicleKind.Road,
+    railRole: RailRole.None,
     introYear: 1972,
     retireYear: 2004,
     priceCt: 4_600_000,
@@ -258,6 +233,7 @@ export const VEHICLE_SPECS: readonly VehicleSpec[] = [
     id: 222,
     nameKey: 'veh.mail_van3',
     kind: VehicleKind.Road,
+    railRole: RailRole.None,
     introYear: 2001,
     retireYear: 2050,
     priceCt: 7_800_000,
@@ -282,6 +258,7 @@ export const VEHICLE_SPECS: readonly VehicleSpec[] = [
     id: 240,
     nameKey: 'veh.lorry_bulk1',
     kind: VehicleKind.Road,
+    railRole: RailRole.None,
     introYear: 1950,
     retireYear: 1974,
     priceCt: 4_200_000,
@@ -304,6 +281,7 @@ export const VEHICLE_SPECS: readonly VehicleSpec[] = [
     id: 241,
     nameKey: 'veh.lorry_bulk2',
     kind: VehicleKind.Road,
+    railRole: RailRole.None,
     introYear: 1971,
     retireYear: 1998,
     priceCt: 6_900_000,
@@ -326,6 +304,7 @@ export const VEHICLE_SPECS: readonly VehicleSpec[] = [
     id: 242,
     nameKey: 'veh.lorry_bulk3',
     kind: VehicleKind.Road,
+    railRole: RailRole.None,
     introYear: 1995,
     retireYear: 2028,
     priceCt: 10_400_000,
@@ -348,6 +327,7 @@ export const VEHICLE_SPECS: readonly VehicleSpec[] = [
     id: 243,
     nameKey: 'veh.lorry_bulk4',
     kind: VehicleKind.Road,
+    railRole: RailRole.None,
     introYear: 2024,
     retireYear: 2050,
     priceCt: 15_800_000,
@@ -370,6 +350,7 @@ export const VEHICLE_SPECS: readonly VehicleSpec[] = [
     id: 250,
     nameKey: 'veh.lorry_box1',
     kind: VehicleKind.Road,
+    railRole: RailRole.None,
     introYear: 1953,
     retireYear: 1980,
     priceCt: 4_800_000,
@@ -392,6 +373,7 @@ export const VEHICLE_SPECS: readonly VehicleSpec[] = [
     id: 251,
     nameKey: 'veh.lorry_box2',
     kind: VehicleKind.Road,
+    railRole: RailRole.None,
     introYear: 1977,
     retireYear: 2006,
     priceCt: 7_900_000,
@@ -414,6 +396,7 @@ export const VEHICLE_SPECS: readonly VehicleSpec[] = [
     id: 252,
     nameKey: 'veh.lorry_box3',
     kind: VehicleKind.Road,
+    railRole: RailRole.None,
     introYear: 2003,
     retireYear: 2040,
     priceCt: 12_200_000,
@@ -436,6 +419,7 @@ export const VEHICLE_SPECS: readonly VehicleSpec[] = [
     id: 260,
     nameKey: 'veh.lorry_reefer1',
     kind: VehicleKind.Road,
+    railRole: RailRole.None,
     introYear: 1958,
     retireYear: 1990,
     priceCt: 6_100_000,
@@ -458,6 +442,7 @@ export const VEHICLE_SPECS: readonly VehicleSpec[] = [
     id: 261,
     nameKey: 'veh.lorry_reefer2',
     kind: VehicleKind.Road,
+    railRole: RailRole.None,
     introYear: 1988,
     retireYear: 2022,
     priceCt: 10_800_000,
@@ -480,6 +465,7 @@ export const VEHICLE_SPECS: readonly VehicleSpec[] = [
     id: 262,
     nameKey: 'veh.lorry_reefer3',
     kind: VehicleKind.Road,
+    railRole: RailRole.None,
     introYear: 2020,
     retireYear: 2050,
     priceCt: 16_400_000,
@@ -502,6 +488,7 @@ export const VEHICLE_SPECS: readonly VehicleSpec[] = [
     id: 270,
     nameKey: 'veh.tanker1',
     kind: VehicleKind.Road,
+    railRole: RailRole.None,
     introYear: 1955,
     retireYear: 1986,
     priceCt: 5_600_000,
@@ -524,6 +511,7 @@ export const VEHICLE_SPECS: readonly VehicleSpec[] = [
     id: 271,
     nameKey: 'veh.tanker2',
     kind: VehicleKind.Road,
+    railRole: RailRole.None,
     introYear: 1984,
     retireYear: 2018,
     priceCt: 9_400_000,
@@ -546,6 +534,7 @@ export const VEHICLE_SPECS: readonly VehicleSpec[] = [
     id: 272,
     nameKey: 'veh.tanker3',
     kind: VehicleKind.Road,
+    railRole: RailRole.None,
     introYear: 2016,
     retireYear: 2050,
     priceCt: 14_600_000,
@@ -568,6 +557,7 @@ export const VEHICLE_SPECS: readonly VehicleSpec[] = [
     id: 280,
     nameKey: 'veh.lorry_container1',
     kind: VehicleKind.Road,
+    railRole: RailRole.None,
     introYear: 1968,
     retireYear: 2000,
     priceCt: 8_200_000,
@@ -590,6 +580,7 @@ export const VEHICLE_SPECS: readonly VehicleSpec[] = [
     id: 281,
     nameKey: 'veh.lorry_container2',
     kind: VehicleKind.Road,
+    railRole: RailRole.None,
     introYear: 1998,
     retireYear: 2050,
     priceCt: 13_100_000,
@@ -612,6 +603,7 @@ export const VEHICLE_SPECS: readonly VehicleSpec[] = [
     id: 290,
     nameKey: 'veh.lorry_livestock',
     kind: VehicleKind.Road,
+    railRole: RailRole.None,
     introYear: 1951,
     retireYear: 1992,
     priceCt: 4_900_000,
@@ -634,6 +626,7 @@ export const VEHICLE_SPECS: readonly VehicleSpec[] = [
     id: 291,
     nameKey: 'veh.lorry_cement',
     kind: VehicleKind.Road,
+    railRole: RailRole.None,
     introYear: 1966,
     retireYear: 2010,
     priceCt: 6_400_000,
@@ -653,6 +646,9 @@ export const VEHICLE_SPECS: readonly VehicleSpec[] = [
     co2PerKm: 1.5,
   },
 ];
+
+/** Every buildable vehicle of every mode, in one list. */
+export const VEHICLE_SPECS: readonly VehicleSpec[] = [...ROAD_SPECS, ...RAIL_SPECS];
 
 const SPEC_BY_ID = new Map<number, VehicleSpec>(VEHICLE_SPECS.map((spec) => [spec.id, spec]));
 
@@ -674,6 +670,18 @@ export function availableVehicles(kind: VehicleKind, year: number): VehicleSpec[
   const result: VehicleSpec[] = [];
   for (const spec of VEHICLE_SPECS) {
     if (spec.kind !== kind) continue;
+    if (year < spec.introYear || year > spec.retireYear) continue;
+    result.push(spec);
+  }
+  result.sort((a, b) => a.id - b.id);
+  return result;
+}
+
+/** Rail vehicles of one role that can be bought in `year`. */
+export function availableRailVehicles(role: RailRole, year: number): VehicleSpec[] {
+  const result: VehicleSpec[] = [];
+  for (const spec of VEHICLE_SPECS) {
+    if (spec.railRole !== role) continue;
     if (year < spec.introYear || year > spec.retireYear) continue;
     result.push(spec);
   }

@@ -2,6 +2,8 @@ import type { ReactElement } from 'react';
 import { formatMoney, t } from '../i18n';
 import type { StationMarker } from '../shared/protocol';
 import {
+  RAIL_DEPOT_COST_CT,
+  RAIL_PLATFORM_COST_CT,
   ROAD_COST_PER_TILE_CT,
   ROAD_DEPOT_COST_CT,
   ROAD_STOP_COST_CT,
@@ -18,6 +20,8 @@ const TOOLS: ReadonlyArray<{ readonly id: Tool; readonly labelKey: string }> = [
   { id: 'track', labelKey: 'ui.tool.track' },
   { id: 'stop', labelKey: 'ui.tool.stop' },
   { id: 'depot', labelKey: 'ui.tool.depot' },
+  { id: 'platform', labelKey: 'ui.tool.platform' },
+  { id: 'raildepot', labelKey: 'ui.tool.railDepot' },
   { id: 'demolish', labelKey: 'ui.tool.demolish' },
   { id: 'raise', labelKey: 'ui.tool.raise' },
   { id: 'lower', labelKey: 'ui.tool.lower' },
@@ -37,6 +41,10 @@ function priceHint(tool: Tool): string {
       return t('ui.tool.priceStop', { amount: formatMoney(ROAD_STOP_COST_CT) });
     case 'depot':
       return t('ui.tool.priceDepot', { amount: formatMoney(ROAD_DEPOT_COST_CT) });
+    case 'platform':
+      return t('ui.tool.pricePlatform', { amount: formatMoney(RAIL_PLATFORM_COST_CT) });
+    case 'raildepot':
+      return t('ui.tool.priceRailDepot', { amount: formatMoney(RAIL_DEPOT_COST_CT) });
     case 'raise':
     case 'lower':
     case 'level':

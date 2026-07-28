@@ -15,12 +15,11 @@ import {
   SPEED_FACTORS,
   STATE_HASH_INTERVAL_TICKS,
   TICK_MS,
+  TILE_DIAGONAL_M,
   TILE_SIZE_M,
 } from './constants';
-import type { Cargo } from './cargo/types';
 import { loanLimitCt } from './economy/company';
 import { stationRating } from './station/types';
-import { capacityFor, vehicleSpec } from './vehicles/catalog';
 import { hashWorldLive, World } from './World';
 
 /**
@@ -121,19 +120,21 @@ function postFleet(current: World): void {
 
   for (let id = 0; id < vehicles.count; id++) {
     if (vehicles.alive[id] !== 1) continue;
-    const spec = vehicleSpec(vehicles.specId[id]!);
-    const cargo = vehicles.refitCargo[id]! as Cargo;
     let units = 0;
     for (const stack of vehicles.cargo[id]!) units += stack.amount;
 
     markers.push({
       id,
       specId: vehicles.specId[id]!,
+      kind: vehicles.kind[id]!,
       state: vehicles.state[id]!,
       cargoUnits: Math.round(units),
-      capacity: capacityFor(spec, cargo),
+      capacity: vehicles.capacityUnits[id]!,
       earnedCt: vehicles.earnedCt[id]!,
       orderStationIds: vehicles.orders[id]!.map((order) => order.targetId),
+      consist: [...vehicles.consist[id]!],
+      maxSpeedMs: vehicles.maxSpeedMs[id]!,
+      lengthM: vehicles.lengthM[id]!,
     });
   }
   scope.postMessage({ type: 'fleetChanged', vehicles: markers });
@@ -158,13 +159,22 @@ function writeVehicles(current: World, block: Int32Array): number {
     const hasNext = index + 1 < vehicles.pathLength[id]!;
     const next = hasNext ? vehicles.paths[id]![index + 1]! : tile;
 
+    // Progress is a fraction of THIS step, which on a diagonal piece of track
+    // is 70.7 m rather than 50 m - dividing by the tile size would make every
+    // train jump forward as it entered a diagonal.
+    const size = current.map.size;
+    const diagonal =
+      hasNext && next % size !== tile % size && ((next / size) | 0) !== ((tile / size) | 0);
+    const stepM = diagonal ? TILE_DIAGONAL_M : TILE_SIZE_M;
+
     const base = written * SNAPSHOT_VEHICLE_STRIDE;
     block[base + SnapshotVehicle.Tile] = tile;
     block[base + SnapshotVehicle.NextTile] = next;
     block[base + SnapshotVehicle.ProgressMilli] = Math.round(
-      (vehicles.progressM[id]! / TILE_SIZE_M) * 1000,
+      (vehicles.progressM[id]! / stepM) * 1000,
     );
     block[base + SnapshotVehicle.State] = vehicles.state[id]!;
+    block[base + SnapshotVehicle.Kind] = vehicles.kind[id]!;
     written++;
   }
   return written;

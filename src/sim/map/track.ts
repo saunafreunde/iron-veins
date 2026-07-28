@@ -2,6 +2,7 @@ import {
   HEIGHT_STEP_M,
   LATERAL_ACCEL_FREIGHT,
   LATERAL_ACCEL_PASSENGER,
+  TILE_DIAGONAL_M,
   TILE_SIZE_M,
 } from '../constants';
 
@@ -55,7 +56,7 @@ export function isDiagonal(direction: TrackDir): boolean {
 
 /** Ground distance covered by one step in this direction. [m] */
 export function stepLengthM(direction: TrackDir): number {
-  return isDiagonal(direction) ? TILE_SIZE_M * Math.SQRT2 : TILE_SIZE_M;
+  return isDiagonal(direction) ? TILE_DIAGONAL_M : TILE_SIZE_M;
 }
 
 /**
@@ -92,6 +93,23 @@ export const RAIL_TYPE_COST_CT: readonly number[] = [0, 90_000, 140_000, 55_000,
 
 /** Yearly upkeep per tile. [cent] */
 export const RAIL_TYPE_UPKEEP_CT: readonly number[] = [0, 4_500, 6_000, 2_800, 14_000];
+
+/**
+ * Least an upgrade can cost, as a share of the new type's build price.
+ *
+ * Converting track is mostly the difference between the two - stringing wire
+ * over an existing line is cheaper than laying that line was. But it is never
+ * free, not even when the new type is the cheaper one: the old track still has
+ * to come up.
+ */
+export const RAIL_UPGRADE_MIN_SHARE = 0.25;
+
+/** Price of converting one tile from one rail type to another. [cent] */
+export function railUpgradeCostCt(from: RailType, to: RailType): number {
+  const difference = RAIL_TYPE_COST_CT[to]! - RAIL_TYPE_COST_CT[from]!;
+  const floor = RAIL_TYPE_COST_CT[to]! * RAIL_UPGRADE_MIN_SHARE;
+  return Math.round(difference > floor ? difference : floor);
+}
 
 /**
  * Curve radius at one node of a route, from the turn there and the turn at the
@@ -144,10 +162,59 @@ export function freightCurveSpeedMs(radiusM: number): number {
   return curveSpeedMs(radiusM, LATERAL_ACCEL_FREIGHT);
 }
 
-/** Gradient of a step between two height levels, in per mille and signed. */
+/** Gradient of a single step between two height levels, in per mille and signed. */
 export function gradePermille(fromHeight: number, toHeight: number, direction: TrackDir): number {
   const rise = (toHeight - fromHeight) * HEIGHT_STEP_M;
   return (rise * 1000) / stepLengthM(direction);
+}
+
+/**
+ * ---------------------------------------------------------------------------
+ * THE GRADIENT WINDOW - read this before touching anything about gradients.
+ * ---------------------------------------------------------------------------
+ * The ground is sampled in whole height levels of 8 m on a 50 m grid, so the
+ * smallest step the terrain can express is 8 m over 50 m: 160 per mille. Taken
+ * literally, no rail type could ever climb anything at all - not even the 60
+ * per mille narrow gauge - and every railway in the game would be confined to
+ * perfectly flat ground.
+ *
+ * That is a measuring error, not a fact about railways. Track has its own
+ * vertical alignment: it leaves the ground on an embankment, climbs steadily
+ * and meets it again further along. What matters is therefore the height gained
+ * over a STRETCH of line, not the sample-to-sample difference.
+ *
+ * So gradients are measured over a window, and the window is the length over
+ * which one height level is exactly at the type's limit:
+ *
+ *   plain / electrified  30    per mille ->  6 tiles (300 m)
+ *   narrow gauge         60    per mille ->  3 tiles (150 m)
+ *   high speed           12.5  per mille -> 13 tiles (650 m)
+ *
+ * Read as a rule: plain track may gain one level every six tiles, high speed
+ * one every thirteen, narrow gauge one every three. Which is the promise the
+ * rail types are supposed to make.
+ */
+export function gradeWindowTiles(railType: RailType): number {
+  const maxGrade = RAIL_TYPE_MAX_GRADE[railType] ?? 0;
+  if (maxGrade <= 0) return 1;
+  return Math.ceil((HEIGHT_STEP_M * 1000) / (maxGrade * TILE_SIZE_M));
+}
+
+/** Length of that window. [m] */
+export function gradeWindowM(railType: RailType): number {
+  return gradeWindowTiles(railType) * TILE_SIZE_M;
+}
+
+/**
+ * Gradient of a stretch of line, in per mille and signed.
+ *
+ * `runM` is floored at the window length: a route that starts halfway up a
+ * slope is judged no more harshly than the middle of one, because the track it
+ * connects to has already been climbing.
+ */
+export function windowedGradePermille(riseLevels: number, runM: number, windowM: number): number {
+  const run = runM > windowM ? runM : windowM;
+  return (riseLevels * HEIGHT_STEP_M * 1000) / run;
 }
 
 /**
@@ -209,18 +276,22 @@ export function measureRoute(
   let minRadius = Infinity;
   let newTiles = 0;
 
+  const windowM = gradeWindowM(railType);
+  const heightOf = (tile: number): number => heightAt(tile % mapSize, (tile / mapSize) | 0);
+
   for (let i = 0; i < directions.length; i++) {
     const direction = directions[i]!;
     lengthM += stepLengthM(direction);
 
-    const from = tiles[i]!;
-    const to = tiles[i + 1]!;
+    // Gradient over the window that ends at the tile just entered.
+    let runM = 0;
+    let back = i;
+    while (back >= 0 && runM < windowM) {
+      runM += stepLengthM(directions[back]!);
+      back--;
+    }
     const grade = Math.abs(
-      gradePermille(
-        heightAt(from % mapSize, (from / mapSize) | 0),
-        heightAt(to % mapSize, (to / mapSize) | 0),
-        direction,
-      ),
+      windowedGradePermille(heightOf(tiles[i + 1]!) - heightOf(tiles[back + 1]!), runM, windowM),
     );
     if (grade > maxGrade) maxGrade = grade;
 

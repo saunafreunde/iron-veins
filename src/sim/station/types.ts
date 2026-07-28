@@ -20,15 +20,27 @@ import { oldestAge } from '../cargo/stack';
 
 /**
  * Stations are assembled from modules rather than being a fixed 3x3 stamp
- * (section 10). M2 ships the road-side modules; platforms, quays, terminals and
- * depots for the other modes follow with their milestones.
+ * (section 10). M2 shipped the road side, M3 adds the rail side; quays and
+ * terminals follow with their milestones.
+ *
+ * The numbers are part of the save format - append, never renumber.
  */
 export const ModuleKind = {
   BusStop: 0,
   LorryBay: 1,
   RoadDepot: 2,
+  /** One tile of platform, built on top of track. */
+  RailPlatform: 3,
+  RailDepot: 4,
 } as const;
 export type ModuleKind = (typeof ModuleKind)[keyof typeof ModuleKind];
+
+export const MODULE_KIND_COUNT = 5;
+
+/** True for the module kinds a train can use. */
+export function isRailModule(kind: number): boolean {
+  return kind === ModuleKind.RailPlatform || kind === ModuleKind.RailDepot;
+}
 
 export interface StationModule {
   readonly kind: ModuleKind;

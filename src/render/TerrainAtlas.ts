@@ -72,8 +72,11 @@ const INDUSTRY_COLUMN = BUILDING_VARIANTS;
 const STATION_COLUMN = BUILDING_VARIANTS + 1;
 const DEPOT_COLUMN = BUILDING_VARIANTS + 2;
 const VEHICLE_COLUMN = BUILDING_VARIANTS + 3;
+const PLATFORM_COLUMN = BUILDING_VARIANTS + 4;
+const RAIL_DEPOT_COLUMN = BUILDING_VARIANTS + 5;
+const TRAIN_COLUMN = BUILDING_VARIANTS + 6;
 
-const ATLAS_COLUMNS = Math.max(SLOPE_COUNT, VEHICLE_COLUMN + 1);
+const ATLAS_COLUMNS = Math.max(SLOPE_COUNT, TRAIN_COLUMN + 1);
 const ATLAS_ROWS = TERRAIN_COUNT + 3;
 
 export interface AtlasFrame {
@@ -96,8 +99,14 @@ export interface TerrainAtlas {
   /** Platform canopy of a road stop; tinted with the company colour. */
   stationFrame(): AtlasFrame;
   depotFrame(): AtlasFrame;
+  /** Low canopy of a rail platform, sitting on the track. */
+  platformFrame(): AtlasFrame;
+  /** Engine shed. */
+  railDepotFrame(): AtlasFrame;
   /** Small box for a road vehicle; tinted with the company colour. */
   vehicleFrame(): AtlasFrame;
+  /** Longer, lower box for a train, so the two modes tell apart at a glance. */
+  trainFrame(): AtlasFrame;
   /** Half a track segment leaving the tile centre in one of the 8 directions. */
   trackFrame(direction: number): AtlasFrame;
 }
@@ -388,6 +397,9 @@ export function buildTerrainAtlas(): TerrainAtlas {
   drawBox(ctx, STATION_COLUMN * CELL_W, BUILDING_ROW * CELL_H, 0.8, 9 * ATLAS_SCALE, '#ffffff');
   drawBox(ctx, DEPOT_COLUMN * CELL_W, BUILDING_ROW * CELL_H, 0.8, 16 * ATLAS_SCALE, '#ffffff');
   drawBox(ctx, VEHICLE_COLUMN * CELL_W, BUILDING_ROW * CELL_H, 0.3, 7 * ATLAS_SCALE, '#ffffff');
+  drawBox(ctx, PLATFORM_COLUMN * CELL_W, BUILDING_ROW * CELL_H, 0.9, 5 * ATLAS_SCALE, '#ffffff');
+  drawBox(ctx, RAIL_DEPOT_COLUMN * CELL_W, BUILDING_ROW * CELL_H, 0.9, 20 * ATLAS_SCALE, '#ffffff');
+  drawBox(ctx, TRAIN_COLUMN * CELL_W, BUILDING_ROW * CELL_H, 0.55, 6 * ATLAS_SCALE, '#ffffff');
 
   for (let direction = 0; direction < 8; direction++) {
     drawTrackCell(ctx, direction * CELL_W, TRACK_ROW * CELL_H, direction);
@@ -412,7 +424,10 @@ export function buildTerrainAtlas(): TerrainAtlas {
     industryFrame: () => frame(INDUSTRY_COLUMN, BUILDING_ROW),
     stationFrame: () => frame(STATION_COLUMN, BUILDING_ROW),
     depotFrame: () => frame(DEPOT_COLUMN, BUILDING_ROW),
+    platformFrame: () => frame(PLATFORM_COLUMN, BUILDING_ROW),
+    railDepotFrame: () => frame(RAIL_DEPOT_COLUMN, BUILDING_ROW),
     vehicleFrame: () => frame(VEHICLE_COLUMN, BUILDING_ROW),
+    trainFrame: () => frame(TRAIN_COLUMN, BUILDING_ROW),
     trackFrame: (direction) => frame(direction & 7, TRACK_ROW),
   };
 }

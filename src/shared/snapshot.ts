@@ -12,7 +12,7 @@
  * refuses to interpret a buffer written by a different layout.
  */
 
-export const SNAPSHOT_LAYOUT_VERSION = 2;
+export const SNAPSHOT_LAYOUT_VERSION = 3;
 
 /** Header fields, shared by both slots. */
 export const SnapshotHeader = {
@@ -62,8 +62,8 @@ export const SNAPSHOT_F64_COUNT = 3;
 /**
  * Vehicles the renderer may draw in one tick.
  *
- * Everything about a vehicle that changes per tick is four Int32 values, so the
- * whole block is one typed array rather than four - fewer views to create, and
+ * Everything about a vehicle that changes per tick is five Int32 values, so the
+ * whole block is one typed array rather than five - fewer views to create, and
  * the layout stays trivially aligned.
  */
 export const SNAPSHOT_MAX_VEHICLES = 1_500;
@@ -74,12 +74,18 @@ export const SnapshotVehicle = {
   Tile: 0,
   /** Tile it is heading for; equal to Tile when standing still. */
   NextTile: 1,
-  /** Progress between the two, in thousandths. */
+  /** Progress between the two, in thousandths of that step. */
   ProgressMilli: 2,
   /** A value of VehicleState. */
   State: 3,
+  /**
+   * A value of VehicleKind. The renderer picks the sprite from it; without it
+   * a train would be drawn as a bus, and it is the one static property that is
+   * cheaper to send than to look up per frame.
+   */
+  Kind: 4,
 } as const;
-export const SNAPSHOT_VEHICLE_STRIDE = 4;
+export const SNAPSHOT_VEHICLE_STRIDE = 5;
 
 const HEADER_BYTES = HEADER_I32_COUNT * 4;
 const STATUS_I32_BYTES = SNAPSHOT_I32_COUNT * 4;

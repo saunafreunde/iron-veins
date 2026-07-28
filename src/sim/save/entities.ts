@@ -1,7 +1,13 @@
 import type { CargoStack } from '../cargo/stack';
 import { CARGO_COUNT } from '../cargo/types';
-import { ModuleKind, type Station, type StationModule } from '../station/types';
-import { hasVehicleSpec } from '../vehicles/catalog';
+import {
+  MODULE_KIND_COUNT,
+  type ModuleKind,
+  type Station,
+  type StationModule,
+} from '../station/types';
+import { hasVehicleSpec, vehicleSpec } from '../vehicles/catalog';
+import { MAX_CONSIST_UNITS } from '../constants';
 import type { OrderLoad, OrderTarget, OrderUnload } from '../vehicles/VehicleStore';
 import { MAX_PATH_TILES, VehicleStore, type Order } from '../vehicles/VehicleStore';
 import { SaveFormatError } from './format';
@@ -38,6 +44,9 @@ export interface VehicleSave {
   tileIndex: number;
   progressM: number;
   speedMs: number;
+  routeRemainingM: number;
+  /** Catalogue ids of a train's units; empty for anything else. */
+  consist: number[];
   pathIndex: number;
   path: number[];
   orderIndex: number;
@@ -88,6 +97,8 @@ export function encodeVehicles(store: VehicleStore): VehicleSave[] {
       tileIndex: store.tileIndex[id]!,
       progressM: store.progressM[id]!,
       speedMs: store.speedMs[id]!,
+      routeRemainingM: store.routeRemainingM[id]!,
+      consist: [...store.consist[id]!],
       pathIndex: store.pathIndex[id]!,
       path,
       orderIndex: store.orderIndex[id]!,
@@ -161,15 +172,11 @@ export function decodeStations(value: unknown, path: string): Station[] {
     const modules = list(raw['modules'], `${path}[${i}].modules`).map((moduleValue, m) => {
       const moduleRaw = record(moduleValue, `${path}[${i}].modules[${m}]`);
       const kind = int(moduleRaw['kind'], `${path}[${i}].modules[${m}].kind`);
-      if (
-        kind !== ModuleKind.BusStop &&
-        kind !== ModuleKind.LorryBay &&
-        kind !== ModuleKind.RoadDepot
-      ) {
+      if (kind < 0 || kind >= MODULE_KIND_COUNT) {
         throw new SaveFormatError(`${path}[${i}].modules[${m}].kind: unknown module ${kind}`);
       }
       return {
-        kind,
+        kind: kind as ModuleKind,
         tileIndex: int(moduleRaw['tileIndex'], `${path}[${i}].modules[${m}].tileIndex`),
         x: int(moduleRaw['x'], `${path}[${i}].modules[${m}].x`),
         y: int(moduleRaw['y'], `${path}[${i}].modules[${m}].y`),
@@ -209,6 +216,18 @@ export function decodeVehicles(value: unknown, path: string): VehicleSave[] {
       throw new SaveFormatError(`${path}[${i}].path: ${pathTiles.length} tiles is too long`);
     }
 
+    const consistRaw = list(raw['consist'], `${path}[${i}].consist`);
+    if (consistRaw.length > MAX_CONSIST_UNITS) {
+      throw new SaveFormatError(`${path}[${i}].consist: ${consistRaw.length} units is too many`);
+    }
+    const consist = consistRaw.map((unit, u) => {
+      const unitId = int(unit, `${path}[${i}].consist[${u}]`);
+      if (!hasVehicleSpec(unitId)) {
+        throw new SaveFormatError(`${path}[${i}].consist[${u}]: ${unitId} is not a known vehicle`);
+      }
+      return unitId;
+    });
+
     return {
       id: int(raw['id'], `${path}[${i}].id`),
       specId,
@@ -217,6 +236,8 @@ export function decodeVehicles(value: unknown, path: string): VehicleSave[] {
       tileIndex: int(raw['tileIndex'], `${path}[${i}].tileIndex`),
       progressM: num(raw['progressM'], `${path}[${i}].progressM`),
       speedMs: num(raw['speedMs'], `${path}[${i}].speedMs`),
+      routeRemainingM: num(raw['routeRemainingM'], `${path}[${i}].routeRemainingM`),
+      consist,
       pathIndex: int(raw['pathIndex'], `${path}[${i}].pathIndex`),
       path: pathTiles.map((tile, t) => int(tile, `${path}[${i}].path[${t}]`)),
       orderIndex: int(raw['orderIndex'], `${path}[${i}].orderIndex`),
@@ -266,9 +287,12 @@ export function buildVehicleStore(saves: readonly VehicleSave[]): VehicleStore {
     store.specId[id] = save.specId;
     store.ownerId[id] = save.ownerId;
     store.state[id] = save.state;
+    store.kind[id] = vehicleSpec(save.specId).kind;
     store.tileIndex[id] = save.tileIndex;
     store.progressM[id] = save.progressM;
     store.speedMs[id] = save.speedMs;
+    store.routeRemainingM[id] = save.routeRemainingM;
+    store.consist[id] = [...save.consist];
     store.pathIndex[id] = save.pathIndex;
     store.pathLength[id] = save.path.length;
     store.orderIndex[id] = save.orderIndex;
@@ -285,6 +309,9 @@ export function buildVehicleStore(saves: readonly VehicleSave[]): VehicleStore {
 
     store.orders[id] = save.orders.map((order) => ({ ...order }));
     store.cargo[id] = save.cargo.map((stack) => ({ ...stack }));
+    // The cached aggregate is derived, never stored: keeping it out of the save
+    // means it cannot go stale against a rebalanced catalogue.
+    store.refreshAggregate(id);
   }
   return store;
 }

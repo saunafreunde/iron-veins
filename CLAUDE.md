@@ -159,23 +159,35 @@ the interface, and balancing scenario 1 is in band (payback in game year 3).
   cargo that does not exist before M5, so calibrating them now would be tuning
   against a guess (DECISIONS.md D-041).
 
-**M3 started.** Done: eight-direction track, the curve radius table of section
-8.1 with its speed limits, gradients, five rail types, the route assistant
-(A* over tile plus incoming direction, costs in metre equivalents), manual
-mode, the build preview, track rendering and save format v4.
+**M3 is done except for bridges and tunnels.** A train can be assembled in an
+engine shed, given orders and run over a line the player laid, and it behaves
+the way its composition says it should.
 
-**Open in M3, in the order it should be built:**
+Done: eight-direction track, the curve radius table of section 8.1 with its
+speed limits, five rail types, the route assistant (A* over tile plus incoming
+direction, costs in metre equivalents), manual mode, the build preview, track
+rendering, 33 traction units and 23 wagons, train composition, the rail
+coefficients in the longitudinal solver, curve-aware braking, train pathfinding
+over the track graph, platforms and engine sheds, electrification, track
+conversion, and save format v5 with the migrations that were missing.
 
-1. **Trains.** The vehicle store, the longitudinal solver and the state machine
-   already exist from M2 and are written for road vehicles; rails need the rail
-   coefficients, train composition (locomotive plus wagons, aggregated mass,
-   tractive effort and length) and the rail catalogue.
-2. **Train pathfinding** over the track graph, with the incoming direction as
-   part of the state - the assistant's search is the template.
-3. **Rail stations** with platform modules, and rail depots.
-4. **Electrification**: the rail type is already stored per tile; what is
-   missing is excluding unelectrified routes when an electric locomotive paths.
-5. **Bridges and tunnels**, which are also the two missing terms of the
-   assistant's cost function.
+**Still open in M3:** bridges and tunnels, which are also the two missing terms
+of the assistant's cost function.
+
+## Rail - the three things that will bite
+
+1. **Gradients are measured over a window, never tile to tile.** One height
+   level is 8 m over a 50 m tile, i.e. 160 per mille, which no rail type can
+   accept. See the note in `map/track.ts` and DECISIONS.md D-042. Three places
+   use the same measure - the route assistant, `measureRoute` and the
+   longitudinal solver - and they have to stay in step.
+2. **A train is one entity.** Its composition is a list of catalogue ids;
+   mass, tractive effort, top speed, length, braking and capacity are cached
+   aggregates refreshed by `VehicleStore.refreshAggregate` whenever the train or
+   its load changes. Never read a train's properties from its leading spec.
+3. **`routeRemainingM` is measured from the start of the current tile**, not
+   from the vehicle. The distance left is that minus `progressM`. Two separate
+   accumulators drift and strand vehicles one tile short of their platform
+   (D-043).
 
 Then M4 (signals) onwards.

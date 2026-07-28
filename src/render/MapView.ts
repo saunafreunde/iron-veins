@@ -27,14 +27,35 @@ const CULL_MARGIN = MAX_HEIGHT + 4;
 /** Below this zoom the map is drawn as a plain overview: no roads, no houses. */
 const DETAIL_ZOOM_MIN = 0.5;
 
-/** ModuleKind.RoadDepot; duplicated as a constant to keep render free of sim enums. */
+/** ModuleKind values, duplicated as constants to keep render free of sim enums. */
 const ROAD_DEPOT_KIND = 2;
+const RAIL_PLATFORM_KIND = 3;
+const RAIL_DEPOT_KIND = 4;
+
+/** VehicleKind.Train, likewise. */
+const TRAIN_KIND = 0;
 
 /** Accent colour per industry type, applied to the generic block as a tint. */
 const INDUSTRY_TINTS = [
   0x2b2b2b, 0x8a5a3b, 0x1a1a1a, 0x3f6b3a, 0xdcc06a, 0x9a9a9a, 0xe0b040, 0x7d8b99, 0xc19a6b,
   0x4f7fd9, 0x7d8b99, 0x4fd9d0, 0xd94f4f, 0x8fd94f, 0xd94fd0, 0xc8c4bc, 0xe07b39,
 ];
+
+/** Texture cache key per module kind; the index is the ModuleKind value. */
+const MODULE_SPRITE_KEYS: readonly string[] = [
+  'station',
+  'station',
+  'depot',
+  'platform',
+  'railDepot',
+];
+
+function moduleFrame(atlas: TerrainAtlas, kind: number): AtlasFrame {
+  if (kind === ROAD_DEPOT_KIND) return atlas.depotFrame();
+  if (kind === RAIL_PLATFORM_KIND) return atlas.platformFrame();
+  if (kind === RAIL_DEPOT_KIND) return atlas.railDepotFrame();
+  return atlas.stationFrame();
+}
 
 export interface TileInfo {
   readonly x: number;
@@ -494,10 +515,10 @@ export class MapView {
         }
         const world = tileToWorld(module.x, module.y, map.baseHeight(module.x, module.y));
         const sprite = this.take(used++);
-        const frame = module.kind === ROAD_DEPOT_KIND ? atlas.depotFrame() : atlas.stationFrame();
+        const key = MODULE_SPRITE_KEYS[module.kind] ?? 'station';
         this.place(
           sprite,
-          this.frameTexture(module.kind === ROAD_DEPOT_KIND ? 'depot' : 'station', frame),
+          this.frameTexture(key, moduleFrame(atlas, module.kind)),
           world.x,
           world.y,
         );
@@ -526,6 +547,7 @@ export class MapView {
       const tile = data[base + SnapshotVehicle.Tile]!;
       const next = data[base + SnapshotVehicle.NextTile]!;
       const progress = data[base + SnapshotVehicle.ProgressMilli]! / 1000;
+      const kind = data[base + SnapshotVehicle.Kind]!;
 
       const fromX = tile % size;
       const fromY = (tile / size) | 0;
@@ -544,6 +566,12 @@ export class MapView {
         this.vehicleLayer.addChild(sprite);
       }
 
+      // A sprite is reused for whatever vehicle lands in its slot, so the
+      // texture is set every frame rather than once at creation.
+      sprite.texture =
+        kind === TRAIN_KIND
+          ? this.frameTexture('train', atlas.trainFrame())
+          : this.frameTexture('vehicle', atlas.vehicleFrame());
       sprite.visible = true;
       sprite.tint = this.companyTint;
       sprite.position.set(

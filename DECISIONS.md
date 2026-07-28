@@ -358,3 +358,139 @@ scenarios 2 and 3 of section 19.4 are written.
 availability and the WebView user agent to stdout. It is the first thing a bug
 report needs, and it is how failure #12 was actually verified rather than
 assumed.
+
+### D-042 Gradients are measured over a stretch of line, not from tile to tile
+
+This is the correction that made rail work at all, and it is worth stating
+plainly because the bug was invisible until a train tried to climb something.
+
+The ground is sampled in whole height levels of 8 m on a 50 m grid. The smallest
+height change the terrain can express is therefore 8 m over 50 m: 160 per mille.
+Compared literally against the type limits of section 8.1 - 30 per mille for
+plain track, 60 for narrow gauge, 12.5 for high speed - *no rail type could ever
+climb anything*. Every railway in the game would have been confined to perfectly
+flat ground, and the whole gradient system would have been decoration.
+
+That is a measuring error, not a fact about railways. Track has its own vertical
+alignment: it leaves the ground on an embankment, climbs steadily, and meets the
+ground again further along. What matters is the height gained over a stretch of
+line, not the difference between two samples of the ground.
+
+So the gradient is measured over a window, and the window is the length over
+which one height level sits exactly at the type's limit:
+
+| rail type          | limit         | window   | reads as                  |
+| ------------------ | ------------- | -------- | ------------------------- |
+| plain, electrified | 30 per mille  | 6 tiles  | one level per 300 m       |
+| narrow gauge       | 60 per mille  | 3 tiles  | one level per 150 m       |
+| high speed         | 12.5 per mille| 13 tiles | one level per 650 m       |
+
+Three places use the same measure and must keep using it: the route assistant
+walks back along the alignment it has already found, `measureRoute` does the same
+over the finished tile list, and the longitudinal solver does it along the route
+a train is driving. If they ever disagree, the assistant will plan alignments
+that the preview refuses, or trains will stall on lines they were sold as able
+to climb.
+
+The run length is floored at the window: a route that starts halfway up a slope
+is judged no more harshly than the middle of one, because the track it connects
+to has already been climbing.
+
+### D-043 One accumulator for the distance to go, not two
+
+A vehicle needs to know how far it still has to drive, to decide when to brake.
+The obvious implementation - a countdown decremented by the same distance that
+`progressM` is incremented by - is wrong, and wrong in a way that only shows up
+after twenty minutes of play.
+
+Two floating point accumulators fed the same numbers drift apart in the last
+decimal. The one place that matters is the boundary of the final tile: if the
+countdown reaches zero a hair before `progressM` crosses the last tile edge, the
+vehicle brakes for a route end it has not arrived at, its traction is cut, it
+stops, and `progressM` freezes one tile short of its platform. For ever. That is
+exactly what happened - a train stood at x=39 of a line ending at x=40 for the
+rest of the test.
+
+`routeRemainingM` therefore holds the distance from the START of the current
+tile to the end of the route, and is updated only when a tile is completed, by
+the very step length the tile advance uses. The distance actually left is that
+minus `progressM`. The two quantities are now the same arithmetic and cannot
+disagree.
+
+### D-044 A train is one entity, its composition is data
+
+A train is one slot in the vehicle store, not one slot per vehicle. Its
+composition is a list of catalogue ids in a parallel reference array, and
+everything the solver needs - mass, tractive effort, power, top speed, length,
+braking, capacity, whether it needs catenary - is aggregated into cached typed
+arrays whenever the train or its load changes.
+
+The alternative, an entity per wagon coupled by references, would put object
+references into serialisable state (against law #9), make the tick loop chase
+pointers, and turn every coupling operation into a consistency problem. Orders,
+cargo and revenue belong to the train anyway; a wagon on its own has no
+behaviour at all.
+
+The cache is derived and never saved. A save that stored the aggregate would go
+stale the first time the catalogue is rebalanced.
+
+### D-045 Rail payload adds mass, road payload does not
+
+Rail wagon masses in the catalogue are TARE masses and the load is added on top;
+road vehicle masses are laden figures and no load is added.
+
+This looks inconsistent and is deliberate. A freight wagon's payload weighs two
+to three times what the wagon does, and a full coal train crawling up a gradient
+that it flew down empty is the single most characteristic thing about railway
+operation - the mechanic that makes a second locomotive worth buying. A bus with
+150 passengers gains 12 t on a 9 t vehicle; modelling that would have been just
+as correct, but the road figures were calibrated as laden masses against
+balancing scenario 1, and quietly doubling every bus mass now would push the one
+scenario that is in band straight out of it.
+
+The tonnages live in `CARGO_TONNES_PER_UNIT`.
+
+### D-046 Gauge separation was not modelled
+
+Narrow gauge is a cheap, slow, steep-climbing track type that every train can
+use, not a separate network. Modelling it properly needs a second locomotive
+catalogue and a rule that keeps standard gauge stock off it, for a mechanic that
+in play reads as "cheap slow track". The rail types that do carry a hard rule
+are the electrified ones, where an electric locomotive genuinely cannot path
+over unwired track - that constraint is implemented and tested.
+
+### D-047 Track can be converted, and the conversion is priced separately
+
+Laying track along a line that already carries track of another type converts
+it. Without this there would be no way to electrify a line built before electric
+traction arrived, which is the single most common thing a railway does over a
+hundred years of play.
+
+A conversion costs the difference between the two build prices, floored at a
+quarter of the new type's price so that it is never free - the old track still
+has to come up. Yearly upkeep moves by the difference between the two types, not
+by the new type's full figure.
+
+### D-048 The missing save migrations were written
+
+`SAVE_VERSION` had reached 4 with an empty migration registry, which meant every
+save from an older milestone was unloadable and the rule in section 19.1 was
+being honoured in the comment only. Migrations 2 -> 3 (stations and vehicles),
+3 -> 4 (the two rail tile layers) and 4 -> 5 (train composition and the running
+distance-to-go) are now registered and tested. Each of them adds exactly what
+that world genuinely contained: nothing.
+
+There is still deliberately no 1 -> 2 (D-026).
+
+While in that file: `parseCommand` only understood six of the sixteen commands,
+so any save whose command log contained a road being built refused to load. All
+of them are parsed now.
+
+### D-049 Depot modules do not serve as station stops
+
+A depot built next to a stop joins its station, and the access tile used to be
+whichever module happened to be first in the list. A vehicle could therefore
+serve a station from inside the depot. The access tile is now the first module
+of the right kind for the mode - a platform for a train, a stop or bay for a
+road vehicle - and a station that offers none for that mode reports no route
+rather than silently sending the vehicle somewhere odd.

@@ -1,6 +1,15 @@
 import type { CargoStack } from '../cargo/stack';
 import type { Cargo } from '../cargo/types';
-import { MAX_VEHICLES } from '../constants';
+import { BRAKE_ROAD, LATERAL_ACCEL_ROAD, MAX_VEHICLES } from '../constants';
+import { capacityFor, vehicleSpec } from './catalog';
+import {
+  aggregateConsist,
+  brakeForCargo,
+  consistCapacityFor,
+  consistHasCooling,
+  lateralForCargo,
+  payloadMassKg,
+} from './consist';
 
 /**
  * Vehicles as a struct of arrays (architecture law #7 and section 5.3).
@@ -82,6 +91,8 @@ export class VehicleStore {
   readonly specId: Int32Array;
   readonly ownerId: Uint8Array;
   readonly state: Uint8Array;
+  /** A value of VehicleKind, cached so the tick loop needs no catalogue lookup. */
+  readonly kind: Uint8Array;
 
   /** Tile the vehicle currently occupies. */
   readonly tileIndex: Int32Array;
@@ -91,6 +102,42 @@ export class VehicleStore {
 
   readonly pathLength: Int32Array;
   readonly pathIndex: Int32Array;
+  /**
+   * Metres from the START of the current tile to the end of the route.
+   *
+   * The distance actually left to drive is this minus `progressM`. Deliberately
+   * not a second odometer counting down beside `progressM`: two accumulators
+   * fed the same numbers drift apart in the last decimal, and the one place
+   * that matters is the boundary of the final tile. A vehicle whose countdown
+   * hit zero a hair before its progress crossed the last tile edge would brake
+   * for a route end it had not reached, and stand there for ever.
+   *
+   * Updated only when a tile is completed, by the very step length the tile
+   * advance uses, so the two can never disagree.
+   */
+  readonly routeRemainingM: Float32Array;
+
+  // --- aggregate of the whole vehicle, recomputed when it or its load changes.
+  // For a road vehicle these are simply its own figures; for a train they are
+  // the sums of section 11.2. Caching them keeps the solver free of catalogue
+  // lookups and of any knowledge that a train has parts at all.
+
+  /** Mass including the load it is carrying. [kg] */
+  readonly massKg: Float32Array;
+  readonly tractiveN: Float32Array;
+  readonly powerW: Float32Array;
+  readonly maxSpeedMs: Float32Array;
+  readonly lengthM: Float32Array;
+  /** Braking deceleration of this vehicle with this load. [m/s^2] */
+  readonly brakeMs2: Float32Array;
+  /** Lateral acceleration its load tolerates in a curve. [m/s^2] */
+  readonly lateralAccel: Float32Array;
+  /** How many units of its refit cargo it can hold. */
+  readonly capacityUnits: Float32Array;
+  /** 1 when every unit carrying the refit cargo is refrigerated. */
+  readonly hasCooling: Uint8Array;
+  /** 1 when it can only run under catenary. */
+  readonly needsCatenary: Uint8Array;
 
   readonly orderIndex: Uint8Array;
   readonly builtTick: Int32Array;
@@ -108,6 +155,11 @@ export class VehicleStore {
   readonly orders: Order[][] = [];
   readonly cargo: CargoStack[][] = [];
   readonly paths: Int32Array[] = [];
+  /**
+   * Spec ids of the units a train is made of, locomotive first. Empty for
+   * anything that is not a train.
+   */
+  readonly consist: number[][] = [];
 
   private readonly freeSlots: number[] = [];
 
@@ -117,11 +169,23 @@ export class VehicleStore {
     this.specId = new Int32Array(capacity);
     this.ownerId = new Uint8Array(capacity);
     this.state = new Uint8Array(capacity);
+    this.kind = new Uint8Array(capacity);
     this.tileIndex = new Int32Array(capacity);
     this.progressM = new Float32Array(capacity);
     this.speedMs = new Float32Array(capacity);
     this.pathLength = new Int32Array(capacity);
     this.pathIndex = new Int32Array(capacity);
+    this.routeRemainingM = new Float32Array(capacity);
+    this.massKg = new Float32Array(capacity);
+    this.tractiveN = new Float32Array(capacity);
+    this.powerW = new Float32Array(capacity);
+    this.maxSpeedMs = new Float32Array(capacity);
+    this.lengthM = new Float32Array(capacity);
+    this.brakeMs2 = new Float32Array(capacity);
+    this.lateralAccel = new Float32Array(capacity);
+    this.capacityUnits = new Float32Array(capacity);
+    this.hasCooling = new Uint8Array(capacity);
+    this.needsCatenary = new Uint8Array(capacity);
     this.orderIndex = new Uint8Array(capacity);
     this.builtTick = new Int32Array(capacity);
     this.reliability = new Uint16Array(capacity);
@@ -132,8 +196,61 @@ export class VehicleStore {
     this.earnedCt = new Float64Array(capacity);
   }
 
-  /** Take a slot. Returns -1 when the store is full. */
-  create(specId: number, ownerId: number, tileIndex: number, tick: number, cargo: Cargo): number {
+  /**
+   * Recompute the cached aggregate of one vehicle.
+   *
+   * Called when the vehicle is created, when its consist or refit changes, and
+   * whenever cargo is loaded or unloaded - a full coal train weighs three times
+   * what the empty one does, and the solver has to see that.
+   */
+  refreshAggregate(id: number): void {
+    const refit = this.refitCargo[id]! as Cargo;
+    const units = this.consist[id];
+
+    if (units !== undefined && units.length > 0) {
+      const aggregate = aggregateConsist(units);
+      this.massKg[id] = aggregate.massKg + payloadMassKg(this.cargo[id] ?? []);
+      this.tractiveN[id] = aggregate.tractiveN;
+      this.powerW[id] = aggregate.powerW;
+      this.maxSpeedMs[id] = aggregate.maxSpeedMs;
+      this.lengthM[id] = aggregate.lengthM;
+      this.brakeMs2[id] = brakeForCargo(refit);
+      this.lateralAccel[id] = lateralForCargo(refit);
+      this.capacityUnits[id] = consistCapacityFor(units, refit);
+      this.hasCooling[id] = consistHasCooling(units, refit) ? 1 : 0;
+      this.needsCatenary[id] = aggregate.needsCatenary ? 1 : 0;
+      return;
+    }
+
+    // Road vehicle masses in the catalogue are laden figures, so no payload is
+    // added here - see DECISIONS.md D-045.
+    const spec = vehicleSpec(this.specId[id]!);
+    this.massKg[id] = spec.massKg;
+    this.tractiveN[id] = spec.tractiveN;
+    this.powerW[id] = spec.powerW;
+    this.maxSpeedMs[id] = spec.maxSpeedMs;
+    this.lengthM[id] = spec.lengthM;
+    this.brakeMs2[id] = BRAKE_ROAD;
+    this.lateralAccel[id] = LATERAL_ACCEL_ROAD;
+    this.capacityUnits[id] = capacityFor(spec, refit);
+    this.hasCooling[id] = spec.hasCooling ? 1 : 0;
+    this.needsCatenary[id] = spec.needsCatenary ? 1 : 0;
+  }
+
+  /**
+   * Take a slot. Returns -1 when the store is full.
+   *
+   * `consist` is the list of units a train is made of; `specId` is then the
+   * leading one, which is what the fleet list and the save name it by.
+   */
+  create(
+    specId: number,
+    ownerId: number,
+    tileIndex: number,
+    tick: number,
+    cargo: Cargo,
+    consist?: readonly number[],
+  ): number {
     // Reusing a freed slot keeps ids dense; the free list is drained in
     // insertion order so the choice is deterministic.
     const id = this.freeSlots.length > 0 ? this.freeSlots.shift()! : this.count++;
@@ -146,11 +263,13 @@ export class VehicleStore {
     this.specId[id] = specId;
     this.ownerId[id] = ownerId;
     this.state[id] = VehicleState.Stopped;
+    this.kind[id] = vehicleSpec(specId).kind;
     this.tileIndex[id] = tileIndex;
     this.progressM[id] = 0;
     this.speedMs[id] = 0;
     this.pathLength[id] = 0;
     this.pathIndex[id] = 0;
+    this.routeRemainingM[id] = 0;
     this.orderIndex[id] = 0;
     this.builtTick[id] = tick;
     this.breakdownTicks[id] = 0;
@@ -161,7 +280,9 @@ export class VehicleStore {
 
     this.orders[id] = [];
     this.cargo[id] = [];
+    this.consist[id] = consist === undefined ? [] : [...consist];
     this.paths[id] = new Int32Array(MAX_PATH_TILES);
+    this.refreshAggregate(id);
     return id;
   }
 
@@ -170,6 +291,7 @@ export class VehicleStore {
     this.alive[id] = 0;
     this.orders[id] = [];
     this.cargo[id] = [];
+    this.consist[id] = [];
     this.freeSlots.push(id);
   }
 

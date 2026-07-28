@@ -20,10 +20,13 @@ export const SAVE_MAGIC = 'IRVN';
  * version 1 is registered: a version 1 world had no map at all, so a migration
  * could only invent one, and handing the player a world that is not the one
  * they saved is worse than refusing to load it. Version 1 existed for a single
- * milestone and was never distributed. From the first released build onwards
- * every bump gets a real migration.
+ * milestone and was never distributed.
+ *
+ * From version 2 on every step has a real migration: 3 added stations and
+ * vehicles, 4 the two rail tile layers, 5 the train composition and the running
+ * distance-to-go.
  */
-export const SAVE_VERSION = 4;
+export const SAVE_VERSION = 5;
 
 /** File extension used for manual and automatic saves. */
 export const SAVE_EXTENSION = '.ironsave';
@@ -65,6 +68,11 @@ function asArray(value: unknown, path: string): unknown[] {
 
 function asString(value: unknown, path: string): string {
   if (typeof value !== 'string') throw new SaveFormatError(`${path}: expected a string`);
+  return value;
+}
+
+function asBoolean(value: unknown, path: string): boolean {
+  if (typeof value !== 'boolean') throw new SaveFormatError(`${path}: expected a boolean`);
   return value;
 }
 
@@ -252,6 +260,91 @@ function parseCommand(value: unknown, path: string): Command {
         kind: CommandKind.LevelLand,
         x: asInt(raw['x'], `${path}.x`),
         y: asInt(raw['y'], `${path}.y`),
+      };
+    case CommandKind.BuildRoad:
+      return {
+        kind: CommandKind.BuildRoad,
+        x1: asInt(raw['x1'], `${path}.x1`),
+        y1: asInt(raw['y1'], `${path}.y1`),
+        x2: asInt(raw['x2'], `${path}.x2`),
+        y2: asInt(raw['y2'], `${path}.y2`),
+      };
+    case CommandKind.DemolishRoad:
+      return {
+        kind: CommandKind.DemolishRoad,
+        x: asInt(raw['x'], `${path}.x`),
+        y: asInt(raw['y'], `${path}.y`),
+      };
+    case CommandKind.BuildTrack:
+      return {
+        kind: CommandKind.BuildTrack,
+        x1: asInt(raw['x1'], `${path}.x1`),
+        y1: asInt(raw['y1'], `${path}.y1`),
+        x2: asInt(raw['x2'], `${path}.x2`),
+        y2: asInt(raw['y2'], `${path}.y2`),
+        railType: asInt(raw['railType'], `${path}.railType`),
+        assistant: asBoolean(raw['assistant'], `${path}.assistant`),
+      };
+    case CommandKind.DemolishTrack:
+      return {
+        kind: CommandKind.DemolishTrack,
+        x: asInt(raw['x'], `${path}.x`),
+        y: asInt(raw['y'], `${path}.y`),
+      };
+    case CommandKind.BuildRoadStop:
+      return {
+        kind: CommandKind.BuildRoadStop,
+        x: asInt(raw['x'], `${path}.x`),
+        y: asInt(raw['y'], `${path}.y`),
+        moduleKind: asInt(raw['moduleKind'], `${path}.moduleKind`),
+      };
+    case CommandKind.BuildRailStop:
+      return {
+        kind: CommandKind.BuildRailStop,
+        x: asInt(raw['x'], `${path}.x`),
+        y: asInt(raw['y'], `${path}.y`),
+        moduleKind: asInt(raw['moduleKind'], `${path}.moduleKind`),
+      };
+    case CommandKind.BuyRoadVehicle:
+      return {
+        kind: CommandKind.BuyRoadVehicle,
+        x: asInt(raw['x'], `${path}.x`),
+        y: asInt(raw['y'], `${path}.y`),
+        specId: asInt(raw['specId'], `${path}.specId`),
+      };
+    case CommandKind.BuyTrain:
+      return {
+        kind: CommandKind.BuyTrain,
+        x: asInt(raw['x'], `${path}.x`),
+        y: asInt(raw['y'], `${path}.y`),
+        specIds: asArray(raw['specIds'], `${path}.specIds`).map((id, i) =>
+          asInt(id, `${path}.specIds[${i}]`),
+        ),
+      };
+    case CommandKind.SellVehicle:
+      return {
+        kind: CommandKind.SellVehicle,
+        vehicleId: asInt(raw['vehicleId'], `${path}.vehicleId`),
+      };
+    case CommandKind.SetVehicleOrders:
+      return {
+        kind: CommandKind.SetVehicleOrders,
+        vehicleId: asInt(raw['vehicleId'], `${path}.vehicleId`),
+        orders: asArray(raw['orders'], `${path}.orders`).map((order, i) => {
+          const entry = asRecord(order, `${path}.orders[${i}]`);
+          return {
+            target: asInt(entry['target'], `${path}.orders[${i}].target`),
+            targetId: asInt(entry['targetId'], `${path}.orders[${i}].targetId`),
+            load: asInt(entry['load'], `${path}.orders[${i}].load`),
+            unload: asInt(entry['unload'], `${path}.orders[${i}].unload`),
+          };
+        }),
+      };
+    case CommandKind.SetVehicleRunning:
+      return {
+        kind: CommandKind.SetVehicleRunning,
+        vehicleId: asInt(raw['vehicleId'], `${path}.vehicleId`),
+        running: asBoolean(raw['running'], `${path}.running`),
       };
     default:
       throw new SaveFormatError(`${path}.kind: ${kind} is not a known command`);

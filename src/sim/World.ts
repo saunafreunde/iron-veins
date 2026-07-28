@@ -18,6 +18,7 @@ import {
   closeMonth,
   createCompany,
 } from './economy/company';
+import { RailPathfinder } from './net/railPath';
 import { RoadPathfinder } from './net/roadPath';
 import {
   buildVehicleStore,
@@ -104,6 +105,7 @@ export class World {
   /** Replaced wholesale when a save is loaded, hence not readonly. */
   vehicles = new VehicleStore();
   readonly roadPathfinder: RoadPathfinder;
+  readonly railPathfinder: RailPathfinder;
 
   /** The company the local player controls. AI companies get 1..n in M8. */
   readonly playerCompanyId = 0;
@@ -118,6 +120,7 @@ export class World {
     this.towns = generated.towns;
     this.industries = generated.industries;
     this.roadPathfinder = new RoadPathfinder(generated.map.tileCount);
+    this.railPathfinder = new RailPathfinder(generated.map.tileCount);
   }
 
   /**
@@ -349,6 +352,9 @@ function hashDynamicState(h: Fnv1a64, world: World): void {
     if (vehicles.alive[id] !== 1) continue;
     h.u32(vehicles.specId[id]!).u32(vehicles.state[id]!).u32(vehicles.tileIndex[id]!);
     h.f64(vehicles.progressM[id]!).f64(vehicles.speedMs[id]!);
+    h.f64(vehicles.routeRemainingM[id]!);
+    h.u32(vehicles.consist[id]!.length);
+    for (const unit of vehicles.consist[id]!) h.u32(unit);
     h.u32(vehicles.pathIndex[id]!).u32(vehicles.pathLength[id]!);
     h.u32(vehicles.orderIndex[id]!).u32(vehicles.reliability[id]!);
     h.u32(vehicles.breakdownTicks[id]!).f64(vehicles.loadTicks[id]!);

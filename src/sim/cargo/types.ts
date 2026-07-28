@@ -215,3 +215,37 @@ export const CARGO_SPECS: readonly CargoSpec[] = [
 export function cargoSpec(cargo: Cargo): CargoSpec {
   return CARGO_SPECS[cargo]!;
 }
+
+/**
+ * What one unit of each cargo weighs, indexed by {@link Cargo}. [t]
+ *
+ * Only trains use this: a loaded freight train weighs three times what its
+ * wagons do, and that is precisely why it needs a second locomotive to get over
+ * a pass. Road vehicle masses in the catalogue are laden figures already, so
+ * adding a payload there would silently make every bus of M2 heavier than the
+ * balancing scenario was calibrated against (DECISIONS.md D-045).
+ *
+ * Units that are not tonnes get a plausible conversion: a passenger with
+ * luggage 80 kg, a mail sack 30 kg, a head of livestock 500 kg, a loaded
+ * twenty-foot container 14 t.
+ */
+export const CARGO_TONNES_PER_UNIT: readonly number[] = [
+  0.08, // Passengers
+  0.03, // Mail
+  1, // Coal
+  1, // IronOre
+  1, // Steel
+  1, // Wood
+  1, // Planks
+  1, // Grain
+  0.5, // Livestock
+  1, // Food
+  1, // Goods
+  1, // Oil
+  1, // Chemicals
+  1, // Plastics
+  1, // Electronics
+  1, // Gravel
+  1, // Cement
+  14, // Containers
+];

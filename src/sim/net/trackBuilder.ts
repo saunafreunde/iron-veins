@@ -1,11 +1,18 @@
-import { MAX_TRACK_SEARCH_NODES, TRACK_SEARCH_MARGIN_TILES } from '../constants';
+import {
+  MAX_TRACK_SEARCH_NODES,
+  TILE_DIAGONAL_M,
+  TILE_SIZE_M,
+  TRACK_SEARCH_MARGIN_TILES,
+} from '../constants';
 import type { TileMap } from '../map/TileMap';
 import { Terrain } from '../map/terrain';
 import {
   curveRadiusM,
   directionFromDelta,
-  gradePermille,
+  gradeWindowM,
   measureRoute,
+  railUpgradeCostCt,
+  windowedGradePermille,
   RAIL_TYPE_COST_CT,
   RAIL_TYPE_MAX_GRADE,
   stepLengthM,
@@ -57,7 +64,9 @@ const LEVEL_CROSSING_PENALTY = 400;
 export interface TrackRoute {
   readonly tiles: number[];
   readonly geometry: RouteGeometry;
-  /** Total build price. [cent] */
+  /** Tiles that already carry track of a different type and get converted. */
+  readonly upgradedTiles: number;
+  /** Total build price, new track and conversions together. [cent] */
   readonly costCt: number;
 }
 
@@ -192,12 +201,56 @@ class TrackSearch {
     this.heapScores[b] = score;
   }
 
+  /**
+   * Gradient of the stretch of line that ends at the candidate tile.
+   *
+   * Walks back along the route already found until the window is full, so the
+   * search judges a climb the same way the finished route will be measured -
+   * otherwise the assistant would happily plan alignments that the preview then
+   * refuses.
+   */
+  private gradeInto(
+    map: TileMap,
+    fromState: number,
+    nx: number,
+    ny: number,
+    direction: TrackDir,
+    windowM: number,
+  ): number {
+    let runM = stepLengthM(direction);
+    let state = fromState;
+
+    while (runM < windowM) {
+      const previous = this.cameFrom[state]!;
+      if (previous === -1) break;
+      const cell = (state / TRACK_DIR_COUNT) | 0;
+      const x = this.minX + (cell % this.width);
+      const y = this.minY + ((cell / this.width) | 0);
+      const previousCell = (previous / TRACK_DIR_COUNT) | 0;
+      const px = this.minX + (previousCell % this.width);
+      const py = this.minY + ((previousCell / this.width) | 0);
+      if (px === x && py === y) break; // the duplicated start seed
+      runM += px !== x && py !== y ? TILE_DIAGONAL_M : TILE_SIZE_M;
+      state = previous;
+    }
+
+    const cell = (state / TRACK_DIR_COUNT) | 0;
+    const backX = this.minX + (cell % this.width);
+    const backY = this.minY + ((cell / this.width) | 0);
+    return windowedGradePermille(
+      map.baseHeight(nx, ny) - map.baseHeight(backX, backY),
+      runM,
+      windowM,
+    );
+  }
+
   /** Find the cheapest alignment. Returns the tile sequence, or null. */
   find(map: TileMap, fromTile: number, toTile: number, railType: RailType): number[] | null {
     this.prepare(map, fromTile, toTile);
     const size = map.size;
     const stamp = this.stamp;
     const maxGrade = RAIL_TYPE_MAX_GRADE[railType]!;
+    const windowM = gradeWindowM(railType);
 
     const targetX = toTile % size;
     const targetY = (toTile / size) | 0;
@@ -229,7 +282,6 @@ class TrackSearch {
 
       if (x === targetX && y === targetY) return this.reconstruct(state, size);
 
-      const height = map.baseHeight(x, y);
       const cost = this.gScore[state]!;
 
       for (let direction = 0; direction < TRACK_DIR_COUNT; direction++) {
@@ -241,9 +293,9 @@ class TrackSearch {
         const turn = turnSteps(incoming, direction as TrackDir);
         if (Math.abs(turn) > 2) continue;
 
-        const grade = Math.abs(
-          gradePermille(height, map.baseHeight(nx, ny), direction as TrackDir),
-        );
+        // The gradient is measured over a stretch of line, not from one tile to
+        // the next - see the note on the gradient window in map/track.ts.
+        const grade = Math.abs(this.gradeInto(map, state, nx, ny, direction as TrackDir, windowM));
         if (grade > maxGrade) continue;
 
         let step = stepLengthM(direction as TrackDir);
@@ -342,14 +394,21 @@ export function planTrack(
     return { ok: false, reasonKey: TrackReason.TooSteep };
   }
 
-  return {
-    ok: true,
-    route: {
-      tiles,
-      geometry,
-      costCt: geometry.newTiles * RAIL_TYPE_COST_CT[railType]!,
-    },
-  };
+  // Laying over a line that is already there but of another type converts it -
+  // that is how a plain line gets its catenary once electric traction arrives.
+  let costCt = 0;
+  let upgradedTiles = 0;
+  for (const tile of tiles) {
+    const existing = map.railType[tile]! as RailType;
+    if (map.trackBits[tile] === 0) {
+      costCt += RAIL_TYPE_COST_CT[railType]!;
+    } else if (existing !== railType) {
+      costCt += railUpgradeCostCt(existing, railType);
+      upgradedTiles++;
+    }
+  }
+
+  return { ok: true, route: { tiles, geometry, upgradedTiles, costCt } };
 }
 
 /**

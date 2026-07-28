@@ -52,12 +52,20 @@ export interface StationMarker {
 /** A vehicle as the fleet list shows it. */
 export interface VehicleMarker {
   readonly id: number;
+  /** Leading unit; for a train that is its locomotive. */
   readonly specId: number;
+  /** A value of VehicleKind. */
+  readonly kind: number;
   readonly state: number;
   readonly cargoUnits: number;
   readonly capacity: number;
   readonly earnedCt: number;
   readonly orderStationIds: readonly number[];
+  /** Units the train is made of, empty for anything else. */
+  readonly consist: readonly number[];
+  /** Fastest the whole vehicle may run, curves aside. [m/s] */
+  readonly maxSpeedMs: number;
+  readonly lengthM: number;
 }
 
 export type MainToWorkerMessage =

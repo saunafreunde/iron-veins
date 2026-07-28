@@ -22,6 +22,8 @@ export const CommandKind = {
   SetVehicleRunning: 14,
   BuildTrack: 15,
   DemolishTrack: 16,
+  BuildRailStop: 17,
+  BuyTrain: 18,
 } as const;
 export type CommandKind = (typeof CommandKind)[keyof typeof CommandKind];
 
@@ -144,9 +146,31 @@ export interface DemolishTrackCommand {
   readonly y: number;
 }
 
+/** Place a platform tile or a rail depot on an existing piece of track. */
+export interface BuildRailStopCommand {
+  readonly kind: typeof CommandKind.BuildRailStop;
+  readonly x: number;
+  readonly y: number;
+  /** A value of ModuleKind: RailPlatform or RailDepot. */
+  readonly moduleKind: number;
+}
+
+/**
+ * Assemble a train in a rail depot. The units are catalogue ids in the order
+ * they run, locomotive first (section 11.2).
+ */
+export interface BuyTrainCommand {
+  readonly kind: typeof CommandKind.BuyTrain;
+  readonly x: number;
+  readonly y: number;
+  readonly specIds: readonly number[];
+}
+
 export type Command =
   | BuildTrackCommand
   | DemolishTrackCommand
+  | BuildRailStopCommand
+  | BuyTrainCommand
   | SetCompanyNameCommand
   | SetCompanyColorCommand
   | TakeLoanCommand
@@ -194,7 +218,10 @@ export const RejectReason = {
   TooSteep: 'cmd.reject.tooSteep',
   NothingToDo: 'cmd.reject.nothingToDo',
   NeedsRoad: 'cmd.reject.needsRoad',
+  NeedsTrack: 'cmd.reject.needsTrack',
   NeedsDepot: 'cmd.reject.needsDepot',
+  NeedsRailDepot: 'cmd.reject.needsRailDepot',
+  UnknownModule: 'cmd.reject.unknownModule',
   WrongVehicleKind: 'cmd.reject.wrongVehicleKind',
   NotAvailableYet: 'cmd.reject.notAvailableYet',
   TooManyVehicles: 'cmd.reject.tooManyVehicles',

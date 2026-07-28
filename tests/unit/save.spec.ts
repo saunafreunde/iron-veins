@@ -5,7 +5,11 @@ import { CommandQueue } from '../../src/sim/commands/queue';
 import { CommandKind } from '../../src/sim/commands/types';
 import { Difficulty, LOAN_STEP_CT, MapClimate, TICKS_PER_MONTH } from '../../src/sim/constants';
 import { SAVE_MAGIC, SAVE_VERSION, SaveFormatError } from '../../src/sim/save/format';
-import { migrateSavePayload, type SaveMigration } from '../../src/sim/save/migrations';
+import {
+  migrateSavePayload,
+  SAVE_MIGRATIONS,
+  type SaveMigration,
+} from '../../src/sim/save/migrations';
 import { decodeSave, encodeSave } from '../../src/sim/save/serialize';
 import { hashWorld, World } from '../../src/sim/World';
 
@@ -159,6 +163,55 @@ describe('save migrations', () => {
   it('pins the current save version', () => {
     // Bumping SAVE_VERSION has to be a conscious act, because from the first
     // released build onwards it also requires a migration.
-    expect(SAVE_VERSION).toBe(4);
+    expect(SAVE_VERSION).toBe(5);
+  });
+
+  it('has a real migration for every step from version 2 on', () => {
+    for (let version = 2; version < SAVE_VERSION; version++) {
+      expect(SAVE_MIGRATIONS.get(version), `missing migration ${version}`).toBeDefined();
+    }
+  });
+});
+
+describe('the registered migrations', () => {
+  /** A version 2 payload: a world with a map, but no stations and no rails. */
+  function version2(): Record<string, unknown> {
+    return {
+      magic: SAVE_MAGIC,
+      saveVersion: 2,
+      state: {
+        mapSize: 64,
+        map: { terrain: new Uint8Array(64 * 64) },
+        vehicles: [],
+      },
+    };
+  }
+
+  it('carries a pre-rail save all the way to the current format', () => {
+    const migrated = migrateSavePayload(version2(), 2, SAVE_VERSION);
+    const state = migrated['state'] as Record<string, unknown>;
+    const map = state['map'] as Record<string, unknown>;
+
+    expect(state['stations']).toEqual([]);
+    expect(map['trackBits']).toEqual(new Uint8Array(64 * 64));
+    expect(map['railType']).toEqual(new Uint8Array(64 * 64));
+    expect(migrated['saveVersion']).toBe(SAVE_VERSION);
+  });
+
+  it('gives every vehicle of a version 4 world an empty composition', () => {
+    const payload = {
+      magic: SAVE_MAGIC,
+      saveVersion: 4,
+      state: { mapSize: 64, vehicles: [{ id: 0, specId: 200 }] },
+    };
+    const migrated = migrateSavePayload(payload, 4, 5);
+    const vehicles = (migrated['state'] as Record<string, unknown>)['vehicles'] as Record<
+      string,
+      unknown
+    >[];
+
+    expect(vehicles[0]!['consist']).toEqual([]);
+    expect(vehicles[0]!['routeRemainingM']).toBe(0);
+    expect(vehicles[0]!['specId']).toBe(200);
   });
 });

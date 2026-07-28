@@ -190,12 +190,16 @@ describe('the route assistant', () => {
     expect(first.ok).toBe(true);
     if (!first.ok) return;
 
-    for (const tile of first.route.tiles) map.trackBits[tile] = 1;
+    for (const tile of first.route.tiles) {
+      map.trackBits[tile] = 1;
+      map.railType[tile] = RailType.Plain;
+    }
 
     const again = planTrack(map, 10, 10, 20, 10, RailType.Plain, true);
     expect(again.ok).toBe(true);
     if (!again.ok) return;
     expect(again.route.costCt).toBe(0);
     expect(again.route.geometry.newTiles).toBe(0);
+    expect(again.route.upgradedTiles).toBe(0);
   });
 });

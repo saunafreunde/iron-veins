@@ -8,6 +8,14 @@
 /** Edge length of one map tile. [m] */
 export const TILE_SIZE_M = 50;
 
+/**
+ * Ground distance of a diagonal step. Roads run orthogonally, but track has
+ * eight directions, so half of a rail route's steps are this long rather than
+ * one tile. Treating them as equal would make diagonal lines 41 % too fast.
+ * [m]
+ */
+export const TILE_DIAGONAL_M = TILE_SIZE_M * Math.sqrt(2);
+
 /** Vertical distance between two height levels. [m] */
 export const HEIGHT_STEP_M = 8;
 
@@ -442,6 +450,38 @@ export const MAX_TRACK_SEARCH_NODES = 60_000;
  */
 export const TRACK_SEARCH_MARGIN_TILES = 24;
 
+/**
+ * Node budget of the train pathfinder (section 8.4 sets 20_000). It searches
+ * over (track tile, incoming direction), which is eight states per tile, so the
+ * budget is eight times the tile figure for the same reach.
+ */
+export const MAX_RAIL_SEARCH_NODES = 160_000;
+
+/**
+ * Longest train that may be assembled.
+ *
+ * 400 m is eight tiles of track, which is also the longest platform anyone
+ * builds by hand before the layout stops fitting between two towns. Longer
+ * trains would make the head arrive at the next station while the tail is still
+ * standing in the previous one, and modelling that properly needs the block
+ * reservations of M4.
+ * [m]
+ */
+export const MAX_TRAIN_LENGTH_M = 400;
+
+/** Hard ceiling on the units in one train, sizing the consist arrays. */
+export const MAX_CONSIST_UNITS = 32;
+
+/**
+ * How many route nodes ahead a train checks for curves.
+ *
+ * A high speed train braking from 300 km/h needs about 3.5 km, i.e. seventy
+ * tiles, so the lookahead has to reach that far or the train would still be at
+ * line speed when the curve arrives. The loop leaves early as soon as it is
+ * past its own braking distance, so the full count is only ever paid at speed.
+ */
+export const CURVE_LOOKAHEAD_MAX_NODES = 96;
+
 // -------------------------------------------------------------- construction
 
 /**
@@ -465,8 +505,29 @@ export const ROAD_STOP_UPKEEP_CT = 200 * CENTS_PER_EURO;
 export const ROAD_DEPOT_COST_CT = 3_000 * CENTS_PER_EURO;
 export const ROAD_DEPOT_UPKEEP_CT = 300 * CENTS_PER_EURO;
 
+/**
+ * Price of one rail platform tile and of a rail depot.
+ *
+ * A platform is dearer than a bus stop by roughly the factor track is dearer
+ * than road, so that the choice between the two modes stays a question of
+ * throughput rather than of which one happens to be cheap this milestone.
+ * [cent]
+ */
+export const RAIL_PLATFORM_COST_CT = 9_000 * CENTS_PER_EURO;
+export const RAIL_PLATFORM_UPKEEP_CT = 900 * CENTS_PER_EURO;
+
+export const RAIL_DEPOT_COST_CT = 14_000 * CENTS_PER_EURO;
+export const RAIL_DEPOT_UPKEEP_CT = 1_400 * CENTS_PER_EURO;
+
 /** Refund when demolishing, as a share of the build price. */
 export const DEMOLITION_REFUND = 0.25;
+
+/**
+ * What a vehicle fetches second hand when it is brand new, as a share of its
+ * price; it falls to nothing over the design life. Buying the wrong vehicle
+ * has to hurt, but not so much that nobody ever corrects a mistake.
+ */
+export const RESALE_SHARE = 0.6;
 
 // ------------------------------------------------------------------ company
 

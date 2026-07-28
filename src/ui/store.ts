@@ -6,7 +6,17 @@ import type { MapGenPhase } from '../sim/mapgen';
 
 /** What a left click on the map does. */
 export type Tool =
-  'none' | 'raise' | 'lower' | 'level' | 'road' | 'stop' | 'depot' | 'demolish' | 'track';
+  | 'none'
+  | 'raise'
+  | 'lower'
+  | 'level'
+  | 'road'
+  | 'stop'
+  | 'depot'
+  | 'demolish'
+  | 'track'
+  | 'platform'
+  | 'raildepot';
 
 /**
  * What the build preview shows before the player commits (section 17.3).
@@ -65,6 +75,8 @@ export interface SimUiState extends SnapshotValues {
   /** First corner of a road drag; the second click completes it. */
   roadAnchor: { readonly x: number; readonly y: number } | null;
   trackPreview: TrackPreview | null;
+  /** Units the player has put together in the rail depot, not yet bought. */
+  trainDraft: readonly number[];
   companyName: string;
   companyColorIndex: number;
   appVersion: string;
@@ -95,6 +107,9 @@ export interface SimUiState extends SnapshotValues {
   setSelectedVehicle: (id: number | null) => void;
   setRoadAnchor: (anchor: { readonly x: number; readonly y: number } | null) => void;
   setTrackPreview: (preview: TrackPreview | null) => void;
+  addTrainUnit: (specId: number) => void;
+  removeTrainUnit: (index: number) => void;
+  clearTrainDraft: () => void;
   setReady: (seed: number) => void;
   setCompany: (name: string, colorIndex: number) => void;
   setPlatform: (appVersion: string, isDesktop: boolean) => void;
@@ -137,6 +152,7 @@ export const useSimStore = create<SimUiState>((set) => ({
   selectedVehicleId: null,
   roadAnchor: null,
   trackPreview: null,
+  trainDraft: [],
   companyName: '',
   companyColorIndex: 0,
   appVersion: '',
@@ -170,6 +186,10 @@ export const useSimStore = create<SimUiState>((set) => ({
   setFleet: (vehicles) => set({ fleet: vehicles }),
   setSelectedVehicle: (id) => set({ selectedVehicleId: id }),
   setRoadAnchor: (anchor) => set({ roadAnchor: anchor, trackPreview: null }),
+  addTrainUnit: (specId) => set((state) => ({ trainDraft: [...state.trainDraft, specId] })),
+  removeTrainUnit: (index) =>
+    set((state) => ({ trainDraft: state.trainDraft.filter((_, i) => i !== index) })),
+  clearTrainDraft: () => set({ trainDraft: [] }),
   setReady: (seed) => set({ ready: true, seed, generatingPhase: null }),
   setCompany: (name, colorIndex) => set({ companyName: name, companyColorIndex: colorIndex }),
   setPlatform: (appVersion, isDesktop) => set({ appVersion, isDesktop }),
