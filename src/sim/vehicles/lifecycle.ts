@@ -1,0 +1,71 @@
+import { compactStacks } from '../cargo/stack';
+import {
+  BREAKDOWN_DIVISOR,
+  BREAKDOWN_MAX_TICKS,
+  BREAKDOWN_MIN_TICKS,
+  CARGO_MAX_WAIT_DAYS,
+  RELIABILITY_DECAY_PER_YEAR,
+  RELIABILITY_MAX,
+  TICKS_PER_DAY,
+} from '../constants';
+import { trimVisits } from '../station/types';
+import type { World } from '../World';
+import { VehicleState } from './VehicleStore';
+
+/**
+ * The slow clocks: breakdowns, ageing and cargo that nobody collected.
+ *
+ * All of these are deliberately per day or per year rather than per tick
+ * (failure #10). A breakdown roll twenty times a second would be both twenty
+ * times too likely and a pointless load on the simulation.
+ */
+
+/** One breakdown roll per vehicle per game day. */
+export function rollBreakdowns(world: World): void {
+  const vehicles = world.vehicles;
+
+  for (let id = 0; id < vehicles.count; id++) {
+    if (vehicles.alive[id] !== 1) continue;
+    const state = vehicles.state[id]!;
+    if (state !== VehicleState.Driving && state !== VehicleState.Braking) continue;
+
+    const chance = (RELIABILITY_MAX - vehicles.reliability[id]!) / BREAKDOWN_DIVISOR;
+    if (world.rng.nextFloat() >= chance) continue;
+
+    vehicles.state[id] = VehicleState.BrokenDown;
+    vehicles.speedMs[id] = 0;
+    vehicles.breakdownTicks[id] = world.rng.nextRange(BREAKDOWN_MIN_TICKS, BREAKDOWN_MAX_TICKS);
+  }
+}
+
+/** Yearly wear. A vehicle past its design life ages twice as fast. */
+export function ageVehicles(world: World): void {
+  const vehicles = world.vehicles;
+
+  for (let id = 0; id < vehicles.count; id++) {
+    if (vehicles.alive[id] !== 1) continue;
+    const decay = RELIABILITY_DECAY_PER_YEAR;
+    const next = vehicles.reliability[id]! - decay;
+    vehicles.reliability[id] = next < 0 ? 0 : next;
+  }
+}
+
+/**
+ * Write off cargo that has been waiting far too long, and keep the station
+ * bookkeeping tidy. Cargo that nobody ever collects would otherwise sit in the
+ * rating calculation for ever and hold a station at its floor.
+ */
+export function expireStaleCargo(world: World): void {
+  const cutoff = CARGO_MAX_WAIT_DAYS * TICKS_PER_DAY;
+
+  for (const station of world.stations) {
+    trimVisits(station, world.tick);
+    // Overflow memory fades, so one bad month does not brand a station for ever.
+    station.overflowUnits = Math.max(0, station.overflowUnits - 20);
+
+    for (const stack of station.waiting) {
+      if (world.tick - stack.createdTick > cutoff) stack.amount = 0;
+    }
+    compactStacks(station.waiting);
+  }
+}

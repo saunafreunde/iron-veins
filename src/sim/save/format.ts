@@ -3,6 +3,7 @@ import { COMPANY_COLOR_COUNT, Difficulty, MapClimate } from '../constants';
 import { INDUSTRY_TYPE_COUNT, type Industry } from '../industry/types';
 import { TownSize, type Town } from '../town/types';
 import type { TileMapData, WorldStateData } from '../World';
+import { decodeStations, decodeVehicles } from './entities';
 import type { CompanyState, RngState } from '../types';
 
 /** Four byte marker at the start of every save payload. */
@@ -22,7 +23,7 @@ export const SAVE_MAGIC = 'IRVN';
  * milestone and was never distributed. From the first released build onwards
  * every bump gets a real migration.
  */
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 
 /** File extension used for manual and automatic saves. */
 export const SAVE_EXTENSION = '.ironsave';
@@ -111,6 +112,9 @@ function parseCompany(value: unknown, path: string): CompanyState {
     profitThisYearCt: asInt(raw['profitThisYearCt'], `${path}.profitThisYearCt`),
     lastYearProfitCt: asInt(raw['lastYearProfitCt'], `${path}.lastYearProfitCt`),
     fixedAssetsCt: asInt(raw['fixedAssetsCt'], `${path}.fixedAssetsCt`),
+    revenueThisMonthCt: asInt(raw['revenueThisMonthCt'], `${path}.revenueThisMonthCt`),
+    expensesThisMonthCt: asInt(raw['expensesThisMonthCt'], `${path}.expensesThisMonthCt`),
+    upkeepPerYearCt: asInt(raw['upkeepPerYearCt'], `${path}.upkeepPerYearCt`),
   };
 }
 
@@ -184,6 +188,11 @@ function parseTowns(value: unknown, path: string): Town[] {
       sizeClass,
       population: asInt(raw['population'], `${path}[${i}].population`),
       radius: asInt(raw['radius'], `${path}[${i}].radius`),
+      producedThisMonth: asInt(raw['producedThisMonth'], `${path}[${i}].producedThisMonth`),
+      transportedThisMonth: asInt(
+        raw['transportedThisMonth'],
+        `${path}[${i}].transportedThisMonth`,
+      ),
     });
   }
   return towns;
@@ -308,6 +317,8 @@ export function parseSaveFile(value: unknown): SaveFile {
     map: parseTileMap(stateRaw['map'], 'save.state.map', mapSize),
     towns: parseTowns(stateRaw['towns'], 'save.state.towns'),
     industries: parseIndustries(stateRaw['industries'], 'save.state.industries'),
+    stations: decodeStations(stateRaw['stations'], 'save.state.stations'),
+    vehicles: decodeVehicles(stateRaw['vehicles'], 'save.state.vehicles'),
   };
 
   const tick = asInt(raw['tick'], 'save.tick');

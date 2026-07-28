@@ -42,4 +42,8 @@ export interface Town {
   population: number;
   /** Half width of the built-up area. [tiles] */
   radius: number;
+  /** Passengers offered at the town's stations this month. */
+  producedThisMonth: number;
+  /** Of those, how many were actually carried away. */
+  transportedThisMonth: number;
 }

@@ -11,7 +11,25 @@ import {
   type Difficulty,
   type MapClimate,
 } from './constants';
-import { bookMonthlyInterest, closeFinancialYear, createCompany } from './economy/company';
+import {
+  bookMonthlyInterest,
+  bookMonthlyUpkeep,
+  closeFinancialYear,
+  closeMonth,
+  createCompany,
+} from './economy/company';
+import { RoadPathfinder } from './net/roadPath';
+import {
+  buildVehicleStore,
+  encodeStations,
+  encodeVehicles,
+  type VehicleSave,
+} from './save/entities';
+import type { Station } from './station/types';
+import { growTowns, produceTownCargo } from './town/update';
+import { ageVehicles, expireStaleCargo, rollBreakdowns } from './vehicles/lifecycle';
+import { updateVehicles } from './vehicles/update';
+import { VehicleStore } from './vehicles/VehicleStore';
 import { Fnv1a64 } from './hash';
 import type { Industry } from './industry/types';
 import { TileMap } from './map/TileMap';
@@ -36,6 +54,8 @@ export interface WorldStateData {
   map: TileMapData;
   towns: Town[];
   industries: Industry[];
+  stations: Station[];
+  vehicles: VehicleSave[];
 }
 
 /** The tile layers, as raw bytes. Derived layers are recomputed on load. */
@@ -78,6 +98,13 @@ export class World {
   readonly map: TileMap;
   readonly towns: Town[];
   readonly industries: Industry[];
+  readonly stations: Station[] = [];
+  /** Replaced wholesale when a save is loaded, hence not readonly. */
+  vehicles = new VehicleStore();
+  readonly roadPathfinder: RoadPathfinder;
+
+  /** The company the local player controls. AI companies get 1..n in M8. */
+  readonly playerCompanyId = 0;
 
   private constructor(params: NewGameParams, generated: GeneratedWorld) {
     this.seed = params.seed | 0;
@@ -88,6 +115,34 @@ export class World {
     this.map = generated.map;
     this.towns = generated.towns;
     this.industries = generated.industries;
+    this.roadPathfinder = new RoadPathfinder(generated.map.tileCount);
+  }
+
+  /**
+   * Name for a new station: the town it stands in, numbered when that town
+   * already has one. Stations in open country are numbered on their own.
+   */
+  nextStationName(x: number, y: number): string {
+    const townId = this.map.townId[this.map.tileIndex(x, y)]!;
+    const town = townId >= 0 ? this.towns[townId] : undefined;
+    const base = town?.name ?? 'Landstation';
+
+    let count = 0;
+    for (const station of this.stations) {
+      if (station.name === base || station.name.startsWith(`${base} `)) count++;
+    }
+    return count === 0 ? base : `${base} ${count + 1}`;
+  }
+
+  /**
+   * Build a world around a map that already exists.
+   *
+   * Used by the balancing scenarios and, from M9, by the tutorial and by
+   * hand-authored scenarios - all of which need a controlled map rather than a
+   * generated one.
+   */
+  static fromGenerated(params: NewGameParams, generated: GeneratedWorld): World {
+    return new World(params, generated);
   }
 
   /** Start a new game: generates the map, then builds the world around it. */
@@ -111,13 +166,23 @@ export class World {
    */
   step(queue: CommandQueue, sink: CommandOutcomeSink | null): void {
     this.drainCommands(queue, sink);
+    updateVehicles(this);
     this.tick++;
 
+    if (this.tick % TICKS_PER_DAY === 0) {
+      produceTownCargo(this);
+      rollBreakdowns(this);
+      expireStaleCargo(this);
+    }
     if (this.tick % TICKS_PER_MONTH === 0) {
       bookMonthlyInterest(this.company, this.difficulty);
+      bookMonthlyUpkeep(this.company);
+      growTowns(this);
+      closeMonth(this.company);
     }
     if (this.tick % TICKS_PER_YEAR === 0) {
       closeFinancialYear(this.company);
+      ageVehicles(this);
     }
   }
 
@@ -163,6 +228,8 @@ export class World {
       },
       towns: this.towns.map((town) => ({ ...town })),
       industries: this.industries.map((industry) => ({ ...industry })),
+      stations: encodeStations(this.stations),
+      vehicles: encodeVehicles(this.vehicles),
     };
   }
 
@@ -196,11 +263,16 @@ export class World {
 
     world.tick = data.tick;
     world.rng.setState(data.rng);
+    world.stations.push(...data.stations);
+    world.vehicles = buildVehicleStore(data.vehicles);
     world.company.cashCt = data.company.cashCt;
     world.company.loanCt = data.company.loanCt;
     world.company.profitThisYearCt = data.company.profitThisYearCt;
     world.company.lastYearProfitCt = data.company.lastYearProfitCt;
     world.company.fixedAssetsCt = data.company.fixedAssetsCt;
+    world.company.revenueThisMonthCt = data.company.revenueThisMonthCt;
+    world.company.expensesThisMonthCt = data.company.expensesThisMonthCt;
+    world.company.upkeepPerYearCt = data.company.upkeepPerYearCt;
     return world;
   }
 }
@@ -246,6 +318,39 @@ function hashDynamicState(h: Fnv1a64, world: World): void {
   for (let i = 0; i < world.industries.length; i++) {
     const industry = world.industries[i]!;
     h.u32(industry.type).u32(industry.x).u32(industry.y).u32(industry.landmassId);
+  }
+
+  h.u32(world.stations.length);
+  for (let i = 0; i < world.stations.length; i++) {
+    const station = world.stations[i]!;
+    h.u32(station.x).u32(station.y).u32(station.townId).u32(station.buildingsCovered);
+    h.u32(station.servedReliability).f64(station.overflowUnits);
+    h.u32(station.modules.length);
+    for (const module of station.modules) h.u32(module.kind).u32(module.tileIndex);
+    h.u32(station.waiting.length);
+    for (const stack of station.waiting) {
+      h.u32(stack.cargo).f64(stack.amount).f64(stack.createdTick);
+      h.f64(stack.paidFromX).f64(stack.paidFromY);
+    }
+    h.u32(station.visitTicks.length);
+    for (const tick of station.visitTicks) h.u32(tick);
+  }
+
+  const vehicles = world.vehicles;
+  h.u32(vehicles.count);
+  for (let id = 0; id < vehicles.count; id++) {
+    h.u32(vehicles.alive[id]!);
+    if (vehicles.alive[id] !== 1) continue;
+    h.u32(vehicles.specId[id]!).u32(vehicles.state[id]!).u32(vehicles.tileIndex[id]!);
+    h.f64(vehicles.progressM[id]!).f64(vehicles.speedMs[id]!);
+    h.u32(vehicles.pathIndex[id]!).u32(vehicles.pathLength[id]!);
+    h.u32(vehicles.orderIndex[id]!).u32(vehicles.reliability[id]!);
+    h.u32(vehicles.breakdownTicks[id]!).f64(vehicles.loadTicks[id]!);
+    h.f64(vehicles.earnedCt[id]!);
+    for (const stack of vehicles.cargo[id]!) {
+      h.u32(stack.cargo).f64(stack.amount).f64(stack.createdTick);
+      h.f64(stack.paidFromX).f64(stack.paidFromY);
+    }
   }
 }
 

@@ -275,6 +275,83 @@ tree down. Disposal that arrives early is now recorded and carried out by
 `attach` when it finishes. This is not a StrictMode quirk - it would happen on
 any remount.
 
+---
+
+## M2 - the first closed economic loop (2026-07-28)
+
+### D-036 Payment happens per leg, from a "paid up to" marker
+
+Every cargo parcel carries the point up to which it has already been paid for.
+A delivery pays for the distance from there, and the marker moves along. Feeder
+chains therefore add up to exactly what one direct vehicle would have earned -
+no double billing, and no penalty for transhipping - and the mechanism is
+already in place for the routing over interchange points that arrives in M5.
+
+### D-037 Cargo stacks merge, and are picked up oldest first
+
+Without merging, a busy station accumulates one stack per production slice and
+the list grows without bound; stacks merge on (cargo, origin, paid-from point),
+which are exactly the fields the payment depends on, so merging cannot change
+what anything earns. Loading takes the oldest first, otherwise a station keeps a
+permanent residue of ancient cargo that drags its rating down for ever.
+
+### D-038 The balancing scenarios build their own map
+
+A generated map cannot produce "two towns of 1,200 inhabitants exactly 25 tiles
+apart". `tests/balance/scenario.ts` builds a flat world with hand-placed towns,
+so the measurement is about the economy and not about which seed the test drew.
+`World.fromGenerated` exists for this, and is what the M9 tutorial and scenario
+loading will use as well.
+
+### D-039 Scenario 1 forced a full recalibration of the cost scale
+
+Measured first, then adjusted - the specification is explicit that the test is
+the authority and the tables are starting values. The first run lost 12,700 EUR
+a year; the diagnostic showed why, and the diagnostic is now permanent output of
+the test, because "out of band" without a reason sends you guessing.
+
+Three findings, in the order they mattered:
+
+1. **Costs were an order of magnitude too high** relative to what a 25 tile bus
+   line can earn. Under the specified time scale (1 day = 10 s, 1 tile = 50 m) a
+   bus does about 25 round trips per _year_, not per week, so a line's revenue
+   is inherently in the low thousands of euro. Road, stop, depot and vehicle
+   prices came down accordingly.
+2. **Raising passenger output made things worse, not better.** With supply far
+   above capacity the queue grew to over a thousand, and since loading takes the
+   oldest first, everything carried was near the write-off age and paid the
+   floor of 10 %. The fix was capacity, not supply.
+3. **The binding constraint is service quality, not demand.** With capacity
+   slightly above supply the queues stay short, cargo is picked up fresh and the
+   time factor roughly doubles. That is the behaviour the design wants: adding a
+   bus helps more than squeezing the timetable.
+
+Final figures: 21,200 EUR invested, about 8,200 EUR profit a year, payback in
+game year 3 - the middle of the specified 2 to 4 year band rather than its edge,
+so later changes do not immediately push it out.
+
+### D-040 The starting capital is now very generous, and that is unresolved
+
+Because a first bus line costs about 21,000 EUR, the specified 500,000 EUR of
+starting capital buys roughly twenty of them. The three figures the
+specification fixes - the fare of 950 cent per passenger per 100 tiles, the
+2 to 4 year payback for scenario 1, and the 500,000 EUR start - cannot all hold
+at once under its own time scale. Two of the three are pinned by mandated tests,
+so the third gives.
+
+This is a real balance tension, not an oversight, and it is written down rather
+than quietly smoothed over. The milestones that can absorb the headroom are M8
+(competitors bidding for the same routes, town councils granting or refusing
+building rights) and the difficulty settings. If it still feels wrong then, the
+honest lever is the starting capital.
+
+### D-041 Only the buses were recalibrated, not the whole vehicle catalogue
+
+Lorries, tankers and mail vans keep their first-draft prices. They move cargo
+that does not exist yet - the production chains arrive in M5 - so calibrating
+them now would mean tuning against a guess. They get the same treatment when
+scenarios 2 and 3 of section 19.4 are written.
+
 ### D-031 The app reports its startup environment to the shell
 
 `startup_report` prints version, `crossOriginIsolated`, SharedArrayBuffer

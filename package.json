@@ -16,6 +16,7 @@
     "test:unit": "vitest run tests/unit",
     "test:determinism": "vitest run tests/determinism",
     "test:perf": "vitest run tests/perf",
+    "test:balance": "vitest run tests/balance",
     "icons": "node tools/make-icons.mjs",
     "tauri": "tauri"
   },

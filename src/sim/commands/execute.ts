@@ -1,5 +1,9 @@
 import { COMPANY_COLOR_COUNT, MAX_COMPANY_NAME_LENGTH } from '../constants';
-import { repayLoan, takeLoan } from '../economy/company';
+import { bookExpense, repayLoan, takeLoan } from '../economy/company';
+import type { ModuleKind } from '../station/types';
+import type { OrderLoad, OrderUnload } from '../vehicles/VehicleStore';
+import { OrderTarget, VehicleState, type Order } from '../vehicles/VehicleStore';
+import { buildRoad, buildRoadStop, buyRoadVehicle, demolishRoad, sellVehicle } from './build';
 import { applyTerraform, estimateTerraform, levelTile, TerraformDirection } from '../map/terraform';
 import type { World } from '../World';
 import { ACCEPTED, CommandKind, RejectReason, type Command, type CommandOutcome } from './types';
@@ -54,6 +58,62 @@ export function executeCommand(world: World, command: Command): CommandOutcome {
       chargeCompany(world, result.costCt);
       return ACCEPTED;
     }
+
+    case CommandKind.BuildRoad:
+      return buildRoad(world, command.x1, command.y1, command.x2, command.y2);
+
+    case CommandKind.DemolishRoad:
+      return demolishRoad(world, command.x, command.y);
+
+    case CommandKind.BuildRoadStop:
+      return buildRoadStop(world, command.x, command.y, command.moduleKind as ModuleKind);
+
+    case CommandKind.BuyRoadVehicle:
+      return buyRoadVehicle(world, command.x, command.y, command.specId);
+
+    case CommandKind.SellVehicle:
+      return sellVehicle(world, command.vehicleId);
+
+    case CommandKind.SetVehicleOrders: {
+      if (!world.vehicles.isAlive(command.vehicleId)) {
+        return { ok: false, reasonKey: RejectReason.NoSuchVehicle };
+      }
+      const orders: Order[] = [];
+      for (const spec of command.orders) {
+        if (spec.target === OrderTarget.Station && world.stations[spec.targetId] === undefined) {
+          return { ok: false, reasonKey: RejectReason.NoSuchStation };
+        }
+        orders.push({
+          target: spec.target as OrderTarget,
+          targetId: spec.targetId,
+          load: spec.load as OrderLoad,
+          unload: spec.unload as OrderUnload,
+        });
+      }
+      world.vehicles.orders[command.vehicleId] = orders;
+      world.vehicles.orderIndex[command.vehicleId] = 0;
+      // A route computed for the old orders is meaningless now.
+      world.vehicles.pathLength[command.vehicleId] = 0;
+      return ACCEPTED;
+    }
+
+    case CommandKind.SetVehicleRunning: {
+      const id = command.vehicleId;
+      if (!world.vehicles.isAlive(id)) {
+        return { ok: false, reasonKey: RejectReason.NoSuchVehicle };
+      }
+      if (!command.running) {
+        world.vehicles.state[id] = VehicleState.Stopped;
+        world.vehicles.speedMs[id] = 0;
+        return ACCEPTED;
+      }
+      if (world.vehicles.orders[id]!.length === 0) {
+        return { ok: false, reasonKey: RejectReason.NoOrders };
+      }
+      // Starting from a standstill: pick up the current order again.
+      world.vehicles.state[id] = VehicleState.NoRoute;
+      return ACCEPTED;
+    }
   }
 }
 
@@ -76,8 +136,7 @@ function terraform(
   return ACCEPTED;
 }
 
-/** Book a construction expense against cash and the running annual profit. */
+/** Book a construction expense against cash, annual profit and the month. */
 function chargeCompany(world: World, amountCt: number): void {
-  world.company.cashCt -= amountCt;
-  world.company.profitThisYearCt -= amountCt;
+  bookExpense(world.company, amountCt);
 }

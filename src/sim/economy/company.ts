@@ -26,7 +26,35 @@ export function createCompany(
     profitThisYearCt: 0,
     lastYearProfitCt: 0,
     fixedAssetsCt: 0,
+    revenueThisMonthCt: 0,
+    expensesThisMonthCt: 0,
+    upkeepPerYearCt: 0,
   };
+}
+
+/** Book a one-off expense against cash and the running annual profit. */
+export function bookExpense(company: CompanyState, amountCt: number): void {
+  company.cashCt -= amountCt;
+  company.profitThisYearCt -= amountCt;
+  company.expensesThisMonthCt += amountCt;
+}
+
+/**
+ * Charge a twelfth of the yearly upkeep. Called at every month boundary, which
+ * is what makes doing nothing with a full bank account still lose the game
+ * (balancing scenario 4 of section 19.4).
+ */
+export function bookMonthlyUpkeep(company: CompanyState): number {
+  const amount = Math.round(company.upkeepPerYearCt / MONTHS_PER_YEAR);
+  if (amount === 0) return 0;
+  bookExpense(company, amount);
+  return amount;
+}
+
+/** Start a new month's revenue and expense counters. */
+export function closeMonth(company: CompanyState): void {
+  company.revenueThisMonthCt = 0;
+  company.expensesThisMonthCt = 0;
 }
 
 /**

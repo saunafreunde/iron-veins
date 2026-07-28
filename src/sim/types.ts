@@ -22,6 +22,12 @@ export interface CompanyState {
   lastYearProfitCt: number;
   /** Book value of owned infrastructure and vehicles - input to the credit line. [cent] */
   fixedAssetsCt: number;
+  /** Revenue booked since the start of the current game month. [cent] */
+  revenueThisMonthCt: number;
+  /** Expenses booked since the start of the current game month. [cent] */
+  expensesThisMonthCt: number;
+  /** Yearly upkeep of everything owned, recomputed on every build. [cent] */
+  upkeepPerYearCt: number;
 }
 
 /** Calendar position derived from a tick count. */

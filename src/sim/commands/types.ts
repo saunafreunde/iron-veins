@@ -13,6 +13,13 @@ export const CommandKind = {
   RaiseLand: 5,
   LowerLand: 6,
   LevelLand: 7,
+  BuildRoad: 8,
+  DemolishRoad: 9,
+  BuildRoadStop: 10,
+  BuyRoadVehicle: 11,
+  SellVehicle: 12,
+  SetVehicleOrders: 13,
+  SetVehicleRunning: 14,
 } as const;
 export type CommandKind = (typeof CommandKind)[keyof typeof CommandKind];
 
@@ -58,6 +65,64 @@ export interface LevelLandCommand {
   readonly y: number;
 }
 
+export interface BuildRoadCommand {
+  readonly kind: typeof CommandKind.BuildRoad;
+  readonly x1: number;
+  readonly y1: number;
+  readonly x2: number;
+  readonly y2: number;
+}
+
+export interface DemolishRoadCommand {
+  readonly kind: typeof CommandKind.DemolishRoad;
+  readonly x: number;
+  readonly y: number;
+}
+
+export interface BuildRoadStopCommand {
+  readonly kind: typeof CommandKind.BuildRoadStop;
+  readonly x: number;
+  readonly y: number;
+  /** A value of ModuleKind. */
+  readonly moduleKind: number;
+}
+
+export interface BuyRoadVehicleCommand {
+  readonly kind: typeof CommandKind.BuyRoadVehicle;
+  /** Tile of the depot module the vehicle appears at. */
+  readonly x: number;
+  readonly y: number;
+  readonly specId: number;
+}
+
+export interface SellVehicleCommand {
+  readonly kind: typeof CommandKind.SellVehicle;
+  readonly vehicleId: number;
+}
+
+/** One entry of a vehicle's cyclic order list. */
+export interface OrderSpec {
+  /** A value of OrderTarget. */
+  readonly target: number;
+  readonly targetId: number;
+  /** A value of OrderLoad. */
+  readonly load: number;
+  /** A value of OrderUnload. */
+  readonly unload: number;
+}
+
+export interface SetVehicleOrdersCommand {
+  readonly kind: typeof CommandKind.SetVehicleOrders;
+  readonly vehicleId: number;
+  readonly orders: readonly OrderSpec[];
+}
+
+export interface SetVehicleRunningCommand {
+  readonly kind: typeof CommandKind.SetVehicleRunning;
+  readonly vehicleId: number;
+  readonly running: boolean;
+}
+
 export type Command =
   | SetCompanyNameCommand
   | SetCompanyColorCommand
@@ -65,7 +130,14 @@ export type Command =
   | RepayLoanCommand
   | RaiseLandCommand
   | LowerLandCommand
-  | LevelLandCommand;
+  | LevelLandCommand
+  | BuildRoadCommand
+  | DemolishRoadCommand
+  | BuildRoadStopCommand
+  | BuyRoadVehicleCommand
+  | SellVehicleCommand
+  | SetVehicleOrdersCommand
+  | SetVehicleRunningCommand;
 
 /** A command bound to the exact tick at which it is executed. */
 export interface CommandEnvelope {
@@ -93,5 +165,18 @@ export const RejectReason = {
   CreditLimitReached: 'cmd.reject.creditLimitReached',
   NothingToRepay: 'cmd.reject.nothingToRepay',
   InsufficientFunds: 'cmd.reject.insufficientFunds',
+  OutsideMap: 'cmd.reject.outsideMap',
+  OnWater: 'cmd.reject.onWater',
+  Occupied: 'cmd.reject.occupied',
+  TooSteep: 'cmd.reject.tooSteep',
+  NothingToDo: 'cmd.reject.nothingToDo',
+  NeedsRoad: 'cmd.reject.needsRoad',
+  NeedsDepot: 'cmd.reject.needsDepot',
+  WrongVehicleKind: 'cmd.reject.wrongVehicleKind',
+  NotAvailableYet: 'cmd.reject.notAvailableYet',
+  TooManyVehicles: 'cmd.reject.tooManyVehicles',
+  NoSuchVehicle: 'cmd.reject.noSuchVehicle',
+  NoOrders: 'cmd.reject.noOrders',
+  NoSuchStation: 'cmd.reject.noSuchStation',
 } as const;
 export type RejectReason = (typeof RejectReason)[keyof typeof RejectReason];

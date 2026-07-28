@@ -299,6 +299,160 @@ export const LOAN_LIMIT_ASSET_FACTOR = 0.3;
 /** Nominal annual interest rate per difficulty, booked monthly. [1/year] */
 export const LOAN_INTEREST_RATE_PER_YEAR: readonly number[] = [0.04, 0.04, 0.065];
 
+// ---------------------------------------------------------------- economy
+
+/** Inflation applied to revenue and costs alike, per game year. [1/year] */
+export const INFLATION_PER_YEAR = 0.018;
+
+/** Payment multiplier for cargo that arrives in half the grace period or less. */
+export const FAST_DELIVERY_BONUS = 1.3;
+
+/** Floor of the time factor: even very late cargo still pays a tenth. */
+export const TIME_FACTOR_MIN = 0.1;
+
+/** Payment multiplier when refrigerated cargo travels in an unrefrigerated vehicle. */
+export const NO_COOLING_PENALTY = 0.55;
+
+// ------------------------------------------------------------------- cargo
+
+/** Cargo that finds no route waits this long before it is written off. [days] */
+export const CARGO_MAX_WAIT_DAYS = 30;
+
+/** Units of cargo one waiting stack holds at most before the station is full. */
+export const STATION_CARGO_CAPACITY = 2_000;
+
+// ----------------------------------------------------------------- stations
+
+/** Catchment radius of a bare station, before any modules. [tiles] */
+export const STATION_BASE_RADIUS = 4;
+
+/** Every this many modules adds one tile of catchment radius. */
+export const STATION_MODULES_PER_RADIUS = 3;
+
+/** Hard cap on the catchment radius. [tiles] */
+export const STATION_MAX_RADIUS = 10;
+
+/** Modules within this distance of each other form one joint station. [tiles] */
+export const STATION_JOIN_DISTANCE = 4;
+
+/** Station rating starts here before any of the terms are added. */
+export const STATION_RATING_BASE = 25;
+
+/** Waiting-time term: full marks below this age, zero above the second. [days] */
+export const RATING_WAIT_GOOD_DAYS = 2;
+export const RATING_WAIT_BAD_DAYS = 20;
+export const RATING_WAIT_MAX = 30;
+
+/** Frequency term: vehicle visits counted over this window. [days] */
+export const RATING_FREQUENCY_WINDOW_DAYS = 20;
+export const RATING_FREQUENCY_MAX = 20;
+export const RATING_FREQUENCY_SATURATION_VISITS = 40;
+
+export const RATING_EQUIPMENT_MAX = 15;
+export const RATING_RELIABILITY_MAX = 10;
+export const RATING_OVERFLOW_PENALTY_MAX = 15;
+
+// -------------------------------------------------------------------- towns
+
+/** Inhabitants per tonne of goods demanded per month. */
+export const TOWN_INHABITANTS_PER_GOODS = 900;
+export const TOWN_INHABITANTS_PER_FOOD = 700;
+
+/**
+ * Passengers produced per inhabitant and month.
+ *
+ * Calibrated against balancing scenario 1. Note that what reaches the station
+ * is this figure multiplied by the station rating, so a badly served stop sees
+ * only a third of it - that gate is a large part of why the number looks high.
+ */
+export const PASSENGERS_PER_INHABITANT_PER_MONTH = 0.35;
+
+/** Mail sacks produced per inhabitant and month. */
+export const MAIL_PER_INHABITANT_PER_MONTH = 0.04;
+
+/** Passenger and mail production is booked in this many slices per month. */
+export const TOWN_PRODUCTION_SLICES_PER_MONTH = 30;
+
+// ----------------------------------------------------------------- vehicles
+
+/** Rolling resistance coefficient by surface. [1] */
+export const ROLLING_RESISTANCE_RAIL = 0.002;
+export const ROLLING_RESISTANCE_ROAD = 0.012;
+
+/** Aerodynamic drag constant, F = k * v^2. [N s^2 / m^2] */
+export const DRAG_TRAIN = 5.5;
+export const DRAG_ROAD = 3.2;
+export const DRAG_SHIP = 40.0;
+
+/** Braking deceleration by vehicle class. [m/s^2] */
+export const BRAKE_FREIGHT = 0.6;
+export const BRAKE_PASSENGER = 1.0;
+export const BRAKE_ROAD = 2.5;
+
+/** Rotating masses add this much apparent inertia. [1] */
+export const ROTATING_MASS_FACTOR = 1.06;
+
+/** Gravity used by the longitudinal solver. [m/s^2] */
+export const GRAVITY = 9.81;
+
+/** Reaction distance added to the braking distance preview. [s] */
+export const BRAKE_REACTION_SECONDS = 0.5;
+
+/** Lateral acceleration a curve may impose, by vehicle class. [m/s^2] */
+export const LATERAL_ACCEL_PASSENGER = 0.65;
+export const LATERAL_ACCEL_FREIGHT = 1.0;
+export const LATERAL_ACCEL_ROAD = 1.2;
+
+/** How long loading one unit of cargo takes. [ticks per unit] */
+export const LOAD_TICKS_PER_UNIT = 0.15;
+
+/** Minimum stop at a station, even with nothing to exchange. [ticks] */
+export const MIN_STATION_STOP_TICKS = 20;
+
+/** Reliability of a new vehicle, and its yearly decay. [0..10000] */
+export const RELIABILITY_MAX = 10_000;
+export const RELIABILITY_DECAY_PER_YEAR = 400;
+export const RELIABILITY_SERVICE_GAIN = 600;
+
+/** Breakdown roll happens once per game day: rng < (max - reliability) / this. */
+export const BREAKDOWN_DIVISOR = 40_000;
+
+/** A broken down vehicle stands still for this long. [ticks] */
+export const BREAKDOWN_MIN_TICKS = 40;
+export const BREAKDOWN_MAX_TICKS = 120;
+
+/** Upper bound on vehicles per company, sizing the struct-of-arrays store. */
+export const MAX_VEHICLES = 4_000;
+
+/** Upper bound on stations per company. */
+export const MAX_STATIONS = 1_000;
+
+// -------------------------------------------------------------- construction
+
+/**
+ * Road construction prices.
+ *
+ * Calibrated against balancing scenario 1 (section 19.4), not chosen by feel:
+ * a 25 tile bus line with two buses between two towns of 1,200 has to pay for
+ * itself within two to four game years. See DECISIONS.md for why the absolute
+ * scale ends up small next to the starting capital.
+ */
+export const ROAD_COST_PER_TILE_CT = 200 * CENTS_PER_EURO;
+
+/** Yearly upkeep of one road tile. [cent] */
+export const ROAD_UPKEEP_PER_TILE_CT = 10 * CENTS_PER_EURO;
+
+/** Price of a bus stop or lorry bay. [cent] */
+export const ROAD_STOP_COST_CT = 2_000 * CENTS_PER_EURO;
+export const ROAD_STOP_UPKEEP_CT = 200 * CENTS_PER_EURO;
+
+/** Price of a road depot. [cent] */
+export const ROAD_DEPOT_COST_CT = 3_000 * CENTS_PER_EURO;
+export const ROAD_DEPOT_UPKEEP_CT = 300 * CENTS_PER_EURO;
+
+/** Refund when demolishing, as a share of the build price. */
+export const DEMOLITION_REFUND = 0.25;
+
 // ------------------------------------------------------------------ company
 
 /** Number of selectable company colours (Okabe-Ito palette, colour-blind safe). */
