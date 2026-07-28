@@ -3,6 +3,7 @@ import {
   BREAKDOWN_DIVISOR,
   BREAKDOWN_MAX_TICKS,
   BREAKDOWN_MIN_TICKS,
+  CARGO_EXPIRY_FRACTION_PER_DAY,
   CARGO_MAX_WAIT_DAYS,
   RELIABILITY_DECAY_PER_YEAR,
   RELIABILITY_MAX,
@@ -64,7 +65,13 @@ export function expireStaleCargo(world: World): void {
     station.overflowUnits = Math.max(0, station.overflowUnits - 20);
 
     for (const stack of station.waiting) {
-      if (world.tick - stack.createdTick > cutoff) stack.amount = 0;
+      if (world.tick - stack.createdTick <= cutoff) continue;
+      // A share, not the lot. Cargo merges into one stack per origin, so
+      // zeroing it would take two thousand units off an over-supplied station
+      // in a single tick - which is the steady state of every mine nobody
+      // collects from.
+      stack.amount -= stack.amount * CARGO_EXPIRY_FRACTION_PER_DAY;
+      stack.createdTick += TICKS_PER_DAY;
     }
     compactStacks(station.waiting);
   }

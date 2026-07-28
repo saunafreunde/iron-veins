@@ -3,6 +3,7 @@ import type { Cargo } from '../cargo/types';
 import {
   INDUSTRY_SPECS,
   industrySpec,
+  newIndustry,
   type Industry,
   type IndustrySpec,
   type IndustryType,
@@ -239,13 +240,13 @@ function repairChains(
           );
           if (spot === null) continue;
 
-          const industry: Industry = {
-            id: nextId++,
-            type: producerType,
-            x: spot.x,
-            y: spot.y,
-            landmassId: consumer.landmassId,
-          };
+          const industry: Industry = newIndustry(
+            nextId++,
+            producerType,
+            spot.x,
+            spot.y,
+            consumer.landmassId,
+          );
           placed.push(industry);
           occupy(map, industry);
           addedAny = true;
@@ -302,13 +303,13 @@ export function generateIndustries(map: TileMap, rng: Rng, towns: readonly Town[
     const spot = findSpot(map, rng, spec, towns, placed, PLACEMENT_ATTEMPTS_PER_INDUSTRY, -1);
     if (spot === null) continue;
 
-    const industry: Industry = {
-      id: placed.length,
+    const industry: Industry = newIndustry(
+      placed.length,
       type,
-      x: spot.x,
-      y: spot.y,
-      landmassId: map.landmassId[map.tileIndex(spot.x, spot.y)]!,
-    };
+      spot.x,
+      spot.y,
+      map.landmassId[map.tileIndex(spot.x, spot.y)]!,
+    );
     placed.push(industry);
     occupy(map, industry);
   }

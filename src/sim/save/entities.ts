@@ -34,6 +34,9 @@ export interface StationSave {
   modules: StationModule[];
   waiting: CargoStack[];
   visitTicks: number[];
+  /** Derived on load, written to the file only because the shape is shared. */
+  acceptedCargo: number;
+  servedIndustries: number[];
 }
 
 export interface VehicleSave {
@@ -80,6 +83,9 @@ export function encodeStations(stations: readonly Station[]): StationSave[] {
     modules: station.modules.map((module) => ({ ...module })),
     waiting: station.waiting.map((stack) => ({ ...stack })),
     visitTicks: [...station.visitTicks],
+    // Recomputed on load; carried here only so the encoded shape matches.
+    acceptedCargo: 0,
+    servedIndustries: [],
   }));
 }
 
@@ -199,6 +205,9 @@ export function decodeStations(value: unknown, path: string): Station[] {
       servedReliability: int(raw['servedReliability'], `${path}[${i}].servedReliability`),
       overflowUnits: num(raw['overflowUnits'], `${path}[${i}].overflowUnits`),
       modules,
+      // Derived from the map on load, exactly as the land masses are.
+      acceptedCargo: 0,
+      servedIndustries: [],
       waiting: decodeStacks(raw['waiting'], `${path}[${i}].waiting`),
       visitTicks: list(raw['visitTicks'], `${path}[${i}].visitTicks`).map((tick, t) =>
         int(tick, `${path}[${i}].visitTicks[${t}]`),

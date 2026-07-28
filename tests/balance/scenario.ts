@@ -93,6 +93,8 @@ export function twoTownScenario(population: number, distance: number): TwoTownSc
     radius: 4,
     producedThisMonth: 0,
     transportedThisMonth: 0,
+    goodsDeliveredThisMonth: 0,
+    foodDeliveredThisMonth: 0,
   });
 
   const townA = makeTown(0, startX, 'Westheim');

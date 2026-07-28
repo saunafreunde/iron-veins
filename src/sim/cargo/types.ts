@@ -4,6 +4,13 @@
  * The numbers are starting values. The balancing tests of section 19.4 are the
  * authority on them - when a test leaves its tolerance band, this table gets
  * adjusted, never the test.
+ *
+ * The freight rates were raised fourfold in M5 against their first draft. The
+ * revenue-ceiling test found that at the original figures NO freight vehicle
+ * could cover its own upkeep on a line of any length: a bus carried 150
+ * passengers at 950 a head while a lorry carried 14 tonnes of coal at 210, and
+ * the passenger side is the one that is calibrated and in band. See
+ * DECISIONS.md D-066.
  */
 
 export const Cargo = {
@@ -69,7 +76,7 @@ export const CARGO_SPECS: readonly CargoSpec[] = [
     id: Cargo.Coal,
     nameKey: 'cargo.coal',
     unitKey: 'cargo.unit.tonne',
-    baseRateCt: 210,
+    baseRateCt: 840,
     graceDays: 30,
     decayPerDay: 0.004,
     needsCooling: false,
@@ -78,7 +85,7 @@ export const CARGO_SPECS: readonly CargoSpec[] = [
     id: Cargo.IronOre,
     nameKey: 'cargo.ironOre',
     unitKey: 'cargo.unit.tonne',
-    baseRateCt: 240,
+    baseRateCt: 960,
     graceDays: 30,
     decayPerDay: 0.004,
     needsCooling: false,
@@ -87,7 +94,7 @@ export const CARGO_SPECS: readonly CargoSpec[] = [
     id: Cargo.Steel,
     nameKey: 'cargo.steel',
     unitKey: 'cargo.unit.tonne',
-    baseRateCt: 420,
+    baseRateCt: 1680,
     graceDays: 22,
     decayPerDay: 0.008,
     needsCooling: false,
@@ -96,7 +103,7 @@ export const CARGO_SPECS: readonly CargoSpec[] = [
     id: Cargo.Wood,
     nameKey: 'cargo.wood',
     unitKey: 'cargo.unit.tonne',
-    baseRateCt: 260,
+    baseRateCt: 1040,
     graceDays: 26,
     decayPerDay: 0.006,
     needsCooling: false,
@@ -105,7 +112,7 @@ export const CARGO_SPECS: readonly CargoSpec[] = [
     id: Cargo.Planks,
     nameKey: 'cargo.planks',
     unitKey: 'cargo.unit.tonne',
-    baseRateCt: 400,
+    baseRateCt: 1600,
     graceDays: 22,
     decayPerDay: 0.008,
     needsCooling: false,
@@ -114,7 +121,7 @@ export const CARGO_SPECS: readonly CargoSpec[] = [
     id: Cargo.Grain,
     nameKey: 'cargo.grain',
     unitKey: 'cargo.unit.tonne',
-    baseRateCt: 300,
+    baseRateCt: 1200,
     graceDays: 14,
     decayPerDay: 0.018,
     needsCooling: false,
@@ -123,7 +130,7 @@ export const CARGO_SPECS: readonly CargoSpec[] = [
     id: Cargo.Livestock,
     nameKey: 'cargo.livestock',
     unitKey: 'cargo.unit.head',
-    baseRateCt: 520,
+    baseRateCt: 2080,
     graceDays: 6,
     decayPerDay: 0.055,
     needsCooling: true,
@@ -132,7 +139,7 @@ export const CARGO_SPECS: readonly CargoSpec[] = [
     id: Cargo.Food,
     nameKey: 'cargo.food',
     unitKey: 'cargo.unit.tonne',
-    baseRateCt: 640,
+    baseRateCt: 2560,
     graceDays: 8,
     decayPerDay: 0.048,
     needsCooling: true,
@@ -141,7 +148,7 @@ export const CARGO_SPECS: readonly CargoSpec[] = [
     id: Cargo.Goods,
     nameKey: 'cargo.goods',
     unitKey: 'cargo.unit.tonne',
-    baseRateCt: 900,
+    baseRateCt: 3600,
     graceDays: 12,
     decayPerDay: 0.022,
     needsCooling: false,
@@ -150,7 +157,7 @@ export const CARGO_SPECS: readonly CargoSpec[] = [
     id: Cargo.Oil,
     nameKey: 'cargo.oil',
     unitKey: 'cargo.unit.tonne',
-    baseRateCt: 350,
+    baseRateCt: 1400,
     graceDays: 26,
     decayPerDay: 0.006,
     needsCooling: false,
@@ -159,7 +166,7 @@ export const CARGO_SPECS: readonly CargoSpec[] = [
     id: Cargo.Chemicals,
     nameKey: 'cargo.chemicals',
     unitKey: 'cargo.unit.tonne',
-    baseRateCt: 700,
+    baseRateCt: 2800,
     graceDays: 16,
     decayPerDay: 0.02,
     needsCooling: true,
@@ -168,7 +175,7 @@ export const CARGO_SPECS: readonly CargoSpec[] = [
     id: Cargo.Plastics,
     nameKey: 'cargo.plastics',
     unitKey: 'cargo.unit.tonne',
-    baseRateCt: 560,
+    baseRateCt: 2240,
     graceDays: 20,
     decayPerDay: 0.012,
     needsCooling: false,
@@ -177,7 +184,7 @@ export const CARGO_SPECS: readonly CargoSpec[] = [
     id: Cargo.Electronics,
     nameKey: 'cargo.electronics',
     unitKey: 'cargo.unit.tonne',
-    baseRateCt: 1500,
+    baseRateCt: 6000,
     graceDays: 10,
     decayPerDay: 0.035,
     needsCooling: false,
@@ -186,7 +193,7 @@ export const CARGO_SPECS: readonly CargoSpec[] = [
     id: Cargo.Gravel,
     nameKey: 'cargo.gravel',
     unitKey: 'cargo.unit.tonne',
-    baseRateCt: 150,
+    baseRateCt: 600,
     graceDays: 30,
     decayPerDay: 0.003,
     needsCooling: false,
@@ -195,7 +202,7 @@ export const CARGO_SPECS: readonly CargoSpec[] = [
     id: Cargo.Cement,
     nameKey: 'cargo.cement',
     unitKey: 'cargo.unit.tonne',
-    baseRateCt: 260,
+    baseRateCt: 1040,
     graceDays: 24,
     decayPerDay: 0.007,
     needsCooling: false,
@@ -204,7 +211,9 @@ export const CARGO_SPECS: readonly CargoSpec[] = [
     id: Cargo.Containers,
     nameKey: 'cargo.containers',
     unitKey: 'cargo.unit.teu',
-    baseRateCt: 1100,
+    // A loaded twenty-foot container is fourteen tonnes of goods, and it was
+    // priced as if it were one. See CARGO_TONNES_PER_UNIT.
+    baseRateCt: 12_000,
     graceDays: 18,
     decayPerDay: 0.015,
     needsCooling: false,

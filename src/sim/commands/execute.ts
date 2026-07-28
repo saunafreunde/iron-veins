@@ -1,3 +1,4 @@
+import type { Cargo } from '../cargo/types';
 import { COMPANY_COLOR_COUNT, MAX_COMPANY_NAME_LENGTH } from '../constants';
 import { bookExpense, repayLoan, takeLoan } from '../economy/company';
 import type { ModuleKind } from '../station/types';
@@ -15,6 +16,7 @@ import {
   buyTrain,
   demolishRoad,
   demolishTrack,
+  refitVehicle,
   sellVehicle,
 } from './build';
 import { releaseAll } from '../vehicles/reservations';
@@ -111,6 +113,9 @@ export function executeCommand(world: World, command: Command): CommandOutcome {
 
     case CommandKind.DemolishSignal:
       return demolishSignal(world, command.x, command.y);
+
+    case CommandKind.RefitVehicle:
+      return refitVehicle(world, command.vehicleId, command.cargo as Cargo);
 
     case CommandKind.SellVehicle:
       return sellVehicle(world, command.vehicleId);

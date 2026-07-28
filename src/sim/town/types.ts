@@ -46,4 +46,7 @@ export interface Town {
   producedThisMonth: number;
   /** Of those, how many were actually carried away. */
   transportedThisMonth: number;
+  /** Goods and food delivered into the town this month. [units] */
+  goodsDeliveredThisMonth: number;
+  foodDeliveredThisMonth: number;
 }

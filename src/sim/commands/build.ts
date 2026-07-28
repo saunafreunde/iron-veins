@@ -5,6 +5,7 @@ import {
   RAIL_DEPOT_UPKEEP_CT,
   RAIL_PLATFORM_COST_CT,
   RAIL_PLATFORM_UPKEEP_CT,
+  REFIT_COST_SHARE,
   RESALE_SHARE,
   SIGNAL_COST_CT,
   SIGNAL_UPKEEP_CT_PER_YEAR,
@@ -37,8 +38,14 @@ import { planTrack } from '../net/trackBuilder';
 import { ModuleKind, recomputeCentre, type Station, type StationModule } from '../station/types';
 import { assignStationCatchment } from '../town/update';
 import { RoadBit } from '../town/types';
-import { defaultCargo, vehicleSpec, VehicleKind } from '../vehicles/catalog';
-import { aggregateConsist, consistDefaultCargo, validateConsist } from '../vehicles/consist';
+import type { Cargo } from '../cargo/types';
+import { capacityFor, defaultCargo, vehicleSpec, VehicleKind } from '../vehicles/catalog';
+import {
+  aggregateConsist,
+  consistCapacityFor,
+  consistDefaultCargo,
+  validateConsist,
+} from '../vehicles/consist';
 import { releaseAll } from '../vehicles/reservations';
 import { VehicleState } from '../vehicles/VehicleStore';
 import type { World } from '../World';
@@ -410,6 +417,8 @@ function attachModule(world: World, module: StationModule): Station {
       overflowUnits: 0,
       townId: -1,
       buildingsCovered: 0,
+      acceptedCargo: 0,
+      servedIndustries: [],
     };
     world.stations.push(station);
   } else {
@@ -567,6 +576,45 @@ export function buyRoadVehicle(
   world.company.upkeepPerYearCt += spec.upkeepCtPerYear;
   world.company.fixedAssetsCt += spec.priceCt;
   return ACCEPTED;
+}
+
+/**
+ * Convert a vehicle to another cargo (section 12).
+ *
+ * Without this an open wagon is coal for life and half the catalogue is
+ * unreachable: `refitCargo` is written once, when the vehicle is bought, and
+ * nothing else ever touched it.
+ */
+export function refitVehicle(world: World, vehicleId: number, cargo: Cargo): CommandOutcome {
+  const vehicles = world.vehicles;
+  if (!vehicles.isAlive(vehicleId)) return reject(RejectReason.NoSuchVehicle);
+  if (vehicles.state[vehicleId] !== VehicleState.InDepot) return reject(RejectReason.NotInDepot);
+  if (vehicles.cargo[vehicleId]!.length > 0) return reject(RejectReason.NotEmpty);
+
+  const units = vehicles.consist[vehicleId]!;
+  const capacity =
+    units.length > 0
+      ? consistCapacityFor(units, cargo)
+      : capacityFor(vehicleSpec(vehicles.specId[vehicleId]!), cargo);
+  if (capacity <= 0) return reject(RejectReason.CannotCarry);
+
+  const cost = Math.round(refitCostCt(world, vehicleId));
+  if (cost > world.company.cashCt) return reject(RejectReason.InsufficientFunds);
+
+  vehicles.refitCargo[vehicleId] = cargo;
+  vehicles.refreshAggregate(vehicleId);
+  bookExpense(world.company, cost);
+  return ACCEPTED;
+}
+
+/** A conversion costs a share of what the vehicle cost to buy. */
+function refitCostCt(world: World, vehicleId: number): number {
+  const units = world.vehicles.consist[vehicleId]!;
+  const priceCt =
+    units.length > 0
+      ? aggregateConsist(units).priceCt
+      : vehicleSpec(world.vehicles.specId[vehicleId]!).priceCt;
+  return priceCt * REFIT_COST_SHARE;
 }
 
 export function sellVehicle(world: World, vehicleId: number): CommandOutcome {

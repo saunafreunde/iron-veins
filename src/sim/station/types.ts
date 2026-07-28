@@ -70,6 +70,17 @@ export interface Station {
   townId: number;
   /** Building tiles of that town inside the catchment; the production share. */
   buildingsCovered: number;
+
+  /**
+   * Bit mask of the cargo types this station takes in, one bit per Cargo.
+   *
+   * DERIVED from the industries and houses inside the catchment, so it is
+   * recomputed when the station changes and again on load, and is neither
+   * serialised nor hashed.
+   */
+  acceptedCargo: number;
+  /** Ids of the industries inside the catchment, ascending. Derived likewise. */
+  servedIndustries: number[];
 }
 
 /** Catchment radius grows with the number of modules (section 10). */

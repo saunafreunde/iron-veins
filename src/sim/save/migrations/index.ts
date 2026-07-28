@@ -130,6 +130,44 @@ const v6_to_v7: SaveMigration = (payload) => {
 };
 
 /**
+ * M5 gave industries a production state and towns two delivery counters. A
+ * version 7 world had industries that did nothing, which is exactly an empty
+ * yard at the starting level.
+ */
+const v7_to_v8: SaveMigration = (payload) => {
+  const inner = state(payload);
+  const industries = inner['industries'];
+  const towns = inner['towns'];
+  if (!Array.isArray(industries)) {
+    throw new SaveFormatError('save.state.industries: expected an array');
+  }
+  if (!Array.isArray(towns)) throw new SaveFormatError('save.state.towns: expected an array');
+
+  return {
+    ...payload,
+    state: {
+      ...inner,
+      industries: industries.map((industry) => ({
+        ...(industry as Record<string, unknown>),
+        inputStock0: 0,
+        inputStock1: 0,
+        outputStock0: 0,
+        outputStock1: 0,
+        productionLevel: 100,
+        producedThisMonth: 0,
+        collectedThisMonth: 0,
+        monthsSinceLevelChange: 0,
+      })),
+      towns: towns.map((town) => ({
+        ...(town as Record<string, unknown>),
+        goodsDeliveredThisMonth: 0,
+        foodDeliveredThisMonth: 0,
+      })),
+    },
+  };
+};
+
+/**
  * Registry keyed by the version a migration reads (section 19.1).
  *
  * There is deliberately no entry for 1 -> 2: a version 1 world had no map at
@@ -142,6 +180,7 @@ export const SAVE_MIGRATIONS: ReadonlyMap<number, SaveMigration> = new Map<numbe
   [4, v4_to_v5],
   [5, v5_to_v6],
   [6, v6_to_v7],
+  [7, v7_to_v8],
 ]);
 
 /**

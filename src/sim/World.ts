@@ -27,8 +27,14 @@ import {
   encodeVehicles,
   type VehicleSave,
 } from './save/entities';
+import { assignStationIndustries } from './industry/catchment';
 import { SaveFormatError } from './save/format';
 import type { Station } from './station/types';
+import {
+  collectIndustryOutput,
+  produceIndustryCargo,
+  reviewIndustries,
+} from './industry/production';
 import { growTowns, produceTownCargo } from './town/update';
 import { ageVehicles, expireStaleCargo, rollBreakdowns } from './vehicles/lifecycle';
 import { updateVehicles } from './vehicles/update';
@@ -189,12 +195,19 @@ export class World {
 
     if (this.tick % TICKS_PER_DAY === 0) {
       produceTownCargo(this);
+      // Production before collection, so a batch can leave the day it is made;
+      // both before the write-off, so nothing made today is aged out today.
+      produceIndustryCargo(this);
+      collectIndustryOutput(this);
       rollBreakdowns(this);
       expireStaleCargo(this);
     }
     if (this.tick % TICKS_PER_MONTH === 0) {
       bookMonthlyInterest(this.company, this.difficulty);
       bookMonthlyUpkeep(this.company);
+      // Before growTowns, which owns the convention that the monthly counters
+      // are reset by whoever read them.
+      reviewIndustries(this);
       growTowns(this);
       closeMonth(this.company);
     }
@@ -292,6 +305,9 @@ export class World {
     world.tick = data.tick;
     world.rng.setState(data.rng);
     world.stations.push(...data.stations);
+    // What a station serves and accepts is derived from the map, so it is
+    // worked out again here rather than trusted from the file.
+    for (const station of world.stations) assignStationIndustries(world, station);
     world.vehicles = buildVehicleStore(data.vehicles);
     rebuildReservations(world);
     world.company.cashCt = data.company.cashCt;
@@ -372,6 +388,8 @@ function hashDynamicState(h: Fnv1a64, world: World): void {
   for (let i = 0; i < world.towns.length; i++) {
     const town = world.towns[i]!;
     h.u32(town.x).u32(town.y).u32(town.sizeClass).int(town.population).u32(town.radius);
+    h.f64(town.producedThisMonth).f64(town.transportedThisMonth);
+    h.f64(town.goodsDeliveredThisMonth).f64(town.foodDeliveredThisMonth);
     h.u32(town.name.length).str(town.name);
   }
 
@@ -379,6 +397,10 @@ function hashDynamicState(h: Fnv1a64, world: World): void {
   for (let i = 0; i < world.industries.length; i++) {
     const industry = world.industries[i]!;
     h.u32(industry.type).u32(industry.x).u32(industry.y).u32(industry.landmassId);
+    h.f64(industry.inputStock0).f64(industry.inputStock1);
+    h.f64(industry.outputStock0).f64(industry.outputStock1);
+    h.u32(industry.productionLevel).u32(industry.monthsSinceLevelChange);
+    h.f64(industry.producedThisMonth).f64(industry.collectedThisMonth);
   }
 
   h.u32(world.stations.length);

@@ -25,9 +25,10 @@ export const SAVE_MAGIC = 'IRVN';
  * From version 2 on every step has a real migration: 3 added stations and
  * vehicles, 4 the two rail tile layers, 5 the train composition and the running
  * distance-to-go, 6 the bridge and tunnel layers, 7 signals and the two
- * reservation indices a train carries.
+ * reservation indices a train carries, 8 industry production and the town
+ * delivery counters.
  */
-export const SAVE_VERSION = 7;
+export const SAVE_VERSION = 8;
 
 /** File extension used for manual and automatic saves. */
 export const SAVE_EXTENSION = '.ironsave';
@@ -74,6 +75,20 @@ function asString(value: unknown, path: string): string {
 
 function asBoolean(value: unknown, path: string): boolean {
   if (typeof value !== 'boolean') throw new SaveFormatError(`${path}: expected a boolean`);
+  return value;
+}
+
+/**
+ * A finite number, integral or not.
+ *
+ * Cargo amounts are fractional - a town of 1,200 makes 14.0 passengers a day -
+ * so every counter fed by them has to be validated with this rather than with
+ * `asInt`, or the first save taken after any of it moves refuses to load.
+ */
+function asFinite(value: unknown, path: string): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    throw new SaveFormatError(`${path}: expected a finite number`);
+  }
   return value;
 }
 
@@ -202,10 +217,18 @@ function parseTowns(value: unknown, path: string): Town[] {
       sizeClass,
       population: asInt(raw['population'], `${path}[${i}].population`),
       radius: asInt(raw['radius'], `${path}[${i}].radius`),
-      producedThisMonth: asInt(raw['producedThisMonth'], `${path}[${i}].producedThisMonth`),
-      transportedThisMonth: asInt(
+      producedThisMonth: asFinite(raw['producedThisMonth'], `${path}[${i}].producedThisMonth`),
+      transportedThisMonth: asFinite(
         raw['transportedThisMonth'],
         `${path}[${i}].transportedThisMonth`,
+      ),
+      goodsDeliveredThisMonth: asFinite(
+        raw['goodsDeliveredThisMonth'],
+        `${path}[${i}].goodsDeliveredThisMonth`,
+      ),
+      foodDeliveredThisMonth: asFinite(
+        raw['foodDeliveredThisMonth'],
+        `${path}[${i}].foodDeliveredThisMonth`,
       ),
     });
   }
@@ -227,6 +250,17 @@ function parseIndustries(value: unknown, path: string): Industry[] {
       x: asInt(raw['x'], `${path}[${i}].x`),
       y: asInt(raw['y'], `${path}[${i}].y`),
       landmassId: asInt(raw['landmassId'], `${path}[${i}].landmassId`),
+      inputStock0: asFinite(raw['inputStock0'], `${path}[${i}].inputStock0`),
+      inputStock1: asFinite(raw['inputStock1'], `${path}[${i}].inputStock1`),
+      outputStock0: asFinite(raw['outputStock0'], `${path}[${i}].outputStock0`),
+      outputStock1: asFinite(raw['outputStock1'], `${path}[${i}].outputStock1`),
+      productionLevel: asInt(raw['productionLevel'], `${path}[${i}].productionLevel`),
+      producedThisMonth: asFinite(raw['producedThisMonth'], `${path}[${i}].producedThisMonth`),
+      collectedThisMonth: asFinite(raw['collectedThisMonth'], `${path}[${i}].collectedThisMonth`),
+      monthsSinceLevelChange: asInt(
+        raw['monthsSinceLevelChange'],
+        `${path}[${i}].monthsSinceLevelChange`,
+      ),
     });
   }
   return industries;
@@ -336,6 +370,12 @@ function parseCommand(value: unknown, path: string): Command {
         kind: CommandKind.DemolishSignal,
         x: asInt(raw['x'], `${path}.x`),
         y: asInt(raw['y'], `${path}.y`),
+      };
+    case CommandKind.RefitVehicle:
+      return {
+        kind: CommandKind.RefitVehicle,
+        vehicleId: asInt(raw['vehicleId'], `${path}.vehicleId`),
+        cargo: asInt(raw['cargo'], `${path}.cargo`),
       };
     case CommandKind.SellVehicle:
       return {

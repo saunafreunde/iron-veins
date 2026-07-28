@@ -26,6 +26,7 @@ export const CommandKind = {
   BuyTrain: 18,
   BuildSignal: 19,
   DemolishSignal: 20,
+  RefitVehicle: 21,
 } as const;
 export type CommandKind = (typeof CommandKind)[keyof typeof CommandKind];
 
@@ -181,7 +182,19 @@ export interface DemolishSignalCommand {
   readonly y: number;
 }
 
+/**
+ * Convert a vehicle to carry another cargo. Only in a depot, only to something
+ * it can be converted to, and only while it is empty.
+ */
+export interface RefitVehicleCommand {
+  readonly kind: typeof CommandKind.RefitVehicle;
+  readonly vehicleId: number;
+  /** A value of Cargo. */
+  readonly cargo: number;
+}
+
 export type Command =
+  | RefitVehicleCommand
   | BuildSignalCommand
   | DemolishSignalCommand
   | BuildTrackCommand
@@ -250,5 +263,8 @@ export const RejectReason = {
   NoOrders: 'cmd.reject.noOrders',
   NoSuchStation: 'cmd.reject.noSuchStation',
   NoRouteToStop: 'cmd.reject.noRouteToStop',
+  NotInDepot: 'cmd.reject.notInDepot',
+  NotEmpty: 'cmd.reject.notEmpty',
+  CannotCarry: 'cmd.reject.cannotCarry',
 } as const;
 export type RejectReason = (typeof RejectReason)[keyof typeof RejectReason];

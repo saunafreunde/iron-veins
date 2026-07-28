@@ -163,7 +163,7 @@ describe('save migrations', () => {
   it('pins the current save version', () => {
     // Bumping SAVE_VERSION has to be a conscious act, because from the first
     // released build onwards it also requires a migration.
-    expect(SAVE_VERSION).toBe(7);
+    expect(SAVE_VERSION).toBe(8);
   });
 
   it('has a real migration for every step from version 2 on', () => {
@@ -182,6 +182,8 @@ describe('the registered migrations', () => {
       state: {
         mapSize: 64,
         map: { terrain: new Uint8Array(64 * 64) },
+        towns: [],
+        industries: [],
         vehicles: [],
       },
     };

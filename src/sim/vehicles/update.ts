@@ -1,6 +1,6 @@
 import { addCargo, amountOf, compactStacks, transferCargo } from '../cargo/stack';
 import { deliveryRevenueCt, tileDistance } from '../cargo/payment';
-import type { Cargo } from '../cargo/types';
+import { Cargo } from '../cargo/types';
 import {
   BRAKE_REACTION_SECONDS,
   CURVE_LOOKAHEAD_MAX_NODES,
@@ -28,6 +28,8 @@ import {
   turnSteps,
   type RailType,
 } from '../map/track';
+import { stationAccepts } from '../industry/catchment';
+import { deliverToIndustry } from '../industry/production';
 import { SignalKind } from '../map/signals';
 import { ModuleKind, type Station } from '../station/types';
 import type { World } from '../World';
@@ -316,6 +318,10 @@ function serveStation(world: World, id: number, station: Station): number {
   if (order.unload === OrderUnload.All) {
     for (let i = carried.length - 1; i >= 0; i--) {
       const stack = carried[i]!;
+      // Nothing is paid for where nobody wants it. Refusal rather than a
+      // discount: a lorry that leaves still loaded is visible in the fleet
+      // list, whereas a quiet fraction of the fare is a leak no test can see.
+      if (!stationAccepts(station, stack.cargo)) continue;
       const distance = tileDistance(stack.paidFromX, stack.paidFromY, station.x, station.y);
       const revenue = deliveryRevenueCt({
         cargo: stack.cargo,
@@ -331,6 +337,7 @@ function serveStation(world: World, id: number, station: Station): number {
       world.company.revenueThisMonthCt += revenue;
       vehicles.earnedCt[id] = vehicles.earnedCt[id]! + revenue;
 
+      deliverCargo(world, station, stack.cargo, stack.amount);
       units += stack.amount;
       carried.splice(i, 1);
     }
@@ -340,7 +347,12 @@ function serveStation(world: World, id: number, station: Station): number {
     const cargo = vehicles.refitCargo[id]! as Cargo;
     const space = vehicles.capacityUnits[id]! - amountOf(carried, cargo);
     if (space > 0) {
-      units += transferCargo(station.waiting, carried, cargo, space);
+      const moved = transferCargo(station.waiting, carried, cargo, space);
+      units += moved;
+      if (station.townId >= 0 && (cargo === Cargo.Passengers || cargo === Cargo.Mail)) {
+        const town = world.towns[station.townId];
+        if (town !== undefined) town.transportedThisMonth += moved;
+      }
       compactStacks(station.waiting);
     }
   }
@@ -353,6 +365,32 @@ function serveStation(world: World, id: number, station: Station): number {
     (station.servedReliability * 3 + vehicles.reliability[id]!) / 4,
   );
   return units;
+}
+
+/**
+ * Route delivered cargo to whoever wanted it: the industries in the catchment
+ * first, in ascending id, then the town's own consumption.
+ *
+ * It deliberately never lands in `station.waiting`. The station's capacity is
+ * checked against the sum over every stack, so inbound coal would push a town's
+ * passengers into overflow and, through the overflow penalty, drag down the
+ * rating of the very station that is working well.
+ */
+function deliverCargo(world: World, station: Station, cargo: Cargo, amount: number): void {
+  let left = amount;
+
+  for (const industryId of station.servedIndustries) {
+    if (left <= 0) break;
+    const industry = world.industries[industryId];
+    if (industry === undefined) continue;
+    left -= deliverToIndustry(industry, cargo, left);
+  }
+
+  if (left <= 0 || station.townId < 0) return;
+  const town = world.towns[station.townId];
+  if (town === undefined) return;
+  if (cargo === Cargo.Goods) town.goodsDeliveredThisMonth += left;
+  else if (cargo === Cargo.Food) town.foodDeliveredThisMonth += left;
 }
 
 /** True when the vehicle has taken on everything it can carry. */
@@ -595,14 +633,18 @@ export function updateVehicles(world: World): void {
   }
 }
 
-/** Put cargo produced nearby into a station, respecting its capacity. */
+/**
+ * Put cargo produced nearby into a station, respecting its capacity.
+ * Returns how much was actually taken - which is what tells an industry
+ * whether anybody is collecting from it.
+ */
 export function depositAtStation(
   station: Station,
   cargo: Cargo,
   amount: number,
   tick: number,
-): void {
-  if (amount <= 0) return;
+): number {
+  if (amount <= 0) return 0;
 
   let waiting = 0;
   for (const stack of station.waiting) waiting += stack.amount;
@@ -610,7 +652,7 @@ export function depositAtStation(
   const space = STATION_CARGO_CAPACITY - waiting;
   if (space <= 0) {
     station.overflowUnits += amount;
-    return;
+    return 0;
   }
   const accepted = Math.min(space, amount);
   station.overflowUnits += amount - accepted;
@@ -623,4 +665,5 @@ export function depositAtStation(
     paidFromX: station.x,
     paidFromY: station.y,
   });
+  return accepted;
 }

@@ -2,8 +2,16 @@ import { Cargo } from '../cargo/types';
 import {
   MAIL_PER_INHABITANT_PER_MONTH,
   PASSENGERS_PER_INHABITANT_PER_MONTH,
+  STATION_CATCHMENT_SCAN_RADIUS,
+  TOWN_GROWTH_BASE_RATE,
+  TOWN_GROWTH_FOOD_WEIGHT,
+  TOWN_GROWTH_GOODS_WEIGHT,
+  TOWN_GROWTH_PASSENGER_WEIGHT,
+  TOWN_INHABITANTS_PER_FOOD,
+  TOWN_INHABITANTS_PER_GOODS,
   TOWN_PRODUCTION_SLICES_PER_MONTH,
 } from '../constants';
+import { assignStationIndustries } from '../industry/catchment';
 import { inCatchment, stationRating, type Station } from '../station/types';
 import { depositAtStation } from '../vehicles/update';
 import type { World } from '../World';
@@ -29,7 +37,7 @@ export function assignStationCatchment(world: World, station: Station): void {
   const map = world.map;
   const counts = new Map<number, number>();
 
-  const radius = 12; // upper bound of STATION_MAX_RADIUS plus slack
+  const radius = STATION_CATCHMENT_SCAN_RADIUS;
   for (let dy = -radius; dy <= radius; dy++) {
     const y = station.y + dy;
     if (y < 0 || y >= map.size) continue;
@@ -57,6 +65,8 @@ export function assignStationCatchment(world: World, station: Station): void {
   }
   station.townId = bestTown;
   station.buildingsCovered = bestCount;
+  // Acceptance depends on buildingsCovered, so it is worked out afterwards.
+  assignStationIndustries(world, station);
 }
 
 /**
@@ -82,6 +92,9 @@ export function produceTownCargo(world: World): void {
       if (station.townId !== town.id) continue;
       const share =
         (station.buildingsCovered * (stationRating(station, world.tick) / 100)) / totalWeight;
+      // What a town produces is counted whether or not the station could take
+      // it: the growth ratio has to divide by the offer, not by the acceptance.
+      town.producedThisMonth += passengers * share;
       depositAtStation(station, Cargo.Passengers, passengers * share, world.tick);
       depositAtStation(station, Cargo.Mail, mail * share, world.tick);
     }
@@ -101,12 +114,27 @@ export function growTowns(world: World): void {
     const transported = town.transportedThisMonth;
     const supplyPassengers = produced > 0 ? Math.min(1, transported / produced) : 0;
 
+    // Demand for the two things a town consumes, from section 13.2.
+    const goodsWanted = town.population / TOWN_INHABITANTS_PER_GOODS;
+    const foodWanted = town.population / TOWN_INHABITANTS_PER_FOOD;
+    const supplyGoods =
+      goodsWanted > 0 ? Math.min(1, town.goodsDeliveredThisMonth / goodsWanted) : 0;
+    const supplyFood = foodWanted > 0 ? Math.min(1, town.foodDeliveredThisMonth / foodWanted) : 0;
+
     const terrainFactor = terrainFactorFor(world, town.x, town.y);
-    const rate = 0.0015 * (1 + 0.55 * supplyPassengers) * terrainFactor;
+    const rate =
+      TOWN_GROWTH_BASE_RATE *
+      (1 +
+        TOWN_GROWTH_PASSENGER_WEIGHT * supplyPassengers +
+        TOWN_GROWTH_GOODS_WEIGHT * supplyGoods +
+        TOWN_GROWTH_FOOD_WEIGHT * supplyFood) *
+      terrainFactor;
 
     town.population = Math.round(town.population * (1 + rate));
     town.producedThisMonth = 0;
     town.transportedThisMonth = 0;
+    town.goodsDeliveredThisMonth = 0;
+    town.foodDeliveredThisMonth = 0;
   }
 }
 

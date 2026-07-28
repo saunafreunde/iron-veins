@@ -657,3 +657,119 @@ Determinism is not negotiable. Fairness would need a deferred resolution phase
 with a total comparator of its own, which is a different design rather than a
 tweak. Named here so that it is a known property rather than a bug report about
 favouritism.
+
+## M5 - industry chains
+
+### D-062 Industry production state is flat scalars on the industry object
+
+Four stock slots, a level, two monthly counters and a hysteresis clock, all as
+plain fields. Not a struct of arrays: the whole catalogue tops out at two inputs
+and two outputs, there are a couple of hundred industries on a large map against
+four thousand vehicles, and the passes run once a game day rather than once a
+tick. `World.toData` already spreads the object.
+
+The two-slot cap is a real constraint, so it is a test: adding a three-input
+factory fails `tests/unit/industry.spec.ts` rather than being silently
+truncated.
+
+### D-063 The collection gate divides by the footprint, not by tiles covered
+
+An industry hands over `min(1, sum of station weights)` of its output, where a
+station's weight is its rating times the SHARE of the industry's footprint it
+covers. The share is what makes the rating matter: with a tile count, a station
+covering two tiles of a two-by-two mine already had weight 1 and the gate
+saturated, so a rating of 25 shipped exactly as much as a rating of 100.
+
+This is the difference from town production, where the same expression is
+normalised so that the shares sum to one and the rating only redistributes.
+Here it CAPS. What does not leave stays in the yard, where the player can see it.
+
+### D-064 The growth ratio divides by ungated production
+
+`collectedThisMonth / producedThisMonth`, where the denominator is what the
+industry made before the gate took its cut. An industry served by a station
+rated 50 therefore cannot exceed a ratio of 0.5 and can never reach the growth
+threshold, however long it waits.
+
+That one choice is the death spiral of section 10.1 applied to freight, and it
+is what makes a second train or an extra platform pay for itself in tonnage
+rather than only in trips.
+
+### D-065 Delivered cargo never enters the station's waiting pile
+
+Accepted cargo goes straight into the consuming industries' input stock, in
+ascending industry id, and then into the town's goods and food counters. It is
+never added to `station.waiting`.
+
+The station capacity is checked against the sum over every stack, so inbound
+coal would push a town's passengers into overflow and, through the overflow
+penalty, drag down the rating of a station that is working perfectly well.
+
+Cargo nobody at the station wants is REFUSED, not discounted: it stays on the
+vehicle. A discount is an invisible money leak that no balance test can see,
+whereas a lorry circling still loaded is visible in the fleet list.
+
+Passengers and mail are accepted everywhere. Making them conditional on houses
+would stop a mine's station carrying its own workers, and it would change what
+M2's bus line is worth - which is calibrated and in band.
+
+### D-066 The freight tariffs were four times too low, and nothing would have caught it
+
+Written down because the size of the error is the point.
+
+A vehicle's ceiling revenue per year is `capacity x rate x speed x constant` -
+the line length cancels out, so it can be computed in closed form. Measured
+against upkeep, the first-draft catalogue read:
+
+| vehicle              | ceiling / upkeep |
+| -------------------- | ---------------- |
+| Type O-1 bus         | 39               |
+| Type S-1 bulk lorry  | 0.06             |
+| Type C-1 container   | 0.05             |
+
+No freight vehicle in the game could cover its own upkeep on a line of ANY
+length, and no test in the repository would have noticed, because the only
+balancing scenario that exists is a bus line. A bus carried 150 passengers at
+950 a head while a lorry carried 14 tonnes of coal at 210.
+
+The passenger side is the one that is calibrated and in band, so freight moved:
+rates fourfold, road freight and mail capacities doubled, their upkeep cut to a
+third. Containers were priced as if a twenty-foot box held one tonne rather than
+the fourteen `CARGO_TONNES_PER_UNIT` says it holds.
+
+The result is deliberately asymmetric and is now a test: rail freight clears the
+ceiling floor of four, road freight sits between 1.4 and 4. A lorry is a feeder
+that pays on a short, well served haul; tonnage pays on rails. Making them equal
+would have made half the game optional.
+
+These are still first-draft figures. The chain scenarios of section 19.4 own the
+final numbers, and `tests/balance/tariff.spec.ts` is the diagnostic that will
+say so in one line rather than after an hour of play.
+
+### D-067 Cargo expires as a share, not all at once
+
+`expireStaleCargo` used to zero a whole stack past the grace period. Cargo merges
+into one stack per origin, so an over-supplied station at capacity lost two
+thousand units in a single tick. No passenger station reaches that; under M5 it
+is the steady state of every mine nobody collects from, and it would have read as
+cargo teleporting away. A tenth of the pile a day, with the age marker moved
+along so the write-off is monotone.
+
+### D-068 A vehicle can be converted, and until M5 it could not
+
+`refitCargo` was written once, when the vehicle was bought, and no command ever
+changed it - so an open wagon was coal for life and most of the catalogue was
+unreachable. `RefitVehicle` costs a share of the purchase price and is allowed
+only in a depot, only while empty, and only to a cargo the vehicle can actually
+hold.
+
+### D-069 Runtime opening and closure of industries was cut
+
+An industry that nobody serves runs down to a quarter of its output and stays
+there. It does not close, and no new ones appear.
+
+Closure needs the placement search exported, a draw from the gameplay RNG (which
+shifts every later draw and perturbs the determinism fixture), intro and retire
+years, tombstone-versus-splice discipline in an array indexed by id, and a fix
+for the release path resetting terrain to grass and leaving scars in forests.
+Five independent risks, none of which the chain loop needs.

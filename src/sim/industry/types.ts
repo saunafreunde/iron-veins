@@ -1,4 +1,5 @@
 import { Cargo } from '../cargo/types';
+import { INDUSTRY_LEVEL_START } from '../constants';
 import { Terrain } from '../map/terrain';
 
 /**
@@ -262,7 +263,16 @@ export function industrySpec(type: IndustryType): IndustrySpec {
   return INDUSTRY_SPECS[type]!;
 }
 
-/** A placed industry. Stock and production state follow in M5. */
+/**
+ * A placed industry, with the production state of section 6.
+ *
+ * The stock slots are flat scalars indexed positionally into the spec's inputs
+ * and outputs rather than a per-cargo array: no industry in the catalogue has
+ * more than two of either, there are a couple of hundred of them on a large
+ * map, and the production passes run once a day rather than once a tick. An
+ * industry with three inputs would need a third slot, and the invariant test
+ * fails the moment somebody adds one.
+ */
 export interface Industry {
   readonly id: number;
   readonly type: IndustryType;
@@ -271,4 +281,48 @@ export interface Industry {
   readonly y: number;
   /** Land component the industry stands on, for reachability checks. */
   readonly landmassId: number;
+
+  /** Delivered input waiting to be used, per input slot. [units] */
+  inputStock0: number;
+  inputStock1: number;
+  /** Finished output waiting to be collected, per output slot. [units] */
+  outputStock0: number;
+  outputStock1: number;
+
+  /**
+   * Output as a percentage of the base figure. An integer, so a monthly step is
+   * bit exact and cannot drift.
+   */
+  productionLevel: number;
+  /** What it made this month, BEFORE the service gate. */
+  producedThisMonth: number;
+  /** What actually left for a station this month. */
+  collectedThisMonth: number;
+  /** Months since the level last moved; the hysteresis dead band. */
+  monthsSinceLevelChange: number;
+}
+
+/** A freshly placed industry, at its starting level with nothing in stock. */
+export function newIndustry(
+  id: number,
+  type: IndustryType,
+  x: number,
+  y: number,
+  landmassId: number,
+): Industry {
+  return {
+    id,
+    type,
+    x,
+    y,
+    landmassId,
+    inputStock0: 0,
+    inputStock1: 0,
+    outputStock0: 0,
+    outputStock1: 0,
+    productionLevel: INDUSTRY_LEVEL_START,
+    producedThisMonth: 0,
+    collectedThisMonth: 0,
+    monthsSinceLevelChange: 0,
+  };
 }

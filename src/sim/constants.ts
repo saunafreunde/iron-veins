@@ -326,8 +326,132 @@ export const NO_COOLING_PENALTY = 0.55;
 /** Cargo that finds no route waits this long before it is written off. [days] */
 export const CARGO_MAX_WAIT_DAYS = 30;
 
+/**
+ * Share of an over-age pile written off per day, once past the grace period.
+ *
+ * Not the whole pile at once. Cargo merges into one stack per origin, so a
+ * station at capacity would otherwise lose two thousand units in a single tick -
+ * survivable for passengers, but the steady state of every under-served mine.
+ */
+export const CARGO_EXPIRY_FRACTION_PER_DAY = 0.1;
+
 /** Units of cargo one waiting stack holds at most before the station is full. */
 export const STATION_CARGO_CAPACITY = 2_000;
+
+// ---------------------------------------------------------------- industry
+
+/**
+ * Industry output at level 100, before any service gate. [units per month]
+ *
+ * Indexed by IndustryType. A pure sink - the power plant, the merchant - uses
+ * this as the amount it can take in, not put out.
+ *
+ * These are starting values. The chain balancing scenarios of section 19.4 own
+ * them, exactly as the bus scenario owns the road figures.
+ */
+export const INDUSTRY_BASE_OUTPUT_PER_MONTH: readonly number[] = [
+  300, // CoalMine
+  250, // IronOreMine
+  220, // OilWell
+  280, // Forestry
+  260, // Farm
+  320, // GravelPit
+  300, // PowerPlant (coal burnt)
+  180, // SteelMill
+  200, // Sawmill
+  120, // FurnitureFactory
+  110, // MachineFactory
+  70, // ElectronicsFactory
+  160, // FoodFactory
+  170, // Refinery
+  130, // PlasticsPlant
+  200, // CementWorks
+  200, // BuildersMerchant (cement taken in)
+];
+
+/**
+ * Input units consumed per batch, per input slot of the recipe.
+ *
+ * The slots line up positionally with `IndustrySpec.inputs`. A primary industry
+ * has an empty row and therefore runs on nothing.
+ */
+export const INDUSTRY_INPUT_PER_BATCH: readonly (readonly number[])[] = [
+  [], // CoalMine
+  [], // IronOreMine
+  [], // OilWell
+  [], // Forestry
+  [], // Farm
+  [], // GravelPit
+  [1], // PowerPlant: coal
+  [0.5, 1], // SteelMill: coal, iron ore
+  [1.5], // Sawmill: wood
+  [1.5], // FurnitureFactory: planks
+  [1.5], // MachineFactory: steel
+  [1, 1], // ElectronicsFactory: steel, plastics
+  [1, 0.5], // FoodFactory: grain, livestock
+  [1.2], // Refinery: oil
+  [1.2], // PlasticsPlant: chemicals
+  [1.5], // CementWorks: gravel
+  [1], // BuildersMerchant: cement
+];
+
+/** Output units produced per batch, per output slot. */
+export const INDUSTRY_OUTPUT_PER_BATCH: readonly (readonly number[])[] = [
+  [1], // CoalMine: coal
+  [1], // IronOreMine: iron ore
+  [1], // OilWell: oil
+  [1], // Forestry: wood
+  [1, 0.35], // Farm: grain and livestock together
+  [1], // GravelPit: gravel
+  [], // PowerPlant: nothing
+  [1], // SteelMill: steel
+  [1], // Sawmill: planks
+  [1], // FurnitureFactory: goods
+  [1], // MachineFactory: goods
+  [1], // ElectronicsFactory: electronics
+  [1], // FoodFactory: food
+  [1], // Refinery: chemicals
+  [1], // PlasticsPlant: plastics
+  [1], // CementWorks: cement
+  [], // BuildersMerchant: nothing
+];
+
+/** Production is booked in this many slices per month, like town output. */
+export const INDUSTRY_PRODUCTION_SLICES_PER_MONTH = 30;
+
+/**
+ * Production level, in percent of the base figure.
+ *
+ * An industry that is well served grows, one that is not shrinks - but never to
+ * nothing, so a line that was abandoned can be picked up again.
+ */
+export const INDUSTRY_LEVEL_START = 100;
+export const INDUSTRY_LEVEL_MIN = 25;
+export const INDUSTRY_LEVEL_MAX = 200;
+export const INDUSTRY_LEVEL_STEP = 25;
+
+/**
+ * Share of what was produced that has to be collected for the level to move.
+ *
+ * The ratio divides by the UNGATED production, so an industry served by a
+ * station rated 50 can never exceed 0.5 and can never reach the growth
+ * threshold. That single choice is the death spiral of section 10.1 applied to
+ * freight: a second train pays for itself in tonnage, not just in trips.
+ */
+export const INDUSTRY_GROWTH_RATIO = 0.85;
+export const INDUSTRY_DECLINE_RATIO = 0.45;
+
+/**
+ * Months an industry holds its level before it may move again.
+ *
+ * One game month is five real minutes at 1x. Without the dead band a single
+ * missed month would halve a line and the player would never see why; with it,
+ * the level only moves on a settled trend.
+ */
+export const INDUSTRY_LEVEL_HYSTERESIS_MONTHS = 3;
+
+/** How much of one cargo an industry holds before it stops taking more. [units] */
+export const INDUSTRY_STOCK_CAP = 500;
 
 // ----------------------------------------------------------------- stations
 
@@ -380,6 +504,24 @@ export const MAIL_PER_INHABITANT_PER_MONTH = 0.04;
 
 /** Passenger and mail production is booked in this many slices per month. */
 export const TOWN_PRODUCTION_SLICES_PER_MONTH = 30;
+
+/**
+ * Monthly town growth: a base rate lifted by how well each need is served.
+ *
+ * All three supply terms are shares in 0..1, so a town whose passengers, goods
+ * and food are all fully carried grows at the base rate times one plus the sum
+ * of the weights.
+ */
+export const TOWN_GROWTH_BASE_RATE = 0.0015;
+export const TOWN_GROWTH_PASSENGER_WEIGHT = 0.55;
+export const TOWN_GROWTH_GOODS_WEIGHT = 0.35;
+export const TOWN_GROWTH_FOOD_WEIGHT = 0.35;
+
+/**
+ * Half width of the square scanned when a station works out what it serves.
+ * The largest catchment radius plus slack. [tiles]
+ */
+export const STATION_CATCHMENT_SCAN_RADIUS = 12;
 
 // ----------------------------------------------------------------- vehicles
 
@@ -594,6 +736,13 @@ export const DEMOLITION_REFUND = 0.25;
  * has to hurt, but not so much that nobody ever corrects a mistake.
  */
 export const RESALE_SHARE = 0.6;
+
+/**
+ * Share of the purchase price a conversion costs. Enough that fitting the right
+ * vehicle in the first place is worth doing, cheap enough that a line can be
+ * repurposed when the chain around it changes.
+ */
+export const REFIT_COST_SHARE = 0.08;
 
 // ------------------------------------------------------------------ company
 
