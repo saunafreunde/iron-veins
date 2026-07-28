@@ -127,10 +127,33 @@ install - prepend `%USERPROFILE%\.cargo\bin` to PATH.
 - The tile artwork is generated at startup by `render/TerrainAtlas.ts`. No
   binary art in the repository.
 
+## Economy
+
+- Every cargo parcel carries a "paid up to" point. A delivery pays for the
+  distance from there and moves the marker along, so a journey split across
+  several vehicles earns exactly what one direct run would.
+- What a town offers a station is its output multiplied by the station rating.
+  A badly served stop therefore gets less cargo - the death spiral of section
+  10.1 is intended and has to be visible in the UI.
+- Loading takes the oldest cargo first. Oversupply therefore shows up as low
+  revenue per unit, not as a growing pile: everything carried is stale and pays
+  the 10 % floor. If a line earns little, check the queue length first.
+- **The balancing tests own the constants.** When `npm run test:balance` leaves
+  its band, the tables in `constants.ts` and `vehicles/catalog.ts` change, never
+  the test. The bus line scenario prints why it earns what it earns.
+
 ## Milestone status
 
-M0 done. M1 done: world generation, terraforming, save v2, isometric renderer
-with camera, zoom, height-correct picking and the terrain atlas.
-Next: M2 - passenger generation, road building, bus depots and stops, vehicle
-pathfinding and orders, the payment formula and the first balancing test.
-Still missing from M1 and to be picked up with M2's UI work: the minimap.
+M0, M1 and the simulation half of M2 are done: world generation, terraforming,
+isometric renderer, and the full economic loop of town output, stations, road
+vehicles, orders and revenue, with balancing scenario 1 in band (payback in
+game year 3).
+
+**Open in M2, and the next thing to build:** the loop has no user interface yet.
+The map draws terrain, roads and buildings, but not stations or moving vehicles,
+and there are no build tools for road, stop, depot or buying a bus. Doing that
+needs a vehicle section in the snapshot buffer (positions per tick), sprites for
+stations and vehicles, and the tool handling in `TilePanel`. The minimap is
+still outstanding from M1 and belongs in the same pass.
+
+Then M3 (rail) onwards.
