@@ -814,3 +814,58 @@ immediately trip the overflow penalty on the station rating.
 
 The recipe minimum is evaluated per slice, which is strictly better than monthly:
 a mill whose coal arrives on the twenty-ninth can still use it that month.
+
+### D-072 The regression network is built with commands, not loaded from a file
+
+Section 19.5 asks for `tests/fixtures/net-complex.json`. The network is built
+with the ordinary build commands instead: a hand-authored file would describe a
+network no player could build, and going through the commands exercises the
+placement rules on the way in - which is how the passing-loop signalling defect
+below was found in the first place.
+
+It is a ring signalled ONE WAY throughout, carrying a passing loop, a crossing
+spur and a two-platform station. One-way is what turns twenty trains on one line
+into a test of following rather than of the head-on case, which signals are not
+supposed to solve (D-059).
+
+Two things the network taught immediately, both of them the mechanic working
+rather than failing:
+
+* A passing loop with no signals of its own joins the ring section before it to
+  the one after it into a single block, so one block signal claims a third of
+  the ring. That is what block signalling *is*, and it is why the loop needs
+  signals at both ends.
+* Twenty trains leaving one depot tile in the same tick is a queue that takes
+  longer to drain than the test runs. They are released in sequence, which is
+  what an operator would do.
+
+### D-073 Two trains can still stack on unsignalled track, and then neither can move
+
+**This is an open defect and M4 is not signed off.** It is written down in full
+because the symptom points at the wrong place.
+
+Only signalled sections are exclusive. Nothing stops a train rolling forward
+onto a tile another train is standing on, which is what M3 did and what the M3
+parity property preserved. Under signalling that becomes a trap: a train held at
+a red owns nothing it has not been granted, so the train behind is blind to it
+and rolls onto the same tiles. Once two trains are stacked, NEITHER can ever
+claim again - each one's own body is held by the other - and they wait for each
+other for ever. It presents as a signalling deadlock; it is a collision that was
+allowed to happen earlier.
+
+Half of it is fixed: a train whose claim is refused now holds the ground it is
+standing on, so it is no longer invisible to the train behind. That reduces the
+case but does not remove it, because the stacking can still happen before the
+first refusal - most reliably at a depot, where several trains legitimately sit
+on one tile.
+
+The real fix is that a train's body is exclusive at ALL times, signals or no
+signals. That is the correct railway model and it is what "zero collisions" in
+section 19.5 actually means. It is not done here because it changes how
+unsignalled track behaves for every existing test, and because a depot holding
+several trains on one tile is a legitimate state that the exclusivity rule has
+to be taught about. Doing half of that would be worse than doing none.
+
+The regression network runs, asserts what does hold - no tile ever owned by two
+trains, nothing in "no route", bit-identical across three runs - and says in its
+own comment which half of the criterion it is not yet checking.

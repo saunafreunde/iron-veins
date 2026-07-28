@@ -4,7 +4,8 @@ import { bookExpense, repayLoan, takeLoan } from '../economy/company';
 import type { ModuleKind } from '../station/types';
 import type { OrderLoad, OrderUnload } from '../vehicles/VehicleStore';
 import { OrderTarget, VehicleState, type Order } from '../vehicles/VehicleStore';
-import type { RailType } from '../map/track';
+import type { SignalKind } from '../map/signals';
+import type { RailType, TrackDir } from '../map/track';
 import {
   buildRailStop,
   buildSignal,
@@ -109,7 +110,13 @@ export function executeCommand(world: World, command: Command): CommandOutcome {
       return buyTrain(world, command.x, command.y, command.specIds);
 
     case CommandKind.BuildSignal:
-      return buildSignal(world, command.x, command.y);
+      return buildSignal(
+        world,
+        command.x,
+        command.y,
+        command.signalKind as SignalKind,
+        command.direction as TrackDir,
+      );
 
     case CommandKind.DemolishSignal:
       return demolishSignal(world, command.x, command.y);

@@ -51,6 +51,10 @@ export interface VehicleSave {
   /** The run of its route the train holds, as route indices, or -1. */
   reservedFromIndex: number;
   reservedToIndex: number;
+  /** Tile inside the block a block signal admitted the train to, or -1. */
+  reservedBlockTile: number;
+  /** Tick the train last made progress towards a claim, or -1. */
+  waitingSinceTick: number;
   /** Catalogue ids of a train's units; empty for anything else. */
   consist: number[];
   pathIndex: number;
@@ -109,6 +113,8 @@ export function encodeVehicles(store: VehicleStore): VehicleSave[] {
       routeRemainingM: store.routeRemainingM[id]!,
       reservedFromIndex: store.reservedFromIndex[id]!,
       reservedToIndex: store.reservedToIndex[id]!,
+      reservedBlockTile: store.reservedBlockTile[id]!,
+      waitingSinceTick: store.waitingSinceTick[id]!,
       consist: [...store.consist[id]!],
       pathIndex: store.pathIndex[id]!,
       path,
@@ -253,6 +259,8 @@ export function decodeVehicles(value: unknown, path: string): VehicleSave[] {
       routeRemainingM: num(raw['routeRemainingM'], `${path}[${i}].routeRemainingM`),
       reservedFromIndex: int(raw['reservedFromIndex'], `${path}[${i}].reservedFromIndex`),
       reservedToIndex: int(raw['reservedToIndex'], `${path}[${i}].reservedToIndex`),
+      reservedBlockTile: int(raw['reservedBlockTile'], `${path}[${i}].reservedBlockTile`),
+      waitingSinceTick: int(raw['waitingSinceTick'], `${path}[${i}].waitingSinceTick`),
       consist,
       pathIndex: int(raw['pathIndex'], `${path}[${i}].pathIndex`),
       path: pathTiles.map((tile, t) => int(tile, `${path}[${i}].path[${t}]`)),
@@ -310,6 +318,8 @@ export function buildVehicleStore(saves: readonly VehicleSave[]): VehicleStore {
     store.routeRemainingM[id] = save.routeRemainingM;
     store.reservedFromIndex[id] = save.reservedFromIndex;
     store.reservedToIndex[id] = save.reservedToIndex;
+    store.reservedBlockTile[id] = save.reservedBlockTile;
+    store.waitingSinceTick[id] = save.waitingSinceTick;
     store.consist[id] = [...save.consist];
     store.pathIndex[id] = save.pathIndex;
     store.pathLength[id] = save.path.length;

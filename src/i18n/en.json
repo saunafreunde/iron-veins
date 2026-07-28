@@ -321,5 +321,14 @@
   "industry.buildersMerchant": "Builders' merchant",
   "cmd.reject.notInDepot": "A vehicle is converted in a depot.",
   "cmd.reject.notEmpty": "The vehicle has to be empty for that.",
-  "cmd.reject.cannotCarry": "This vehicle cannot carry that cargo."
+  "cmd.reject.cannotCarry": "This vehicle cannot carry that cargo.",
+  "ui.tool.pathSignal": "Path signal",
+  "ui.tool.pricePathSignal": "{amount}. Reserves only its own path - for station throats.",
+  "signal.block": "Block signal",
+  "signal.blockOneWay": "Block signal (one way)",
+  "signal.path": "Path signal",
+  "signal.pathEntry": "Entry path signal",
+  "cmd.reject.unknownSignal": "There is no such signal type.",
+  "cmd.reject.signalNeedsDirection": "A one-way signal has to face along its track.",
+  "ui.fleet.stuck": "Held at a signal for {days} days - possible deadlock."
 }

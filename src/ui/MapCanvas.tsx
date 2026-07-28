@@ -3,7 +3,8 @@ import { MapView, type TileInfo } from '../render/MapView';
 import { COMPANY_COLORS } from '../shared/palette';
 import { CommandKind, type Command } from '../sim/commands/types';
 import { TileMap } from '../sim/map/TileMap';
-import { RailType } from '../sim/map/track';
+import { SignalKind } from '../sim/map/signals';
+import { RailType, TrackDir } from '../sim/map/track';
 import { planTrack } from '../sim/net/trackBuilder';
 import { ModuleKind } from '../sim/station/types';
 import type { SimClient } from './SimClient';
@@ -24,6 +25,11 @@ import { useSimStore, type Tool } from './store';
  * the second builds the run - so it reports back whether it consumed the click
  * or is still waiting for the second one.
  */
+/** Which signal the two signal tools place. */
+function signalKindFor(tool: Tool): number {
+  return tool === 'pathsignal' ? SignalKind.Path : SignalKind.Block;
+}
+
 function commandForClick(tool: Tool, tile: TileInfo): Command | null {
   switch (tool) {
     case 'raise':
@@ -61,7 +67,21 @@ function commandForClick(tool: Tool, tile: TileInfo): Command | null {
         moduleKind: ModuleKind.RailDepot,
       };
     case 'signal':
-      return { kind: CommandKind.BuildSignal, x: tile.x, y: tile.y };
+      return {
+        kind: CommandKind.BuildSignal,
+        x: tile.x,
+        y: tile.y,
+        signalKind: signalKindFor(tool),
+        direction: TrackDir.East,
+      };
+    case 'pathsignal':
+      return {
+        kind: CommandKind.BuildSignal,
+        x: tile.x,
+        y: tile.y,
+        signalKind: signalKindFor(tool),
+        direction: TrackDir.East,
+      };
     case 'demolish':
       return { kind: CommandKind.DemolishRoad, x: tile.x, y: tile.y };
     case 'road':

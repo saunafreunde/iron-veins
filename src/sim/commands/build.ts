@@ -19,7 +19,14 @@ import {
   TICKS_PER_YEAR,
   TOWN_ROAD_MAX_SLOPE,
 } from '../constants';
-import { SignalKind, SIGNAL_TRACK_DEGREE } from '../map/signals';
+import {
+  isOneWay,
+  packSignal,
+  signalKind,
+  SignalKind,
+  SIGNAL_KIND_COUNT,
+  SIGNAL_TRACK_DEGREE,
+} from '../map/signals';
 import { Structure, structureUpkeepCt } from '../map/structures';
 import { slopeRise, Terrain } from '../map/terrain';
 import {
@@ -261,7 +268,7 @@ export function buildTrack(
   // standing in a junction is the one state the placement rule exists to
   // prevent. It comes down with a refund rather than silently becoming illegal.
   for (const tile of route.tiles) {
-    if (map.signal[tile] === SignalKind.None) continue;
+    if (signalKind(map.signal[tile]!) === SignalKind.None) continue;
     if (trackDegree(map.trackBits[tile]!) !== SIGNAL_TRACK_DEGREE) clearSignal(world, tile);
   }
 
@@ -317,21 +324,35 @@ export function demolishTrack(world: World, x: number, y: number): CommandOutcom
  * the case that matters, and refusing the placement removes it entirely -
  * which is why there are no pre-signals in this design (DECISIONS.md D-055).
  */
-export function buildSignal(world: World, x: number, y: number): CommandOutcome {
+export function buildSignal(
+  world: World,
+  x: number,
+  y: number,
+  kind: SignalKind,
+  direction: TrackDir,
+): CommandOutcome {
+  if (kind === SignalKind.None || kind >= SIGNAL_KIND_COUNT) {
+    return reject(RejectReason.UnknownSignal);
+  }
   if (!world.map.contains(x, y)) return reject(RejectReason.OutsideMap);
   const map = world.map;
   const tile = map.tileIndex(x, y);
 
   if (map.trackBits[tile] === 0) return reject(RejectReason.NeedsTrack);
+  // A one-way signal has to face along the track it stands on, or it would be
+  // a wall in both directions.
+  if (isOneWay(kind) && (map.trackBits[tile]! & trackBit(direction)) === 0) {
+    return reject(RejectReason.SignalNeedsDirection);
+  }
   if (trackDegree(map.trackBits[tile]!) !== SIGNAL_TRACK_DEGREE) {
     return reject(RejectReason.NotPlainTrack);
   }
   if (map.structure[tile] !== Structure.None) return reject(RejectReason.SignalOnStructure);
   if (stationAt(world, tile) !== null) return reject(RejectReason.Occupied);
-  if (map.signal[tile] !== SignalKind.None) return reject(RejectReason.SignalExists);
+  if (signalKind(map.signal[tile]!) !== SignalKind.None) return reject(RejectReason.SignalExists);
   if (SIGNAL_COST_CT > world.company.cashCt) return reject(RejectReason.InsufficientFunds);
 
-  map.signal[tile] = SignalKind.Block;
+  map.signal[tile] = packSignal(kind, direction);
   bookExpense(world.company, SIGNAL_COST_CT);
   world.company.upkeepPerYearCt += SIGNAL_UPKEEP_CT_PER_YEAR;
   world.company.fixedAssetsCt += SIGNAL_COST_CT;
@@ -342,7 +363,9 @@ export function buildSignal(world: World, x: number, y: number): CommandOutcome 
 export function demolishSignal(world: World, x: number, y: number): CommandOutcome {
   if (!world.map.contains(x, y)) return reject(RejectReason.OutsideMap);
   const tile = world.map.tileIndex(x, y);
-  if (world.map.signal[tile] === SignalKind.None) return reject(RejectReason.NoSignalHere);
+  if (signalKind(world.map.signal[tile]!) === SignalKind.None) {
+    return reject(RejectReason.NoSignalHere);
+  }
 
   clearSignal(world, tile);
   world.map.revision++;
@@ -351,7 +374,7 @@ export function demolishSignal(world: World, x: number, y: number): CommandOutco
 
 /** Take a signal away and unwind what it cost, wherever that happens. */
 function clearSignal(world: World, tile: number): void {
-  if (world.map.signal[tile] === SignalKind.None) return;
+  if (signalKind(world.map.signal[tile]!) === SignalKind.None) return;
   world.map.signal[tile] = SignalKind.None;
   world.company.cashCt += Math.round(SIGNAL_COST_CT * DEMOLITION_REFUND);
   world.company.upkeepPerYearCt -= SIGNAL_UPKEEP_CT_PER_YEAR;

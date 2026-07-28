@@ -24,6 +24,7 @@ const TOOLS: ReadonlyArray<{ readonly id: Tool; readonly labelKey: string }> = [
   { id: 'platform', labelKey: 'ui.tool.platform' },
   { id: 'raildepot', labelKey: 'ui.tool.railDepot' },
   { id: 'signal', labelKey: 'ui.tool.signal' },
+  { id: 'pathsignal', labelKey: 'ui.tool.pathSignal' },
   { id: 'demolish', labelKey: 'ui.tool.demolish' },
   { id: 'raise', labelKey: 'ui.tool.raise' },
   { id: 'lower', labelKey: 'ui.tool.lower' },
@@ -49,6 +50,8 @@ function priceHint(tool: Tool): string {
       return t('ui.tool.priceRailDepot', { amount: formatMoney(RAIL_DEPOT_COST_CT) });
     case 'signal':
       return t('ui.tool.priceSignal', { amount: formatMoney(SIGNAL_COST_CT) });
+    case 'pathsignal':
+      return t('ui.tool.pricePathSignal', { amount: formatMoney(SIGNAL_COST_CT) });
     case 'raise':
     case 'lower':
     case 'level':

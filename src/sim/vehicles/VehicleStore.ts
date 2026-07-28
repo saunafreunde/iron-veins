@@ -129,6 +129,19 @@ export class VehicleStore {
    */
   readonly reservedFromIndex: Int32Array;
   readonly reservedToIndex: Int32Array;
+  /**
+   * A tile inside the block a block signal let this train into, or -1.
+   *
+   * A TILE and not a block id: the block numbering is derived and a rebuild
+   * renumbers it, whereas a tile index survives every rebuild untouched
+   * (DECISIONS.md D-054).
+   */
+  readonly reservedBlockTile: Int32Array;
+  /**
+   * Tick at which this train last made progress towards a claim. Feeds the
+   * deadlock warning of section 9.3.
+   */
+  readonly waitingSinceTick: Int32Array;
 
   // --- aggregate of the whole vehicle, recomputed when it or its load changes.
   // For a road vehicle these are simply its own figures; for a train they are
@@ -191,6 +204,8 @@ export class VehicleStore {
     this.routeRemainingM = new Float32Array(capacity);
     this.reservedFromIndex = new Int32Array(capacity).fill(-1);
     this.reservedToIndex = new Int32Array(capacity).fill(-1);
+    this.reservedBlockTile = new Int32Array(capacity).fill(-1);
+    this.waitingSinceTick = new Int32Array(capacity).fill(-1);
     this.massKg = new Float32Array(capacity);
     this.tractiveN = new Float32Array(capacity);
     this.powerW = new Float32Array(capacity);
@@ -287,6 +302,8 @@ export class VehicleStore {
     this.routeRemainingM[id] = 0;
     this.reservedFromIndex[id] = -1;
     this.reservedToIndex[id] = -1;
+    this.reservedBlockTile[id] = -1;
+    this.waitingSinceTick[id] = -1;
     this.orderIndex[id] = 0;
     this.builtTick[id] = tick;
     this.breakdownTicks[id] = 0;
@@ -308,6 +325,8 @@ export class VehicleStore {
     this.alive[id] = 0;
     this.reservedFromIndex[id] = -1;
     this.reservedToIndex[id] = -1;
+    this.reservedBlockTile[id] = -1;
+    this.waitingSinceTick[id] = -1;
     this.orders[id] = [];
     this.cargo[id] = [];
     this.consist[id] = [];

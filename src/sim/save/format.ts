@@ -26,9 +26,9 @@ export const SAVE_MAGIC = 'IRVN';
  * vehicles, 4 the two rail tile layers, 5 the train composition and the running
  * distance-to-go, 6 the bridge and tunnel layers, 7 signals and the two
  * reservation indices a train carries, 8 industry production and the town
- * delivery counters.
+ * delivery counters, 9 the block claim and the deadlock clock.
  */
-export const SAVE_VERSION = 8;
+export const SAVE_VERSION = 9;
 
 /** File extension used for manual and automatic saves. */
 export const SAVE_EXTENSION = '.ironsave';
@@ -364,6 +364,8 @@ function parseCommand(value: unknown, path: string): Command {
         kind: CommandKind.BuildSignal,
         x: asInt(raw['x'], `${path}.x`),
         y: asInt(raw['y'], `${path}.y`),
+        signalKind: asInt(raw['signalKind'], `${path}.signalKind`),
+        direction: asInt(raw['direction'], `${path}.direction`),
       };
     case CommandKind.DemolishSignal:
       return {

@@ -168,6 +168,29 @@ const v7_to_v8: SaveMigration = (payload) => {
 };
 
 /**
+ * M4 finished with path signals: a train now also records the block a block
+ * signal let it into, and how long it has been waiting. A version 8 world had
+ * neither, and -1 is what "nothing claimed, not waiting" means.
+ */
+const v8_to_v9: SaveMigration = (payload) => {
+  const inner = state(payload);
+  const vehicles = inner['vehicles'];
+  if (!Array.isArray(vehicles)) throw new SaveFormatError('save.state.vehicles: expected an array');
+
+  return {
+    ...payload,
+    state: {
+      ...inner,
+      vehicles: vehicles.map((vehicle) => ({
+        ...(vehicle as Record<string, unknown>),
+        reservedBlockTile: -1,
+        waitingSinceTick: -1,
+      })),
+    },
+  };
+};
+
+/**
  * Registry keyed by the version a migration reads (section 19.1).
  *
  * There is deliberately no entry for 1 -> 2: a version 1 world had no map at
@@ -181,6 +204,7 @@ export const SAVE_MIGRATIONS: ReadonlyMap<number, SaveMigration> = new Map<numbe
   [5, v5_to_v6],
   [6, v6_to_v7],
   [7, v7_to_v8],
+  [8, v8_to_v9],
 ]);
 
 /**

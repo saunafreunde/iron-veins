@@ -663,6 +663,28 @@ export const SIGNAL_UPKEEP_CT_PER_YEAR = 15 * CENTS_PER_EURO;
 export const SIGNAL_STOP_OFFSET_M = 5;
 
 /**
+ * Largest block a block signal can claim in one go. [tiles]
+ *
+ * A bigger block is ten kilometres of rail with no signal on it, where block
+ * signalling means nothing anyway; such a signal falls back to claiming the
+ * train's own route, which is what a path signal does.
+ */
+export const MAX_BLOCK_CLAIM_TILES = 4_096;
+
+/**
+ * How long a train may sit at a signal with no progress before the game says
+ * so. [ticks]
+ *
+ * One real minute at 1x. Section 9.3: the game helps the player FIND a
+ * deadlock, it never resolves one - an automatic fix would hide real bugs and
+ * rob the player of the one lesson signals exist to teach.
+ */
+export const DEADLOCK_WARN_TICKS = 1_200;
+
+/** Default spacing when the assistant signals a route for you. [tiles] */
+export const AUTO_SIGNAL_SPACING_TILES = 12;
+
+/**
  * Bound on the backward walk that finds the tiles a train's body still covers.
  * The longest legal train divided by the tile size, plus one for the tile the
  * tail has only partly left.

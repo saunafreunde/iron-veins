@@ -1,5 +1,5 @@
-import { MAX_TRAIN_OCCUPIED_TILES } from '../constants';
-import { SignalKind } from '../map/signals';
+import { MAX_BLOCK_CLAIM_TILES, MAX_TRAIN_OCCUPIED_TILES } from '../constants';
+import { claimsWholeBlock, signalKind, SignalKind } from '../map/signals';
 import type { World } from '../World';
 import { pathStepM } from './route';
 
@@ -11,6 +11,12 @@ import { pathStepM } from './route';
  * or nothing - it either takes every tile or writes nothing at all - and it
  * releases from behind as its tail clears.
  *
+ * A BLOCK signal claims more: every tile of the block ahead, whether the train
+ * drives over it or not. That is the whole difference between the two families
+ * of section 9.1, and it is why a station throat wants path signals - two
+ * trains can cross the same junction on paths that never touch, but they cannot
+ * share a block.
+ *
  * All-or-nothing is not tidiness. A partial claim that then fails leaves tiles
  * owned by a train that never entered them, which is a deadlock nobody can
  * reproduce and nothing detects. Because a claim always covers the train's own
@@ -20,6 +26,16 @@ import { pathStepM } from './route';
  *
  * Everything here runs inside the tick: plain `for` loops, no allocation.
  */
+
+/**
+ * Working buffer for the tiles of one block.
+ *
+ * A block larger than this is a rail network of ten kilometres with no signal
+ * in it, and a block signal on such a thing would be meaningless anyway; the
+ * claim falls back to the path-style route range and says so in the log of the
+ * decision, not silently. One shared buffer: claiming is never concurrent.
+ */
+const blockScratch = new Int32Array(MAX_BLOCK_CLAIM_TILES);
 
 /**
  * First route index the train's body still occupies.
@@ -54,6 +70,10 @@ export function tailIndex(world: World, id: number): number {
 /**
  * Last route index of the section that begins at `from`: the tile just before
  * the next signal, or the end of the route.
+ *
+ * The route end is the other safe stopping place section 9.2 names - a platform
+ * or a depot is always where the route ends, because that is what the order
+ * sent the train to.
  */
 export function sectionEnd(world: World, id: number, from: number): number {
   const vehicles = world.vehicles;
@@ -62,7 +82,7 @@ export function sectionEnd(world: World, id: number, from: number): number {
   const signal = world.map.signal;
 
   let end = from;
-  while (end < last && signal[path[end + 1]!] === SignalKind.None) end++;
+  while (end < last && signalKind(signal[path[end + 1]!]!) === SignalKind.None) end++;
   return end;
 }
 
@@ -79,16 +99,87 @@ export function tryClaim(world: World, id: number, from: number): boolean {
   const first = tailIndex(world, id);
   const last = sectionEnd(world, id, from);
 
-  for (let index = first; index <= last; index++) {
-    if (!reservations.freeFor(path[index]!, id)) return false;
+  // A block signal takes the whole block, not just the line through it.
+  const kind = signalKind(world.map.signal[path[from]!]!);
+  let blockTiles = 0;
+  if (claimsWholeBlock(kind)) {
+    world.blocks.refresh(world.map);
+    const collected = world.blocks.collectBlock(world.map, path[from]!, blockScratch);
+    blockTiles = collected < 0 ? 0 : collected;
   }
+
   for (let index = first; index <= last; index++) {
-    reservations.set(path[index]!, id);
+    if (!reservations.freeFor(path[index]!, id)) return holdBody(world, id, first);
   }
+  for (let i = 0; i < blockTiles; i++) {
+    if (!reservations.freeFor(blockScratch[i]!, id)) return holdBody(world, id, first);
+  }
+
+  for (let index = first; index <= last; index++) reservations.set(path[index]!, id);
+  for (let i = 0; i < blockTiles; i++) reservations.set(blockScratch[i]!, id);
 
   vehicles.reservedFromIndex[id] = first;
   vehicles.reservedToIndex[id] = last;
+  if (blockTiles > 0) vehicles.reservedBlockTile[id] = path[from]!;
   return true;
+}
+
+/**
+ * A train whose claim was refused still holds the ground it is standing on.
+ *
+ * This is the difference between a queue and a deadlock. A held train that owns
+ * nothing is invisible to the train behind it, which rolls forward onto the
+ * same tiles - and once two trains are stacked, NEITHER can claim, because each
+ * one's own body is held by the other. They wait for each other for ever, and
+ * it presents as a signalling bug rather than as what it is.
+ *
+ * Holding the body costs nothing when the line is clear and is always available
+ * unless somebody has already stacked, so it is attempted on every refusal.
+ * The return value is still false: the section ahead was not granted.
+ */
+function holdBody(world: World, id: number, first: number): boolean {
+  const vehicles = world.vehicles;
+  const path = vehicles.paths[id]!;
+  const head = vehicles.pathIndex[id]!;
+  const reservations = world.reservations;
+
+  for (let index = first; index <= head; index++) {
+    if (!reservations.freeFor(path[index]!, id)) return false;
+  }
+  for (let index = first; index <= head; index++) reservations.set(path[index]!, id);
+
+  vehicles.reservedFromIndex[id] = first;
+  vehicles.reservedToIndex[id] = head;
+  return false;
+}
+
+/**
+ * Give back the block a train claimed once its tail has left it.
+ *
+ * The route range is re-stamped afterwards, because the block and the route
+ * overlap and clearing the block would otherwise hand away the tiles the train
+ * is standing on.
+ */
+function releaseBlockIfClear(world: World, id: number): void {
+  const vehicles = world.vehicles;
+  const claimed = vehicles.reservedBlockTile[id]!;
+  if (claimed < 0) return;
+
+  world.blocks.refresh(world.map);
+  const here = vehicles.paths[id]![tailIndex(world, id)]!;
+  if (world.blocks.blockAt(here) === world.blocks.blockAt(claimed)) return;
+
+  const collected = world.blocks.collectBlock(world.map, claimed, blockScratch);
+  for (let i = 0; i < collected; i++) {
+    world.reservations.clearIfOwnedBy(blockScratch[i]!, id);
+  }
+  vehicles.reservedBlockTile[id] = -1;
+
+  const path = vehicles.paths[id]!;
+  const to = vehicles.reservedToIndex[id]!;
+  for (let index = vehicles.reservedFromIndex[id]!; index <= to; index++) {
+    world.reservations.set(path[index]!, id);
+  }
 }
 
 /** Let go of everything the train's tail has already left behind. */
@@ -106,6 +197,7 @@ export function releaseBehind(world: World, id: number): void {
     from++;
   }
   vehicles.reservedFromIndex[id] = from;
+  releaseBlockIfClear(world, id);
 }
 
 /**
@@ -115,13 +207,23 @@ export function releaseBehind(world: World, id: number): void {
  */
 export function releaseAll(world: World, id: number): void {
   const vehicles = world.vehicles;
+  const claimed = vehicles.reservedBlockTile[id]!;
+
+  if (claimed >= 0) {
+    world.blocks.refresh(world.map);
+    const collected = world.blocks.collectBlock(world.map, claimed, blockScratch);
+    for (let i = 0; i < collected; i++) {
+      world.reservations.clearIfOwnedBy(blockScratch[i]!, id);
+    }
+    vehicles.reservedBlockTile[id] = -1;
+  }
+
   const to = vehicles.reservedToIndex[id]!;
   if (to < 0) return;
 
   const path = vehicles.paths[id]!;
-  const reservations = world.reservations;
   for (let index = vehicles.reservedFromIndex[id]!; index <= to; index++) {
-    reservations.clearIfOwnedBy(path[index]!, id);
+    world.reservations.clearIfOwnedBy(path[index]!, id);
   }
   vehicles.reservedFromIndex[id] = -1;
   vehicles.reservedToIndex[id] = -1;

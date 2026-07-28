@@ -1,5 +1,6 @@
 import { MAX_RAIL_SEARCH_NODES, TILE_SIZE_M } from '../constants';
 import type { TileMap } from '../map/TileMap';
+import { isOneWay, signalDirection, signalKind } from '../map/signals';
 import {
   curveRadiusM,
   curveSpeedMs,
@@ -157,6 +158,13 @@ export class RailPathfinder {
     needsCatenary: boolean,
   ): number {
     if (!hasEdge(map.trackBits, map.size, fromTile, outgoing)) return IMPASSABLE;
+
+    // A one-way signal is part of the topology, not of the traffic: routing a
+    // train the wrong way through one would strand it at the tile edge with no
+    // way ever to pass. Occupancy stays out of the search deliberately (D-059),
+    // but this is not occupancy.
+    const packed = map.signal[toTile]!;
+    if (isOneWay(signalKind(packed)) && signalDirection(packed) !== outgoing) return IMPASSABLE;
 
     const railType = map.railType[toTile]!;
     if (needsCatenary && railType !== RailType.Electrified) return IMPASSABLE;

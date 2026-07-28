@@ -20,6 +20,7 @@ import {
 } from './economy/company';
 import { RailPathfinder } from './net/railPath';
 import { ReservationTable } from './net/reservations';
+import { BlockIndex } from './signals/blocks';
 import { RoadPathfinder } from './net/roadPath';
 import {
   buildVehicleStore,
@@ -124,6 +125,11 @@ export class World {
    * masses and the ocean mask are.
    */
   readonly reservations: ReservationTable;
+  /**
+   * Which tiles form which signal block. Derived from the track and signal
+   * layers, rebuilt whenever the map revision moves, never serialised.
+   */
+  readonly blocks: BlockIndex;
 
   /** The company the local player controls. AI companies get 1..n in M8. */
   readonly playerCompanyId = 0;
@@ -140,6 +146,7 @@ export class World {
     this.roadPathfinder = new RoadPathfinder(generated.map.tileCount);
     this.railPathfinder = new RailPathfinder(generated.map.tileCount);
     this.reservations = new ReservationTable(generated.map.tileCount);
+    this.blocks = new BlockIndex(generated.map.tileCount);
   }
 
   /**
@@ -428,6 +435,7 @@ function hashDynamicState(h: Fnv1a64, world: World): void {
     h.f64(vehicles.progressM[id]!).f64(vehicles.speedMs[id]!);
     h.f64(vehicles.routeRemainingM[id]!);
     h.int(vehicles.reservedFromIndex[id]!).int(vehicles.reservedToIndex[id]!);
+    h.int(vehicles.reservedBlockTile[id]!).int(vehicles.waitingSinceTick[id]!);
     h.u32(vehicles.consist[id]!.length);
     for (const unit of vehicles.consist[id]!) h.u32(unit);
     h.u32(vehicles.pathIndex[id]!).u32(vehicles.pathLength[id]!);

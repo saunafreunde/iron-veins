@@ -12,7 +12,7 @@ import {
   TILE_SIZE_M,
 } from '../../src/sim/constants';
 import { TileMap } from '../../src/sim/map/TileMap';
-import { SignalKind } from '../../src/sim/map/signals';
+import { SignalKind, signalKind } from '../../src/sim/map/signals';
 import { Terrain } from '../../src/sim/map/terrain';
 import { hasEdge, RailType, trackDegree, TrackDir } from '../../src/sim/map/track';
 import { ReservationTable } from '../../src/sim/net/reservations';
@@ -128,18 +128,32 @@ describe('where a signal may stand', () => {
 
     const cashBefore = bench.world.company.cashCt;
     const upkeepBefore = bench.world.company.upkeepPerYearCt;
-    run(bench, { kind: CommandKind.BuildSignal, x: 20, y: 10 });
+    run(bench, {
+      kind: CommandKind.BuildSignal,
+      x: 20,
+      y: 10,
+      signalKind: SignalKind.Block,
+      direction: TrackDir.East,
+    });
 
-    expect(bench.world.map.signal[bench.world.map.tileIndex(20, 10)]).toBe(SignalKind.Block);
+    expect(signalKind(bench.world.map.signal[bench.world.map.tileIndex(20, 10)]!)).toBe(
+      SignalKind.Block,
+    );
     expect(cashBefore - bench.world.company.cashCt).toBe(SIGNAL_COST_CT);
     expect(bench.world.company.upkeepPerYearCt - upkeepBefore).toBe(SIGNAL_UPKEEP_CT_PER_YEAR);
   });
 
   it('refuses ground with no track on it', () => {
     const bench = flatWorld();
-    expect(tryRun(bench, { kind: CommandKind.BuildSignal, x: 20, y: 10 })).toBe(
-      'cmd.reject.needsTrack',
-    );
+    expect(
+      tryRun(bench, {
+        kind: CommandKind.BuildSignal,
+        x: 20,
+        y: 10,
+        signalKind: SignalKind.Block,
+        direction: TrackDir.East,
+      }),
+    ).toBe('cmd.reject.needsTrack');
   });
 
   it('refuses a junction, which is the case the rule exists for', () => {
@@ -148,17 +162,29 @@ describe('where a signal may stand', () => {
     layTrack(bench, 20, 10, 20, 20);
 
     expect(trackDegree(bench.world.map.trackBits[bench.world.map.tileIndex(20, 10)]!)).toBe(3);
-    expect(tryRun(bench, { kind: CommandKind.BuildSignal, x: 20, y: 10 })).toBe(
-      'cmd.reject.notPlainTrack',
-    );
+    expect(
+      tryRun(bench, {
+        kind: CommandKind.BuildSignal,
+        x: 20,
+        y: 10,
+        signalKind: SignalKind.Block,
+        direction: TrackDir.East,
+      }),
+    ).toBe('cmd.reject.notPlainTrack');
   });
 
   it('refuses a dead end', () => {
     const bench = flatWorld();
     layTrack(bench, 10, 10, 30, 10);
-    expect(tryRun(bench, { kind: CommandKind.BuildSignal, x: 10, y: 10 })).toBe(
-      'cmd.reject.notPlainTrack',
-    );
+    expect(
+      tryRun(bench, {
+        kind: CommandKind.BuildSignal,
+        x: 10,
+        y: 10,
+        signalKind: SignalKind.Block,
+        direction: TrackDir.East,
+      }),
+    ).toBe('cmd.reject.notPlainTrack');
   });
 
   it('refuses a bridge', () => {
@@ -175,9 +201,15 @@ describe('where a signal may stand', () => {
       assistant: true,
     });
 
-    expect(tryRun(bench, { kind: CommandKind.BuildSignal, x: 20, y: 10 })).toBe(
-      'cmd.reject.signalOnStructure',
-    );
+    expect(
+      tryRun(bench, {
+        kind: CommandKind.BuildSignal,
+        x: 20,
+        y: 10,
+        signalKind: SignalKind.Block,
+        direction: TrackDir.East,
+      }),
+    ).toBe('cmd.reject.signalOnStructure');
   });
 
   it('refuses a platform tile and a second signal', () => {
@@ -190,43 +222,85 @@ describe('where a signal may stand', () => {
       moduleKind: ModuleKind.RailPlatform,
     });
 
-    expect(tryRun(bench, { kind: CommandKind.BuildSignal, x: 15, y: 10 })).toBe(
-      'cmd.reject.occupied',
-    );
-    run(bench, { kind: CommandKind.BuildSignal, x: 20, y: 10 });
-    expect(tryRun(bench, { kind: CommandKind.BuildSignal, x: 20, y: 10 })).toBe(
-      'cmd.reject.signalExists',
-    );
+    expect(
+      tryRun(bench, {
+        kind: CommandKind.BuildSignal,
+        x: 15,
+        y: 10,
+        signalKind: SignalKind.Block,
+        direction: TrackDir.East,
+      }),
+    ).toBe('cmd.reject.occupied');
+    run(bench, {
+      kind: CommandKind.BuildSignal,
+      x: 20,
+      y: 10,
+      signalKind: SignalKind.Block,
+      direction: TrackDir.East,
+    });
+    expect(
+      tryRun(bench, {
+        kind: CommandKind.BuildSignal,
+        x: 20,
+        y: 10,
+        signalKind: SignalKind.Block,
+        direction: TrackDir.East,
+      }),
+    ).toBe('cmd.reject.signalExists');
   });
 
   it('comes down with the track under it', () => {
     const bench = flatWorld();
     layTrack(bench, 10, 10, 30, 10);
-    run(bench, { kind: CommandKind.BuildSignal, x: 20, y: 10 });
+    run(bench, {
+      kind: CommandKind.BuildSignal,
+      x: 20,
+      y: 10,
+      signalKind: SignalKind.Block,
+      direction: TrackDir.East,
+    });
 
     const upkeep = bench.world.company.upkeepPerYearCt;
     run(bench, { kind: CommandKind.DemolishTrack, x: 20, y: 10 });
 
-    expect(bench.world.map.signal[bench.world.map.tileIndex(20, 10)]).toBe(SignalKind.None);
+    expect(signalKind(bench.world.map.signal[bench.world.map.tileIndex(20, 10)]!)).toBe(
+      SignalKind.None,
+    );
     expect(bench.world.company.upkeepPerYearCt).toBeLessThan(upkeep);
   });
 
   it('comes down when a spur turns its tile into a junction', () => {
     const bench = flatWorld();
     layTrack(bench, 10, 10, 30, 10);
-    run(bench, { kind: CommandKind.BuildSignal, x: 20, y: 10 });
+    run(bench, {
+      kind: CommandKind.BuildSignal,
+      x: 20,
+      y: 10,
+      signalKind: SignalKind.Block,
+      direction: TrackDir.East,
+    });
 
     layTrack(bench, 20, 10, 20, 20);
-    expect(bench.world.map.signal[bench.world.map.tileIndex(20, 10)]).toBe(SignalKind.None);
+    expect(signalKind(bench.world.map.signal[bench.world.map.tileIndex(20, 10)]!)).toBe(
+      SignalKind.None,
+    );
   });
 
   it('can be taken down on its own', () => {
     const bench = flatWorld();
     layTrack(bench, 10, 10, 30, 10);
-    run(bench, { kind: CommandKind.BuildSignal, x: 20, y: 10 });
+    run(bench, {
+      kind: CommandKind.BuildSignal,
+      x: 20,
+      y: 10,
+      signalKind: SignalKind.Block,
+      direction: TrackDir.East,
+    });
     run(bench, { kind: CommandKind.DemolishSignal, x: 20, y: 10 });
 
-    expect(bench.world.map.signal[bench.world.map.tileIndex(20, 10)]).toBe(SignalKind.None);
+    expect(signalKind(bench.world.map.signal[bench.world.map.tileIndex(20, 10)]!)).toBe(
+      SignalKind.None,
+    );
     expect(tryRun(bench, { kind: CommandKind.DemolishSignal, x: 20, y: 10 })).toBe(
       'cmd.reject.noSignalHere',
     );
@@ -290,7 +364,13 @@ describe('a train and a signal', () => {
   it('claims the section ahead once a signal is in reach', () => {
     const bench = flatWorld();
     singleTrack(bench, [RAILBUS]);
-    run(bench, { kind: CommandKind.BuildSignal, x: 30, y: 10 });
+    run(bench, {
+      kind: CommandKind.BuildSignal,
+      x: 30,
+      y: 10,
+      signalKind: SignalKind.Block,
+      direction: TrackDir.East,
+    });
     startTowardsPlatform(bench, 0);
 
     let claimed = false;
@@ -311,8 +391,20 @@ describe('a train and a signal', () => {
   it('lets go of the track behind it as it goes', () => {
     const bench = flatWorld();
     singleTrack(bench, [RAILBUS]);
-    run(bench, { kind: CommandKind.BuildSignal, x: 20, y: 10 });
-    run(bench, { kind: CommandKind.BuildSignal, x: 40, y: 10 });
+    run(bench, {
+      kind: CommandKind.BuildSignal,
+      x: 20,
+      y: 10,
+      signalKind: SignalKind.Block,
+      direction: TrackDir.East,
+    });
+    run(bench, {
+      kind: CommandKind.BuildSignal,
+      x: 40,
+      y: 10,
+      signalKind: SignalKind.Block,
+      direction: TrackDir.East,
+    });
     startTowardsPlatform(bench, 0);
 
     for (let i = 0; i < 2_500; i++) bench.world.step(bench.queue, null);
@@ -327,7 +419,13 @@ describe('a train and a signal', () => {
   it('gives everything back when it arrives', () => {
     const bench = flatWorld();
     singleTrack(bench, [RAILBUS]);
-    run(bench, { kind: CommandKind.BuildSignal, x: 30, y: 10 });
+    run(bench, {
+      kind: CommandKind.BuildSignal,
+      x: 30,
+      y: 10,
+      signalKind: SignalKind.Block,
+      direction: TrackDir.East,
+    });
     startTowardsPlatform(bench, 0);
 
     const map = bench.world.map;
@@ -345,7 +443,13 @@ describe('a train and a signal', () => {
   it('gives everything back when it is sold', () => {
     const bench = flatWorld();
     singleTrack(bench, [RAILBUS]);
-    run(bench, { kind: CommandKind.BuildSignal, x: 30, y: 10 });
+    run(bench, {
+      kind: CommandKind.BuildSignal,
+      x: 30,
+      y: 10,
+      signalKind: SignalKind.Block,
+      direction: TrackDir.East,
+    });
     startTowardsPlatform(bench, 0);
     for (let i = 0; i < 1_200; i++) bench.world.step(bench.queue, null);
     expect(bench.world.vehicles.reservedToIndex[0]).toBeGreaterThanOrEqual(0);
@@ -360,7 +464,13 @@ describe('a train and a signal', () => {
   it('gives everything back when its orders change', () => {
     const bench = flatWorld();
     singleTrack(bench, [RAILBUS]);
-    run(bench, { kind: CommandKind.BuildSignal, x: 30, y: 10 });
+    run(bench, {
+      kind: CommandKind.BuildSignal,
+      x: 30,
+      y: 10,
+      signalKind: SignalKind.Block,
+      direction: TrackDir.East,
+    });
     startTowardsPlatform(bench, 0);
     for (let i = 0; i < 1_200; i++) bench.world.step(bench.queue, null);
     expect(bench.world.vehicles.reservedToIndex[0]).toBeGreaterThanOrEqual(0);
@@ -377,7 +487,13 @@ describe('a train and a signal', () => {
     // A long train: locomotive plus twenty wagons is 265 m of the 400 m limit.
     const long = [HEAVY_LOCO, ...Array<number>(20).fill(OPEN_WAGON)];
     singleTrack(bench, long);
-    run(bench, { kind: CommandKind.BuildSignal, x: 40, y: 10 });
+    run(bench, {
+      kind: CommandKind.BuildSignal,
+      x: 40,
+      y: 10,
+      signalKind: SignalKind.Block,
+      direction: TrackDir.East,
+    });
     startTowardsPlatform(bench, 0);
 
     // Sampled while it runs, not after: on arrival it gives everything back.
@@ -421,7 +537,13 @@ describe('two trains, one line', () => {
       y: 10,
       moduleKind: ModuleKind.RailPlatform,
     });
-    run(bench, { kind: CommandKind.BuildSignal, x: 30, y: 10 });
+    run(bench, {
+      kind: CommandKind.BuildSignal,
+      x: 30,
+      y: 10,
+      signalKind: SignalKind.Block,
+      direction: TrackDir.East,
+    });
 
     run(bench, { kind: CommandKind.BuyTrain, x: 6, y: 10, specIds: [RAILBUS] });
     run(bench, { kind: CommandKind.BuyTrain, x: 6, y: 10, specIds: [RAILBUS] });
@@ -551,7 +673,15 @@ describe('two trains following each other', () => {
       y: 10,
       moduleKind: ModuleKind.RailPlatform,
     });
-    for (const x of [22, 32, 42]) run(bench, { kind: CommandKind.BuildSignal, x, y: 10 });
+    for (const x of [22, 32, 42]) {
+      run(bench, {
+        kind: CommandKind.BuildSignal,
+        x,
+        y: 10,
+        signalKind: SignalKind.Block,
+        direction: TrackDir.East,
+      });
+    }
 
     for (let i = 0; i < 2; i++) {
       run(bench, { kind: CommandKind.BuyTrain, x: 6, y: 10, specIds: [RAILBUS] });

@@ -30,7 +30,7 @@ import {
 } from '../map/track';
 import { stationAccepts } from '../industry/catchment';
 import { deliverToIndustry } from '../industry/production';
-import { SignalKind } from '../map/signals';
+import { isOneWay, signalDirection, signalKind, SignalKind } from '../map/signals';
 import { ModuleKind, type Station } from '../station/types';
 import type { World } from '../World';
 import { releaseAll, releaseBehind, tryClaim } from './reservations';
@@ -444,7 +444,7 @@ function claimAhead(world: World, id: number): void {
         tryClaim(world, id, boundary);
         return;
       }
-    } else if (signal[path[node + 1]!] !== SignalKind.None) {
+    } else if (signalKind(signal[path[node + 1]!]!) !== SignalKind.None) {
       tryClaim(world, id, start);
       return;
     }
@@ -462,7 +462,19 @@ function claimAhead(world: World, id: number): void {
 function mayEnter(world: World, id: number, next: number): boolean {
   const vehicles = world.vehicles;
   if (next <= vehicles.reservedToIndex[id]!) return true;
-  if (world.map.signal[vehicles.paths[id]![next]!] === SignalKind.None) return true;
+
+  const path = vehicles.paths[id]!;
+  const packed = world.map.signal[path[next]!]!;
+  const kind = signalKind(packed);
+  if (kind === SignalKind.None) return true;
+
+  // A one-way signal met from behind is a wall, not a wait. The pathfinder
+  // already refuses to route through one that way, so reaching this means the
+  // signal was turned round under a train that was already on its way.
+  if (isOneWay(kind) && next >= 1) {
+    const heading = pathDirection(path, next - 1, world.map.size);
+    if (heading !== signalDirection(packed)) return false;
+  }
   return tryClaim(world, id, next);
 }
 
@@ -538,6 +550,7 @@ export function updateVehicles(world: World): void {
         }
         if (mayEnter(world, id, vehicles.pathIndex[id]! + 1)) {
           vehicles.state[id] = VehicleState.Driving;
+          vehicles.waitingSinceTick[id] = -1;
         }
         continue;
       }
@@ -575,6 +588,7 @@ export function updateVehicles(world: World): void {
           // is the backstop that makes the guarantee independent of how far the
           // lookahead reached.
           if (train && !mayEnter(world, id, index + 1)) {
+            if (vehicles.waitingSinceTick[id]! < 0) vehicles.waitingSinceTick[id] = world.tick;
             const stopAt = step - SIGNAL_STOP_OFFSET_M;
             if (vehicles.progressM[id]! > stopAt) vehicles.progressM[id] = stopAt;
             vehicles.speedMs[id] = 0;
@@ -589,7 +603,10 @@ export function updateVehicles(world: World): void {
           vehicles.tileIndex[id] = path[index + 1]!;
         }
         if (held) continue;
-        if (train) releaseBehind(world, id);
+        if (train) {
+          vehicles.waitingSinceTick[id] = -1;
+          releaseBehind(world, id);
+        }
 
         const atEnd = vehicles.pathIndex[id]! + 1 >= vehicles.pathLength[id]!;
         if (!atEnd) continue;

@@ -321,5 +321,14 @@
   "industry.buildersMerchant": "Baustoffhandel",
   "cmd.reject.notInDepot": "Umbauten sind nur im Depot möglich.",
   "cmd.reject.notEmpty": "Das Fahrzeug muss dafür leer sein.",
-  "cmd.reject.cannotCarry": "Dieses Fahrzeug kann diese Fracht nicht aufnehmen."
+  "cmd.reject.cannotCarry": "Dieses Fahrzeug kann diese Fracht nicht aufnehmen.",
+  "ui.tool.pathSignal": "Pfadsignal",
+  "ui.tool.pricePathSignal": "{amount}. Reserviert nur den eigenen Fahrweg — für Bahnhofsköpfe.",
+  "signal.block": "Blocksignal",
+  "signal.blockOneWay": "Blocksignal (einseitig)",
+  "signal.path": "Pfadsignal",
+  "signal.pathEntry": "Einfahr-Pfadsignal",
+  "cmd.reject.unknownSignal": "Diesen Signaltyp gibt es nicht.",
+  "cmd.reject.signalNeedsDirection": "Ein einseitiges Signal muss entlang des Gleises zeigen.",
+  "ui.fleet.stuck": "Steht seit {days} Tagen am Signal — mögliche Verklemmung."
 }

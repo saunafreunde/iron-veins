@@ -174,6 +174,10 @@ export interface BuildSignalCommand {
   readonly kind: typeof CommandKind.BuildSignal;
   readonly x: number;
   readonly y: number;
+  /** A value of SignalKind. */
+  readonly signalKind: number;
+  /** A value of TrackDir; only read for the one-way kinds. */
+  readonly direction: number;
 }
 
 export interface DemolishSignalCommand {
@@ -253,6 +257,8 @@ export const RejectReason = {
   SignalOnStructure: 'cmd.reject.signalOnStructure',
   SignalExists: 'cmd.reject.signalExists',
   NoSignalHere: 'cmd.reject.noSignalHere',
+  UnknownSignal: 'cmd.reject.unknownSignal',
+  SignalNeedsDirection: 'cmd.reject.signalNeedsDirection',
   NeedsDepot: 'cmd.reject.needsDepot',
   NeedsRailDepot: 'cmd.reject.needsRailDepot',
   UnknownModule: 'cmd.reject.unknownModule',
