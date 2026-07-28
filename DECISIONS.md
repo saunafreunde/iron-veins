@@ -773,3 +773,44 @@ shifts every later draw and perturbs the determinism fixture), intro and retire
 years, tombstone-versus-splice discipline in an array indexed by id, and a fix
 for the release path resetting terrain to grass and leaving scars in forests.
 Five independent risks, none of which the chain loop needs.
+
+
+### D-070 The specification is in the repository, and M4/M5 are measured against it
+
+`SPEC.md` holds the original brief verbatim. It arrived after M4 and M5 were
+built, so both were made from the repository's own record plus genre convention.
+
+Measured against the text, both are **partial**, and the gap list is in
+`CLAUDE.md` rather than buried here because a future session has to see it
+before it believes the milestone status. The two that matter most:
+
+* **M4 has one signal type of four.** Path signalling is the one the spec needs
+  for a station throat worked by two trains, and the acceptance test - twenty
+  trains on a hand-built network for five thousand ticks - does not exist. M4 is
+  not signed off.
+* **M5 cargo has no destination.** Section 7.4 is the heart of that milestone:
+  cargo carries a target station, stations keep connection tables, and waiting
+  cargo picks the vehicle that will get it there soonest, transfers included.
+  What is built is production, the service gate and acceptance - the supply
+  side. The routing side is absent, and with it the milestone's own acceptance
+  case.
+
+Also on the record: the freight recalibration of D-066 rests on a diagnostic
+test written for the purpose, not on balancing scenario 2 of section 19.4, which
+the specification names as the authority over precisely those numbers. The
+figures stand until that scenario says otherwise.
+
+### D-071 Industry production runs in thirty daily slices, not once a month
+
+Section 7.3 books production once per game month. This implementation books a
+thirtieth of it each game day, which is the same shape the town production
+already had.
+
+The reason the spec gives for "monthly" is failure #10 - production per TICK is
+twenty times too much cargo and pointless CPU load. A daily slice is 1/200th of
+the tick rate and costs nothing measurable, while it removes a step function
+that would otherwise dump a month of output into a station in one tick and
+immediately trip the overflow penalty on the station rating.
+
+The recipe minimum is evaluated per slice, which is strictly better than monthly:
+a mill whose coal arrives on the twenty-ninth can still use it that month.
