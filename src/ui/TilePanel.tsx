@@ -8,12 +8,14 @@ import {
   TERRAFORM_COST_PER_STEP_CT,
 } from '../sim/constants';
 import { TERRAIN_NAME_KEYS } from '../sim/map/terrain';
+import { RAIL_TYPE_COST_CT, RailType } from '../sim/map/track';
 import { useSimStore, type Tool } from './store';
 
 /** Tools of M1 and M2. Rail, water and air join the list with their milestones. */
 const TOOLS: ReadonlyArray<{ readonly id: Tool; readonly labelKey: string }> = [
   { id: 'none', labelKey: 'ui.tool.select' },
   { id: 'road', labelKey: 'ui.tool.road' },
+  { id: 'track', labelKey: 'ui.tool.track' },
   { id: 'stop', labelKey: 'ui.tool.stop' },
   { id: 'depot', labelKey: 'ui.tool.depot' },
   { id: 'demolish', labelKey: 'ui.tool.demolish' },
@@ -27,6 +29,10 @@ function priceHint(tool: Tool): string {
   switch (tool) {
     case 'road':
       return t('ui.tool.priceRoad', { amount: formatMoney(ROAD_COST_PER_TILE_CT) });
+    case 'track':
+      return t('ui.tool.priceTrack', {
+        amount: formatMoney(RAIL_TYPE_COST_CT[RailType.Plain]!),
+      });
     case 'stop':
       return t('ui.tool.priceStop', { amount: formatMoney(ROAD_STOP_COST_CT) });
     case 'depot':
@@ -60,6 +66,7 @@ export function TilePanel(): ReactElement {
   const towns = useSimStore((s) => s.towns);
   const stations = useSimStore((s) => s.stations);
   const roadAnchor = useSimStore((s) => s.roadAnchor);
+  const trackPreview = useSimStore((s) => s.trackPreview);
 
   const tile = hovered ?? selected;
   const town = tile !== null && tile.townId >= 0 ? towns[tile.townId] : undefined;
@@ -82,12 +89,52 @@ export function TilePanel(): ReactElement {
         ))}
       </div>
       <p className="panel__hint">{priceHint(tool)}</p>
-      {tool === 'road' && (
+      {(tool === 'road' || tool === 'track') && (
         <p className="panel__hint">
           {roadAnchor === null
             ? t('ui.tool.roadFirst')
             : t('ui.tool.roadSecond', { x: roadAnchor.x, y: roadAnchor.y })}
         </p>
+      )}
+
+      {tool === 'track' && trackPreview !== null && (
+        <>
+          <span className="field__label field__label--spaced">{t('ui.preview.title')}</span>
+          {trackPreview.reasonKey !== null ? (
+            <p className="panel__hint value--danger">{t(trackPreview.reasonKey)}</p>
+          ) : (
+            <dl className="readout">
+              <div>
+                <dt>{t('ui.preview.cost')}</dt>
+                <dd className="value">{formatMoney(trackPreview.costCt)}</dd>
+              </div>
+              <div>
+                <dt>{t('ui.preview.length')}</dt>
+                <dd className="value value--mono">{Math.round(trackPreview.lengthM)} m</dd>
+              </div>
+              <div>
+                <dt>{t('ui.preview.radius')}</dt>
+                <dd className="value value--mono">
+                  {Number.isFinite(trackPreview.minRadiusM)
+                    ? `${Math.round(trackPreview.minRadiusM)} m`
+                    : t('ui.preview.straight')}
+                </dd>
+              </div>
+              <div>
+                <dt>{t('ui.preview.grade')}</dt>
+                <dd className="value value--mono">{trackPreview.maxGradePermille.toFixed(0)} ‰</dd>
+              </div>
+              <div>
+                <dt>{t('ui.preview.speed')}</dt>
+                <dd className="value value--mono">
+                  {Number.isFinite(trackPreview.maxSpeedMs)
+                    ? `${Math.round(trackPreview.maxSpeedMs * 3.6)} km/h`
+                    : '-'}
+                </dd>
+              </div>
+            </dl>
+          )}
+        </>
       )}
 
       {tile === null ? (

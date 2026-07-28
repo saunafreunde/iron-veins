@@ -3,7 +3,16 @@ import { bookExpense, repayLoan, takeLoan } from '../economy/company';
 import type { ModuleKind } from '../station/types';
 import type { OrderLoad, OrderUnload } from '../vehicles/VehicleStore';
 import { OrderTarget, VehicleState, type Order } from '../vehicles/VehicleStore';
-import { buildRoad, buildRoadStop, buyRoadVehicle, demolishRoad, sellVehicle } from './build';
+import type { RailType } from '../map/track';
+import {
+  buildRoad,
+  buildRoadStop,
+  buildTrack,
+  buyRoadVehicle,
+  demolishRoad,
+  demolishTrack,
+  sellVehicle,
+} from './build';
 import { startVehicle } from '../vehicles/update';
 import { applyTerraform, estimateTerraform, levelTile, TerraformDirection } from '../map/terraform';
 import type { World } from '../World';
@@ -59,6 +68,20 @@ export function executeCommand(world: World, command: Command): CommandOutcome {
       chargeCompany(world, result.costCt);
       return ACCEPTED;
     }
+
+    case CommandKind.BuildTrack:
+      return buildTrack(
+        world,
+        command.x1,
+        command.y1,
+        command.x2,
+        command.y2,
+        command.railType as RailType,
+        command.assistant,
+      );
+
+    case CommandKind.DemolishTrack:
+      return demolishTrack(world, command.x, command.y);
 
     case CommandKind.BuildRoad:
       return buildRoad(world, command.x1, command.y1, command.x2, command.y2);

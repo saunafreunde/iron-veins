@@ -23,7 +23,7 @@ export const SAVE_MAGIC = 'IRVN';
  * milestone and was never distributed. From the first released build onwards
  * every bump gets a real migration.
  */
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
 
 /** File extension used for manual and automatic saves. */
 export const SAVE_EXTENSION = '.ironsave';
@@ -160,6 +160,8 @@ function parseTileMap(value: unknown, path: string, mapSize: number): TileMapDat
     cornerHeight: asBytes(raw['cornerHeight'], `${path}.cornerHeight`, corners),
     terrain: asBytes(raw['terrain'], `${path}.terrain`, tiles),
     roadBits: asBytes(raw['roadBits'], `${path}.roadBits`, tiles),
+    trackBits: asBytes(raw['trackBits'], `${path}.trackBits`, tiles),
+    railType: asBytes(raw['railType'], `${path}.railType`, tiles),
     townId: asBytes(raw['townId'], `${path}.townId`, tiles * 2),
     industryId: asBytes(raw['industryId'], `${path}.industryId`, tiles * 2),
     buildingKind: asBytes(raw['buildingKind'], `${path}.buildingKind`, tiles),

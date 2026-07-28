@@ -19,8 +19,14 @@ export class TileMap {
   /** Terrain type per tile, see {@link Terrain}. */
   readonly terrain: Uint8Array;
 
-  /** Road direction bits per tile (added in M2, zero until then). */
+  /** Road direction bits per tile. */
   readonly roadBits: Uint8Array;
+
+  /** Track direction bits per tile, one per {@link TrackDir}. */
+  readonly trackBits: Uint8Array;
+
+  /** Rail type per tile, see RailType. 0 where there is no track. */
+  readonly railType: Uint8Array;
 
   /** Town that owns this tile, -1 for open country. */
   readonly townId: Int16Array;
@@ -79,6 +85,10 @@ export class TileMap {
     offset += tiles;
     this.roadBits = new Uint8Array(this.buffer, offset, tiles);
     offset += tiles;
+    this.trackBits = new Uint8Array(this.buffer, offset, tiles);
+    offset += tiles;
+    this.railType = new Uint8Array(this.buffer, offset, tiles);
+    offset += tiles;
     this.buildingKind = new Uint8Array(this.buffer, offset, tiles);
     offset += tiles;
     this.buildingLevel = new Uint8Array(this.buffer, offset, tiles);
@@ -100,7 +110,10 @@ export class TileMap {
   static bufferBytes(size: number): number {
     const tiles = size * size;
     const corners = (size + 1) * (size + 1);
-    return tiles * 8 + corners + tiles * 5;
+    // 4-byte landmass, two 2-byte id layers, the corner heights, and seven
+    // single-byte layers: terrain, road, track, rail type, building kind,
+    // building level, ocean mask.
+    return tiles * 8 + corners + tiles * 7;
   }
 
   /** Read-side view on a map the worker owns. */

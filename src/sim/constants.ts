@@ -427,6 +427,21 @@ export const MAX_VEHICLES = 4_000;
 /** Upper bound on stations per company. */
 export const MAX_STATIONS = 1_000;
 
+// ---------------------------------------------------------------- rail
+
+/**
+ * Node budget of the route assistant. Section 8.4 sets 20_000 for train
+ * pathfinding; the builder searches over (tile, direction) pairs, which is
+ * eight times the state space, so it gets a correspondingly larger budget.
+ */
+export const MAX_TRACK_SEARCH_NODES = 60_000;
+
+/**
+ * How far outside the bounding box of the two endpoints the assistant may
+ * wander. Enough room to swing around a hill, not enough to cross the map.
+ */
+export const TRACK_SEARCH_MARGIN_TILES = 24;
+
 // -------------------------------------------------------------- construction
 
 /**

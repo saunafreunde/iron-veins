@@ -86,6 +86,7 @@ export class MapView {
   private companyTint = 0xf08020;
   /** Where the renderer fetches the per-tick vehicle block from. */
   private vehicleSource: (() => { data: Int32Array; count: number }) | null = null;
+  private previewRoute: readonly number[] | null = null;
   private readonly vehicleSprites: Sprite[] = [];
   private readonly vehicleLayer = new Container();
 
@@ -430,6 +431,20 @@ export class MapView {
           );
         }
 
+        // Track is composited from one half segment per connected direction.
+        const trackBits = map.trackBits[index]!;
+        if (trackBits !== 0) {
+          for (let direction = 0; direction < 8; direction++) {
+            if ((trackBits & (1 << direction)) === 0) continue;
+            this.place(
+              this.take(used++),
+              this.frameTexture(`k${direction}`, atlas.trackFrame(direction)),
+              world.x,
+              world.y,
+            );
+          }
+        }
+
         const buildingKind = map.buildingKind[index]!;
         if (buildingKind !== 0) {
           const level = map.buildingLevel[index]!;
@@ -542,9 +557,28 @@ export class MapView {
     }
   }
 
-  /** Cursor highlight and selection marker. */
+  /** Route the build preview is currently showing, drawn on the overlay. */
+  setPreviewRoute(tiles: readonly number[] | null): void {
+    this.previewRoute = tiles;
+  }
+
+  /** Cursor highlight, selection marker and the build preview. */
   private drawOverlay(map: TileMap): void {
     this.overlay.clear();
+
+    const preview = this.previewRoute;
+    if (preview !== null && preview.length > 1) {
+      const size = map.size;
+      for (let i = 0; i < preview.length; i++) {
+        const tile = preview[i]!;
+        const x = tile % size;
+        const y = (tile / size) | 0;
+        const centre = tileToWorld(x, y, map.baseHeight(x, y));
+        if (i === 0) this.overlay.moveTo(centre.x, centre.y + TILE_H / 2);
+        else this.overlay.lineTo(centre.x, centre.y + TILE_H / 2);
+      }
+      this.overlay.stroke({ width: 4 / this.zoom, color: 0x4caf7d, alpha: 0.9 });
+    }
     for (const [tile, colour, alpha] of [
       [this.hovered, 0xf08020, 0.85],
       [this.selected, 0xe6e9ee, 1],

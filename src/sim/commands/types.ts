@@ -20,6 +20,8 @@ export const CommandKind = {
   SellVehicle: 12,
   SetVehicleOrders: 13,
   SetVehicleRunning: 14,
+  BuildTrack: 15,
+  DemolishTrack: 16,
 } as const;
 export type CommandKind = (typeof CommandKind)[keyof typeof CommandKind];
 
@@ -123,7 +125,28 @@ export interface SetVehicleRunningCommand {
   readonly running: boolean;
 }
 
+/** Lay track from one tile to another, optionally via the route assistant. */
+export interface BuildTrackCommand {
+  readonly kind: typeof CommandKind.BuildTrack;
+  readonly x1: number;
+  readonly y1: number;
+  readonly x2: number;
+  readonly y2: number;
+  /** A value of RailType. */
+  readonly railType: number;
+  /** False lays exactly the line the player drew (the manual mode of 8.2). */
+  readonly assistant: boolean;
+}
+
+export interface DemolishTrackCommand {
+  readonly kind: typeof CommandKind.DemolishTrack;
+  readonly x: number;
+  readonly y: number;
+}
+
 export type Command =
+  | BuildTrackCommand
+  | DemolishTrackCommand
   | SetCompanyNameCommand
   | SetCompanyColorCommand
   | TakeLoanCommand

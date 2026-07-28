@@ -60,6 +60,11 @@ const TERRAIN_SPECKLE: readonly string[] = [
 /** Rows of the atlas that are not terrain. */
 const ROAD_ROW = TERRAIN_COUNT;
 const BUILDING_ROW = TERRAIN_COUNT + 1;
+/**
+ * Track is drawn as eight half segments, one per direction, composited per
+ * tile. Eight cells instead of the 256 a full bit-combination atlas would need.
+ */
+const TRACK_ROW = TERRAIN_COUNT + 2;
 
 /** Three zones times two expansion stages, plus one generic industry block. */
 const BUILDING_VARIANTS = 6;
@@ -69,7 +74,7 @@ const DEPOT_COLUMN = BUILDING_VARIANTS + 2;
 const VEHICLE_COLUMN = BUILDING_VARIANTS + 3;
 
 const ATLAS_COLUMNS = Math.max(SLOPE_COUNT, VEHICLE_COLUMN + 1);
-const ATLAS_ROWS = TERRAIN_COUNT + 2;
+const ATLAS_ROWS = TERRAIN_COUNT + 3;
 
 export interface AtlasFrame {
   readonly x: number;
@@ -93,6 +98,8 @@ export interface TerrainAtlas {
   depotFrame(): AtlasFrame;
   /** Small box for a road vehicle; tinted with the company colour. */
   vehicleFrame(): AtlasFrame;
+  /** Half a track segment leaving the tile centre in one of the 8 directions. */
+  trackFrame(direction: number): AtlasFrame;
 }
 
 /** Corner offsets of the base diamond inside a cell, in draw order N-E-S-W. */
@@ -274,6 +281,75 @@ function drawBox(
 
 const BUILDING_COLORS = ['#a8896b', '#7d8b99', '#8a7f6d'];
 
+/** Tile-space offsets of the eight track directions, clockwise from east. */
+const TRACK_DELTA: ReadonlyArray<readonly [number, number]> = [
+  [1, 0],
+  [1, 1],
+  [0, 1],
+  [-1, 1],
+  [-1, 0],
+  [-1, -1],
+  [0, -1],
+  [1, -1],
+];
+
+/**
+ * Half a track segment: ballast, two rails and a few sleepers, running from the
+ * tile centre to the edge in one direction. Two of these meeting in a tile make
+ * a through track, three or more make a junction - all without a sprite per
+ * combination.
+ */
+function drawTrackCell(
+  ctx: CanvasRenderingContext2D,
+  originX: number,
+  originY: number,
+  direction: number,
+): void {
+  const [dx, dy] = TRACK_DELTA[direction]!;
+  const cx = originX + TILE_W / 2;
+  const cy = originY + CELL_TOP + TILE_H / 2;
+  // Isometric projection of the tile-space direction, halved to reach the edge.
+  const ex = cx + ((dx - dy) * TILE_W) / 4;
+  const ey = cy + ((dx + dy) * TILE_H) / 4;
+
+  ctx.lineCap = 'butt';
+  ctx.strokeStyle = '#9a938a'; // ballast
+  ctx.lineWidth = 9 * ATLAS_SCALE;
+  ctx.beginPath();
+  ctx.moveTo(cx, cy);
+  ctx.lineTo(ex, ey);
+  ctx.stroke();
+
+  // Sleepers across the ballast.
+  ctx.strokeStyle = '#5a4b3a';
+  ctx.lineWidth = 1.5 * ATLAS_SCALE;
+  const normalX = -(ey - cy);
+  const normalY = ex - cx;
+  const normalLength = Math.sqrt(normalX * normalX + normalY * normalY) || 1;
+  for (let i = 1; i <= 3; i++) {
+    const t = i / 3.5;
+    const px = cx + (ex - cx) * t;
+    const py = cy + (ey - cy) * t;
+    const half = 4.5 * ATLAS_SCALE;
+    ctx.beginPath();
+    ctx.moveTo(px - (normalX / normalLength) * half, py - (normalY / normalLength) * half);
+    ctx.lineTo(px + (normalX / normalLength) * half, py + (normalY / normalLength) * half);
+    ctx.stroke();
+  }
+
+  // The two rails.
+  ctx.strokeStyle = '#6b6560';
+  ctx.lineWidth = 1.5 * ATLAS_SCALE;
+  for (const offset of [-2.6 * ATLAS_SCALE, 2.6 * ATLAS_SCALE]) {
+    const ox = (normalX / normalLength) * offset;
+    const oy = (normalY / normalLength) * offset;
+    ctx.beginPath();
+    ctx.moveTo(cx + ox, cy + oy);
+    ctx.lineTo(ex + ox, ey + oy);
+    ctx.stroke();
+  }
+}
+
 /** Build the whole atlas. Call once at startup. */
 export function buildTerrainAtlas(): TerrainAtlas {
   const canvas = document.createElement('canvas');
@@ -313,6 +389,10 @@ export function buildTerrainAtlas(): TerrainAtlas {
   drawBox(ctx, DEPOT_COLUMN * CELL_W, BUILDING_ROW * CELL_H, 0.8, 16 * ATLAS_SCALE, '#ffffff');
   drawBox(ctx, VEHICLE_COLUMN * CELL_W, BUILDING_ROW * CELL_H, 0.3, 7 * ATLAS_SCALE, '#ffffff');
 
+  for (let direction = 0; direction < 8; direction++) {
+    drawTrackCell(ctx, direction * CELL_W, TRACK_ROW * CELL_H, direction);
+  }
+
   const frame = (column: number, row: number): AtlasFrame => ({
     x: column * CELL_W,
     y: row * CELL_H,
@@ -333,5 +413,6 @@ export function buildTerrainAtlas(): TerrainAtlas {
     stationFrame: () => frame(STATION_COLUMN, BUILDING_ROW),
     depotFrame: () => frame(DEPOT_COLUMN, BUILDING_ROW),
     vehicleFrame: () => frame(VEHICLE_COLUMN, BUILDING_ROW),
+    trackFrame: (direction) => frame(direction & 7, TRACK_ROW),
   };
 }

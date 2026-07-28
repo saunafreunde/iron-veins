@@ -11,6 +11,18 @@ import {
   TOWN_ROAD_MAX_SLOPE,
 } from '../constants';
 import { slopeRise, Terrain } from '../map/terrain';
+import {
+  directionFromDelta,
+  oppositeDir,
+  RAIL_TYPE_COST_CT,
+  RAIL_TYPE_UPKEEP_CT,
+  trackBit,
+  TRACK_DX,
+  TRACK_DY,
+  type RailType,
+  type TrackDir,
+} from '../map/track';
+import { planTrack } from '../net/trackBuilder';
 import { ModuleKind, recomputeCentre, type Station } from '../station/types';
 import { assignStationCatchment } from '../town/update';
 import { RoadBit } from '../town/types';
@@ -155,6 +167,77 @@ export function demolishRoad(world: World, x: number, y: number): CommandOutcome
   world.company.cashCt += Math.round(ROAD_COST_PER_TILE_CT * DEMOLITION_REFUND);
   world.company.upkeepPerYearCt -= ROAD_UPKEEP_PER_TILE_CT;
   world.map.revision++;
+  return ACCEPTED;
+}
+
+/**
+ * Lay track along a planned route.
+ *
+ * The route comes from the same planner the preview uses, so what the player
+ * was shown is exactly what is built and exactly what is charged.
+ */
+export function buildTrack(
+  world: World,
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  railType: RailType,
+  assistant: boolean,
+): CommandOutcome {
+  const planned = planTrack(world.map, x1, y1, x2, y2, railType, assistant);
+  if (!planned.ok) return reject(planned.reasonKey);
+
+  const route = planned.route;
+  if (route.geometry.newTiles === 0) return reject(RejectReason.NothingToDo);
+  if (route.costCt > world.company.cashCt) return reject(RejectReason.InsufficientFunds);
+
+  const map = world.map;
+  for (let i = 0; i + 1 < route.tiles.length; i++) {
+    const from = route.tiles[i]!;
+    const to = route.tiles[i + 1]!;
+    const direction = directionFromDelta(
+      (to % map.size) - (from % map.size),
+      ((to / map.size) | 0) - ((from / map.size) | 0),
+    );
+
+    map.trackBits[from] = map.trackBits[from]! | trackBit(direction);
+    map.trackBits[to] = map.trackBits[to]! | trackBit(oppositeDir(direction));
+    map.railType[from] = railType;
+    map.railType[to] = railType;
+  }
+
+  bookExpense(world.company, route.costCt);
+  world.company.upkeepPerYearCt += route.geometry.newTiles * RAIL_TYPE_UPKEEP_CT[railType]!;
+  world.company.fixedAssetsCt += route.costCt;
+  map.revision++;
+  return ACCEPTED;
+}
+
+/** Remove the track from one tile, including the neighbours' connections. */
+export function demolishTrack(world: World, x: number, y: number): CommandOutcome {
+  if (!world.map.contains(x, y)) return reject(RejectReason.OutsideMap);
+  const map = world.map;
+  const tile = map.tileIndex(x, y);
+  if (map.trackBits[tile] === 0) return reject(RejectReason.NothingToDo);
+
+  const railType = map.railType[tile]! as RailType;
+  for (let direction = 0; direction < 8; direction++) {
+    if ((map.trackBits[tile]! & trackBit(direction as TrackDir)) === 0) continue;
+    const nx = x + TRACK_DX[direction]!;
+    const ny = y + TRACK_DY[direction]!;
+    if (!map.contains(nx, ny)) continue;
+    const neighbour = map.tileIndex(nx, ny);
+    map.trackBits[neighbour] =
+      map.trackBits[neighbour]! & ~trackBit(oppositeDir(direction as TrackDir));
+    if (map.trackBits[neighbour] === 0) map.railType[neighbour] = 0;
+  }
+  map.trackBits[tile] = 0;
+  map.railType[tile] = 0;
+
+  world.company.cashCt += Math.round(RAIL_TYPE_COST_CT[railType]! * DEMOLITION_REFUND);
+  world.company.upkeepPerYearCt -= RAIL_TYPE_UPKEEP_CT[railType]!;
+  map.revision++;
   return ACCEPTED;
 }
 

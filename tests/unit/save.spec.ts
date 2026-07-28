@@ -159,6 +159,6 @@ describe('save migrations', () => {
   it('pins the current save version', () => {
     // Bumping SAVE_VERSION has to be a conscious act, because from the first
     // released build onwards it also requires a migration.
-    expect(SAVE_VERSION).toBe(3);
+    expect(SAVE_VERSION).toBe(4);
   });
 });

@@ -63,6 +63,8 @@ export interface TileMapData {
   cornerHeight: Uint8Array;
   terrain: Uint8Array;
   roadBits: Uint8Array;
+  trackBits: Uint8Array;
+  railType: Uint8Array;
   townId: Uint8Array;
   industryId: Uint8Array;
   buildingKind: Uint8Array;
@@ -221,6 +223,8 @@ export class World {
         cornerHeight: this.map.cornerHeight,
         terrain: this.map.terrain,
         roadBits: this.map.roadBits,
+        trackBits: this.map.trackBits,
+        railType: this.map.railType,
         townId: bytesOf(this.map.townId),
         industryId: bytesOf(this.map.industryId),
         buildingKind: this.map.buildingKind,
@@ -239,6 +243,8 @@ export class World {
     map.cornerHeight.set(data.map.cornerHeight);
     map.terrain.set(data.map.terrain);
     map.roadBits.set(data.map.roadBits);
+    map.trackBits.set(data.map.trackBits);
+    map.railType.set(data.map.railType);
     map.buildingKind.set(data.map.buildingKind);
     map.buildingLevel.set(data.map.buildingLevel);
     map.townId.set(new Int16Array(data.map.townId.slice().buffer));
@@ -369,6 +375,8 @@ export function hashWorld(world: World): string {
   h.intArray(map.cornerHeight);
   h.intArray(map.terrain);
   h.intArray(map.roadBits);
+  h.intArray(map.trackBits);
+  h.intArray(map.railType);
   h.intArray(map.townId);
   h.intArray(map.industryId);
   h.intArray(map.buildingKind);
