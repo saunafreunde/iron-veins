@@ -190,4 +190,47 @@ on.
    accumulators drift and strand vehicles one tile short of their platform
    (D-043).
 
-Then M4 (signals) onwards.
+## M4 - signals
+
+A signal divides a line into sections; a train claims the one it is entering,
+all of it or none of it, and gives it back as its tail clears. Two trains can
+run one line.
+
+- the reservation table is keyed by TILE and is DERIVED - never saved, never
+  hashed, rebuilt on load. A key derived from anything else would be rebuilt
+  every time a road tile is laid (D-054).
+- a signal stands only on plain line, which is what removes junction throats as
+  stopping places and with them the whole pre-signal family (D-055).
+- **the claim runs from where the train IS, every tick** - not at the tile
+  boundary. A train braked to a stand never crosses a boundary again, so a
+  boundary-triggered claim is never retried (D-060).
+- following trains are safe and live; two trains meeting nose to nose on single
+  track deadlock, and that is a stated limitation, not a bug (D-059).
+
+## M5 - industry chains
+
+Industries produce, accept and transform cargo on the calendar, and the loop
+closes back into town growth.
+
+- the collection gate CAPS what leaves an industry by the rating of the stations
+  serving it, weighted by the SHARE of the footprint they cover. A tile count
+  saturates the gate and the rating stops mattering (D-063).
+- the growth ratio divides by UNGATED production, which is what makes service
+  quality pay in tonnage (D-064).
+- delivered cargo goes into industry stock or town demand, NEVER into
+  `station.waiting` - it would push a town's passengers into overflow (D-065).
+- **freight tariffs were four times too low and nothing checked it.** A
+  vehicle's ceiling revenue is closed form; measured that way, no freight
+  vehicle covered its own upkeep on any line. `tests/balance/tariff.spec.ts`
+  prints the table now (D-066).
+
+## Still outstanding
+
+- The **minimap** (owed since M1) and **vehicle selection on the map** (M2).
+- **Balancing scenarios 2, 3, 4 and 5** of section 19.4. The chain scenarios own
+  the freight figures that M5 set by first draft.
+- **Industry opening and closure** at runtime (D-069).
+- The **industry panel**: production level and stock are simulated but nothing
+  shows them.
+
+Then M6 (water) onwards.
