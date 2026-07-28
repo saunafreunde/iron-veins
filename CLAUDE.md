@@ -237,23 +237,25 @@ M4 and M5 were built before `SPEC.md` was in the repository, from the repo's own
 record plus genre convention. Against the actual text they are **partial**. This
 is the honest list, and it is work, not commentary.
 
-**M4 (section 9 of SPEC.md).** Delivered: two-way block signals, tile-keyed
-reservations, train length, braking for a red. Missing:
+**M4 (section 9 of SPEC.md).** Delivered: all four signal types, block
+segmentation, path versus block claiming, one-way signals the pathfinder
+respects, the deadlock clock, and the regression network of 19.5. Missing:
 
-- **Three of the four signal types**: one-way block, path (PBS) and entry-path.
-  PBS is the one that matters - without it a station throat cannot be worked by
-  two trains at once.
-- **Block segmentation via Union-Find** with a `blockId` per edge. The current
-  design has no block graph at all (D-054 argues why, but the spec asks for one).
-- **Deadlock detection**: a train waiting 1_200 ticks without progress must
-  raise a log message with a jump-to-position and a marker. Nothing detects it.
+- **THE DEFECT (D-073), which is why M4 is not signed off.** A train's body is
+  only exclusive where it has been granted a section, so two trains can still
+  stack on unsignalled track - most reliably at a depot - and once stacked
+  neither can ever claim again. The regression network reaches this state and
+  therefore asserts only half its criterion. The fix is to make a train's body
+  exclusive at all times, which changes unsignalled track for every existing
+  test and needs the depot case taught explicitly.
 - **Automatic signalling** when dragging a route (default every 12 tiles).
 - **The F3 overlay showing block boundaries, occupancy and reservations.** F3
   currently shows the state hash only. The spec calls this overlay a *learning
-  tool* and requires it in the release build.
-- **The acceptance test**: `tests/fixtures/net-complex.json` with a crossing, a
-  passing loop and a double station throat, 20 trains, 5_000 ticks, zero
-  collisions and zero deadlocks. M4 is not signed off without it.
+  tool* and requires it in the release build. The block index it needs now
+  exists and can be rebuilt on the main thread from the shared map buffer; the
+  reservations would have to travel in the snapshot.
+- **The deadlock WARNING.** The clock is recorded per train; nothing surfaces
+  it yet, because there is no message log until M8.
 
 **M5 (sections 7 and 10 of SPEC.md).** Delivered: production, the service gate,
 the monthly level, acceptance, town demand, refit. Missing:
