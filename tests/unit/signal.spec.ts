@@ -350,15 +350,19 @@ function startTowardsPlatform(bench: Bench, id: number): void {
 }
 
 describe('a train and a signal', () => {
-  it('claims nothing at all on a line without signals', () => {
+  it('never holds up a train on a line without signals', () => {
     const bench = flatWorld();
     singleTrack(bench, [RAILBUS]);
     startTowardsPlatform(bench, 0);
 
+    const vehicles = bench.world.vehicles;
     for (let i = 0; i < 1_500; i++) {
       bench.world.step(bench.queue, null);
-      expect(bench.world.vehicles.reservedToIndex[0]).toBe(-1);
+      // The parity that matters: with no signal anywhere, a train is never
+      // held. It owns the ground under itself (D-073), but nothing gates it.
+      expect(vehicles.state[0]).not.toBe(VehicleState.WaitingForPath);
     }
+    expect(vehicles.tileIndex[0]).not.toBe(bench.world.map.tileIndex(6, 10));
   });
 
   it('claims the section ahead once a signal is in reach', () => {
@@ -607,7 +611,6 @@ describe('two trains, one line', () => {
     }
 
     const vehicles = bench.world.vehicles;
-    const map = bench.world.map;
     let held = -1;
     for (let i = 0; i < 20_000 && held < 0; i++) {
       bench.world.step(bench.queue, null);
@@ -615,13 +618,14 @@ describe('two trains, one line', () => {
     }
 
     expect(held).toBe(1);
-    // It stands on the tile before the signal, not on it.
-    expect(vehicles.tileIndex[1]).toBe(map.tileIndex(29, 10));
     expect(vehicles.speedMs[1]).toBe(0);
-    expect(vehicles.progressM[1]!).toBeCloseTo(TILE_SIZE_M - SIGNAL_STOP_OFFSET_M, 5);
+    // It is standing clear of the train ahead, not on top of it.
+    expect(vehicles.tileIndex[1]).not.toBe(vehicles.tileIndex[0]);
     // Its route and its distance to go are untouched - it is waiting, not lost.
     expect(vehicles.pathLength[1]!).toBeGreaterThan(0);
     expect(vehicles.routeRemainingM[1]!).toBeGreaterThan(0);
+    // And it comes to rest short of a tile boundary, never astride one.
+    expect(vehicles.progressM[1]!).toBeLessThanOrEqual(TILE_SIZE_M - SIGNAL_STOP_OFFSET_M);
   });
 
   it('runs identically three times over', () => {

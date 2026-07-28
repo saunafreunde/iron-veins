@@ -17,11 +17,12 @@ import { hashWorld, World } from '../../src/sim/World';
  * is the acceptance criterion for M4 and the only test in the suite that puts
  * the signalling under real load.
  *
- * It does NOT pass that criterion yet. What it asserts today is that no tile is
- * ever held by two trains, that nothing falls into "no route", and that the
- * whole thing is reproducible - and it is what found the defect written up as
- * DECISIONS.md D-073, which is what stops the deadlock half of the criterion
- * being met. The test is here, running, and honest about which half it checks.
+ * It does NOT pass the deadlock half of that criterion yet, and D-074 records
+ * exactly why: the network is over capacity for twenty trains and the lowest id
+ * always wins a contested section, so the last trains starve. What it does
+ * assert - no tile ever held by two trains, nothing in "no route", the whole
+ * run reproducible three times over - is what found and then proved the fix for
+ * the stacking defect D-073.
  *
  * The network is built with the ordinary build COMMANDS rather than loaded from
  * a fixture file. That is a deliberate departure from the wording of 19.5: a
@@ -236,16 +237,14 @@ describe('the regression network', () => {
       }
     }
 
-    // NOT asserted yet: that nothing waits longer than DEADLOCK_WARN_TICKS.
-    // Running this network is what found the reason, and it is a real defect
-    // rather than a tuning problem (DECISIONS.md D-073): nothing stops a train
-    // rolling onto a tile another train is standing on, because only signalled
-    // sections are exclusive. Once two trains are stacked neither can claim -
-    // each one's own body is held by the other - and they wait for ever. The
-    // fix is to make a train's body exclusive at all times, which changes how
-    // unsignalled track behaves and is therefore its own piece of work.
-    // The measurement is kept so the number is visible when it is fixed.
-    expect(longestWait).toBeGreaterThanOrEqual(0);
+    // The deadlock half of the criterion is not asserted yet, and the reason
+    // has CHANGED. It used to be the stacking defect of D-073, which is fixed:
+    // the longest wait fell from 8_391 ticks to 5_488 by making a train's body
+    // exclusive. What is left is capacity and starvation (D-061): twenty trains
+    // on a single-track ring whose four stations each stop the through line
+    // while they load, with the lowest id always winning a contested section.
+    // That is a scheduling problem, not a signalling one - see D-074.
+    expect(longestWait).toBeLessThan(6_000);
 
     // And they are all still working, not parked in "no route".
     let running = 0;

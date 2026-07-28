@@ -33,7 +33,7 @@ import { deliverToIndustry } from '../industry/production';
 import { isOneWay, signalDirection, signalKind, SignalKind } from '../map/signals';
 import { ModuleKind, type Station } from '../station/types';
 import type { World } from '../World';
-import { releaseAll, releaseBehind, tryClaim } from './reservations';
+import { holdBody, releaseAll, releaseBehind, tryClaim } from './reservations';
 import { pathDirection, pathStepM, routeLengthM } from './route';
 import { VehicleKind } from './spec';
 import { OrderLoad, OrderTarget, OrderUnload, VehicleState } from './VehicleStore';
@@ -464,6 +464,13 @@ function mayEnter(world: World, id: number, next: number): boolean {
   if (next <= vehicles.reservedToIndex[id]!) return true;
 
   const path = vehicles.paths[id]!;
+
+  // Somebody else is standing there. Signals decide who may enter a SECTION;
+  // this decides who may occupy a TILE, and it holds everywhere - which is what
+  // stops two trains ending up on one (D-073).
+  const owner = world.reservations.ownerOf(path[next]!);
+  if (owner !== -1 && owner !== id) return false;
+
   const packed = world.map.signal[path[next]!]!;
   const kind = signalKind(packed);
   if (kind === SignalKind.None) return true;
@@ -548,6 +555,7 @@ export function updateVehicles(world: World): void {
           vehicles.state[id] = VehicleState.NoRoute;
           continue;
         }
+        if (vehicles.reservedToIndex[id]! < 0) holdBody(world, id);
         if (mayEnter(world, id, vehicles.pathIndex[id]! + 1)) {
           vehicles.state[id] = VehicleState.Driving;
           vehicles.waitingSinceTick[id] = -1;
@@ -563,7 +571,11 @@ export function updateVehicles(world: World): void {
         }
 
         const train = vehicles.kind[id] === VehicleKind.Train;
-        if (train) claimAhead(world, id);
+        if (train) {
+          claimAhead(world, id);
+          // Whatever the signals say, the train owns the ground under itself.
+          if (vehicles.reservedToIndex[id]! < 0) holdBody(world, id);
+        }
         const limit = train ? trainSpeedLimit(world, id) : vehicles.maxSpeedMs[id]!;
 
         const remaining = remainingDistanceM(world, id);

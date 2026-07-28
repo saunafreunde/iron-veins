@@ -109,10 +109,16 @@ export function tryClaim(world: World, id: number, from: number): boolean {
   }
 
   for (let index = first; index <= last; index++) {
-    if (!reservations.freeFor(path[index]!, id)) return holdBody(world, id, first);
+    if (!reservations.freeFor(path[index]!, id)) {
+      holdBody(world, id, first);
+      return false;
+    }
   }
   for (let i = 0; i < blockTiles; i++) {
-    if (!reservations.freeFor(blockScratch[i]!, id)) return holdBody(world, id, first);
+    if (!reservations.freeFor(blockScratch[i]!, id)) {
+      holdBody(world, id, first);
+      return false;
+    }
   }
 
   for (let index = first; index <= last; index++) reservations.set(path[index]!, id);
@@ -125,21 +131,26 @@ export function tryClaim(world: World, id: number, from: number): boolean {
 }
 
 /**
- * A train whose claim was refused still holds the ground it is standing on.
+ * A train holds the ground it is standing on, always, signals or no signals.
  *
- * This is the difference between a queue and a deadlock. A held train that owns
- * nothing is invisible to the train behind it, which rolls forward onto the
- * same tiles - and once two trains are stacked, NEITHER can claim, because each
- * one's own body is held by the other. They wait for each other for ever, and
- * it presents as a signalling bug rather than as what it is.
+ * This is what stops two trains occupying one tile, and it is what "zero
+ * collisions" means. Without it a train held at a red owns nothing, is
+ * invisible to the train behind, and gets rolled onto - after which NEITHER can
+ * claim again, because each one's own body is held by the other. They wait for
+ * each other for ever and it presents as a signalling bug (DECISIONS.md D-073).
  *
- * Holding the body costs nothing when the line is clear and is always available
- * unless somebody has already stacked, so it is attempted on every refusal.
- * The return value is still false: the section ahead was not granted.
+ * A stopped train, and a train in a depot, hold nothing: several trains sharing
+ * one depot tile is a legitimate state that this rule must not forbid. A train
+ * takes its body the moment it starts moving, and if it cannot - because the
+ * train it was parked behind has not left yet - it simply waits, which is what
+ * it would do anyway.
  */
-function holdBody(world: World, id: number, first: number): boolean {
+export function holdBody(world: World, id: number, from = -1): boolean {
   const vehicles = world.vehicles;
   const path = vehicles.paths[id]!;
+  if (vehicles.pathLength[id]! === 0) return false;
+
+  const first = from >= 0 ? from : tailIndex(world, id);
   const head = vehicles.pathIndex[id]!;
   const reservations = world.reservations;
 
@@ -148,9 +159,10 @@ function holdBody(world: World, id: number, first: number): boolean {
   }
   for (let index = first; index <= head; index++) reservations.set(path[index]!, id);
 
+  // Never shrink a claim that already runs further ahead.
   vehicles.reservedFromIndex[id] = first;
-  vehicles.reservedToIndex[id] = head;
-  return false;
+  if (vehicles.reservedToIndex[id]! < head) vehicles.reservedToIndex[id] = head;
+  return true;
 }
 
 /**

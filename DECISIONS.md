@@ -869,3 +869,49 @@ to be taught about. Doing half of that would be worse than doing none.
 The regression network runs, asserts what does hold - no tile ever owned by two
 trains, nothing in "no route", bit-identical across three runs - and says in its
 own comment which half of the criterion it is not yet checking.
+
+
+### D-073 addendum - a train's body is exclusive at all times, and it fixed half of it
+
+The fix is in: a train owns the ground under itself whether or not a signal has
+granted it anything, and no train may enter a tile another train holds. Signals
+decide who may enter a SECTION; this decides who may occupy a TILE.
+
+A stopped train and a train in a depot hold nothing, because several trains
+sharing one depot tile is a legitimate state that the rule must not forbid. A
+train takes its body the moment it starts moving, and if it cannot - because the
+train it was parked behind has not pulled out yet - it waits, which is what it
+would have done anyway.
+
+Measured on the regression network, the longest unbroken wait fell from 8_391
+ticks to 5_488. The stacking deadlock is gone.
+
+Two existing assertions changed with it, and both are now stating something
+truer than before:
+
+* "claims nothing on a line without signals" became "never HOLDS UP a train on a
+  line without signals". The internal sentinel was never the point; the point is
+  that an unsignalled line still runs exactly as it did in M3.
+* The held train no longer stops on the tile before the signal but wherever the
+  train ahead leaves room. Standing clear of the train in front is the correct
+  behaviour; standing on a fixed tile was an artefact of trains being able to
+  drive through each other.
+
+### D-074 What is left on the regression network is capacity, not signalling
+
+Twenty trains on a single-track ring with four stations, each of which halts the
+through line while it loads, is over capacity. Add the permanent priority of
+D-061 - the lowest id always wins a contested section - and the last trains
+starve rather than deadlock: they are waiting for a section that is genuinely
+busy, and a lower id keeps taking it.
+
+That is a scheduling problem and it has scheduling answers, all of which belong
+to the order system rather than to signals: a station on a passing siding so a
+loading train does not block the line, per-train platform selection so a station
+with two platforms uses both (the D-049 limitation), and an arbitration that
+does not permanently favour a low id.
+
+The test asserts a 6_000 tick bound so the number stays visible and cannot
+regress, and says in its own comment which half of section 19.5 it is checking.
+Calling this "M4 done" would be false; calling it a signalling defect would be
+equally false.
