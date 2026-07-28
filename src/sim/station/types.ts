@@ -1,5 +1,6 @@
 import type { CargoStack } from '../cargo/stack';
 import {
+  RATING_CANOPY_BONUS,
   RATING_EQUIPMENT_MAX,
   RATING_FREQUENCY_MAX,
   RATING_FREQUENCY_SATURATION_VISITS,
@@ -32,10 +33,29 @@ export const ModuleKind = {
   /** One tile of platform, built on top of track. */
   RailPlatform: 3,
   RailDepot: 4,
+  /** Crane and ramp: loading is half again as fast (section 10). */
+  FreightTerminal: 5,
+  /** Canopy and waiting hall: better rating, and cargo keeps longer. */
+  Canopy: 6,
+  /** Cold store: perishable cargo does not spoil at this station at all. */
+  ColdStore: 7,
 } as const;
 export type ModuleKind = (typeof ModuleKind)[keyof typeof ModuleKind];
 
-export const MODULE_KIND_COUNT = 5;
+export const MODULE_KIND_COUNT = 8;
+
+/**
+ * Modules that stand beside the line rather than on it.
+ *
+ * They need no road and no track - a crane, a canopy and a cold store are
+ * buildings on the goods yard - so they are placed on clear ground within the
+ * join distance of a station that already exists.
+ */
+export function isSupportModule(kind: number): boolean {
+  return (
+    kind === ModuleKind.FreightTerminal || kind === ModuleKind.Canopy || kind === ModuleKind.ColdStore
+  );
+}
 
 /** True for the module kinds a train can use. */
 export function isRailModule(kind: number): boolean {
@@ -81,6 +101,57 @@ export interface Station {
   acceptedCargo: number;
   /** Ids of the industries inside the catchment, ascending. Derived likewise. */
   servedIndustries: number[];
+}
+
+/** Does the station have at least one module of this kind? */
+export function hasModule(station: Station, kind: ModuleKind): boolean {
+  for (const module of station.modules) {
+    if (module.kind === kind) return true;
+  }
+  return false;
+}
+
+/**
+ * Longest unbroken run of platform tiles the station has, in tiles.
+ *
+ * A platform is 1xN and it is N that decides how much of a train can be worked
+ * at once (section 10). The run has to be unbroken: two single platforms at
+ * opposite ends of a station are two short platforms, not one long one.
+ */
+export function platformLength(station: Station): number {
+  let best = 0;
+  for (const module of station.modules) {
+    if (module.kind !== ModuleKind.RailPlatform) continue;
+    for (const axis of PLATFORM_AXES) {
+      let run = 1;
+      // Only count forwards, so the run starting at the far end is the one
+      // measured and every run is measured exactly once per axis.
+      let x = module.x + axis[0]!;
+      let y = module.y + axis[1]!;
+      while (hasPlatformAt(station, x, y)) {
+        run++;
+        x += axis[0]!;
+        y += axis[1]!;
+      }
+      if (run > best) best = run;
+    }
+  }
+  return best;
+}
+
+/** The four directions a 1xN platform can run in. */
+const PLATFORM_AXES: readonly (readonly number[])[] = [
+  [1, 0],
+  [0, 1],
+  [-1, 0],
+  [0, -1],
+];
+
+function hasPlatformAt(station: Station, x: number, y: number): boolean {
+  for (const module of station.modules) {
+    if (module.kind === ModuleKind.RailPlatform && module.x === x && module.y === y) return true;
+  }
+  return false;
 }
 
 /** Catchment radius grows with the number of modules (section 10). */
@@ -146,9 +217,12 @@ export function stationRating(station: Station, nowTick: number): number {
   const frequency = visits / RATING_FREQUENCY_SATURATION_VISITS;
   rating += RATING_FREQUENCY_MAX * (frequency > 1 ? 1 : frequency);
 
-  // Equipment: every module beyond the first adds a little comfort.
-  const equipment = (station.modules.length - 1) / 6;
-  rating += RATING_EQUIPMENT_MAX * (equipment > 1 ? 1 : equipment < 0 ? 0 : equipment);
+  // Equipment: every module beyond the first adds a little comfort, and a
+  // canopy is worth eight points of it on its own (section 10).
+  const modules = (station.modules.length - 1) / 6;
+  let equipment = RATING_EQUIPMENT_MAX * (modules > 1 ? 1 : modules < 0 ? 0 : modules);
+  if (hasModule(station, ModuleKind.Canopy)) equipment += RATING_CANOPY_BONUS;
+  rating += equipment > RATING_EQUIPMENT_MAX ? RATING_EQUIPMENT_MAX : equipment;
 
   // Reliability of the vehicles that serve it.
   rating += (RATING_RELIABILITY_MAX * station.servedReliability) / RELIABILITY_MAX;

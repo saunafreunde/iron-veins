@@ -30,6 +30,15 @@ export interface IndustryMarker {
   readonly type: number;
   readonly x: number;
   readonly y: number;
+  /** Production level in percent of the base rate; 0 once it has closed. */
+  readonly level: number;
+  /** Finished output waiting in the yard, rounded. [units] */
+  readonly stock: number;
+  /** Share of the last twelve months' output that left, 0..100. */
+  readonly service: number;
+  /** Months in a row in which nothing was collected. */
+  readonly neglectedMonths: number;
+  readonly open: boolean;
 }
 
 /** One module of a station, as the renderer needs to draw it. */
@@ -101,6 +110,8 @@ export type WorkerToMainMessage =
   | { readonly type: 'commandRejected'; readonly reasonKey: string }
   /** Sent whenever a station was built, extended or removed. */
   | { readonly type: 'stationsChanged'; readonly stations: readonly StationMarker[] }
+  /** Industry production state; sent on the same cadence as the stations. */
+  | { readonly type: 'industriesChanged'; readonly industries: readonly IndustryMarker[] }
   /** Fleet overview for the vehicle list; sent when it changes, not per tick. */
   | { readonly type: 'fleetChanged'; readonly vehicles: readonly VehicleMarker[] }
   | { readonly type: 'error'; readonly message: string };

@@ -10,12 +10,11 @@ import {
   INDUSTRY_DECLINE_RATIO,
   INDUSTRY_GROWTH_RATIO,
   INDUSTRY_INPUT_PER_BATCH,
-  INDUSTRY_LEVEL_HYSTERESIS_MONTHS,
+  INDUSTRY_SERVICE_WINDOW_MONTHS,
   INDUSTRY_LEVEL_MIN,
   INDUSTRY_LEVEL_START,
   INDUSTRY_LEVEL_STEP,
   INDUSTRY_OUTPUT_PER_BATCH,
-  INDUSTRY_STOCK_CAP,
   MapClimate,
   TICKS_PER_DAY,
   TICKS_PER_MONTH,
@@ -30,6 +29,7 @@ import {
   INDUSTRY_SPECS,
   INDUSTRY_TYPE_COUNT,
   IndustryType,
+  industryStockCap,
   newIndustry,
   type Industry,
 } from '../../src/sim/industry/types';
@@ -168,9 +168,10 @@ describe('what an industry produces', () => {
     const mine = newIndustry(0, IndustryType.CoalMine, 20, 20, 0);
     const b = bench([mine]);
 
+    const cap = industryStockCap(IndustryType.CoalMine);
     for (let i = 0; i < 200; i++) produceIndustryCargo(b.world);
-    expect(mine.outputStock0).toBeLessThanOrEqual(INDUSTRY_STOCK_CAP);
-    expect(mine.outputStock0).toBeCloseTo(INDUSTRY_STOCK_CAP, 6);
+    expect(mine.outputStock0).toBeLessThanOrEqual(cap);
+    expect(mine.outputStock0).toBeCloseTo(cap, 6);
   });
 });
 
@@ -252,9 +253,9 @@ describe('the production level', () => {
     return { b: bench([mine]), mine };
   }
 
-  it('waits out the hysteresis before it moves at all', () => {
+  it('waits out the twelve month window before it moves at all', () => {
     const { b, mine } = levelBench();
-    for (let month = 0; month < INDUSTRY_LEVEL_HYSTERESIS_MONTHS - 1; month++) {
+    for (let month = 0; month < INDUSTRY_SERVICE_WINDOW_MONTHS - 1; month++) {
       mine.producedThisMonth = 100;
       mine.collectedThisMonth = 100;
       reviewIndustries(b.world);
@@ -277,11 +278,13 @@ describe('the production level', () => {
     expect(mine.productionLevel).toBe(INDUSTRY_LEVEL_START);
   });
 
-  it('runs an unserved industry down to the floor and no further', () => {
+  it('runs a badly served industry down to the floor and no further', () => {
     const { b, mine } = levelBench();
-    for (let month = 0; month < 60; month++) {
+    // Something leaves every month, so the works never counts as abandoned -
+    // it is just never worth much. Eight steps of ten points, a year apart.
+    for (let month = 0; month < 12 * 12; month++) {
       mine.producedThisMonth = 100;
-      mine.collectedThisMonth = 0;
+      mine.collectedThisMonth = 1;
       reviewIndustries(b.world);
     }
     expect(mine.productionLevel).toBe(INDUSTRY_LEVEL_MIN);

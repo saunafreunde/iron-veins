@@ -1,6 +1,15 @@
 import { Cargo } from '../cargo/types';
-import { INDUSTRY_LEVEL_START } from '../constants';
+import {
+  INDUSTRY_BASE_OUTPUT_PER_MONTH,
+  INDUSTRY_FLUCTUATION_AMPLITUDE,
+  INDUSTRY_FLUCTUATION_PERIOD_YEARS,
+  INDUSTRY_LEVEL_START,
+  INDUSTRY_STOCK_MONTHS,
+  TICKS_PER_YEAR,
+  TRIG_TABLE_SIZE,
+} from '../constants';
 import { Terrain } from '../map/terrain';
+import { sinTurns } from '../math';
 
 /**
  * Industry catalogue and the placement rules of section 6.6.
@@ -300,6 +309,30 @@ export interface Industry {
   collectedThisMonth: number;
   /** Months since the level last moved; the hysteresis dead band. */
   monthsSinceLevelChange: number;
+
+  /**
+   * Running average of the share collected, over the last twelve months.
+   *
+   * A ring of twelve figures would be the literal reading of section 7.3; this
+   * is the same window kept as one number, which is what the expansion rule
+   * actually asks it (DECISIONS.md D-079).
+   */
+  serviceAverage: number;
+  /** Months that average has seen, until the window is full. */
+  serviceMonths: number;
+  /**
+   * Consecutive months in which nothing at all was collected. Twenty-four of
+   * them close the works; twelve and twenty are the two warnings.
+   */
+  monthsWithoutCollection: number;
+  /**
+   * False once the works has closed. The slot stays, because ids index the
+   * array and the map layer refers to them; the footprint is given back to
+   * open country and no station serves it any more.
+   */
+  open: boolean;
+  /** Tick the works opened. New industries appear once a game year. */
+  openedTick: number;
 }
 
 /** A freshly placed industry, at its starting level with nothing in stock. */
@@ -309,6 +342,7 @@ export function newIndustry(
   x: number,
   y: number,
   landmassId: number,
+  openedTick = 0,
 ): Industry {
   return {
     id,
@@ -324,5 +358,48 @@ export function newIndustry(
     producedThisMonth: 0,
     collectedThisMonth: 0,
     monthsSinceLevelChange: 0,
+    serviceAverage: 0,
+    serviceMonths: 0,
+    monthsWithoutCollection: 0,
+    open: true,
+    openedTick,
   };
 }
+
+/**
+ * How much of one cargo this industry holds before it takes no more (7.3).
+ *
+ * Eight months of its own production, so the figure means the same thing to a
+ * gravel pit and to an electronics works. A flat cap would make the small
+ * industries hoard and choke the large ones.
+ */
+export function industryStockCap(type: IndustryType): number {
+  return INDUSTRY_STOCK_MONTHS * (INDUSTRY_BASE_OUTPUT_PER_MONTH[type] ?? 0);
+}
+
+/**
+ * Base rate this month, with the swing of a primary industry applied (7.3).
+ *
+ * A works with inputs runs on what is delivered and does not swing; a mine, a
+ * forest, a farm or an oil well does, plus or minus a quarter over five game
+ * years. The phase comes from the id so a region does not boom in unison, and
+ * the sine comes from the lookup table because Math.sin is not bit exact across
+ * engines (architecture law #4).
+ */
+export function industryBaseOutput(industry: Industry, tick: number): number {
+  const base = INDUSTRY_BASE_OUTPUT_PER_MONTH[industry.type] ?? 0;
+  if (industrySpec(industry.type).inputs.length > 0) return base;
+
+  const period = INDUSTRY_FLUCTUATION_PERIOD_YEARS * TICKS_PER_YEAR;
+  const phase = (industry.id * PHASE_STRIDE) / TRIG_TABLE_SIZE;
+  const turns = tick / period + phase;
+  return base * (1 + INDUSTRY_FLUCTUATION_AMPLITUDE * sinTurns(turns));
+}
+
+/**
+ * Step between the phases of two neighbouring ids, in table entries.
+ *
+ * A prime fraction of the table, so consecutive ids land far apart and the
+ * pattern does not repeat for any run of industries a map will hold.
+ */
+const PHASE_STRIDE = 1_619;

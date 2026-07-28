@@ -12,17 +12,20 @@ import {
   CURVE_LOOKAHEAD_MAX_NODES,
   DRAG_ROAD,
   DRAG_TRAIN,
+  FREIGHT_TERMINAL_LOAD_FACTOR,
   GRAVITY,
   HEIGHT_STEP_M,
   LOAD_TICKS_PER_UNIT,
   MIN_STATION_STOP_TICKS,
   ROLLING_RESISTANCE_RAIL,
   ROLLING_RESISTANCE_ROAD,
+  PLATFORM_OVERHANG_PENALTY,
   ROTATING_MASS_FACTOR,
   SIGNAL_STOP_OFFSET_M,
   STOPPED_SPEED_MS,
   TICK_SECONDS,
   TILE_DIAGONAL_M,
+  TILE_SIZE_M,
 } from '../constants';
 import {
   curveRadiusM,
@@ -35,7 +38,7 @@ import {
 } from '../map/track';
 import { deliverToIndustry } from '../industry/production';
 import { isOneWay, signalDirection, signalKind, SignalKind } from '../map/signals';
-import { ModuleKind, type Station } from '../station/types';
+import { hasModule, ModuleKind, platformLength, type Station } from '../station/types';
 import type { World } from '../World';
 import { holdBody, releaseAll, releaseBehind, tryClaim } from './reservations';
 import { pathDirection, pathStepM, routeLengthM } from './route';
@@ -373,7 +376,8 @@ function serveStation(world: World, id: number, station: Station): number {
 
   if (order.load !== OrderLoad.None) {
     const cargo = vehicles.refitCargo[id]! as Cargo;
-    const space = vehicles.capacityUnits[id]! - amountOf(carried, cargo);
+    const room = vehicles.capacityUnits[id]! - amountOf(carried, cargo);
+    const space = room * platformShare(world, id, station);
     if (space > 0) {
       const moved = loadFromStation(world, id, station, cargo, space);
       units += moved;
@@ -418,6 +422,26 @@ function deliverCargo(world: World, station: Station, cargo: Cargo, amount: numb
   if (town === undefined) return;
   if (cargo === Cargo.Goods) town.goodsDeliveredThisMonth += left;
   else if (cargo === Cargo.Food) town.foodDeliveredThisMonth += left;
+}
+
+/**
+ * How much of its capacity a train can work at this station (section 10).
+ *
+ * A platform is 1xN tiles and N decides how much of a train stands at it. A
+ * train that hangs off the end loads only the share that fits, and forty
+ * percent off that: the rest has to be shunted into place and worked
+ * separately, which is slow enough that lengthening the platform is the right
+ * answer. Road vehicles are one tile long and never meet the rule.
+ */
+export function platformShare(world: World, id: number, station: Station): number {
+  if (world.vehicles.kind[id] !== VehicleKind.Train) return 1;
+
+  const platform = platformLength(station);
+  if (platform <= 0) return 1;
+  const trainTiles = Math.ceil(world.vehicles.lengthM[id]! / TILE_SIZE_M);
+  if (trainTiles <= platform) return 1;
+
+  return (platform / trainTiles) * (1 - PLATFORM_OVERHANG_PENALTY);
 }
 
 /** True when the vehicle has taken on everything it can carry. */
@@ -676,7 +700,10 @@ export function updateVehicles(world: World): void {
           continue;
         }
         const units = serveStation(world, id, station);
-        vehicles.loadTicks[id] = Math.max(MIN_STATION_STOP_TICKS, units * LOAD_TICKS_PER_UNIT);
+        const perUnit = hasModule(station, ModuleKind.FreightTerminal)
+          ? LOAD_TICKS_PER_UNIT * FREIGHT_TERMINAL_LOAD_FACTOR
+          : LOAD_TICKS_PER_UNIT;
+        vehicles.loadTicks[id] = Math.max(MIN_STATION_STOP_TICKS, units * perUnit);
         vehicles.state[id] = VehicleState.Loading;
         continue;
       }

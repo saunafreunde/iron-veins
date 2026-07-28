@@ -31,6 +31,7 @@ import {
   type VehicleSave,
 } from './save/entities';
 import { assignStationIndustries } from './industry/catchment';
+import { openNewIndustries } from './industry/lifecycle';
 import { SaveFormatError } from './save/format';
 import type { Station } from './station/types';
 import {
@@ -217,9 +218,9 @@ export class World {
       // and that answer comes out of the connections the fleet is running now.
       refreshCargoRouting(this);
       produceTownCargo(this);
-      // Production before collection, so a batch can leave the day it is made;
-      // both before the write-off, so nothing made today is aged out today.
-      produceIndustryCargo(this);
+      // Collection is daily, production is monthly (section 7.3). A month's
+      // output appearing on the platform in one tick would sit there ageing
+      // for four weeks; the yard hands it over a day at a time instead.
       collectIndustryOutput(this);
       rollBreakdowns(this);
       expireStaleCargo(this);
@@ -227,15 +228,21 @@ export class World {
     if (this.tick % TICKS_PER_MONTH === 0) {
       bookMonthlyInterest(this.company, this.difficulty);
       bookMonthlyUpkeep(this.company);
-      // Before growTowns, which owns the convention that the monthly counters
-      // are reset by whoever read them.
+      // Judge the month that has just ended, THEN make the next month's
+      // output. The other way round would compare this month's production
+      // against last month's collection, and every industry would look badly
+      // served for ever. Before growTowns, which owns the convention that the
+      // monthly counters are reset by whoever read them.
       reviewIndustries(this);
+      produceIndustryCargo(this);
       growTowns(this);
       closeMonth(this.company);
     }
     if (this.tick % TICKS_PER_YEAR === 0) {
       closeFinancialYear(this.company);
       ageVehicles(this);
+      // One new works a year, by preference where nothing is served yet.
+      openNewIndustries(this);
     }
   }
 
@@ -426,6 +433,9 @@ function hashDynamicState(h: Fnv1a64, world: World): void {
     h.f64(industry.outputStock0).f64(industry.outputStock1);
     h.u32(industry.productionLevel).u32(industry.monthsSinceLevelChange);
     h.f64(industry.producedThisMonth).f64(industry.collectedThisMonth);
+    h.f64(industry.serviceAverage).u32(industry.serviceMonths);
+    h.u32(industry.monthsWithoutCollection);
+    h.u32(industry.open ? 1 : 0).u32(industry.openedTick);
   }
 
   h.u32(world.stations.length);

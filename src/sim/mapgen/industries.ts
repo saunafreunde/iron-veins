@@ -34,7 +34,7 @@ const REPAIR_ATTEMPTS = 2_000;
  */
 const MAX_REPAIR_ROUNDS = 4;
 
-interface Candidate {
+export interface Candidate {
   readonly x: number;
   readonly y: number;
 }
@@ -106,6 +106,9 @@ function farEnoughFromOthers(placed: readonly Industry[], x: number, y: number):
   const limitSq = INDUSTRY_MIN_DISTANCE * INDUSTRY_MIN_DISTANCE;
   for (let i = 0; i < placed.length; i++) {
     const other = placed[i]!;
+    // A works that has closed gave its ground back; it must not go on
+    // reserving eight tiles around a hole in the map.
+    if (!other.open) continue;
     const dx = other.x - x;
     const dy = other.y - y;
     if (dx * dx + dy * dy < limitSq) return false;
@@ -114,7 +117,7 @@ function farEnoughFromOthers(placed: readonly Industry[], x: number, y: number):
 }
 
 /** Search a valid spot for one industry type. Returns null if none was found. */
-function findSpot(
+export function findSpot(
   map: TileMap,
   rng: Rng,
   spec: IndustrySpec,
@@ -122,6 +125,11 @@ function findSpot(
   placed: readonly Industry[],
   attempts: number,
   requiredLandmass: number,
+  /**
+   * Extra condition the caller cares about. Runtime openings use it to prefer
+   * ground no station reaches yet (section 7.3); the generator passes none.
+   */
+  accept?: (x: number, y: number) => boolean,
 ): Candidate | null {
   for (let attempt = 0; attempt < attempts; attempt++) {
     const x = rng.nextInt(map.size);
@@ -134,13 +142,14 @@ function findSpot(
     if (!nearTerrainSatisfied(map, spec, x, y)) continue;
     if (!nearTownSatisfied(spec, towns, x, y)) continue;
     if (!farEnoughFromOthers(placed, x, y)) continue;
+    if (accept !== undefined && !accept(x, y)) continue;
     return { x, y };
   }
   return null;
 }
 
 /** Reserve the footprint tiles for an industry. */
-function occupy(map: TileMap, industry: Industry): void {
+export function occupy(map: TileMap, industry: Industry): void {
   const spec = industrySpec(industry.type);
   for (let dy = 0; dy < spec.footprint; dy++) {
     for (let dx = 0; dx < spec.footprint; dx++) {
@@ -152,7 +161,7 @@ function occupy(map: TileMap, industry: Industry): void {
 }
 
 /** Give the footprint back to open country. */
-function release(map: TileMap, industry: Industry): void {
+export function release(map: TileMap, industry: Industry): void {
   const spec = industrySpec(industry.type);
   for (let dy = 0; dy < spec.footprint; dy++) {
     for (let dx = 0; dx < spec.footprint; dx++) {
@@ -164,7 +173,11 @@ function release(map: TileMap, industry: Industry): void {
 }
 
 /** Cumulative weight table so a type can be drawn in one random step. */
-function buildWeightTable(): { types: IndustryType[]; cumulative: number[]; total: number } {
+export function buildWeightTable(): {
+  types: IndustryType[];
+  cumulative: number[];
+  total: number;
+} {
   const types: IndustryType[] = [];
   const cumulative: number[] = [];
   let total = 0;
@@ -176,7 +189,7 @@ function buildWeightTable(): { types: IndustryType[]; cumulative: number[]; tota
   return { types, cumulative, total };
 }
 
-function drawType(rng: Rng, table: ReturnType<typeof buildWeightTable>): IndustryType {
+export function drawType(rng: Rng, table: ReturnType<typeof buildWeightTable>): IndustryType {
   const roll = rng.nextInt(table.total);
   for (let i = 0; i < table.cumulative.length; i++) {
     if (roll < table.cumulative[i]!) return table.types[i]!;

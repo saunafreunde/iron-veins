@@ -1,30 +1,35 @@
 import type { Cargo } from '../cargo/types';
+import { depositAtStation } from '../cargo/routing';
 import {
-  INDUSTRY_BASE_OUTPUT_PER_MONTH,
+  INDUSTRY_CLOSURE_MONTHS,
   INDUSTRY_DECLINE_RATIO,
+  INDUSTRY_FULL_STORE_RATE,
   INDUSTRY_GROWTH_RATIO,
   INDUSTRY_INPUT_PER_BATCH,
-  INDUSTRY_LEVEL_HYSTERESIS_MONTHS,
   INDUSTRY_LEVEL_MAX,
   INDUSTRY_LEVEL_MIN,
   INDUSTRY_LEVEL_STEP,
   INDUSTRY_OUTPUT_PER_BATCH,
-  INDUSTRY_PRODUCTION_SLICES_PER_MONTH,
-  INDUSTRY_STOCK_CAP,
+  INDUSTRY_SERVICE_WINDOW_MONTHS,
+  INDUSTRY_STORE_FULL_SHARE,
 } from '../constants';
 import { stationRating } from '../station/types';
-import { depositAtStation } from '../cargo/routing';
 import type { World } from '../World';
 import { coveredShareOf } from './catchment';
-import { industrySpec, type Industry } from './types';
+import { closeIndustry } from './lifecycle';
+import { industryBaseOutput, industrySpec, industryStockCap, type Industry } from './types';
 
 /**
- * Industry production, collection and expansion (section 6).
+ * Industry production, collection and expansion (section 7.3).
  *
- * Three passes, on two clocks. Twice a day: make something out of what has been
- * delivered, then hand what a station can carry over to it. Once a month: look
- * at how much of the month's output actually left, and move the production
- * level accordingly.
+ * Two clocks. Once a month: make something out of what has been delivered, then
+ * look at how much of the year's output actually left and move the production
+ * level. Once a day: hand what the stations can carry over to them.
+ *
+ * Production is monthly and collection is daily on purpose. Booking production
+ * per tick is the balancing mistake section 7.3 names by name; collecting only
+ * once a month would put a mine's whole output on the platform in a single tick
+ * and leave it there ageing for four weeks.
  *
  * The one arithmetic choice that carries the whole design is in
  * `reviewIndustries`: the ratio divides by the UNGATED production. An industry
@@ -56,9 +61,10 @@ function setOutputStock(industry: Industry, slot: number, value: number): void {
 /** Room left for one more unit of a cargo an industry consumes, or 0. */
 export function inputSpaceFor(industry: Industry, cargo: Cargo): number {
   const spec = industrySpec(industry.type);
+  const cap = industryStockCap(industry.type);
   for (let slot = 0; slot < spec.inputs.length; slot++) {
     if (spec.inputs[slot] !== cargo) continue;
-    const space = INDUSTRY_STOCK_CAP - inputStock(industry, slot);
+    const space = cap - inputStock(industry, slot);
     return space > 0 ? space : 0;
   }
   return 0;
@@ -66,10 +72,12 @@ export function inputSpaceFor(industry: Industry, cargo: Cargo): number {
 
 /** Put delivered cargo into the right slot; returns what was actually taken. */
 export function deliverToIndustry(industry: Industry, cargo: Cargo, amount: number): number {
+  if (!industry.open) return 0;
   const spec = industrySpec(industry.type);
+  const cap = industryStockCap(industry.type);
   for (let slot = 0; slot < spec.inputs.length; slot++) {
     if (spec.inputs[slot] !== cargo) continue;
-    const space = INDUSTRY_STOCK_CAP - inputStock(industry, slot);
+    const space = cap - inputStock(industry, slot);
     const taken = amount < space ? amount : space;
     if (taken <= 0) return 0;
     setInputStock(industry, slot, inputStock(industry, slot) + taken);
@@ -78,22 +86,36 @@ export function deliverToIndustry(industry: Industry, cargo: Cargo, amount: numb
   return 0;
 }
 
+/** True while an output slot is as good as full (section 7.3). */
+export function outputStoreFull(industry: Industry): boolean {
+  const spec = industrySpec(industry.type);
+  if (spec.outputs.length === 0) return false;
+  const full = industryStockCap(industry.type) * INDUSTRY_STORE_FULL_SHARE;
+  for (let slot = 0; slot < spec.outputs.length; slot++) {
+    if (outputStock(industry, slot) >= full) return true;
+  }
+  return false;
+}
+
 /**
- * One slice of production for every industry. Called once per game day.
+ * One month of production for every industry (section 7.3).
  *
- * The recipe minimum is evaluated per slice rather than per month, so a mill
- * whose coal arrives on the twenty-ninth can still use it that month.
+ * `amount = min(base rate x level, what the delivered input pays for, the room
+ * the output shed has left)`, and a full shed throttles the whole thing to a
+ * quarter rather than stopping it - a yard that has halted looks exactly like
+ * one that was never supplied, and the player has to be able to tell those two
+ * apart.
  */
 export function produceIndustryCargo(world: World): void {
   for (const industry of world.industries) {
+    if (!industry.open) continue;
     const spec = industrySpec(industry.type);
     const inputs = INDUSTRY_INPUT_PER_BATCH[industry.type]!;
     const outputs = INDUSTRY_OUTPUT_PER_BATCH[industry.type]!;
+    const cap = industryStockCap(industry.type);
 
-    const target =
-      (INDUSTRY_BASE_OUTPUT_PER_MONTH[industry.type]! * industry.productionLevel) /
-      100 /
-      INDUSTRY_PRODUCTION_SLICES_PER_MONTH;
+    let target = (industryBaseOutput(industry, world.tick) * industry.productionLevel) / 100;
+    if (outputStoreFull(industry)) target *= INDUSTRY_FULL_STORE_RATE;
     if (target <= 0) continue;
 
     // How many batches the delivered input can pay for ...
@@ -109,7 +131,7 @@ export function produceIndustryCargo(world: World): void {
     for (let slot = 0; slot < outputs.length; slot++) {
       const per = outputs[slot]!;
       if (per <= 0) continue;
-      const room = (INDUSTRY_STOCK_CAP - outputStock(industry, slot)) / per;
+      const room = (cap - outputStock(industry, slot)) / per;
       if (room < batches) batches = room;
     }
     if (batches <= 0) continue;
@@ -128,7 +150,7 @@ export function produceIndustryCargo(world: World): void {
 }
 
 /**
- * Hand finished output to the stations that serve the industry.
+ * Hand finished output to the stations that serve the industry. Once a day.
  *
  * The difference from town production is one `min(1, ...)`: a town's stations
  * share a fixed output between them, so the rating only redistributes. Here the
@@ -139,6 +161,7 @@ export function collectIndustryOutput(world: World): void {
   if (world.stations.length === 0) return;
 
   for (const industry of world.industries) {
+    if (!industry.open) continue;
     const spec = industrySpec(industry.type);
     if (spec.outputs.length === 0) continue;
 
@@ -174,22 +197,55 @@ export function collectIndustryOutput(world: World): void {
 }
 
 /**
- * Monthly: move the production level, then reset the counters.
+ * Monthly: move the production level, count the months in which nothing left,
+ * close what nobody has served for two years, then reset the counters.
  *
- * The dead band between the two thresholds is what stops an industry
- * oscillating around a boundary, and the hysteresis is what stops one bad month
- * halving a line that is otherwise working.
+ * The expansion rule is section 7.3's: at least eighty percent collected over
+ * twelve months buys ten more points of production level, up to two hundred.
+ * That twelve month window is also the dead band - an industry that has just
+ * moved holds its new level for a year - so the level follows a settled trend
+ * and never one good month.
  */
 export function reviewIndustries(world: World): void {
   for (const industry of world.industries) {
+    if (!industry.open) {
+      industry.producedThisMonth = 0;
+      industry.collectedThisMonth = 0;
+      continue;
+    }
+
     const produced = industry.producedThisMonth;
-    const ratio = produced > 0 ? industry.collectedThisMonth / produced : 0;
+    // An industry that made nothing is dormant, not neglected. A steel mill
+    // nobody has ever supplied would otherwise spend its first two years
+    // failing to be collected from and then close - taking every factory on
+    // the map with it in the first two game years.
+    if (produced <= 0) {
+      industry.collectedThisMonth = 0;
+      industry.monthsSinceLevelChange++;
+      continue;
+    }
+    const ratio = industry.collectedThisMonth / produced;
+
+    // The twelve month window of section 7.3, kept as one running number rather
+    // than a ring of twelve figures (DECISIONS.md D-079).
+    //
+    // While the window is still filling it is a true mean of the months so far,
+    // and only afterwards a rolling one. Starting the rolling form from zero
+    // would mean twelve perfect months averaged 0.65 and an industry served
+    // faultlessly from the day it opened could not expand for two years.
+    const window = INDUSTRY_SERVICE_WINDOW_MONTHS;
+    const seen = industry.serviceMonths < window ? industry.serviceMonths : window - 1;
+    industry.serviceAverage = (industry.serviceAverage * seen + ratio) / (seen + 1);
+    if (industry.serviceMonths < window) industry.serviceMonths++;
+
+    if (industry.collectedThisMonth > 0) industry.monthsWithoutCollection = 0;
+    else industry.monthsWithoutCollection++;
 
     industry.monthsSinceLevelChange++;
-    if (industry.monthsSinceLevelChange >= INDUSTRY_LEVEL_HYSTERESIS_MONTHS) {
+    if (industry.monthsSinceLevelChange >= window) {
       let level = industry.productionLevel;
-      if (ratio >= INDUSTRY_GROWTH_RATIO) level += INDUSTRY_LEVEL_STEP;
-      else if (ratio <= INDUSTRY_DECLINE_RATIO) level -= INDUSTRY_LEVEL_STEP;
+      if (industry.serviceAverage >= INDUSTRY_GROWTH_RATIO) level += INDUSTRY_LEVEL_STEP;
+      else if (industry.serviceAverage <= INDUSTRY_DECLINE_RATIO) level -= INDUSTRY_LEVEL_STEP;
 
       if (level < INDUSTRY_LEVEL_MIN) level = INDUSTRY_LEVEL_MIN;
       if (level > INDUSTRY_LEVEL_MAX) level = INDUSTRY_LEVEL_MAX;
@@ -201,5 +257,7 @@ export function reviewIndustries(world: World): void {
 
     industry.producedThisMonth = 0;
     industry.collectedThisMonth = 0;
+
+    if (industry.monthsWithoutCollection >= INDUSTRY_CLOSURE_MONTHS) closeIndustry(world, industry);
   }
 }

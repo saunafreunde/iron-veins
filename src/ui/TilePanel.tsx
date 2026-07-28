@@ -1,7 +1,12 @@
 import type { ReactElement } from 'react';
 import { formatMoney, t } from '../i18n';
-import type { StationMarker } from '../shared/protocol';
+import type { IndustryMarker, StationMarker } from '../shared/protocol';
 import {
+  CANOPY_COST_CT,
+  INDUSTRY_CLOSURE_MONTHS,
+  INDUSTRY_WARNING_MONTHS,
+  COLD_STORE_COST_CT,
+  FREIGHT_TERMINAL_COST_CT,
   RAIL_DEPOT_COST_CT,
   RAIL_PLATFORM_COST_CT,
   ROAD_COST_PER_TILE_CT,
@@ -10,7 +15,9 @@ import {
   SIGNAL_COST_CT,
   TERRAFORM_COST_PER_STEP_CT,
 } from '../sim/constants';
+import { INDUSTRY_SPECS } from '../sim/industry/types';
 import { TERRAIN_NAME_KEYS } from '../sim/map/terrain';
+import { platformLength, type ModuleKind, type Station } from '../sim/station/types';
 import { RAIL_TYPE_COST_CT, RailType } from '../sim/map/track';
 import { useSimStore, type Tool } from './store';
 
@@ -23,6 +30,9 @@ const TOOLS: ReadonlyArray<{ readonly id: Tool; readonly labelKey: string }> = [
   { id: 'depot', labelKey: 'ui.tool.depot' },
   { id: 'platform', labelKey: 'ui.tool.platform' },
   { id: 'raildepot', labelKey: 'ui.tool.railDepot' },
+  { id: 'freightterminal', labelKey: 'ui.tool.freightTerminal' },
+  { id: 'canopy', labelKey: 'ui.tool.canopy' },
+  { id: 'coldstore', labelKey: 'ui.tool.coldStore' },
   { id: 'signal', labelKey: 'ui.tool.signal' },
   { id: 'pathsignal', labelKey: 'ui.tool.pathSignal' },
   { id: 'demolish', labelKey: 'ui.tool.demolish' },
@@ -48,6 +58,14 @@ function priceHint(tool: Tool): string {
       return t('ui.tool.pricePlatform', { amount: formatMoney(RAIL_PLATFORM_COST_CT) });
     case 'raildepot':
       return t('ui.tool.priceRailDepot', { amount: formatMoney(RAIL_DEPOT_COST_CT) });
+    case 'freightterminal':
+      return t('ui.tool.priceFreightTerminal', {
+        amount: formatMoney(FREIGHT_TERMINAL_COST_CT),
+      });
+    case 'canopy':
+      return t('ui.tool.priceCanopy', { amount: formatMoney(CANOPY_COST_CT) });
+    case 'coldstore':
+      return t('ui.tool.priceColdStore', { amount: formatMoney(COLD_STORE_COST_CT) });
     case 'signal':
       return t('ui.tool.priceSignal', { amount: formatMoney(SIGNAL_COST_CT) });
     case 'pathsignal':
@@ -61,6 +79,18 @@ function priceHint(tool: Tool): string {
     case 'none':
       return t('ui.tool.hintSelect');
   }
+}
+
+/** Industry whose footprint covers a tile, if any. */
+function industryAtTile(
+  industries: readonly IndustryMarker[],
+  x: number,
+  y: number,
+): IndustryMarker | undefined {
+  return industries.find((industry) => {
+    const size = INDUSTRY_SPECS[industry.type]?.footprint ?? 1;
+    return x >= industry.x && x < industry.x + size && y >= industry.y && y < industry.y + size;
+  });
 }
 
 /** Station whose modules cover a tile, if any. */
@@ -80,12 +110,26 @@ export function TilePanel(): ReactElement {
   const setTool = useSimStore((s) => s.setTool);
   const towns = useSimStore((s) => s.towns);
   const stations = useSimStore((s) => s.stations);
+  const industries = useSimStore((s) => s.industries);
   const roadAnchor = useSimStore((s) => s.roadAnchor);
   const trackPreview = useSimStore((s) => s.trackPreview);
 
   const tile = hovered ?? selected;
   const town = tile !== null && tile.townId >= 0 ? towns[tile.townId] : undefined;
   const station = tile === null ? undefined : stationAtTile(stations, tile.x, tile.y);
+  const industry = tile === null ? undefined : industryAtTile(industries, tile.x, tile.y);
+
+  const platformTiles =
+    station === undefined
+      ? 0
+      : platformLength({
+          modules: station.modules.map((module) => ({
+            kind: module.kind as ModuleKind,
+            tileIndex: 0,
+            x: module.x,
+            y: module.y,
+          })),
+        } as Station);
 
   return (
     <section className="panel">
@@ -199,8 +243,49 @@ export function TilePanel(): ReactElement {
               <dt>{t('ui.station.modules')}</dt>
               <dd className="value value--mono">{station.modules.length}</dd>
             </div>
+            {platformTiles > 0 && (
+              <div>
+                <dt>{t('ui.station.platform')}</dt>
+                <dd className="value value--mono">{platformTiles}</dd>
+              </div>
+            )}
           </dl>
           {station.rating < 40 && <p className="panel__hint">{t('ui.station.lowRating')}</p>}
+        </>
+      )}
+
+      {industry !== undefined && (
+        <>
+          <span className="field__label field__label--spaced">{t('ui.industry.title')}</span>
+          <dl className="readout">
+            <div>
+              <dt>{t('ui.tile.terrain')}</dt>
+              <dd className="value">{t(INDUSTRY_SPECS[industry.type]?.nameKey ?? '')}</dd>
+            </div>
+            <div>
+              <dt>{t('ui.industry.level')}</dt>
+              <dd className="value value--mono">{industry.level} %</dd>
+            </div>
+            <div>
+              <dt>{t('ui.industry.stock')}</dt>
+              <dd className="value value--mono">{industry.stock}</dd>
+            </div>
+            <div>
+              <dt>{t('ui.industry.service')}</dt>
+              <dd className={industry.service < 50 ? 'value value--warning' : 'value'}>
+                {industry.service} %
+              </dd>
+            </div>
+          </dl>
+          {!industry.open && <p className="panel__hint value--danger">{t('ui.industry.closed')}</p>}
+          {industry.open && industry.neglectedMonths >= INDUSTRY_WARNING_MONTHS[0]! && (
+            <p className="panel__hint value--danger">
+              {t('ui.industry.closureWarning', {
+                months: industry.neglectedMonths,
+                left: INDUSTRY_CLOSURE_MONTHS - industry.neglectedMonths,
+              })}
+            </p>
+          )}
         </>
       )}
     </section>

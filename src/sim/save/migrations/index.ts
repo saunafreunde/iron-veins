@@ -236,6 +236,38 @@ const v9_to_v10: SaveMigration = (payload) => {
 };
 
 /**
+ * M5 finished with industry closure and the support modules of section 10.
+ *
+ * A version 10 world had industries that could never close, so every one of
+ * them is open, has never missed a collection, and opened when the map did.
+ * `serviceAverage` starts at zero rather than at what the industry deserves:
+ * the expansion rule needs a year of evidence either way, and inventing that
+ * evidence would hand a loaded save an expansion it had not earned.
+ */
+const v10_to_v11: SaveMigration = (payload) => {
+  const inner = state(payload);
+  const industries = inner['industries'];
+  if (!Array.isArray(industries)) {
+    throw new SaveFormatError('save.state.industries: expected an array');
+  }
+
+  return {
+    ...payload,
+    state: {
+      ...inner,
+      industries: industries.map((industry) => ({
+        ...(industry as Record<string, unknown>),
+        serviceAverage: 0,
+        serviceMonths: 0,
+        monthsWithoutCollection: 0,
+        open: true,
+        openedTick: 0,
+      })),
+    },
+  };
+};
+
+/**
  * Registry keyed by the version a migration reads (section 19.1).
  *
  * There is deliberately no entry for 1 -> 2: a version 1 world had no map at
@@ -251,6 +283,7 @@ export const SAVE_MIGRATIONS: ReadonlyMap<number, SaveMigration> = new Map<numbe
   [7, v7_to_v8],
   [8, v8_to_v9],
   [9, v9_to_v10],
+  [10, v10_to_v11],
 ]);
 
 /**

@@ -1,5 +1,13 @@
 import { bookExpense } from '../economy/company';
 import {
+  CANOPY_COST_CT,
+  CANOPY_UPKEEP_CT,
+  COLD_STORE_COST_CT,
+  COLD_STORE_UPKEEP_CT,
+  FREIGHT_TERMINAL_COST_CT,
+  FREIGHT_TERMINAL_UPKEEP_CT,
+} from '../constants';
+import {
   DEMOLITION_REFUND,
   RAIL_DEPOT_COST_CT,
   RAIL_DEPOT_UPKEEP_CT,
@@ -42,7 +50,13 @@ import {
   type TrackDir,
 } from '../map/track';
 import { planTrack } from '../net/trackBuilder';
-import { ModuleKind, recomputeCentre, type Station, type StationModule } from '../station/types';
+import {
+  isSupportModule,
+  ModuleKind,
+  recomputeCentre,
+  type Station,
+  type StationModule,
+} from '../station/types';
 import { assignStationCatchment } from '../town/update';
 import { RoadBit } from '../town/types';
 import type { Cargo } from '../cargo/types';
@@ -512,6 +526,62 @@ export function buildRailStop(
   world.map.revision++;
   return ACCEPTED;
 }
+
+/**
+ * Place a crane, a canopy or a cold store beside a station (section 10).
+ *
+ * These three stand on the goods yard rather than on the line, so they need
+ * neither road nor track - only clear, dry ground close enough to an existing
+ * station to join it. That is also what stops them being used as free stations:
+ * a canopy on its own in a field would have nothing to join.
+ */
+export function buildStationModule(
+  world: World,
+  x: number,
+  y: number,
+  kind: ModuleKind,
+): CommandOutcome {
+  if (!isSupportModule(kind)) return reject(RejectReason.UnknownModule);
+  if (!world.map.contains(x, y)) return reject(RejectReason.OutsideMap);
+
+  const map = world.map;
+  const tile = map.tileIndex(x, y);
+  if (stationAt(world, tile) !== null) return reject(RejectReason.Occupied);
+  if (
+    map.terrain[tile] === Terrain.Water ||
+    map.roadBits[tile] !== 0 ||
+    map.trackBits[tile] !== 0 ||
+    map.buildingKind[tile] !== 0 ||
+    map.industryId[tile] !== -1
+  ) {
+    return reject(RejectReason.GroundNotClear);
+  }
+  if (joinTarget(world, x, y) === null) return reject(RejectReason.NeedsStation);
+
+  const cost = SUPPORT_MODULE_COST_CT[kind]!;
+  if (cost > world.company.cashCt) return reject(RejectReason.InsufficientFunds);
+
+  attachModule(world, { kind, tileIndex: tile, x, y });
+
+  bookExpense(world.company, cost);
+  world.company.upkeepPerYearCt += SUPPORT_MODULE_UPKEEP_CT[kind]!;
+  world.company.fixedAssetsCt += cost;
+  map.revision++;
+  return ACCEPTED;
+}
+
+/** Price and upkeep of the three support modules, indexed by ModuleKind. */
+const SUPPORT_MODULE_COST_CT: Readonly<Record<number, number>> = {
+  [ModuleKind.FreightTerminal]: FREIGHT_TERMINAL_COST_CT,
+  [ModuleKind.Canopy]: CANOPY_COST_CT,
+  [ModuleKind.ColdStore]: COLD_STORE_COST_CT,
+};
+
+const SUPPORT_MODULE_UPKEEP_CT: Readonly<Record<number, number>> = {
+  [ModuleKind.FreightTerminal]: FREIGHT_TERMINAL_UPKEEP_CT,
+  [ModuleKind.Canopy]: CANOPY_UPKEEP_CT,
+  [ModuleKind.ColdStore]: COLD_STORE_UPKEEP_CT,
+};
 
 /**
  * Assemble a train in a rail depot (section 11.2).

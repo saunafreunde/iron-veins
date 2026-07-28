@@ -8,6 +8,7 @@ import type { SignalKind } from '../map/signals';
 import type { RailType, TrackDir } from '../map/track';
 import {
   buildRailStop,
+  buildStationModule,
   buildSignal,
   demolishSignal,
   buildRoad,
@@ -102,6 +103,9 @@ export function executeCommand(world: World, command: Command): CommandOutcome {
 
     case CommandKind.BuildRailStop:
       return buildRailStop(world, command.x, command.y, command.moduleKind as ModuleKind);
+
+    case CommandKind.BuildStationModule:
+      return buildStationModule(world, command.x, command.y, command.moduleKind as ModuleKind);
 
     case CommandKind.BuyRoadVehicle:
       return buyRoadVehicle(world, command.x, command.y, command.specId);

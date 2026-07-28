@@ -18,7 +18,10 @@ export type Tool =
   | 'platform'
   | 'raildepot'
   | 'signal'
-  | 'pathsignal';
+  | 'pathsignal'
+  | 'freightterminal'
+  | 'canopy'
+  | 'coldstore';
 
 /**
  * What the build preview shows before the player commits (section 17.3).
@@ -105,6 +108,7 @@ export interface SimUiState extends SnapshotValues {
   setSelectedTile: (tile: TileInfo | null) => void;
   setTool: (tool: Tool) => void;
   setStations: (stations: readonly StationMarker[]) => void;
+  setIndustries: (industries: readonly IndustryMarker[]) => void;
   setFleet: (vehicles: readonly VehicleMarker[]) => void;
   setSelectedVehicle: (id: number | null) => void;
   setRoadAnchor: (anchor: { readonly x: number; readonly y: number } | null) => void;
@@ -183,6 +187,7 @@ export const useSimStore = create<SimUiState>((set) => ({
   setHoveredTile: (tile) => set({ hoveredTile: tile }),
   setSelectedTile: (tile) => set({ selectedTile: tile }),
   setTool: (tool) => set({ tool, roadAnchor: null, trackPreview: null }),
+  setIndustries: (industries) => set({ industries }),
   setTrackPreview: (preview) => set({ trackPreview: preview }),
   setStations: (stations) => set({ stations }),
   setFleet: (vehicles) => set({ fleet: vehicles }),

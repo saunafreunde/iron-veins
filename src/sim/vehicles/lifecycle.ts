@@ -1,6 +1,8 @@
 import { compactStacks } from '../cargo/stack';
+import { cargoSpec } from '../cargo/types';
 import {
   BREAKDOWN_DIVISOR,
+  CANOPY_DECAY_FACTOR,
   BREAKDOWN_MAX_TICKS,
   BREAKDOWN_MIN_TICKS,
   CARGO_EXPIRY_FRACTION_PER_DAY,
@@ -9,7 +11,7 @@ import {
   RELIABILITY_MAX,
   TICKS_PER_DAY,
 } from '../constants';
-import { trimVisits } from '../station/types';
+import { hasModule, ModuleKind, trimVisits } from '../station/types';
 import type { World } from '../World';
 import { VehicleState } from './VehicleStore';
 
@@ -64,17 +66,32 @@ export function expireStaleCargo(world: World): void {
     // Overflow memory fades, so one bad month does not brand a station for ever.
     station.overflowUnits = Math.max(0, station.overflowUnits - 20);
 
+    // What the station's own buildings do about spoilage (section 10).
+    const canopy = hasModule(station, ModuleKind.Canopy);
+    const coldStore = hasModule(station, ModuleKind.ColdStore);
+
     for (const stack of station.waiting) {
       // Cargo with nowhere to go is the routing sweep's business: it writes the
       // parcel off whole and charges the station for it. Nibbling at it here as
       // well would take the same loss twice (section 7.4).
       if (stack.destinationStationId < 0) continue;
       if (world.tick - stack.createdTick <= cutoff) continue;
+
+      // A cold store stops perishable cargo spoiling here at all; a canopy
+      // holds back a third of the loss on everything.
+      if (coldStore && cargoSpec(stack.cargo).needsCooling) {
+        stack.createdTick += TICKS_PER_DAY;
+        continue;
+      }
+      const share = canopy
+        ? CARGO_EXPIRY_FRACTION_PER_DAY * CANOPY_DECAY_FACTOR
+        : CARGO_EXPIRY_FRACTION_PER_DAY;
+
       // A share, not the lot. Cargo merges into one stack per origin, so
       // zeroing it would take two thousand units off an over-supplied station
       // in a single tick - which is the steady state of every mine nobody
       // collects from.
-      stack.amount -= stack.amount * CARGO_EXPIRY_FRACTION_PER_DAY;
+      stack.amount -= stack.amount * share;
       stack.createdTick += TICKS_PER_DAY;
     }
     compactStacks(station.waiting);

@@ -1,4 +1,8 @@
-import type { MainToWorkerMessage, WorkerToMainMessage } from '../shared/protocol';
+import type {
+  IndustryMarker,
+  MainToWorkerMessage,
+  WorkerToMainMessage,
+} from '../shared/protocol';
 import {
   SNAPSHOT_MAX_VEHICLES,
   SNAPSHOT_VEHICLE_STRIDE,
@@ -95,7 +99,31 @@ function refreshStateHash(current: World): void {
 function structureSignature(current: World): string {
   let modules = 0;
   for (const station of current.stations) modules += station.modules.length;
-  return `${current.stations.length}:${modules}:${current.vehicles.livingCount}`;
+  let levels = 0;
+  let closed = 0;
+  for (const industry of current.industries) {
+    levels += industry.productionLevel;
+    if (!industry.open) closed++;
+  }
+  return (
+    `${current.stations.length}:${modules}:${current.vehicles.livingCount}:` +
+    `${current.industries.length}:${levels}:${closed}`
+  );
+}
+
+/** Live production state of every industry, for the tile panel. */
+function industryMarkers(current: World): IndustryMarker[] {
+  return current.industries.map((industry) => ({
+    id: industry.id,
+    type: industry.type,
+    x: industry.x,
+    y: industry.y,
+    level: industry.open ? industry.productionLevel : 0,
+    stock: Math.round(industry.outputStock0 + industry.outputStock1),
+    service: Math.round(industry.serviceAverage * 100),
+    neglectedMonths: industry.monthsWithoutCollection,
+    open: industry.open,
+  }));
 }
 
 function postStructure(current: World): void {
@@ -111,6 +139,7 @@ function postStructure(current: World): void {
       modules: station.modules.map((module) => ({ kind: module.kind, x: module.x, y: module.y })),
     })),
   });
+  scope.postMessage({ type: 'industriesChanged', industries: industryMarkers(current) });
   postFleet(current);
 }
 
@@ -332,12 +361,7 @@ function startGame(message: Extract<MainToWorkerMessage, { type: 'init' }>): voi
       y: town.y,
       sizeClass: town.sizeClass,
     })),
-    industries: world.industries.map((industry) => ({
-      id: industry.id,
-      type: industry.type,
-      x: industry.x,
-      y: industry.y,
-    })),
+    industries: industryMarkers(world),
   });
 }
 

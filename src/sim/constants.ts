@@ -469,9 +469,6 @@ export const INDUSTRY_OUTPUT_PER_BATCH: readonly (readonly number[])[] = [
   [], // BuildersMerchant: nothing
 ];
 
-/** Production is booked in this many slices per month, like town output. */
-export const INDUSTRY_PRODUCTION_SLICES_PER_MONTH = 30;
-
 /**
  * Production level, in percent of the base figure.
  *
@@ -481,7 +478,8 @@ export const INDUSTRY_PRODUCTION_SLICES_PER_MONTH = 30;
 export const INDUSTRY_LEVEL_START = 100;
 export const INDUSTRY_LEVEL_MIN = 25;
 export const INDUSTRY_LEVEL_MAX = 200;
-export const INDUSTRY_LEVEL_STEP = 25;
+/** One expansion, in percentage points of the base rate (section 7.3). */
+export const INDUSTRY_LEVEL_STEP = 10;
 
 /**
  * Share of what was produced that has to be collected for the level to move.
@@ -491,20 +489,67 @@ export const INDUSTRY_LEVEL_STEP = 25;
  * threshold. That single choice is the death spiral of section 10.1 applied to
  * freight: a second train pays for itself in tonnage, not just in trips.
  */
-export const INDUSTRY_GROWTH_RATIO = 0.85;
-export const INDUSTRY_DECLINE_RATIO = 0.45;
+export const INDUSTRY_GROWTH_RATIO = 0.8;
+export const INDUSTRY_DECLINE_RATIO = 0.35;
 
 /**
- * Months an industry holds its level before it may move again.
+ * Months of service the expansion rule judges, and the window the running
+ * average covers (section 7.3: "at least 80 % collected over 12 months").
  *
- * One game month is five real minutes at 1x. Without the dead band a single
- * missed month would halve a line and the player would never see why; with it,
- * the level only moves on a settled trend.
+ * It is also the dead band: an industry that has just moved holds its new level
+ * for a year, so the level follows a settled trend and not one bad month.
  */
-export const INDUSTRY_LEVEL_HYSTERESIS_MONTHS = 3;
+export const INDUSTRY_SERVICE_WINDOW_MONTHS = 12;
 
-/** How much of one cargo an industry holds before it stops taking more. [units] */
-export const INDUSTRY_STOCK_CAP = 500;
+/** Months with nothing collected at all before an industry closes for good. */
+export const INDUSTRY_CLOSURE_MONTHS = 24;
+
+/** The two warnings on the way there. [months without a collection] */
+export const INDUSTRY_WARNING_MONTHS: readonly number[] = [12, 20];
+
+/**
+ * What an industry still produces once its output store is full.
+ *
+ * Not zero: a yard that has stopped entirely looks the same as one that was
+ * never built, and the player has to be able to see the difference between a
+ * works nobody collects from and a works nobody supplies.
+ */
+export const INDUSTRY_FULL_STORE_RATE = 0.25;
+
+/**
+ * Share of the store at which the yard counts as full.
+ *
+ * Not the last unit. At exactly the cap there is no room for anything at all,
+ * so a throttle would be invisible - production would simply be zero and the
+ * player would never see the works winding down. At nine tenths the slowdown
+ * happens while there is still something to see.
+ */
+export const INDUSTRY_STORE_FULL_SHARE = 0.9;
+
+/**
+ * Swing of a primary industry's base rate, and the period of that swing.
+ *
+ * A mine is not a metronome. The phase is taken from the industry id, so a
+ * region does not boom and slump in unison, and the sine comes from the lookup
+ * table of math.ts because Math.sin is not bit exact across engines.
+ */
+export const INDUSTRY_FLUCTUATION_AMPLITUDE = 0.25;
+export const INDUSTRY_FLUCTUATION_PERIOD_YEARS = 5;
+
+/**
+ * Stock capacity, in months of the industry's own production (section 7.3).
+ *
+ * Per industry rather than a flat figure: eight months of a gravel pit is a
+ * different quantity from eight months of an electronics works, and a flat cap
+ * would make the small industries hoard and the large ones choke.
+ */
+export const INDUSTRY_STOCK_MONTHS = 8;
+
+/** New industries that open per game year, in under-served regions. */
+export const INDUSTRY_NEW_PER_YEAR = 1;
+
+/** Attempts spent looking for a spot for one of them before giving up. */
+export const INDUSTRY_OPENING_ATTEMPTS = 400;
 
 // ----------------------------------------------------------------- stations
 
@@ -534,6 +579,9 @@ export const RATING_FREQUENCY_MAX = 20;
 export const RATING_FREQUENCY_SATURATION_VISITS = 40;
 
 export const RATING_EQUIPMENT_MAX = 15;
+
+/** A canopy is worth this much of the equipment term on its own (section 10). */
+export const RATING_CANOPY_BONUS = 8;
 export const RATING_RELIABILITY_MAX = 10;
 export const RATING_OVERFLOW_PENALTY_MAX = 15;
 
@@ -780,6 +828,40 @@ export const RAIL_PLATFORM_UPKEEP_CT = 900 * CENTS_PER_EURO;
 
 export const RAIL_DEPOT_COST_CT = 14_000 * CENTS_PER_EURO;
 export const RAIL_DEPOT_UPKEEP_CT = 1_400 * CENTS_PER_EURO;
+
+/**
+ * The three support modules of section 10, which stand beside the line rather
+ * than on it.
+ *
+ * Priced against what each one buys. A freight terminal turns over a goods yard
+ * half again as fast and is the dearest; a canopy is worth eight rating points
+ * and a third off cargo spoilage; a cold store is narrow - it only matters for
+ * food, livestock and chemicals - so it is the cheapest of the three but has
+ * the highest upkeep, because a cold store runs on electricity.
+ */
+export const FREIGHT_TERMINAL_COST_CT = 18_000 * CENTS_PER_EURO;
+export const FREIGHT_TERMINAL_UPKEEP_CT = 1_600 * CENTS_PER_EURO;
+
+export const CANOPY_COST_CT = 9_000 * CENTS_PER_EURO;
+export const CANOPY_UPKEEP_CT = 700 * CENTS_PER_EURO;
+
+export const COLD_STORE_COST_CT = 12_000 * CENTS_PER_EURO;
+export const COLD_STORE_UPKEEP_CT = 2_100 * CENTS_PER_EURO;
+
+/** A freight terminal multiplies the time a stop takes by this (section 10). */
+export const FREIGHT_TERMINAL_LOAD_FACTOR = 1 / 1.5;
+
+/** A canopy leaves this share of the daily spoilage at a station standing. */
+export const CANOPY_DECAY_FACTOR = 0.7;
+
+/**
+ * What a train longer than the platform still manages to load (section 10).
+ *
+ * The share of the train that fits, and then a further forty percent off: the
+ * part hanging off the end has to be shunted into place and worked separately,
+ * which is slow enough that a player should lengthen the platform instead.
+ */
+export const PLATFORM_OVERHANG_PENALTY = 0.4;
 
 /**
  * Bridges and tunnels (section 8.3).

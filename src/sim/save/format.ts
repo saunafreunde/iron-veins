@@ -28,9 +28,10 @@ export const SAVE_MAGIC = 'IRVN';
  * distance-to-go, 6 the bridge and tunnel layers, 7 signals and the two
  * reservation indices a train carries, 8 industry production and the town
  * delivery counters, 9 the block claim and the deadlock clock, 10 the cargo
- * destinations and the measured connection table of section 7.4.
+ * destinations and the measured connection table of section 7.4, 11 industry
+ * closure and the three support modules of section 10.
  */
-export const SAVE_VERSION = 10;
+export const SAVE_VERSION = 11;
 
 /** File extension used for manual and automatic saves. */
 export const SAVE_EXTENSION = '.ironsave';
@@ -263,6 +264,14 @@ function parseIndustries(value: unknown, path: string): Industry[] {
         raw['monthsSinceLevelChange'],
         `${path}[${i}].monthsSinceLevelChange`,
       ),
+      serviceAverage: asFinite(raw['serviceAverage'], `${path}[${i}].serviceAverage`),
+      serviceMonths: asInt(raw['serviceMonths'], `${path}[${i}].serviceMonths`),
+      monthsWithoutCollection: asInt(
+        raw['monthsWithoutCollection'],
+        `${path}[${i}].monthsWithoutCollection`,
+      ),
+      open: asBoolean(raw['open'], `${path}[${i}].open`),
+      openedTick: asInt(raw['openedTick'], `${path}[${i}].openedTick`),
     });
   }
   return industries;
@@ -361,6 +370,14 @@ function parseCommand(value: unknown, path: string): Command {
           asInt(id, `${path}.specIds[${i}]`),
         ),
       };
+    case CommandKind.BuildStationModule:
+      return {
+        kind: CommandKind.BuildStationModule,
+        x: asInt(raw['x'], `${path}.x`),
+        y: asInt(raw['y'], `${path}.y`),
+        moduleKind: asInt(raw['moduleKind'], `${path}.moduleKind`),
+      };
+
     case CommandKind.BuildSignal:
       return {
         kind: CommandKind.BuildSignal,

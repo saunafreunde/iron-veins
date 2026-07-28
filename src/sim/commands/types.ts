@@ -27,6 +27,7 @@ export const CommandKind = {
   BuildSignal: 19,
   DemolishSignal: 20,
   RefitVehicle: 21,
+  BuildStationModule: 22,
 } as const;
 export type CommandKind = (typeof CommandKind)[keyof typeof CommandKind];
 
@@ -169,6 +170,18 @@ export interface BuyTrainCommand {
   readonly specIds: readonly number[];
 }
 
+/**
+ * Place a support module - crane, canopy or cold store - on clear ground beside
+ * a station that already exists (section 10).
+ */
+export interface BuildStationModuleCommand {
+  readonly kind: typeof CommandKind.BuildStationModule;
+  readonly x: number;
+  readonly y: number;
+  /** A value of ModuleKind; only the three support kinds are accepted. */
+  readonly moduleKind: number;
+}
+
 /** Place a signal on a piece of plain line. */
 export interface BuildSignalCommand {
   readonly kind: typeof CommandKind.BuildSignal;
@@ -199,6 +212,7 @@ export interface RefitVehicleCommand {
 
 export type Command =
   | RefitVehicleCommand
+  | BuildStationModuleCommand
   | BuildSignalCommand
   | DemolishSignalCommand
   | BuildTrackCommand
@@ -253,6 +267,8 @@ export const RejectReason = {
   NothingToDo: 'cmd.reject.nothingToDo',
   NeedsRoad: 'cmd.reject.needsRoad',
   NeedsTrack: 'cmd.reject.needsTrack',
+  NeedsStation: 'cmd.reject.needsStation',
+  GroundNotClear: 'cmd.reject.groundNotClear',
   NotPlainTrack: 'cmd.reject.notPlainTrack',
   SignalOnStructure: 'cmd.reject.signalOnStructure',
   SignalExists: 'cmd.reject.signalExists',

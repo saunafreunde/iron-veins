@@ -330,5 +330,22 @@
   "signal.pathEntry": "Einfahr-Pfadsignal",
   "cmd.reject.unknownSignal": "Diesen Signaltyp gibt es nicht.",
   "cmd.reject.signalNeedsDirection": "Ein einseitiges Signal muss entlang des Gleises zeigen.",
-  "ui.fleet.stuck": "Steht seit {days} Tagen am Signal — mögliche Verklemmung."
+  "ui.fleet.stuck": "Steht seit {days} Tagen am Signal — mögliche Verklemmung.",
+  "ui.tool.freightTerminal": "Frachtterminal",
+  "ui.tool.canopy": "Überdachung",
+  "ui.tool.coldStore": "Kühlhalle",
+  "ui.tool.priceFreightTerminal": "Frachtterminal: {amount} — lädt 50 % schneller",
+  "ui.tool.priceCanopy": "Überdachung: {amount} — +8 Bewertung, weniger Verfall",
+  "ui.tool.priceColdStore": "Kühlhalle: {amount} — verderbliche Fracht hält sich",
+  "cmd.reject.needsStation": "Ein Modul dieser Art muss an eine bestehende Station anschließen.",
+  "cmd.reject.groundNotClear": "Der Untergrund muss frei sein: kein Weg, kein Gleis, kein Gebäude.",
+  "ui.station.platform": "Bahnsteiglänge",
+  "ui.station.modulesList": "Module",
+  "ui.industry.title": "Industrie",
+  "ui.industry.level": "Produktionsstufe",
+  "ui.industry.stock": "Lager",
+  "ui.industry.service": "Abtransport (12 Monate)",
+  "ui.industry.closureWarning": "Seit {months} Monaten holt niemand etwas ab — schließt in {left} Monaten.",
+  "ui.industry.closed": "Stillgelegt.",
+  "ui.industry.storeFull": "Lager voll — Produktion auf 25 %."
 }

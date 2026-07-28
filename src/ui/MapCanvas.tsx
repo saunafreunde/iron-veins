@@ -66,6 +66,30 @@ function commandForClick(tool: Tool, tile: TileInfo): Command | null {
         y: tile.y,
         moduleKind: ModuleKind.RailDepot,
       };
+    case 'freightterminal':
+      return {
+        kind: CommandKind.BuildStationModule,
+        x: tile.x,
+        y: tile.y,
+        moduleKind: ModuleKind.FreightTerminal,
+      };
+
+    case 'canopy':
+      return {
+        kind: CommandKind.BuildStationModule,
+        x: tile.x,
+        y: tile.y,
+        moduleKind: ModuleKind.Canopy,
+      };
+
+    case 'coldstore':
+      return {
+        kind: CommandKind.BuildStationModule,
+        x: tile.x,
+        y: tile.y,
+        moduleKind: ModuleKind.ColdStore,
+      };
+
     case 'signal':
       return {
         kind: CommandKind.BuildSignal,
