@@ -7,6 +7,7 @@ import {
   type StationModule,
 } from '../station/types';
 import { hasVehicleSpec, vehicleSpec } from '../vehicles/catalog';
+import { powerCode } from '../vehicles/spec';
 import { MAX_CONSIST_UNITS } from '../constants';
 import type { OrderLoad, OrderTarget, OrderUnload } from '../vehicles/VehicleStore';
 import { MAX_PATH_TILES, VehicleStore, type Order } from '../vehicles/VehicleStore';
@@ -70,6 +71,8 @@ export interface VehicleSave {
   refitCargo: number;
   homeDepotTile: number;
   earnedCt: number;
+  /** Traction work done since the last energy bill. [J] */
+  workJ: number;
   orders: Order[];
   cargo: CargoStack[];
 }
@@ -131,6 +134,7 @@ export function encodeVehicles(store: VehicleStore): VehicleSave[] {
       refitCargo: store.refitCargo[id]!,
       homeDepotTile: store.homeDepotTile[id]!,
       earnedCt: store.earnedCt[id]!,
+      workJ: store.workJ[id]!,
       orders: store.orders[id]!.map((order) => ({ ...order })),
       cargo: store.cargo[id]!.map((stack) => ({ ...stack })),
     });
@@ -280,6 +284,7 @@ export function decodeVehicles(value: unknown, path: string): VehicleSave[] {
       refitCargo: int(raw['refitCargo'], `${path}[${i}].refitCargo`),
       homeDepotTile: int(raw['homeDepotTile'], `${path}[${i}].homeDepotTile`),
       earnedCt: num(raw['earnedCt'], `${path}[${i}].earnedCt`),
+      workJ: num(raw['workJ'], `${path}[${i}].workJ`),
       orders: list(raw['orders'], `${path}[${i}].orders`).map((orderValue, o) => ({
         target: int(
           record(orderValue, `${path}[${i}].orders[${o}]`)['target'],
@@ -341,6 +346,8 @@ export function buildVehicleStore(saves: readonly VehicleSave[]): VehicleStore {
     store.refitCargo[id] = save.refitCargo;
     store.homeDepotTile[id] = save.homeDepotTile;
     store.earnedCt[id] = save.earnedCt;
+    store.workJ[id] = save.workJ;
+    store.powerCode[id] = powerCode(vehicleSpec(save.specId).power);
 
     store.paths[id] = new Int32Array(MAX_PATH_TILES);
     for (let t = 0; t < save.path.length; t++) store.paths[id]![t] = save.path[t]!;

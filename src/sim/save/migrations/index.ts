@@ -347,6 +347,52 @@ const v12_to_v13: SaveMigration = (payload) => {
 };
 
 /**
+ * M6 priced the energy a fleet burns, which needs a work accumulator per
+ * vehicle. A version 13 world has burned nothing that anybody counted, so every
+ * vehicle starts the next month with a clean meter.
+ */
+const v13_to_v14: SaveMigration = (payload) => {
+  const inner = state(payload);
+  const vehicles = inner['vehicles'];
+  if (!Array.isArray(vehicles)) throw new SaveFormatError('save.state.vehicles: expected an array');
+
+  return {
+    ...payload,
+    state: {
+      ...inner,
+      vehicles: vehicles.map((vehicle) => ({
+        ...(vehicle as Record<string, unknown>),
+        workJ: 0,
+      })),
+    },
+  };
+};
+
+/**
+ * M6 made inflation switchable (section 14.2) and added the auto-renewal
+ * switch of 11.3. Every world before version 15 ran with inflation ON, because
+ * the revenue side has been inflated since M2 - so on is what those saves
+ * actually mean - and without auto-renewal, which did not exist.
+ */
+const v14_to_v15: SaveMigration = (payload) => {
+  const inner = state(payload);
+  const company = inner['company'];
+  if (typeof company !== 'object' || company === null || Array.isArray(company)) {
+    throw new SaveFormatError('save.state.company: expected an object');
+  }
+  return {
+    ...payload,
+    state: {
+      ...inner,
+      inflation: true,
+      // Off, because a save taken before the switch existed was played without
+      // it and turning it on would spend the player's money for them.
+      company: { ...(company as Record<string, unknown>), autoRenew: false },
+    },
+  };
+};
+
+/**
  * Registry keyed by the version a migration reads (section 19.1).
  *
  * There is deliberately no entry for 1 -> 2: a version 1 world had no map at
@@ -365,6 +411,8 @@ export const SAVE_MIGRATIONS: ReadonlyMap<number, SaveMigration> = new Map<numbe
   [10, v10_to_v11],
   [11, v11_to_v12],
   [12, v12_to_v13],
+  [13, v13_to_v14],
+  [14, v14_to_v15],
 ]);
 
 /**

@@ -68,6 +68,24 @@ export function tileDistance(fromX: number, fromY: number, toX: number, toY: num
   return Math.sqrt(dx * dx + dy * dy);
 }
 
+/**
+ * Price level to charge a COST at, in a world where inflation may be off.
+ *
+ * Section 14.2 applies inflation to revenue and costs alike. Revenue gets it
+ * through `epochFactor` inside the payment formula; everything the company buys
+ * or maintains goes through this instead, so that turning inflation off turns
+ * it off on both sides at once rather than leaving costs frozen while fares
+ * climb.
+ */
+export function costFactor(year: number, inflation: boolean): number {
+  return inflation ? epochFactor(year) : 1;
+}
+
+/** A cost at this year's price level, in whole cents. */
+export function inflatedCostCt(baseCt: number, year: number, inflation: boolean): number {
+  return Math.round(baseCt * costFactor(year, inflation));
+}
+
 export interface PaymentInput {
   readonly cargo: Cargo;
   readonly amount: number;

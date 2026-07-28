@@ -37,6 +37,34 @@ export type RailRole = (typeof RailRole)[keyof typeof RailRole];
 
 export type PowerSource = 'steam' | 'diesel' | 'electric' | 'hydrogen' | 'battery';
 
+/**
+ * The same list as a number, in the order ENERGY_COST_CT_PER_MJ is indexed by.
+ *
+ * The tick loop prices the work a vehicle has done and must not do a string
+ * comparison or a catalogue lookup to find out what it burns (law #7), so the
+ * code is cached per vehicle when it is created.
+ */
+export const PowerCode = {
+  Steam: 0,
+  Diesel: 1,
+  Electric: 2,
+  Hydrogen: 3,
+  Battery: 4,
+} as const;
+export type PowerCode = (typeof PowerCode)[keyof typeof PowerCode];
+
+const POWER_CODES: Readonly<Record<PowerSource, PowerCode>> = {
+  steam: PowerCode.Steam,
+  diesel: PowerCode.Diesel,
+  electric: PowerCode.Electric,
+  hydrogen: PowerCode.Hydrogen,
+  battery: PowerCode.Battery,
+};
+
+export function powerCode(power: PowerSource): PowerCode {
+  return POWER_CODES[power];
+}
+
 export interface VehicleSpec {
   readonly id: number;
   readonly nameKey: string;

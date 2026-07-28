@@ -318,6 +318,41 @@ export const BANKRUPTCY_MONTHS = 12;
 /** Nominal annual interest rate per difficulty, booked monthly. [1/year] */
 export const LOAN_INTEREST_RATE_PER_YEAR: readonly number[] = [0.04, 0.04, 0.065];
 
+// ------------------------------------------------------------------- energy
+
+/**
+ * What a megajoule of USEFUL work costs, by energy carrier (section 14.1).
+ *
+ * Indexed by PowerSource. The figure is the price of the fuel divided by how
+ * much of it reaches the drawbar, so the two effects the account exists to show
+ * are folded into one number: a steam locomotive turns about eight percent of
+ * what it burns into work and an electric one about ninety, which is why
+ * electrification is worth paying for and why it is the whole point of having
+ * this account at all.
+ *
+ * The absolute level is set by balancing scenario 2, which is the authority
+ * section 19.4 names: the first draft of these numbers put the coal line at the
+ * very edge of its payback band with nothing to spare. The RATIOS between them
+ * are the part that is not negotiable - steam dearest, then hydrogen, diesel,
+ * battery, electric - because those are what make electrification worth paying
+ * for, which is the whole reason the account exists.
+ * [cent per megajoule of work at the drawbar]
+ */
+export const ENERGY_COST_CT_PER_MJ: readonly number[] = [
+  170, // steam: cheap coal, dreadful efficiency
+  62, // diesel
+  25, // electric
+  92, // hydrogen
+  36, // battery
+];
+
+/**
+ * Megajoules in a joule, the other way up. Work is accumulated in joules
+ * because that is what force times distance gives, and priced in megajoules
+ * because that is a number a human can read.
+ */
+export const JOULES_PER_MJ = 1_000_000;
+
 // ---------------------------------------------------------------- accounting
 
 /**
@@ -719,6 +754,15 @@ export const RELIABILITY_SERVICE_GAIN = 600;
  */
 export const OBSOLETE_UPKEEP_FACTOR = 2;
 export const OBSOLETE_DECAY_FACTOR = 2;
+
+/**
+ * Age at which auto-renewal replaces a vehicle, as a share of its design life.
+ *
+ * Nine tenths, so a vehicle is replaced just BEFORE the doubled upkeep and the
+ * doubled decay of obsolescence bite rather than just after - which is the
+ * whole point of having the setting.
+ */
+export const AUTO_RENEW_LIFE_SHARE = 0.9;
 
 /** Breakdown roll happens once per game day: rng < (max - reliability) / this. */
 export const BREAKDOWN_DIVISOR = 40_000;

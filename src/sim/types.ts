@@ -71,6 +71,14 @@ export interface CompanyState {
   monthsInDebt: number;
   /** True once the company has been wound up. The game is over. */
   bankrupt: boolean;
+  /**
+   * Replace vehicles automatically as they near the end of their design life
+   * (section 11.3).
+   *
+   * A company-wide switch rather than the per-line one the spec asks for,
+   * because lines are section 12.2 and do not exist yet (D-093).
+   */
+  autoRenew: boolean;
 }
 
 /** Calendar position derived from a tick count. */
@@ -92,4 +100,15 @@ export interface NewGameParams {
   readonly mapSize: number;
   readonly companyName: string;
   readonly companyColorIndex: number;
+  /**
+   * Whether prices and costs drift upward over the century (section 14.2).
+   *
+   * Fixed when the game is started rather than being a preference that can be
+   * flipped mid-game. It changes what every command costs, so two worlds with
+   * the same seed and the same commands but different settings diverge - which
+   * makes it saved state and part of the hash, and makes a mid-game toggle
+   * something that would have to be a COMMAND rather than a checkbox
+   * (DECISIONS.md D-092).
+   */
+  readonly inflation?: boolean;
 }

@@ -28,6 +28,7 @@ export const CommandKind = {
   DemolishSignal: 20,
   RefitVehicle: 21,
   BuildStationModule: 22,
+  SetAutoRenew: 23,
 } as const;
 export type CommandKind = (typeof CommandKind)[keyof typeof CommandKind];
 
@@ -180,6 +181,18 @@ export interface BuyTrainCommand {
 }
 
 /**
+ * Turn automatic vehicle renewal on or off (section 11.3).
+ *
+ * A command rather than a UI preference, because it spends money and changes
+ * the fleet - and everything that changes state goes through a command, which
+ * is what buys the replay (law #6).
+ */
+export interface SetAutoRenewCommand {
+  readonly kind: typeof CommandKind.SetAutoRenew;
+  readonly enabled: boolean;
+}
+
+/**
  * Place a support module - crane, canopy or cold store - on clear ground beside
  * a station that already exists (section 10).
  */
@@ -220,6 +233,7 @@ export interface RefitVehicleCommand {
 }
 
 export type Command =
+  | SetAutoRenewCommand
   | RefitVehicleCommand
   | BuildStationModuleCommand
   | BuildSignalCommand

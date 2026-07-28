@@ -244,7 +244,15 @@ function stepPhysics(world: World, id: number, braking: boolean, speedLimit: num
   if (next < 0) next = 0;
   if (next > speedLimit) next = speedLimit;
   vehicles.speedMs[id] = next;
-  vehicles.progressM[id] = vehicles.progressM[id]! + next * TICK_SECONDS;
+
+  // Work is force times distance, and the distance has to be the SAME one the
+  // position uses - a separately recomputed step would let the energy bill and
+  // the odometer drift apart, which is the mistake of D-043 wearing a hat.
+  // Braking sets traction to zero, so nothing is recovered on the way down:
+  // regenerative braking is not modelled (DECISIONS.md D-091).
+  const stepM = next * TICK_SECONDS;
+  vehicles.workJ[id] = vehicles.workJ[id]! + traction * stepM;
+  vehicles.progressM[id] = vehicles.progressM[id]! + stepM;
 }
 
 /** Metres the vehicle still has to drive on its route. */

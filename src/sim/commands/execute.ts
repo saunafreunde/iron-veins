@@ -105,6 +105,10 @@ export function executeCommand(world: World, command: Command): CommandOutcome {
     case CommandKind.BuildRailStop:
       return buildRailStop(world, command.x, command.y, command.moduleKind as ModuleKind);
 
+    case CommandKind.SetAutoRenew:
+      world.company.autoRenew = command.enabled;
+      return ACCEPTED;
+
     case CommandKind.BuildStationModule:
       return buildStationModule(world, command.x, command.y, command.moduleKind as ModuleKind);
 
@@ -206,13 +210,13 @@ function terraform(
 ): CommandOutcome {
   const estimate = estimateTerraform(world.map, x, y, direction);
   if (!estimate.ok) return { ok: false, reasonKey: estimate.reasonKey ?? '' };
-  if (estimate.costCt > world.company.cashCt) {
+  if (world.costCt(estimate.costCt) > world.company.cashCt) {
     return { ok: false, reasonKey: RejectReason.InsufficientFunds };
   }
 
   const result = applyTerraform(world.map, x, y, direction);
   if (!result.ok) return { ok: false, reasonKey: result.reasonKey ?? '' };
-  chargeCompany(world, result.costCt);
+  chargeCompany(world, world.costCt(result.costCt));
   return ACCEPTED;
 }
 

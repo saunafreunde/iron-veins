@@ -5,6 +5,7 @@ import { CommandKind, type Command } from '../sim/commands/types';
 import { TileMap } from '../sim/map/TileMap';
 import { SignalKind } from '../sim/map/signals';
 import { RailType, TrackDir } from '../sim/map/track';
+import { inflatedCostCt } from '../sim/cargo/payment';
 import { planTrack } from '../sim/net/trackBuilder';
 import { AUTO_SIGNAL_SPACING_TILES, DEADLOCK_WARN_TICKS } from '../sim/constants';
 import { ModuleKind } from '../sim/station/types';
@@ -178,7 +179,11 @@ export function MapCanvas({ client }: { readonly client: SimClient }): ReactElem
         minRadiusM: planned.route.geometry.minRadiusM,
         maxGradePermille: planned.route.geometry.maxGradePermille,
         maxSpeedMs: planned.route.geometry.maxSpeedMs,
-        costCt: planned.route.costCt,
+        // What will actually be CHARGED, not what the table says: costs
+        // inflate with the century (section 14.2), and a preview that showed
+        // the raw constant would disagree with the bill - the exact frustration
+        // section 17.3 exists to prevent.
+        costCt: inflatedCostCt(planned.route.costCt, state.year, true),
         reasonKey: null,
       });
       view.setPreviewRoute(planned.route.tiles);

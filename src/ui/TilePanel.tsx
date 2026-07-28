@@ -16,6 +16,7 @@ import {
   SIGNAL_COST_CT,
   TERRAFORM_COST_PER_STEP_CT,
 } from '../sim/constants';
+import { inflatedCostCt } from '../sim/cargo/payment';
 import { INDUSTRY_SPECS } from '../sim/industry/types';
 import { TERRAIN_NAME_KEYS } from '../sim/map/terrain';
 import { platformLength, type ModuleKind, type Station } from '../sim/station/types';
@@ -42,39 +43,46 @@ const TOOLS: ReadonlyArray<{ readonly id: Tool; readonly labelKey: string }> = [
   { id: 'level', labelKey: 'ui.tool.level' },
 ];
 
-/** Price shown under the active tool, so the cost is known before the click. */
-function priceHint(tool: Tool): string {
+/**
+ * Price shown under the active tool, so the cost is known before the click.
+ *
+ * Every figure passes through the same inflation the simulation charges at
+ * (section 14.2), because a preview that disagrees with the bill is the exact
+ * frustration section 17.3 exists to prevent.
+ */
+function priceHint(tool: Tool, year: number): string {
+  const at = (baseCt: number): number => inflatedCostCt(baseCt, year, true);
   switch (tool) {
     case 'road':
-      return t('ui.tool.priceRoad', { amount: formatMoney(ROAD_COST_PER_TILE_CT) });
+      return t('ui.tool.priceRoad', { amount: formatMoney(at(ROAD_COST_PER_TILE_CT)) });
     case 'track':
       return t('ui.tool.priceTrack', {
-        amount: formatMoney(RAIL_TYPE_COST_CT[RailType.Plain]!),
+        amount: formatMoney(at(RAIL_TYPE_COST_CT[RailType.Plain]!)),
       });
     case 'stop':
-      return t('ui.tool.priceStop', { amount: formatMoney(ROAD_STOP_COST_CT) });
+      return t('ui.tool.priceStop', { amount: formatMoney(at(ROAD_STOP_COST_CT)) });
     case 'depot':
-      return t('ui.tool.priceDepot', { amount: formatMoney(ROAD_DEPOT_COST_CT) });
+      return t('ui.tool.priceDepot', { amount: formatMoney(at(ROAD_DEPOT_COST_CT)) });
     case 'platform':
-      return t('ui.tool.pricePlatform', { amount: formatMoney(RAIL_PLATFORM_COST_CT) });
+      return t('ui.tool.pricePlatform', { amount: formatMoney(at(RAIL_PLATFORM_COST_CT)) });
     case 'raildepot':
-      return t('ui.tool.priceRailDepot', { amount: formatMoney(RAIL_DEPOT_COST_CT) });
+      return t('ui.tool.priceRailDepot', { amount: formatMoney(at(RAIL_DEPOT_COST_CT)) });
     case 'freightterminal':
       return t('ui.tool.priceFreightTerminal', {
-        amount: formatMoney(FREIGHT_TERMINAL_COST_CT),
+        amount: formatMoney(at(FREIGHT_TERMINAL_COST_CT)),
       });
     case 'canopy':
-      return t('ui.tool.priceCanopy', { amount: formatMoney(CANOPY_COST_CT) });
+      return t('ui.tool.priceCanopy', { amount: formatMoney(at(CANOPY_COST_CT)) });
     case 'coldstore':
-      return t('ui.tool.priceColdStore', { amount: formatMoney(COLD_STORE_COST_CT) });
+      return t('ui.tool.priceColdStore', { amount: formatMoney(at(COLD_STORE_COST_CT)) });
     case 'signal':
-      return t('ui.tool.priceSignal', { amount: formatMoney(SIGNAL_COST_CT) });
+      return t('ui.tool.priceSignal', { amount: formatMoney(at(SIGNAL_COST_CT)) });
     case 'pathsignal':
-      return t('ui.tool.pricePathSignal', { amount: formatMoney(SIGNAL_COST_CT) });
+      return t('ui.tool.pricePathSignal', { amount: formatMoney(at(SIGNAL_COST_CT)) });
     case 'raise':
     case 'lower':
     case 'level':
-      return t('ui.tool.priceTerraform', { amount: formatMoney(TERRAFORM_COST_PER_STEP_CT) });
+      return t('ui.tool.priceTerraform', { amount: formatMoney(at(TERRAFORM_COST_PER_STEP_CT)) });
     case 'demolish':
       return t('ui.tool.priceDemolish');
     case 'none':
@@ -108,6 +116,7 @@ export function TilePanel(): ReactElement {
   const hovered = useSimStore((s) => s.hoveredTile);
   const selected = useSimStore((s) => s.selectedTile);
   const tool = useSimStore((s) => s.tool);
+  const year = useSimStore((s) => s.year);
   const setTool = useSimStore((s) => s.setTool);
   const autoSignal = useSimStore((s) => s.autoSignal);
   const setAutoSignal = useSimStore((s) => s.setAutoSignal);
@@ -150,7 +159,7 @@ export function TilePanel(): ReactElement {
           </button>
         ))}
       </div>
-      <p className="panel__hint">{priceHint(tool)}</p>
+      <p className="panel__hint">{priceHint(tool, year)}</p>
       {tool === 'track' && (
         <label className="panel__hint">
           <input

@@ -37,9 +37,11 @@ export const SAVE_MAGIC = 'IRVN';
  * delivery counters, 9 the block claim and the deadlock clock, 10 the cargo
  * destinations and the measured connection table of section 7.4, 11 industry
  * closure and the three support modules of section 10, 12 the bankruptcy
- * countdown of section 14.2, 13 the accounts of section 14.1.
+ * countdown of section 14.2, 13 the accounts of section 14.1, 14 the traction
+ * work each vehicle has done since its last energy bill, 15 the inflation
+ * setting of section 14.2 and the auto-renewal switch of 11.3.
  */
-export const SAVE_VERSION = 13;
+export const SAVE_VERSION = 15;
 
 /** File extension used for manual and automatic saves. */
 export const SAVE_EXTENSION = '.ironsave';
@@ -160,6 +162,7 @@ function parseCompany(value: unknown, path: string): CompanyState {
     expensesThisMonthCt: asInt(raw['expensesThisMonthCt'], `${path}.expensesThisMonthCt`),
     monthsInDebt: asInt(raw['monthsInDebt'], `${path}.monthsInDebt`),
     bankrupt: asBoolean(raw['bankrupt'], `${path}.bankrupt`),
+    autoRenew: asBoolean(raw['autoRenew'], `${path}.autoRenew`),
     vehicleUpkeepPerYearCt: asInt(raw['vehicleUpkeepPerYearCt'], `${path}.vehicleUpkeepPerYearCt`),
     infrastructureUpkeepPerYearCt: asInt(
       raw['infrastructureUpkeepPerYearCt'],
@@ -414,6 +417,12 @@ function parseCommand(value: unknown, path: string): Command {
           asInt(id, `${path}.specIds[${i}]`),
         ),
       };
+    case CommandKind.SetAutoRenew:
+      return {
+        kind: CommandKind.SetAutoRenew,
+        enabled: asBoolean(raw['enabled'], `${path}.enabled`),
+      };
+
     case CommandKind.BuildStationModule:
       return {
         kind: CommandKind.BuildStationModule,
@@ -547,6 +556,7 @@ export function parseSaveFile(value: unknown): SaveFile {
     seed: asInt(stateRaw['seed'], 'save.state.seed'),
     difficulty: parseDifficulty(stateRaw['difficulty'], 'save.state.difficulty'),
     climate: parseClimate(stateRaw['climate'], 'save.state.climate'),
+    inflation: asBoolean(stateRaw['inflation'], 'save.state.inflation'),
     mapSize,
     rng: parseRngState(stateRaw['rng'], 'save.state.rng'),
     company: parseCompany(stateRaw['company'], 'save.state.company'),

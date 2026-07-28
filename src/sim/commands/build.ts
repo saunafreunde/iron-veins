@@ -164,7 +164,8 @@ export function buildRoad(
   }
 
   const cost = newTiles * ROAD_COST_PER_TILE_CT;
-  if (cost > world.company.cashCt) return reject(RejectReason.InsufficientFunds);
+  const chargeCt = world.costCt(cost);
+  if (chargeCt > world.company.cashCt) return reject(RejectReason.InsufficientFunds);
   if (newTiles === 0) return reject(RejectReason.NothingToDo);
 
   for (let i = 0; i < tiles.length; i++) {
@@ -175,7 +176,7 @@ export function buildRoad(
     if (i > 0) connect(world, tiles[i - 1]!, tile);
   }
 
-  bookExpense(world.company, cost);
+  bookExpense(world.company, chargeCt);
   world.company.infrastructureUpkeepPerYearCt += newTiles * ROAD_UPKEEP_PER_TILE_CT;
   world.company.fixedAssetsCt += cost;
   world.map.revision++;
@@ -235,7 +236,8 @@ export function buildTrack(
   if (route.geometry.newTiles === 0 && route.upgradedTiles === 0) {
     return reject(RejectReason.NothingToDo);
   }
-  if (route.costCt > world.company.cashCt) return reject(RejectReason.InsufficientFunds);
+  const chargeCt = world.costCt(route.costCt);
+  if (chargeCt > world.company.cashCt) return reject(RejectReason.InsufficientFunds);
 
   const map = world.map;
 
@@ -288,7 +290,7 @@ export function buildTrack(
     if (trackDegree(map.trackBits[tile]!) !== SIGNAL_TRACK_DEGREE) clearSignal(world, tile);
   }
 
-  bookExpense(world.company, route.costCt);
+  bookExpense(world.company, chargeCt);
   world.company.infrastructureUpkeepPerYearCt += upkeepDelta;
   world.company.fixedAssetsCt += route.costCt;
   map.revision++;
@@ -412,10 +414,11 @@ export function buildSignal(
   if (map.structure[tile] !== Structure.None) return reject(RejectReason.SignalOnStructure);
   if (stationAt(world, tile) !== null) return reject(RejectReason.Occupied);
   if (signalKind(map.signal[tile]!) !== SignalKind.None) return reject(RejectReason.SignalExists);
-  if (SIGNAL_COST_CT > world.company.cashCt) return reject(RejectReason.InsufficientFunds);
+  const chargeCt = world.costCt(SIGNAL_COST_CT);
+  if (chargeCt > world.company.cashCt) return reject(RejectReason.InsufficientFunds);
 
   map.signal[tile] = packSignal(kind, direction);
-  bookExpense(world.company, SIGNAL_COST_CT);
+  bookExpense(world.company, chargeCt);
   world.company.infrastructureUpkeepPerYearCt += SIGNAL_UPKEEP_CT_PER_YEAR;
   world.company.fixedAssetsCt += SIGNAL_COST_CT;
   map.revision++;
@@ -529,11 +532,12 @@ export function buildRoadStop(
 
   const cost = kind === ModuleKind.RoadDepot ? ROAD_DEPOT_COST_CT : ROAD_STOP_COST_CT;
   const upkeep = kind === ModuleKind.RoadDepot ? ROAD_DEPOT_UPKEEP_CT : ROAD_STOP_UPKEEP_CT;
-  if (cost > world.company.cashCt) return reject(RejectReason.InsufficientFunds);
+  const chargeCt = world.costCt(cost);
+  if (chargeCt > world.company.cashCt) return reject(RejectReason.InsufficientFunds);
 
   attachModule(world, { kind, tileIndex: tile, x, y });
 
-  bookExpense(world.company, cost);
+  bookExpense(world.company, chargeCt);
   world.company.infrastructureUpkeepPerYearCt += upkeep;
   world.company.fixedAssetsCt += cost;
   world.map.revision++;
@@ -564,11 +568,12 @@ export function buildRailStop(
 
   const cost = kind === ModuleKind.RailDepot ? RAIL_DEPOT_COST_CT : RAIL_PLATFORM_COST_CT;
   const upkeep = kind === ModuleKind.RailDepot ? RAIL_DEPOT_UPKEEP_CT : RAIL_PLATFORM_UPKEEP_CT;
-  if (cost > world.company.cashCt) return reject(RejectReason.InsufficientFunds);
+  const chargeCt = world.costCt(cost);
+  if (chargeCt > world.company.cashCt) return reject(RejectReason.InsufficientFunds);
 
   attachModule(world, { kind, tileIndex: tile, x, y });
 
-  bookExpense(world.company, cost);
+  bookExpense(world.company, chargeCt);
   world.company.infrastructureUpkeepPerYearCt += upkeep;
   world.company.fixedAssetsCt += cost;
   world.map.revision++;
@@ -607,11 +612,12 @@ export function buildStationModule(
   if (joinTarget(world, x, y) === null) return reject(RejectReason.NeedsStation);
 
   const cost = SUPPORT_MODULE_COST_CT[kind]!;
-  if (cost > world.company.cashCt) return reject(RejectReason.InsufficientFunds);
+  const chargeCt = world.costCt(cost);
+  if (chargeCt > world.company.cashCt) return reject(RejectReason.InsufficientFunds);
 
   attachModule(world, { kind, tileIndex: tile, x, y });
 
-  bookExpense(world.company, cost);
+  bookExpense(world.company, chargeCt);
   world.company.infrastructureUpkeepPerYearCt += SUPPORT_MODULE_UPKEEP_CT[kind]!;
   world.company.fixedAssetsCt += cost;
   map.revision++;
@@ -657,7 +663,8 @@ export function buyTrain(
   if (problem !== null) return reject(problem);
 
   const aggregate = aggregateConsist(specIds);
-  if (aggregate.priceCt > world.company.cashCt) return reject(RejectReason.InsufficientFunds);
+  const chargeCt = world.costCt(aggregate.priceCt);
+  if (chargeCt > world.company.cashCt) return reject(RejectReason.InsufficientFunds);
 
   const id = world.vehicles.create(
     specIds[0]!,
@@ -672,7 +679,7 @@ export function buyTrain(
   world.vehicles.reliability[id] = aggregate.reliability0;
   world.vehicles.state[id] = VehicleState.Stopped;
 
-  bookExpense(world.company, aggregate.priceCt);
+  bookExpense(world.company, chargeCt);
   world.company.vehicleUpkeepPerYearCt += aggregate.upkeepCtPerYear;
   world.company.fixedAssetsCt += aggregate.priceCt;
   return ACCEPTED;
@@ -699,7 +706,8 @@ export function buyRoadVehicle(
 
   const year = world.date.year;
   if (year < spec.introYear || year > spec.retireYear) return reject(RejectReason.NotAvailableYet);
-  if (spec.priceCt > world.company.cashCt) return reject(RejectReason.InsufficientFunds);
+  const chargeCt = world.costCt(spec.priceCt);
+  if (chargeCt > world.company.cashCt) return reject(RejectReason.InsufficientFunds);
 
   const id = world.vehicles.create(
     specId,
@@ -713,7 +721,7 @@ export function buyRoadVehicle(
   world.vehicles.reliability[id] = spec.reliability0;
   world.vehicles.state[id] = VehicleState.Stopped;
 
-  bookExpense(world.company, spec.priceCt);
+  bookExpense(world.company, chargeCt);
   world.company.vehicleUpkeepPerYearCt += spec.upkeepCtPerYear;
   world.company.fixedAssetsCt += spec.priceCt;
   return ACCEPTED;
@@ -764,11 +772,12 @@ export function refitVehicle(world: World, vehicleId: number, cargo: Cargo): Com
   if (capacity <= 0) return reject(RejectReason.CannotCarry);
 
   const cost = Math.round(refitCostCt(world, vehicleId));
-  if (cost > world.company.cashCt) return reject(RejectReason.InsufficientFunds);
+  const chargeCt = world.costCt(cost);
+  if (chargeCt > world.company.cashCt) return reject(RejectReason.InsufficientFunds);
 
   vehicles.refitCargo[vehicleId] = cargo;
   vehicles.refreshAggregate(vehicleId);
-  bookExpense(world.company, cost);
+  bookExpense(world.company, chargeCt);
   return ACCEPTED;
 }
 

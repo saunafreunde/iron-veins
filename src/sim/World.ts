@@ -22,6 +22,8 @@ import { LinkGraph, type CargoLinkSave } from './cargo/linkGraph';
 import { refreshCargoRouting } from './cargo/routing';
 import { reviewBankruptcy } from './economy/bankruptcy';
 import { bookDepreciation } from './economy/depreciation';
+import { bookMonthlyEnergy } from './economy/energy';
+import { costFactor, inflatedCostCt } from './cargo/payment';
 import { RailPathfinder } from './net/railPath';
 import { ReservationTable } from './net/reservations';
 import { BlockIndex } from './signals/blocks';
@@ -48,6 +50,7 @@ import {
   fleetUpkeepCtPerYear,
   rollBreakdowns,
 } from './vehicles/lifecycle';
+import { renewFleet } from './vehicles/renewal';
 import { updateVehicles } from './vehicles/update';
 import { VehicleStore } from './vehicles/VehicleStore';
 import { Fnv1a64 } from './hash';
@@ -68,6 +71,7 @@ export interface WorldStateData {
   seed: number;
   difficulty: Difficulty;
   climate: MapClimate;
+  inflation: boolean;
   mapSize: number;
   rng: RngState;
   company: CompanyState;
@@ -120,6 +124,8 @@ export class World {
   readonly seed: number;
   readonly difficulty: Difficulty;
   readonly climate: MapClimate;
+  /** Whether costs and fares drift upward over the century (section 14.2). */
+  readonly inflation: boolean;
   readonly rng: Rng;
   readonly company: CompanyState;
   readonly map: TileMap;
@@ -158,6 +164,7 @@ export class World {
     this.seed = params.seed | 0;
     this.difficulty = params.difficulty;
     this.climate = params.climate;
+    this.inflation = params.inflation ?? true;
     this.rng = Rng.fromSeed(gameplaySeed(this.seed));
     this.company = createCompany(params.companyName, params.companyColorIndex, params.difficulty);
     this.map = generated.map;
@@ -234,7 +241,10 @@ export class World {
     }
     if (this.tick % TICKS_PER_MONTH === 0) {
       bookMonthlyInterest(this.company, this.difficulty);
-      bookMonthlyUpkeep(this.company);
+      // Upkeep and energy are costs like any other and inflate with the rest
+      // of the economy; the fares they are set against have done so since M2.
+      bookMonthlyUpkeep(this.company, this.costFactor);
+      bookMonthlyEnergy(this);
       bookDepreciation(this);
       // Judge the month that has just ended, THEN make the next month's
       // output. The other way round would compare this month's production
@@ -253,6 +263,9 @@ export class World {
       ageVehicles(this);
       // After ageing, so a vehicle that has just passed its design life is
       // charged the doubled upkeep from the year it becomes obsolete.
+      // Renew before the fleet's upkeep is totalled, so a company that just
+      // replaced its vehicles is charged for the new ones and not the old.
+      renewFleet(this);
       this.company.vehicleUpkeepPerYearCt = fleetUpkeepCtPerYear(this);
       // One new works a year, by preference where nothing is served yet.
       openNewIndustries(this);
@@ -275,6 +288,22 @@ export class World {
     }
   }
 
+  /**
+   * A cost at this year's price level (section 14.2).
+   *
+   * Every command that charges for something goes through this rather than
+   * using the constant directly, so that inflation is on both sides of the
+   * books at once.
+   */
+  costCt(baseCt: number): number {
+    return inflatedCostCt(baseCt, this.date.year, this.inflation);
+  }
+
+  /** This year's price level for costs, 1 when inflation is off. */
+  get costFactor(): number {
+    return costFactor(this.date.year, this.inflation);
+  }
+
   /** Current calendar position. */
   get date(): GameDate {
     return calendarFromTick(this.tick);
@@ -287,6 +316,7 @@ export class World {
       seed: this.seed,
       difficulty: this.difficulty,
       climate: this.climate,
+      inflation: this.inflation,
       mapSize: this.map.size,
       rng: this.rng.getState(),
       company: { ...this.company },
@@ -338,6 +368,7 @@ export class World {
         seed: data.seed,
         difficulty: data.difficulty,
         climate: data.climate,
+        inflation: data.inflation,
         mapSize: data.mapSize,
         companyName: data.company.name,
         companyColorIndex: data.company.colorIndex,
@@ -373,6 +404,7 @@ export class World {
     world.company.accumulatedDepreciationCt = data.company.accumulatedDepreciationCt;
     world.company.monthsInDebt = data.company.monthsInDebt;
     world.company.bankrupt = data.company.bankrupt;
+    world.company.autoRenew = data.company.autoRenew;
     return world;
   }
 }
@@ -426,6 +458,7 @@ function hashDynamicState(h: Fnv1a64, world: World): void {
   h.u32(world.seed);
   h.u32(world.difficulty);
   h.u32(world.climate);
+  h.u32(world.inflation ? 1 : 0);
 
   const rng = world.rng.getState();
   h.u32(rng[0]).u32(rng[1]).u32(rng[2]).u32(rng[3]);
@@ -438,7 +471,9 @@ function hashDynamicState(h: Fnv1a64, world: World): void {
   h.int(c.profitThisYearCt);
   h.int(c.lastYearProfitCt);
   h.int(c.fixedAssetsCt);
-  h.u32(c.monthsInDebt).u32(c.bankrupt ? 1 : 0);
+  h.u32(c.monthsInDebt)
+    .u32(c.bankrupt ? 1 : 0)
+    .u32(c.autoRenew ? 1 : 0);
   h.int(c.vehicleUpkeepPerYearCt).int(c.infrastructureUpkeepPerYearCt);
   h.int(c.accumulatedDepreciationCt).u32(c.historyCursor);
   // The whole ledger is hashed. It is state the simulation writes every month,
@@ -515,7 +550,7 @@ function hashDynamicState(h: Fnv1a64, world: World): void {
     h.u32(vehicles.pathIndex[id]!).u32(vehicles.pathLength[id]!);
     h.u32(vehicles.orderIndex[id]!).u32(vehicles.reliability[id]!);
     h.u32(vehicles.breakdownTicks[id]!).f64(vehicles.loadTicks[id]!);
-    h.f64(vehicles.earnedCt[id]!);
+    h.f64(vehicles.earnedCt[id]!).f64(vehicles.workJ[id]!);
     h.int(vehicles.lastStationId[id]!).int(vehicles.lastArrivalTick[id]!);
     for (const stack of vehicles.cargo[id]!) {
       h.u32(stack.cargo).f64(stack.amount).f64(stack.createdTick);

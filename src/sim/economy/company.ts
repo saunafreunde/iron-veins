@@ -52,6 +52,7 @@ export function createCompany(
     accumulatedDepreciationCt: 0,
     monthsInDebt: 0,
     bankrupt: false,
+    autoRenew: false,
   };
 }
 
@@ -113,9 +114,9 @@ export function bookRevenue(company: CompanyState, amountCt: number, cargo: Carg
  * is what makes doing nothing with a full bank account still lose the game
  * (balancing scenario 4 of section 19.4).
  */
-export function bookMonthlyUpkeep(company: CompanyState): number {
-  const fleet = monthlyShareCt(company.vehicleUpkeepPerYearCt);
-  const infrastructure = monthlyShareCt(company.infrastructureUpkeepPerYearCt);
+export function bookMonthlyUpkeep(company: CompanyState, priceFactor = 1): number {
+  const fleet = monthlyShareCt(company.vehicleUpkeepPerYearCt * priceFactor);
+  const infrastructure = monthlyShareCt(company.infrastructureUpkeepPerYearCt * priceFactor);
 
   if (fleet !== 0) bookExpense(company, fleet, Account.VehicleUpkeep);
   if (infrastructure !== 0) {

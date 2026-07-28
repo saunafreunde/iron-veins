@@ -2,6 +2,7 @@ import type { CargoStack } from '../cargo/stack';
 import type { Cargo } from '../cargo/types';
 import { BRAKE_ROAD, LATERAL_ACCEL_ROAD, MAX_VEHICLES } from '../constants';
 import { capacityFor, vehicleSpec } from './catalog';
+import { powerCode } from './spec';
 import {
   aggregateConsist,
   brakeForCargo,
@@ -191,6 +192,17 @@ export class VehicleStore {
   readonly homeDepotTile: Int32Array;
   /** Revenue earned since the vehicle was bought. [cent] */
   readonly earnedCt: Float64Array;
+  /**
+   * Traction work done since the last time the energy bill was drawn. [J]
+   *
+   * Float64 and not Float32, and reset every month. One tick can be 840 kJ and
+   * a game year is 72_000 ticks, so a Float32 - 24 bits of mantissa - would
+   * stop accumulating meaningfully inside the first game MONTH and the bill
+   * would silently stop growing (DECISIONS.md D-091).
+   */
+  readonly workJ: Float64Array;
+  /** A value of PowerCode, cached so the tick loop needs no lookup. */
+  readonly powerCode: Uint8Array;
 
   readonly orders: Order[][] = [];
   readonly cargo: CargoStack[][] = [];
@@ -240,6 +252,8 @@ export class VehicleStore {
     this.refitCargo = new Uint8Array(capacity);
     this.homeDepotTile = new Int32Array(capacity);
     this.earnedCt = new Float64Array(capacity);
+    this.workJ = new Float64Array(capacity);
+    this.powerCode = new Uint8Array(capacity);
   }
 
   /**
@@ -337,6 +351,10 @@ export class VehicleStore {
     this.refitCargo[id] = cargo;
     this.homeDepotTile[id] = tileIndex;
     this.earnedCt[id] = 0;
+    this.workJ[id] = 0;
+    // A train burns whatever its LEADING unit burns: the locomotive is what
+    // does the work, and a diesel with electric coaches is still a diesel.
+    this.powerCode[id] = powerCode(vehicleSpec(specId).power);
 
     this.orders[id] = [];
     this.cargo[id] = [];

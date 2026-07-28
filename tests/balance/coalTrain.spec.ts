@@ -36,8 +36,13 @@ const INDUSTRY_ROW = ROW + 2;
 const LOCO = 1000;
 const WAGON = 1520;
 const WAGON_COUNT = 8;
-/** Tiles of platform at each end: a locomotive and eight wagons is 98 m. */
-const PLATFORM_TILES = 3;
+/**
+ * Tiles of platform at each end.
+ *
+ * A locomotive and eight wagons is 98 m, which is exactly two tiles - so two is
+ * what the line needs and a third would be a platform nothing ever stands on.
+ */
+const PLATFORM_TILES = 2;
 
 const PAYBACK_MIN_YEARS = 4;
 const PAYBACK_MAX_YEARS = 7;
