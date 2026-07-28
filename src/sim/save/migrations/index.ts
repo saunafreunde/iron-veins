@@ -77,6 +77,30 @@ const v4_to_v5: SaveMigration = (payload) => {
 };
 
 /**
+ * M3 finished with bridges and tunnels. A version 5 world had neither, so both
+ * layers are simply empty - which is what "no structures anywhere" is.
+ */
+const v5_to_v6: SaveMigration = (payload) => {
+  const tiles = tileCount(payload);
+  const inner = state(payload);
+  const map = inner['map'];
+  if (typeof map !== 'object' || map === null || Array.isArray(map)) {
+    throw new SaveFormatError('save.state.map: expected an object');
+  }
+  return {
+    ...payload,
+    state: {
+      ...inner,
+      map: {
+        ...(map as Record<string, unknown>),
+        structure: new Uint8Array(tiles),
+        structureHeight: new Uint8Array(tiles),
+      },
+    },
+  };
+};
+
+/**
  * Registry keyed by the version a migration reads (section 19.1).
  *
  * There is deliberately no entry for 1 -> 2: a version 1 world had no map at
@@ -87,6 +111,7 @@ export const SAVE_MIGRATIONS: ReadonlyMap<number, SaveMigration> = new Map<numbe
   [2, v2_to_v3],
   [3, v3_to_v4],
   [4, v4_to_v5],
+  [5, v5_to_v6],
 ]);
 
 /**

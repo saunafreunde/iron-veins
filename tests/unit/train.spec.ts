@@ -14,6 +14,7 @@ import {
 } from '../../src/sim/constants';
 import { TileMap } from '../../src/sim/map/TileMap';
 import { Terrain } from '../../src/sim/map/terrain';
+import { Structure, structureCostCt } from '../../src/sim/map/structures';
 import {
   curveSpeedMs,
   railUpgradeCostCt,
@@ -371,6 +372,187 @@ describe('the gradient window', () => {
       expect(planned.route.geometry.maxGradePermille).toBeGreaterThan(20);
       expect(planned.route.geometry.maxGradePermille).toBeLessThan(30);
     }
+  });
+});
+
+// ------------------------------------------------------ bridges and tunnels
+
+describe('bridges and tunnels', () => {
+  /**
+   * Flat land with a river running north to south at x = `at`.
+   *
+   * The ground stays where it is: rivers do not carve (DECISIONS.md D-019), so
+   * a river really is a run of water tiles at the height of the land around it.
+   */
+  function withRiver(at: number, widthTiles: number): Bench {
+    const bench = flatWorld();
+    const map = bench.world.map;
+    for (let y = 0; y < SIZE; y++) {
+      for (let x = at; x < at + widthTiles; x++) map.terrain[map.tileIndex(x, y)] = Terrain.Water;
+    }
+    return bench;
+  }
+
+  /** Flat land with a ridge `widthTiles` wide, `levels` higher, at x = `at`. */
+  function withRidge(at: number, widthTiles: number, levels: number): Bench {
+    const bench = flatWorld();
+    const map = bench.world.map;
+    for (let y = 0; y <= SIZE; y++) {
+      for (let x = at; x <= at + widthTiles; x++) {
+        map.cornerHeight[map.cornerIndex(x, y)] = GROUND + levels;
+      }
+    }
+    map.enforceSlopeInvariant();
+    return bench;
+  }
+
+  it('bridges a river the assistant cannot walk round', () => {
+    const bench = withRiver(30, 3);
+    const planned = planTrack(bench.world.map, 20, 10, 40, 10, RailType.Plain, true);
+
+    expect(planned.ok).toBe(true);
+    if (!planned.ok) return;
+    expect(planned.route.structures).toContain(Structure.Bridge);
+    expect(planned.route.structures).not.toContain(Structure.Tunnel);
+  });
+
+  it('keeps the deck at bank level all the way across', () => {
+    const bench = withRiver(30, 3);
+    const planned = planTrack(bench.world.map, 20, 10, 40, 10, RailType.Plain, true);
+    if (!planned.ok) return;
+
+    const bank = bench.world.map.baseHeight(20, 10);
+    for (let i = 0; i < planned.route.tiles.length; i++) {
+      if (planned.route.structures[i] !== Structure.Bridge) continue;
+      expect(planned.route.heights[i]!).toBe(bank);
+    }
+    // And because it is level, the route has no gradient at all.
+    expect(planned.route.geometry.maxGradePermille).toBe(0);
+  });
+
+  it('charges for the span on top of the track', () => {
+    const bench = withRiver(30, 3);
+    const planned = planTrack(bench.world.map, 20, 10, 40, 10, RailType.Plain, true);
+    if (!planned.ok) return;
+
+    const bridgeTiles = planned.route.structures.filter((s) => s === Structure.Bridge).length;
+    const trackOnly = planned.route.tiles.length * RAIL_TYPE_COST_CT[RailType.Plain]!;
+
+    expect(bridgeTiles).toBeGreaterThan(0);
+    expect(planned.route.costCt).toBeGreaterThan(trackOnly);
+    expect(planned.route.costCt).toBe(
+      trackOnly + structureCostCt(Structure.Bridge, bridgeTiles + 1),
+    );
+  });
+
+  it('actually builds the bridge and charges for it', () => {
+    const bench = withRiver(30, 3);
+    const planned = planTrack(bench.world.map, 20, 10, 40, 10, RailType.Plain, true);
+    if (!planned.ok) return;
+
+    const before = bench.world.company.cashCt;
+    run(bench, {
+      kind: CommandKind.BuildTrack,
+      x1: 20,
+      y1: 10,
+      x2: 40,
+      y2: 10,
+      railType: RailType.Plain,
+      assistant: true,
+    });
+
+    expect(before - bench.world.company.cashCt).toBe(planned.route.costCt);
+
+    const map = bench.world.map;
+    const midTile = map.tileIndex(31, 10);
+    expect(map.structure[midTile]).toBe(Structure.Bridge);
+    expect(map.trackBits[midTile]).not.toBe(0);
+    // The ground under the deck is still water - the track crosses it, the
+    // river is not filled in.
+    expect(map.terrain[midTile]).toBe(Terrain.Water);
+    expect(map.railHeight(31, 10)).toBe(map.baseHeight(20, 10));
+  });
+
+  it('bores through a ridge that is too steep to climb', () => {
+    const bench = withRidge(30, 4, 4);
+    const planned = planTrack(bench.world.map, 20, 10, 45, 10, RailType.Plain, true);
+
+    expect(planned.ok).toBe(true);
+    if (!planned.ok) return;
+    expect(planned.route.structures).toContain(Structure.Tunnel);
+  });
+
+  it('does not reach for a structure it does not need', () => {
+    const bench = flatWorld();
+    const planned = planTrack(bench.world.map, 20, 10, 40, 10, RailType.Plain, true);
+
+    expect(planned.ok).toBe(true);
+    if (!planned.ok) return;
+    expect(planned.route.structures.every((s) => s === Structure.None)).toBe(true);
+  });
+
+  it('lets a train run over a bridge', () => {
+    const bench = withRiver(30, 3);
+    run(bench, {
+      kind: CommandKind.BuildTrack,
+      x1: 20,
+      y1: 10,
+      x2: 40,
+      y2: 10,
+      railType: RailType.Plain,
+      assistant: true,
+    });
+    run(bench, {
+      kind: CommandKind.BuildRailStop,
+      x: 20,
+      y: 10,
+      moduleKind: ModuleKind.RailDepot,
+    });
+    run(bench, {
+      kind: CommandKind.BuildRailStop,
+      x: 40,
+      y: 10,
+      moduleKind: ModuleKind.RailPlatform,
+    });
+    run(bench, { kind: CommandKind.BuyTrain, x: 20, y: 10, specIds: [RAILBUS] });
+    run(bench, {
+      kind: CommandKind.SetVehicleOrders,
+      vehicleId: 0,
+      orders: [{ target: 0, targetId: 1, load: 1, unload: 0 }],
+    });
+    run(bench, { kind: CommandKind.SetVehicleRunning, vehicleId: 0, running: true });
+
+    const map = bench.world.map;
+    let crossedWater = false;
+    for (let i = 0; i < 3_000; i++) {
+      bench.world.step(bench.queue, null);
+      const tile = bench.world.vehicles.tileIndex[0]!;
+      if (map.structure[tile] === Structure.Bridge) crossedWater = true;
+      if (tile === map.tileIndex(40, 10)) break;
+    }
+
+    expect(crossedWater).toBe(true);
+    expect(bench.world.vehicles.tileIndex[0]).toBe(map.tileIndex(40, 10));
+  });
+
+  it('takes the bridge out with the tile it stands on', () => {
+    const bench = withRiver(30, 3);
+    run(bench, {
+      kind: CommandKind.BuildTrack,
+      x1: 20,
+      y1: 10,
+      x2: 40,
+      y2: 10,
+      railType: RailType.Plain,
+      assistant: true,
+    });
+
+    const map = bench.world.map;
+    expect(map.structure[map.tileIndex(31, 10)]).toBe(Structure.Bridge);
+
+    run(bench, { kind: CommandKind.DemolishTrack, x: 31, y: 10 });
+    expect(map.structure[map.tileIndex(31, 10)]).toBe(Structure.None);
+    expect(map.trackBits[map.tileIndex(31, 10)]).toBe(0);
   });
 });
 

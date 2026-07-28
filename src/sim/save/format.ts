@@ -24,9 +24,9 @@ export const SAVE_MAGIC = 'IRVN';
  *
  * From version 2 on every step has a real migration: 3 added stations and
  * vehicles, 4 the two rail tile layers, 5 the train composition and the running
- * distance-to-go.
+ * distance-to-go, 6 the bridge and tunnel layers.
  */
-export const SAVE_VERSION = 5;
+export const SAVE_VERSION = 6;
 
 /** File extension used for manual and automatic saves. */
 export const SAVE_EXTENSION = '.ironsave';
@@ -170,6 +170,8 @@ function parseTileMap(value: unknown, path: string, mapSize: number): TileMapDat
     roadBits: asBytes(raw['roadBits'], `${path}.roadBits`, tiles),
     trackBits: asBytes(raw['trackBits'], `${path}.trackBits`, tiles),
     railType: asBytes(raw['railType'], `${path}.railType`, tiles),
+    structure: asBytes(raw['structure'], `${path}.structure`, tiles),
+    structureHeight: asBytes(raw['structureHeight'], `${path}.structureHeight`, tiles),
     townId: asBytes(raw['townId'], `${path}.townId`, tiles * 2),
     industryId: asBytes(raw['industryId'], `${path}.industryId`, tiles * 2),
     buildingKind: asBytes(raw['buildingKind'], `${path}.buildingKind`, tiles),

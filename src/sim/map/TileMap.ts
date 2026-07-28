@@ -28,6 +28,22 @@ export class TileMap {
   /** Rail type per tile, see RailType. 0 where there is no track. */
   readonly railType: Uint8Array;
 
+  /**
+   * Bridge or tunnel on this tile, see {@link Structure}. Only the tiles
+   * BETWEEN the two ends carry it; the ends themselves are ordinary track.
+   */
+  readonly structure: Uint8Array;
+
+  /**
+   * Height level the deck or the bore sits at, where {@link structure} is set.
+   *
+   * A bridge tile's ground can be at sea level while its deck is eight levels
+   * up. Everything that asks how high the track is - the gradient window, the
+   * longitudinal solver, the renderer - has to ask {@link railHeight}, never
+   * `baseHeight`, or a bridge reads as a cliff.
+   */
+  readonly structureHeight: Uint8Array;
+
   /** Town that owns this tile, -1 for open country. */
   readonly townId: Int16Array;
 
@@ -89,6 +105,10 @@ export class TileMap {
     offset += tiles;
     this.railType = new Uint8Array(this.buffer, offset, tiles);
     offset += tiles;
+    this.structure = new Uint8Array(this.buffer, offset, tiles);
+    offset += tiles;
+    this.structureHeight = new Uint8Array(this.buffer, offset, tiles);
+    offset += tiles;
     this.buildingKind = new Uint8Array(this.buffer, offset, tiles);
     offset += tiles;
     this.buildingLevel = new Uint8Array(this.buffer, offset, tiles);
@@ -110,10 +130,10 @@ export class TileMap {
   static bufferBytes(size: number): number {
     const tiles = size * size;
     const corners = (size + 1) * (size + 1);
-    // 4-byte landmass, two 2-byte id layers, the corner heights, and seven
-    // single-byte layers: terrain, road, track, rail type, building kind,
-    // building level, ocean mask.
-    return tiles * 8 + corners + tiles * 7;
+    // 4-byte landmass, two 2-byte id layers, the corner heights, and nine
+    // single-byte layers: terrain, road, track, rail type, structure,
+    // structure height, building kind, building level, ocean mask.
+    return tiles * 8 + corners + tiles * 9;
   }
 
   /** Read-side view on a map the worker owns. */
@@ -185,6 +205,15 @@ export class TileMap {
     if (s > base) slope |= SlopeBit.South;
     if (w > base) slope |= SlopeBit.West;
     return slope;
+  }
+
+  /**
+   * Height the track on this tile runs at: the deck of a bridge, the roof of a
+   * bore, or the ground where there is neither.
+   */
+  railHeight(x: number, y: number): number {
+    const index = y * this.size + x;
+    return this.structure[index] !== 0 ? this.structureHeight[index]! : this.baseHeight(x, y);
   }
 
   /** A tile is water when even its highest corner is at or below the sea. */

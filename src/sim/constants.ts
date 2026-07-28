@@ -519,6 +519,27 @@ export const RAIL_PLATFORM_UPKEEP_CT = 900 * CENTS_PER_EURO;
 export const RAIL_DEPOT_COST_CT = 14_000 * CENTS_PER_EURO;
 export const RAIL_DEPOT_UPKEEP_CT = 1_400 * CENTS_PER_EURO;
 
+/**
+ * Bridges and tunnels (section 8.3).
+ *
+ * A tile of bridge costs ten times a tile of plain track, a tile of tunnel
+ * sixteen. Both prices rise further with the span, so that crossing a river at
+ * the narrows is worth the detour and boring straight through a range never is.
+ * [cent per tile]
+ */
+export const BRIDGE_COST_PER_TILE_CT = 9_000 * CENTS_PER_EURO;
+export const BRIDGE_UPKEEP_PER_TILE_CT = 450 * CENTS_PER_EURO;
+
+export const TUNNEL_COST_PER_TILE_CT = 14_500 * CENTS_PER_EURO;
+export const TUNNEL_UPKEEP_PER_TILE_CT = 350 * CENTS_PER_EURO;
+
+/**
+ * Longest span of each. A bridge is limited by what can stand up, a tunnel by
+ * how far a train may run without a way out. [tiles from end to end]
+ */
+export const MAX_BRIDGE_SPAN_TILES = 12;
+export const MAX_TUNNEL_SPAN_TILES = 20;
+
 /** Refund when demolishing, as a share of the build price. */
 export const DEMOLITION_REFUND = 0.25;
 

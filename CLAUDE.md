@@ -159,8 +159,8 @@ the interface, and balancing scenario 1 is in band (payback in game year 3).
   cargo that does not exist before M5, so calibrating them now would be tuning
   against a guess (DECISIONS.md D-041).
 
-**M3 is done except for bridges and tunnels.** A train can be assembled in an
-engine shed, given orders and run over a line the player laid, and it behaves
+**M3 is done.** A train can be assembled in an engine shed, given orders and run
+over a line the player laid - across rivers and through hills - and it behaves
 the way its composition says it should.
 
 Done: eight-direction track, the curve radius table of section 8.1 with its
@@ -169,23 +169,23 @@ direction, costs in metre equivalents), manual mode, the build preview, track
 rendering, 33 traction units and 23 wagons, train composition, the rail
 coefficients in the longitudinal solver, curve-aware braking, train pathfinding
 over the track graph, platforms and engine sheds, electrification, track
-conversion, and save format v5 with the migrations that were missing.
+conversion, bridges and tunnels, and save format v6 with every migration from 2
+on.
 
-**Still open in M3:** bridges and tunnels, which are also the two missing terms
-of the assistant's cost function.
-
-## Rail - the three things that will bite
+## Rail - the four things that will bite
 
 1. **Gradients are measured over a window, never tile to tile.** One height
    level is 8 m over a 50 m tile, i.e. 160 per mille, which no rail type can
    accept. See the note in `map/track.ts` and DECISIONS.md D-042. Three places
    use the same measure - the route assistant, `measureRoute` and the
    longitudinal solver - and they have to stay in step.
-2. **A train is one entity.** Its composition is a list of catalogue ids;
+2. **Track height is `TileMap.railHeight`, never `baseHeight`.** On a bridge the
+   two differ by the whole depth of the valley (D-053).
+3. **A train is one entity.** Its composition is a list of catalogue ids;
    mass, tractive effort, top speed, length, braking and capacity are cached
    aggregates refreshed by `VehicleStore.refreshAggregate` whenever the train or
    its load changes. Never read a train's properties from its leading spec.
-3. **`routeRemainingM` is measured from the start of the current tile**, not
+4. **`routeRemainingM` is measured from the start of the current tile**, not
    from the vehicle. The distance left is that minus `progressM`. Two separate
    accumulators drift and strand vehicles one tile short of their platform
    (D-043).

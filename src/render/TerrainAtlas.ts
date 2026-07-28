@@ -75,8 +75,9 @@ const VEHICLE_COLUMN = BUILDING_VARIANTS + 3;
 const PLATFORM_COLUMN = BUILDING_VARIANTS + 4;
 const RAIL_DEPOT_COLUMN = BUILDING_VARIANTS + 5;
 const TRAIN_COLUMN = BUILDING_VARIANTS + 6;
+const BRIDGE_COLUMN = BUILDING_VARIANTS + 7;
 
-const ATLAS_COLUMNS = Math.max(SLOPE_COUNT, TRAIN_COLUMN + 1);
+const ATLAS_COLUMNS = Math.max(SLOPE_COUNT, BRIDGE_COLUMN + 1);
 const ATLAS_ROWS = TERRAIN_COUNT + 3;
 
 export interface AtlasFrame {
@@ -107,6 +108,8 @@ export interface TerrainAtlas {
   vehicleFrame(): AtlasFrame;
   /** Longer, lower box for a train, so the two modes tell apart at a glance. */
   trainFrame(): AtlasFrame;
+  /** Deck slab of a bridge, drawn at the deck's height rather than the ground's. */
+  bridgeFrame(): AtlasFrame;
   /** Half a track segment leaving the tile centre in one of the 8 directions. */
   trackFrame(direction: number): AtlasFrame;
 }
@@ -400,6 +403,8 @@ export function buildTerrainAtlas(): TerrainAtlas {
   drawBox(ctx, PLATFORM_COLUMN * CELL_W, BUILDING_ROW * CELL_H, 0.9, 5 * ATLAS_SCALE, '#ffffff');
   drawBox(ctx, RAIL_DEPOT_COLUMN * CELL_W, BUILDING_ROW * CELL_H, 0.9, 20 * ATLAS_SCALE, '#ffffff');
   drawBox(ctx, TRAIN_COLUMN * CELL_W, BUILDING_ROW * CELL_H, 0.55, 6 * ATLAS_SCALE, '#ffffff');
+  // The deck is a wide, very shallow slab; the ground it spans shows around it.
+  drawBox(ctx, BRIDGE_COLUMN * CELL_W, BUILDING_ROW * CELL_H, 0.98, 3 * ATLAS_SCALE, '#8e8a84');
 
   for (let direction = 0; direction < 8; direction++) {
     drawTrackCell(ctx, direction * CELL_W, TRACK_ROW * CELL_H, direction);
@@ -428,6 +433,7 @@ export function buildTerrainAtlas(): TerrainAtlas {
     railDepotFrame: () => frame(RAIL_DEPOT_COLUMN, BUILDING_ROW),
     vehicleFrame: () => frame(VEHICLE_COLUMN, BUILDING_ROW),
     trainFrame: () => frame(TRAIN_COLUMN, BUILDING_ROW),
+    bridgeFrame: () => frame(BRIDGE_COLUMN, BUILDING_ROW),
     trackFrame: (direction) => frame(direction & 7, TRACK_ROW),
   };
 }

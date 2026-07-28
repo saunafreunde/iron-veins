@@ -235,15 +235,17 @@ export interface RouteGeometry {
 }
 
 /**
- * Measure a route given as a tile sequence.
+ * Measure a route given as a tile sequence and the height the track runs at on
+ * each of those tiles.
  *
- * `heightAt` is passed in rather than the map, so this stays a pure function of
- * geometry and can be unit tested without building a world.
+ * The heights are passed in rather than read from the map, because a planned
+ * bridge does not exist yet: its deck is eight levels above the water it
+ * crosses, and asking the map would measure the river bed.
  */
 export function measureRoute(
   tiles: readonly number[],
+  heights: readonly number[],
   mapSize: number,
-  heightAt: (x: number, y: number) => number,
   railType: RailType,
   isNewTile: (tile: number) => boolean,
 ): RouteGeometry {
@@ -277,7 +279,6 @@ export function measureRoute(
   let newTiles = 0;
 
   const windowM = gradeWindowM(railType);
-  const heightOf = (tile: number): number => heightAt(tile % mapSize, (tile / mapSize) | 0);
 
   for (let i = 0; i < directions.length; i++) {
     const direction = directions[i]!;
@@ -291,7 +292,7 @@ export function measureRoute(
       back--;
     }
     const grade = Math.abs(
-      windowedGradePermille(heightOf(tiles[i + 1]!) - heightOf(tiles[back + 1]!), runM, windowM),
+      windowedGradePermille(heights[i + 1]! - heights[back + 1]!, runM, windowM),
     );
     if (grade > maxGrade) maxGrade = grade;
 

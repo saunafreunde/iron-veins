@@ -35,6 +35,9 @@ const RAIL_DEPOT_KIND = 4;
 /** VehicleKind.Train, likewise. */
 const TRAIN_KIND = 0;
 
+/** Structure.Bridge. A tunnel is drawn by drawing nothing. */
+const BRIDGE_STRUCTURE = 1;
+
 /** Accent colour per industry type, applied to the generic block as a tint. */
 const INDUSTRY_TINTS = [
   0x2b2b2b, 0x8a5a3b, 0x1a1a1a, 0x3f6b3a, 0xdcc06a, 0x9a9a9a, 0xe0b040, 0x7d8b99, 0xc19a6b,
@@ -440,6 +443,33 @@ export class MapView {
           world.y,
         );
 
+        // A bridge deck is drawn at ITS height, not the ground's - that is the
+        // whole point of it. A tunnel bore is drawn not at all: the hill above
+        // it has already been drawn, and the track is inside the hill.
+        const structure = map.structure[index]!;
+        if (structure !== 0) {
+          if (detailed && structure === BRIDGE_STRUCTURE) {
+            const deck = tileToWorld(x, y, map.structureHeight[index]!);
+            this.place(
+              this.take(used++),
+              this.frameTexture('bridge', atlas.bridgeFrame()),
+              deck.x,
+              deck.y,
+            );
+            const bits = map.trackBits[index]!;
+            for (let direction = 0; direction < 8; direction++) {
+              if ((bits & (1 << direction)) === 0) continue;
+              this.place(
+                this.take(used++),
+                this.frameTexture(`k${direction}`, atlas.trackFrame(direction)),
+                deck.x,
+                deck.y,
+              );
+            }
+          }
+          continue;
+        }
+
         if (!detailed || terrain === Terrain.Water) continue;
 
         const roadBits = map.roadBits[index]!;
@@ -555,8 +585,9 @@ export class MapView {
       const toY = (next / size) | 0;
       if (!map.contains(fromX, fromY) || !map.contains(toX, toY)) continue;
 
-      const from = tileToWorld(fromX, fromY, map.baseHeight(fromX, fromY));
-      const to = tileToWorld(toX, toY, map.baseHeight(toX, toY));
+      // railHeight, so a train on a bridge rides the deck instead of the river.
+      const from = tileToWorld(fromX, fromY, map.railHeight(fromX, fromY));
+      const to = tileToWorld(toX, toY, map.railHeight(toX, toY));
 
       let sprite = this.vehicleSprites[i];
       if (sprite === undefined) {

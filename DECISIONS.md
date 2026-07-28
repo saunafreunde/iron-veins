@@ -494,3 +494,52 @@ serve a station from inside the depot. The access tile is now the first module
 of the right kind for the mode - a platform for a train, a stop or bay for a
 road vehicle - and a station that offers none for that mode reports no route
 rather than silently sending the vehicle somewhere odd.
+
+### D-050 Bridges and tunnels are the same idea, and the assistant proposes them
+
+Both are a stretch of line that keeps its height while the ground does not: a
+bridge holds the height up over water or a valley, a tunnel holds it down
+through a hill. Only the tiles BETWEEN the two ends carry the structure; the
+ends are ordinary track, which is why a train can path over one without the
+pathfinder knowing that structures exist at all.
+
+Neither can bend. A curved viaduct is a modelling problem out of all proportion
+to what it adds, and keeping structures straight is what makes every route the
+assistant proposes explicable.
+
+The assistant reaches for one only when the plain step is impossible - water or
+ground too low ahead gives a bridge, ground too high gives a tunnel - and then
+takes the shortest legal span. It never builds one merely because it could. The
+two penalties, 450 m of detour per tile of bridge and 800 m per tile of tunnel,
+are the two terms section 8.2 asks for; the price also rises with the square of
+the span, so crossing a river at the narrows beats a viaduct across the bay.
+
+Manual mode still refuses water. It lays exactly the line the player drew, and
+silently inserting a bridge into that would be the opposite of what it is for.
+
+### D-051 Water is always bridgeable, whatever the height grid says
+
+A watercourse is below its banks by definition. The height grid samples in whole
+8 m levels and rivers do not carve (D-019), so a river tile reads as exactly
+level with the bank beside it - and a clearance rule of "the ground must be
+lower than the deck" would make every river in the game uncrossable.
+
+Water tiles are therefore spannable regardless of their corner heights. Dry
+ground still needs real clearance, or a bridge over a flat field would be a
+cutting.
+
+### D-052 A tunnel forbids everything else on the tile above it
+
+Strictly, a house on a hill and a bore beneath it can coexist. Drawing that
+convincingly, and keeping it consistent when the ground is later terraformed,
+is work for a milestone that has a reason to do it. Tunnels go through hills,
+and hills do not have houses on them, so the restriction costs nothing in play.
+
+### D-053 Track height is `railHeight`, never `baseHeight`
+
+Everything that asks how high the track is - the gradient window, the
+longitudinal solver, the renderer, the vehicle sprites - has to ask
+`TileMap.railHeight`, which returns the deck or bore where there is one and the
+ground where there is not. Asking `baseHeight` on a bridge tile measures the
+river bed, which reads as a cliff down and back up: the route would be refused
+as too steep, and a train that did cross would be dragged into the water.

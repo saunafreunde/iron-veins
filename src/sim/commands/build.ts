@@ -16,6 +16,7 @@ import {
   TICKS_PER_YEAR,
   TOWN_ROAD_MAX_SLOPE,
 } from '../constants';
+import { Structure, structureUpkeepCt } from '../map/structures';
 import { slopeRise, Terrain } from '../map/terrain';
 import {
   directionFromDelta,
@@ -206,13 +207,28 @@ export function buildTrack(
   // Upkeep is worked out before the type is overwritten, because a converted
   // tile stops costing what the old type cost.
   let upkeepDelta = 0;
-  for (const tile of route.tiles) {
+  for (let i = 0; i < route.tiles.length; i++) {
+    const tile = route.tiles[i]!;
     const existing = map.railType[tile]!;
     if (map.trackBits[tile] === 0) {
       upkeepDelta += RAIL_TYPE_UPKEEP_CT[railType]!;
     } else if (existing !== railType) {
       upkeepDelta += RAIL_TYPE_UPKEEP_CT[railType]! - RAIL_TYPE_UPKEEP_CT[existing]!;
     }
+    const structure = route.structures[i]! as Structure;
+    if (structure !== Structure.None && map.structure[tile] === Structure.None) {
+      upkeepDelta += structureUpkeepCt(structure);
+    }
+  }
+
+  // Bridges and tunnels go down before the rails, so that the height the track
+  // runs at is right the moment anything asks for it.
+  for (let i = 0; i < route.tiles.length; i++) {
+    const structure = route.structures[i]!;
+    if (structure === Structure.None) continue;
+    const tile = route.tiles[i]!;
+    map.structure[tile] = structure;
+    map.structureHeight[tile] = route.heights[i]!;
   }
 
   for (let i = 0; i + 1 < route.tiles.length; i++) {
@@ -256,6 +272,15 @@ export function demolishTrack(world: World, x: number, y: number): CommandOutcom
   }
   map.trackBits[tile] = 0;
   map.railType[tile] = 0;
+
+  // Taking out one tile of a bridge takes out the bridge: half a viaduct is not
+  // a thing, and leaving the deck standing with a hole in it would be worse.
+  const structure = map.structure[tile]! as Structure;
+  if (structure !== Structure.None) {
+    world.company.upkeepPerYearCt -= structureUpkeepCt(structure);
+    map.structure[tile] = Structure.None;
+    map.structureHeight[tile] = 0;
+  }
 
   world.company.cashCt += Math.round(RAIL_TYPE_COST_CT[railType]! * DEMOLITION_REFUND);
   world.company.upkeepPerYearCt -= RAIL_TYPE_UPKEEP_CT[railType]!;

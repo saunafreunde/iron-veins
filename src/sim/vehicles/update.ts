@@ -104,7 +104,9 @@ function gradePermille(world: World, id: number): number {
 
   const path = vehicles.paths[id]!;
   const size = world.map.size;
-  const height = (tile: number): number => world.map.baseHeight(tile % size, (tile / size) | 0);
+  // railHeight, not baseHeight: on a bridge the track is level while the ground
+  // beneath it is a river bed, and a train must not be dragged down into it.
+  const height = (tile: number): number => world.map.railHeight(tile % size, (tile / size) | 0);
   const to = path[index + 1]!;
 
   if (vehicles.kind[id] !== VehicleKind.Train) {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { LATERAL_ACCEL_PASSENGER, TILE_SIZE_M } from '../../src/sim/constants';
 import { TileMap } from '../../src/sim/map/TileMap';
+import { Structure } from '../../src/sim/map/structures';
 import { Terrain } from '../../src/sim/map/terrain';
 import {
   curveRadiusM,
@@ -83,11 +84,13 @@ describe('track geometry', () => {
 
 describe('measuring a route', () => {
   const map = flatMap();
-  const heightAt = (x: number, y: number): number => map.baseHeight(x, y);
+  /** Flat ground: every tile of every route runs at the same level. */
+  const level = (tiles: readonly number[]): number[] =>
+    tiles.map((tile) => map.baseHeight(tile % SIZE, (tile / SIZE) | 0));
 
   it('adds up straight length', () => {
     const tiles = [10, 11, 12, 13].map((x) => map.tileIndex(x, 10));
-    const geometry = measureRoute(tiles, SIZE, heightAt, RailType.Plain, () => true);
+    const geometry = measureRoute(tiles, level(tiles), SIZE, RailType.Plain, () => true);
 
     expect(geometry.lengthM).toBe(3 * TILE_SIZE_M);
     expect(geometry.minRadiusM).toBe(Infinity);
@@ -99,8 +102,8 @@ describe('measuring a route', () => {
     const straight = [10, 11, 12].map((x) => map.tileIndex(x, 10));
     const corner = [map.tileIndex(10, 10), map.tileIndex(11, 10), map.tileIndex(11, 11)];
 
-    const fast = measureRoute(straight, SIZE, heightAt, RailType.Plain, () => true);
-    const slow = measureRoute(corner, SIZE, heightAt, RailType.Plain, () => true);
+    const fast = measureRoute(straight, level(straight), SIZE, RailType.Plain, () => true);
+    const slow = measureRoute(corner, level(corner), SIZE, RailType.Plain, () => true);
 
     expect(slow.minRadiusM).toBe(45);
     expect(slow.maxSpeedMs).toBeLessThan(fast.maxSpeedMs);
@@ -108,8 +111,8 @@ describe('measuring a route', () => {
 
   it('never exceeds the line speed of the rail type', () => {
     const tiles = [10, 11, 12, 13].map((x) => map.tileIndex(x, 10));
-    const narrow = measureRoute(tiles, SIZE, heightAt, RailType.Narrow, () => true);
-    const highSpeed = measureRoute(tiles, SIZE, heightAt, RailType.HighSpeed, () => true);
+    const narrow = measureRoute(tiles, level(tiles), SIZE, RailType.Narrow, () => true);
+    const highSpeed = measureRoute(tiles, level(tiles), SIZE, RailType.HighSpeed, () => true);
     expect(narrow.maxSpeedMs).toBeLessThan(highSpeed.maxSpeedMs);
   });
 });
@@ -156,11 +159,22 @@ describe('the route assistant', () => {
     );
   });
 
-  it('refuses to cross water', () => {
+  it('bridges water rather than refusing it', () => {
     const map = flatMap();
     for (let y = 0; y < SIZE; y++) map.terrain[map.tileIndex(15, y)] = Terrain.Water;
 
     const planned = planTrack(map, 10, 10, 20, 10, RailType.Plain, true);
+    expect(planned.ok).toBe(true);
+    if (!planned.ok) return;
+    // One tile of water, so one tile of bridge and a span of two.
+    expect(planned.route.structures.filter((s) => s === Structure.Bridge)).toHaveLength(1);
+  });
+
+  it('refuses water in manual mode, where the player draws the line', () => {
+    const map = flatMap();
+    for (let y = 0; y < SIZE; y++) map.terrain[map.tileIndex(15, y)] = Terrain.Water;
+
+    const planned = planTrack(map, 10, 10, 20, 10, RailType.Plain, false);
     expect(planned.ok).toBe(false);
     if (planned.ok) return;
     expect(planned.reasonKey).toBe('track.reject.noRoute');

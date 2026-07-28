@@ -163,7 +163,7 @@ describe('save migrations', () => {
   it('pins the current save version', () => {
     // Bumping SAVE_VERSION has to be a conscious act, because from the first
     // released build onwards it also requires a migration.
-    expect(SAVE_VERSION).toBe(5);
+    expect(SAVE_VERSION).toBe(6);
   });
 
   it('has a real migration for every step from version 2 on', () => {
@@ -195,6 +195,7 @@ describe('the registered migrations', () => {
     expect(state['stations']).toEqual([]);
     expect(map['trackBits']).toEqual(new Uint8Array(64 * 64));
     expect(map['railType']).toEqual(new Uint8Array(64 * 64));
+    expect(map['structure']).toEqual(new Uint8Array(64 * 64));
     expect(migrated['saveVersion']).toBe(SAVE_VERSION);
   });
 
