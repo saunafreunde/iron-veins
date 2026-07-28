@@ -34,6 +34,8 @@ export const VehicleState = {
   InDepot: 6,
   /** No route to the next order target. */
   NoRoute: 7,
+  /** Held at a signal: the section ahead belongs to another train. */
+  WaitingForPath: 8,
 } as const;
 export type VehicleState = (typeof VehicleState)[keyof typeof VehicleState];
 
@@ -47,6 +49,7 @@ export const VEHICLE_STATE_KEYS: readonly string[] = [
   'veh.state.brokenDown',
   'veh.state.inDepot',
   'veh.state.noRoute',
+  'veh.state.waitingForPath',
 ];
 
 export const OrderLoad = {
@@ -117,6 +120,16 @@ export class VehicleStore {
    */
   readonly routeRemainingM: Float32Array;
 
+  /**
+   * The run of its own route a train currently holds, as route indices, or -1.
+   *
+   * Indices rather than tiles, and a range rather than a list, because that is
+   * all a contiguous claim needs - and because it makes the reservation table
+   * itself derived state that never has to be saved (DECISIONS.md D-057).
+   */
+  readonly reservedFromIndex: Int32Array;
+  readonly reservedToIndex: Int32Array;
+
   // --- aggregate of the whole vehicle, recomputed when it or its load changes.
   // For a road vehicle these are simply its own figures; for a train they are
   // the sums of section 11.2. Caching them keeps the solver free of catalogue
@@ -176,6 +189,8 @@ export class VehicleStore {
     this.pathLength = new Int32Array(capacity);
     this.pathIndex = new Int32Array(capacity);
     this.routeRemainingM = new Float32Array(capacity);
+    this.reservedFromIndex = new Int32Array(capacity).fill(-1);
+    this.reservedToIndex = new Int32Array(capacity).fill(-1);
     this.massKg = new Float32Array(capacity);
     this.tractiveN = new Float32Array(capacity);
     this.powerW = new Float32Array(capacity);
@@ -270,6 +285,8 @@ export class VehicleStore {
     this.pathLength[id] = 0;
     this.pathIndex[id] = 0;
     this.routeRemainingM[id] = 0;
+    this.reservedFromIndex[id] = -1;
+    this.reservedToIndex[id] = -1;
     this.orderIndex[id] = 0;
     this.builtTick[id] = tick;
     this.breakdownTicks[id] = 0;
@@ -289,6 +306,8 @@ export class VehicleStore {
   destroy(id: number): void {
     if (this.alive[id] !== 1) return;
     this.alive[id] = 0;
+    this.reservedFromIndex[id] = -1;
+    this.reservedToIndex[id] = -1;
     this.orders[id] = [];
     this.cargo[id] = [];
     this.consist[id] = [];

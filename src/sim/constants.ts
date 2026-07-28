@@ -429,7 +429,11 @@ export const BREAKDOWN_DIVISOR = 40_000;
 export const BREAKDOWN_MIN_TICKS = 40;
 export const BREAKDOWN_MAX_TICKS = 120;
 
-/** Upper bound on vehicles per company, sizing the struct-of-arrays store. */
+/**
+ * Upper bound on vehicles per company, sizing the struct-of-arrays store.
+ * Raising it past 32_767 also has to widen the Int16 reservation table in
+ * `net/reservations.ts`.
+ */
 export const MAX_VEHICLES = 4_000;
 
 /** Upper bound on stations per company. */
@@ -473,14 +477,55 @@ export const MAX_TRAIN_LENGTH_M = 400;
 export const MAX_CONSIST_UNITS = 32;
 
 /**
- * How many route nodes ahead a train checks for curves.
+ * How many route nodes ahead a train checks for curves and signals.
  *
- * A high speed train braking from 300 km/h needs about 3.5 km, i.e. seventy
- * tiles, so the lookahead has to reach that far or the train would still be at
- * line speed when the curve arrives. The loop leaves early as soon as it is
- * past its own braking distance, so the full count is only ever paid at speed.
+ * The fastest traction unit tops out at 330 km/h = 91.7 m/s, and a freight
+ * brake of 0.6 m/s^2 needs v^2/2b = 7_007 m to stop from there - 140 orthogonal
+ * tiles. 160 leaves margin. The loop leaves early as soon as it is past its own
+ * braking distance, so the full count is only ever paid by a train genuinely
+ * doing 330.
+ *
+ * This is a COMFORT constant, not a correctness one: a signal beyond the
+ * lookahead is still caught by the hard gate in the tile advance, which stops
+ * the train at the section boundary rather than letting it run past.
  */
-export const CURVE_LOOKAHEAD_MAX_NODES = 96;
+export const CURVE_LOOKAHEAD_MAX_NODES = 160;
+
+/**
+ * Speed below which a vehicle counts as having stopped. [m/s]
+ * Used both to decide that a vehicle has finished its route and to decide that
+ * a train held at a signal has come to a stand.
+ */
+export const STOPPED_SPEED_MS = 0.4;
+
+// ------------------------------------------------------------------ signals
+
+/**
+ * Price and upkeep of one signal. [cent]
+ *
+ * A third of a plain track tile to build, and the 5 % of the build price a year
+ * that plain track already carries. First-draft figures: balancing scenario 5
+ * of section 19.4 owns the final numbers, the same posture D-041 took for the
+ * lorry prices.
+ */
+export const SIGNAL_COST_CT = 300 * CENTS_PER_EURO;
+export const SIGNAL_UPKEEP_CT_PER_YEAR = 15 * CENTS_PER_EURO;
+
+/**
+ * How far short of a signal tile a held train's head comes to rest. [m]
+ *
+ * A tenth of a tile, so the train visibly stands before the boundary and the
+ * snapshot's progress fraction never reads a full 1000 - which would draw it
+ * sitting on the very tile it is being held out of.
+ */
+export const SIGNAL_STOP_OFFSET_M = 5;
+
+/**
+ * Bound on the backward walk that finds the tiles a train's body still covers.
+ * The longest legal train divided by the tile size, plus one for the tile the
+ * tail has only partly left.
+ */
+export const MAX_TRAIN_OCCUPIED_TILES = MAX_TRAIN_LENGTH_M / TILE_SIZE_M + 1;
 
 // -------------------------------------------------------------- construction
 

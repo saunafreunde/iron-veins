@@ -7,6 +7,7 @@ import {
   ROAD_COST_PER_TILE_CT,
   ROAD_DEPOT_COST_CT,
   ROAD_STOP_COST_CT,
+  SIGNAL_COST_CT,
   TERRAFORM_COST_PER_STEP_CT,
 } from '../sim/constants';
 import { TERRAIN_NAME_KEYS } from '../sim/map/terrain';
@@ -22,6 +23,7 @@ const TOOLS: ReadonlyArray<{ readonly id: Tool; readonly labelKey: string }> = [
   { id: 'depot', labelKey: 'ui.tool.depot' },
   { id: 'platform', labelKey: 'ui.tool.platform' },
   { id: 'raildepot', labelKey: 'ui.tool.railDepot' },
+  { id: 'signal', labelKey: 'ui.tool.signal' },
   { id: 'demolish', labelKey: 'ui.tool.demolish' },
   { id: 'raise', labelKey: 'ui.tool.raise' },
   { id: 'lower', labelKey: 'ui.tool.lower' },
@@ -45,6 +47,8 @@ function priceHint(tool: Tool): string {
       return t('ui.tool.pricePlatform', { amount: formatMoney(RAIL_PLATFORM_COST_CT) });
     case 'raildepot':
       return t('ui.tool.priceRailDepot', { amount: formatMoney(RAIL_DEPOT_COST_CT) });
+    case 'signal':
+      return t('ui.tool.priceSignal', { amount: formatMoney(SIGNAL_COST_CT) });
     case 'raise':
     case 'lower':
     case 'level':

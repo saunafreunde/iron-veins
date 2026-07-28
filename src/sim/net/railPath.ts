@@ -3,11 +3,10 @@ import type { TileMap } from '../map/TileMap';
 import {
   curveRadiusM,
   curveSpeedMs,
-  oppositeDir,
+  hasEdge,
   RailType,
   RAIL_TYPE_SPEED_MS,
   stepLengthM,
-  trackBit,
   TRACK_DIR_COUNT,
   TRACK_DX,
   TRACK_DY,
@@ -157,8 +156,7 @@ export class RailPathfinder {
     lateralAccel: number,
     needsCatenary: boolean,
   ): number {
-    if ((map.trackBits[fromTile]! & trackBit(outgoing)) === 0) return IMPASSABLE;
-    if ((map.trackBits[toTile]! & trackBit(oppositeDir(outgoing))) === 0) return IMPASSABLE;
+    if (!hasEdge(map.trackBits, map.size, fromTile, outgoing)) return IMPASSABLE;
 
     const railType = map.railType[toTile]!;
     if (needsCatenary && railType !== RailType.Electrified) return IMPASSABLE;

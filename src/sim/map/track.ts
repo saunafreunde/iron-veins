@@ -44,9 +44,46 @@ export function trackBit(direction: TrackDir): number {
   return 1 << direction;
 }
 
+/**
+ * How many directions leave this tile.
+ *
+ * Two is plain line, one is a dead end, three or more is a junction. That
+ * distinction is what decides where a signal may stand: a train held at a
+ * signal must not be standing in a junction throat, and refusing to place one
+ * there is cheaper than modelling the case (DECISIONS.md D-055).
+ */
+export function trackDegree(bits: number): number {
+  let count = 0;
+  for (let direction = 0; direction < TRACK_DIR_COUNT; direction++) {
+    if ((bits & (1 << direction)) !== 0) count++;
+  }
+  return count;
+}
+
 /** The direction that leads back where you came from. */
 export function oppositeDir(direction: TrackDir): TrackDir {
   return ((direction + 4) % TRACK_DIR_COUNT) as TrackDir;
+}
+
+/**
+ * Is there a usable edge from `tile` in `direction`?
+ *
+ * Track is stored twice, once as a bit on each end, and an edge counts only
+ * when both halves are there. One definition, used by the pathfinder and by
+ * everything that walks the network, so a block rule and a route can never
+ * disagree about what is connected.
+ */
+export function hasEdge(
+  trackBits: Uint8Array,
+  size: number,
+  tile: number,
+  direction: TrackDir,
+): boolean {
+  if ((trackBits[tile]! & trackBit(direction)) === 0) return false;
+  const x = (tile % size) + TRACK_DX[direction]!;
+  const y = ((tile / size) | 0) + TRACK_DY[direction]!;
+  if (x < 0 || y < 0 || x >= size || y >= size) return false;
+  return (trackBits[y * size + x]! & trackBit(oppositeDir(direction))) !== 0;
 }
 
 /** True for the four diagonal directions. */

@@ -6,6 +6,8 @@ import { OrderTarget, VehicleState, type Order } from '../vehicles/VehicleStore'
 import type { RailType } from '../map/track';
 import {
   buildRailStop,
+  buildSignal,
+  demolishSignal,
   buildRoad,
   buildRoadStop,
   buildTrack,
@@ -15,6 +17,7 @@ import {
   demolishTrack,
   sellVehicle,
 } from './build';
+import { releaseAll } from '../vehicles/reservations';
 import { startVehicle } from '../vehicles/update';
 import { applyTerraform, estimateTerraform, levelTile, TerraformDirection } from '../map/terraform';
 import type { World } from '../World';
@@ -103,6 +106,12 @@ export function executeCommand(world: World, command: Command): CommandOutcome {
     case CommandKind.BuyTrain:
       return buyTrain(world, command.x, command.y, command.specIds);
 
+    case CommandKind.BuildSignal:
+      return buildSignal(world, command.x, command.y);
+
+    case CommandKind.DemolishSignal:
+      return demolishSignal(world, command.x, command.y);
+
     case CommandKind.SellVehicle:
       return sellVehicle(world, command.vehicleId);
 
@@ -124,7 +133,9 @@ export function executeCommand(world: World, command: Command): CommandOutcome {
       }
       world.vehicles.orders[command.vehicleId] = orders;
       world.vehicles.orderIndex[command.vehicleId] = 0;
-      // A route computed for the old orders is meaningless now.
+      // A route computed for the old orders is meaningless now - and so is any
+      // track claimed along it, which would otherwise hold a section for ever.
+      releaseAll(world, command.vehicleId);
       world.vehicles.pathLength[command.vehicleId] = 0;
       return ACCEPTED;
     }

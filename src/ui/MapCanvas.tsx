@@ -60,6 +60,8 @@ function commandForClick(tool: Tool, tile: TileInfo): Command | null {
         y: tile.y,
         moduleKind: ModuleKind.RailDepot,
       };
+    case 'signal':
+      return { kind: CommandKind.BuildSignal, x: tile.x, y: tile.y };
     case 'demolish':
       return { kind: CommandKind.DemolishRoad, x: tile.x, y: tile.y };
     case 'road':

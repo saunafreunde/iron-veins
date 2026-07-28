@@ -101,6 +101,35 @@ const v5_to_v6: SaveMigration = (payload) => {
 };
 
 /**
+ * M4 added signals and the two reservation indices a train carries. A version 6
+ * world had no signals, so it held no reservations either - the sentinel -1 is
+ * exactly what "this train has claimed nothing" means.
+ */
+const v6_to_v7: SaveMigration = (payload) => {
+  const tiles = tileCount(payload);
+  const inner = state(payload);
+  const map = inner['map'];
+  if (typeof map !== 'object' || map === null || Array.isArray(map)) {
+    throw new SaveFormatError('save.state.map: expected an object');
+  }
+  const vehicles = inner['vehicles'];
+  if (!Array.isArray(vehicles)) throw new SaveFormatError('save.state.vehicles: expected an array');
+
+  return {
+    ...payload,
+    state: {
+      ...inner,
+      map: { ...(map as Record<string, unknown>), signal: new Uint8Array(tiles) },
+      vehicles: vehicles.map((vehicle) => ({
+        ...(vehicle as Record<string, unknown>),
+        reservedFromIndex: -1,
+        reservedToIndex: -1,
+      })),
+    },
+  };
+};
+
+/**
  * Registry keyed by the version a migration reads (section 19.1).
  *
  * There is deliberately no entry for 1 -> 2: a version 1 world had no map at
@@ -112,6 +141,7 @@ export const SAVE_MIGRATIONS: ReadonlyMap<number, SaveMigration> = new Map<numbe
   [3, v3_to_v4],
   [4, v4_to_v5],
   [5, v5_to_v6],
+  [6, v6_to_v7],
 ]);
 
 /**

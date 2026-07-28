@@ -13,24 +13,26 @@ import {
   ROLLING_RESISTANCE_RAIL,
   ROLLING_RESISTANCE_ROAD,
   ROTATING_MASS_FACTOR,
+  SIGNAL_STOP_OFFSET_M,
   STATION_CARGO_CAPACITY,
+  STOPPED_SPEED_MS,
   TICK_SECONDS,
   TILE_DIAGONAL_M,
-  TILE_SIZE_M,
 } from '../constants';
 import {
   curveRadiusM,
   curveSpeedMs,
-  directionFromDelta,
   gradeWindowM,
   windowedGradePermille,
   RAIL_TYPE_SPEED_MS,
   turnSteps,
   type RailType,
-  type TrackDir,
 } from '../map/track';
+import { SignalKind } from '../map/signals';
 import { ModuleKind, type Station } from '../station/types';
 import type { World } from '../World';
+import { releaseAll, releaseBehind, tryClaim } from './reservations';
+import { pathDirection, pathStepM, routeLengthM } from './route';
 import { VehicleKind } from './spec';
 import { OrderLoad, OrderTarget, OrderUnload, VehicleState } from './VehicleStore';
 
@@ -70,22 +72,6 @@ export function stationAccessTile(station: Station, vehicleKind: number): number
     if (moduleServes(module.kind, vehicleKind)) return module.tileIndex;
   }
   return -1;
-}
-
-/** Ground distance of the route step that starts at `index`. [m] */
-function pathStepM(path: Int32Array, index: number, size: number): number {
-  const from = path[index]!;
-  const to = path[index + 1]!;
-  const dx = (to % size) - (from % size);
-  const dy = ((to / size) | 0) - ((from / size) | 0);
-  return dx !== 0 && dy !== 0 ? TILE_DIAGONAL_M : TILE_SIZE_M;
-}
-
-/** Direction of the route step that starts at `index`. */
-function pathDirection(path: Int32Array, index: number, size: number): TrackDir {
-  const from = path[index]!;
-  const to = path[index + 1]!;
-  return directionFromDelta((to % size) - (from % size), ((to / size) | 0) - ((from / size) | 0));
 }
 
 /**
@@ -147,6 +133,7 @@ function trainSpeedLimit(world: World, id: number): number {
   const speed = vehicles.speedMs[id]!;
   const horizon = (speed * speed) / (2 * brake) + TILE_DIAGONAL_M;
 
+  const reservedTo = vehicles.reservedToIndex[id]!;
   let distance = -vehicles.progressM[id]!;
 
   for (let step = 0; step < CURVE_LOOKAHEAD_MAX_NODES; step++) {
@@ -171,6 +158,17 @@ function trainSpeedLimit(world: World, id: number): number {
         const allowed = Math.sqrt(curve * curve + 2 * brake * ahead);
         if (allowed < limit) limit = allowed;
       }
+    }
+
+    // The end of what this train holds is a wall it must stop short of. Same
+    // equation as the curve above with a target speed of zero, and it needs no
+    // accumulator of its own - `distance` already counts from the start of the
+    // current tile, exactly as routeRemainingM does.
+    if (reservedTo >= 0 && node === reservedTo) {
+      const stop = distance + pathStepM(path, node, size) - SIGNAL_STOP_OFFSET_M;
+      const allowed = Math.sqrt(2 * brake * (stop > 0 ? stop : 0));
+      if (allowed < limit) limit = allowed;
+      break;
     }
 
     distance += pathStepM(path, node, size);
@@ -220,17 +218,12 @@ function brakingDistanceM(speed: number, brakeMs2: number): number {
   return (speed * speed) / (2 * brakeMs2) + speed * BRAKE_REACTION_SECONDS;
 }
 
-/** Total ground distance of a route that has just been written. [m] */
-function routeLengthM(path: Int32Array, length: number, size: number): number {
-  let total = 0;
-  for (let i = 0; i + 1 < length; i++) total += pathStepM(path, i, size);
-  return total;
-}
-
 /** Hand the vehicle a route to `targetTile`; returns false when there is none. */
 function routeTo(world: World, id: number, targetTile: number): boolean {
   const vehicles = world.vehicles;
   const path = vehicles.paths[id]!;
+  // The old claim is about to lose the route it was expressed in terms of.
+  releaseAll(world, id);
 
   const length =
     vehicles.kind[id] === VehicleKind.Train
@@ -369,6 +362,72 @@ function isFull(world: World, id: number): boolean {
   return amountOf(vehicles.cargo[id]!, cargo) >= vehicles.capacityUnits[id]!;
 }
 
+/**
+ * Claim the section ahead early enough to brake for it - and, once stopped
+ * short of a red, keep asking.
+ *
+ * This runs every tick a train is driving, and it is the primary mechanism, not
+ * a comfort feature. The braking term in `trainSpeedLimit` brings the train to a
+ * stand a few metres short of the signal, which means its wheels never cross a
+ * tile boundary again - so the gate inside the tile advance would never be
+ * reached and the train would wait for ever. The claim has to be attempted from
+ * where the train is, not from where it is about to be.
+ *
+ * It looks only as far as the train could brake from. A train does not claim
+ * section after section across the whole map; it claims the one it is coming up
+ * to. On a line with no signals at all it claims nothing ever, which is what
+ * keeps M3's behaviour exactly as it was.
+ */
+function claimAhead(world: World, id: number): void {
+  const vehicles = world.vehicles;
+  const path = vehicles.paths[id]!;
+  const length = vehicles.pathLength[id]!;
+  const start = vehicles.pathIndex[id]!;
+  const size = world.map.size;
+  const signal = world.map.signal;
+  const brake = vehicles.brakeMs2[id]!;
+  const speed = vehicles.speedMs[id]!;
+  const horizon = (speed * speed) / (2 * brake) + TILE_DIAGONAL_M;
+
+  // The node the train would have to be granted next: the one just past what it
+  // already holds, or the first signal ahead when it holds nothing yet.
+  const boundary = vehicles.reservedToIndex[id]! + 1;
+  const extending = vehicles.reservedToIndex[id]! >= 0;
+  if (extending && boundary >= length) return;
+
+  let distance = -vehicles.progressM[id]!;
+  for (let step = 0; step < CURVE_LOOKAHEAD_MAX_NODES; step++) {
+    const node = start + step;
+    if (node + 1 >= length) return;
+    distance += pathStepM(path, node, size);
+
+    if (extending) {
+      if (node + 1 === boundary) {
+        tryClaim(world, id, boundary);
+        return;
+      }
+    } else if (signal[path[node + 1]!] !== SignalKind.None) {
+      tryClaim(world, id, start);
+      return;
+    }
+
+    if (distance > horizon) return;
+  }
+}
+
+/**
+ * May this train move onto route node `next`?
+ *
+ * Free unless the tile begins a new section - and then only if the train can
+ * claim the whole of that section, its own body included.
+ */
+function mayEnter(world: World, id: number, next: number): boolean {
+  const vehicles = world.vehicles;
+  if (next <= vehicles.reservedToIndex[id]!) return true;
+  if (world.map.signal[vehicles.paths[id]![next]!] === SignalKind.None) return true;
+  return tryClaim(world, id, next);
+}
+
 /** Advance every vehicle by one tick. */
 export function updateVehicles(world: World): void {
   const vehicles = world.vehicles;
@@ -431,6 +490,20 @@ export function updateVehicles(world: World): void {
         continue;
       }
 
+      case VehicleState.WaitingForPath: {
+        // Retried every tick rather than on the repath cadence: a failed claim
+        // is a handful of array reads, and a train sitting at a signal that
+        // went green five real seconds ago is the sort of thing players notice.
+        if (vehicles.pathLength[id]! === 0) {
+          vehicles.state[id] = VehicleState.NoRoute;
+          continue;
+        }
+        if (mayEnter(world, id, vehicles.pathIndex[id]! + 1)) {
+          vehicles.state[id] = VehicleState.Driving;
+        }
+        continue;
+      }
+
       case VehicleState.Driving:
       case VehicleState.Braking: {
         if (vehicles.pathLength[id]! === 0) {
@@ -438,10 +511,9 @@ export function updateVehicles(world: World): void {
           continue;
         }
 
-        const limit =
-          vehicles.kind[id] === VehicleKind.Train
-            ? trainSpeedLimit(world, id)
-            : vehicles.maxSpeedMs[id]!;
+        const train = vehicles.kind[id] === VehicleKind.Train;
+        if (train) claimAhead(world, id);
+        const limit = train ? trainSpeedLimit(world, id) : vehicles.maxSpeedMs[id]!;
 
         const remaining = remainingDistanceM(world, id);
         const braking =
@@ -452,26 +524,48 @@ export function updateVehicles(world: World): void {
         // Walk forward over as many tiles as this tick covered.
         const path = vehicles.paths[id]!;
         const size = world.map.size;
+        let held = false;
+
         for (;;) {
           const index = vehicles.pathIndex[id]!;
           if (index + 1 >= vehicles.pathLength[id]!) break;
           const step = pathStepM(path, index, size);
           if (vehicles.progressM[id]! < step) break;
+
+          // The gate: a train may cross into a section only while it holds it.
+          // The braking term above normally has it standing here already; this
+          // is the backstop that makes the guarantee independent of how far the
+          // lookahead reached.
+          if (train && !mayEnter(world, id, index + 1)) {
+            const stopAt = step - SIGNAL_STOP_OFFSET_M;
+            if (vehicles.progressM[id]! > stopAt) vehicles.progressM[id] = stopAt;
+            vehicles.speedMs[id] = 0;
+            vehicles.state[id] = VehicleState.WaitingForPath;
+            held = true;
+            break;
+          }
+
           vehicles.progressM[id] = vehicles.progressM[id]! - step;
           vehicles.routeRemainingM[id] = vehicles.routeRemainingM[id]! - step;
           vehicles.pathIndex[id] = index + 1;
           vehicles.tileIndex[id] = path[index + 1]!;
         }
+        if (held) continue;
+        if (train) releaseBehind(world, id);
 
         const atEnd = vehicles.pathIndex[id]! + 1 >= vehicles.pathLength[id]!;
         if (!atEnd) continue;
 
         vehicles.progressM[id] = 0;
-        if (vehicles.speedMs[id]! > 0.4) continue; // still rolling out
+        if (vehicles.speedMs[id]! > STOPPED_SPEED_MS) continue; // still rolling out
 
         vehicles.speedMs[id] = 0;
         vehicles.pathLength[id] = 0;
         vehicles.routeRemainingM[id] = 0;
+        // The route is gone, so the claim expressed in its indices has to go
+        // with it - otherwise a train standing at a platform holds its whole
+        // approach for the rest of the game.
+        releaseAll(world, id);
 
         const orders = vehicles.orders[id]!;
         const order = orders[vehicles.orderIndex[id]! % orders.length];

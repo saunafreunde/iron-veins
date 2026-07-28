@@ -45,6 +45,9 @@ export interface VehicleSave {
   progressM: number;
   speedMs: number;
   routeRemainingM: number;
+  /** The run of its route the train holds, as route indices, or -1. */
+  reservedFromIndex: number;
+  reservedToIndex: number;
   /** Catalogue ids of a train's units; empty for anything else. */
   consist: number[];
   pathIndex: number;
@@ -98,6 +101,8 @@ export function encodeVehicles(store: VehicleStore): VehicleSave[] {
       progressM: store.progressM[id]!,
       speedMs: store.speedMs[id]!,
       routeRemainingM: store.routeRemainingM[id]!,
+      reservedFromIndex: store.reservedFromIndex[id]!,
+      reservedToIndex: store.reservedToIndex[id]!,
       consist: [...store.consist[id]!],
       pathIndex: store.pathIndex[id]!,
       path,
@@ -237,6 +242,8 @@ export function decodeVehicles(value: unknown, path: string): VehicleSave[] {
       progressM: num(raw['progressM'], `${path}[${i}].progressM`),
       speedMs: num(raw['speedMs'], `${path}[${i}].speedMs`),
       routeRemainingM: num(raw['routeRemainingM'], `${path}[${i}].routeRemainingM`),
+      reservedFromIndex: int(raw['reservedFromIndex'], `${path}[${i}].reservedFromIndex`),
+      reservedToIndex: int(raw['reservedToIndex'], `${path}[${i}].reservedToIndex`),
       consist,
       pathIndex: int(raw['pathIndex'], `${path}[${i}].pathIndex`),
       path: pathTiles.map((tile, t) => int(tile, `${path}[${i}].path[${t}]`)),
@@ -292,6 +299,8 @@ export function buildVehicleStore(saves: readonly VehicleSave[]): VehicleStore {
     store.progressM[id] = save.progressM;
     store.speedMs[id] = save.speedMs;
     store.routeRemainingM[id] = save.routeRemainingM;
+    store.reservedFromIndex[id] = save.reservedFromIndex;
+    store.reservedToIndex[id] = save.reservedToIndex;
     store.consist[id] = [...save.consist];
     store.pathIndex[id] = save.pathIndex;
     store.pathLength[id] = save.path.length;

@@ -24,9 +24,10 @@ export const SAVE_MAGIC = 'IRVN';
  *
  * From version 2 on every step has a real migration: 3 added stations and
  * vehicles, 4 the two rail tile layers, 5 the train composition and the running
- * distance-to-go, 6 the bridge and tunnel layers.
+ * distance-to-go, 6 the bridge and tunnel layers, 7 signals and the two
+ * reservation indices a train carries.
  */
-export const SAVE_VERSION = 6;
+export const SAVE_VERSION = 7;
 
 /** File extension used for manual and automatic saves. */
 export const SAVE_EXTENSION = '.ironsave';
@@ -170,6 +171,7 @@ function parseTileMap(value: unknown, path: string, mapSize: number): TileMapDat
     roadBits: asBytes(raw['roadBits'], `${path}.roadBits`, tiles),
     trackBits: asBytes(raw['trackBits'], `${path}.trackBits`, tiles),
     railType: asBytes(raw['railType'], `${path}.railType`, tiles),
+    signal: asBytes(raw['signal'], `${path}.signal`, tiles),
     structure: asBytes(raw['structure'], `${path}.structure`, tiles),
     structureHeight: asBytes(raw['structureHeight'], `${path}.structureHeight`, tiles),
     townId: asBytes(raw['townId'], `${path}.townId`, tiles * 2),
@@ -322,6 +324,18 @@ function parseCommand(value: unknown, path: string): Command {
         specIds: asArray(raw['specIds'], `${path}.specIds`).map((id, i) =>
           asInt(id, `${path}.specIds[${i}]`),
         ),
+      };
+    case CommandKind.BuildSignal:
+      return {
+        kind: CommandKind.BuildSignal,
+        x: asInt(raw['x'], `${path}.x`),
+        y: asInt(raw['y'], `${path}.y`),
+      };
+    case CommandKind.DemolishSignal:
+      return {
+        kind: CommandKind.DemolishSignal,
+        x: asInt(raw['x'], `${path}.x`),
+        y: asInt(raw['y'], `${path}.y`),
       };
     case CommandKind.SellVehicle:
       return {

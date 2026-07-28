@@ -1,24 +1,19 @@
 {
   "app.title": "Iron Veins",
   "app.tagline": "Aufbau eines Transportimperiums, 1950 bis 2050",
-
   "ui.defaultCompanyName": "Eisenadern Transport AG",
-
   "ui.status.company": "Firma",
   "ui.status.date": "Datum",
   "ui.status.cash": "Kontostand",
   "ui.status.loan": "Kredit",
   "ui.status.speed": "Geschwindigkeit",
   "ui.status.version": "Version {version}",
-
   "ui.speed.pause": "Pause",
   "ui.speed.x1": "1x",
   "ui.speed.x2": "2x",
   "ui.speed.x5": "5x",
   "ui.speed.x20": "20x",
-
   "ui.date.format": "{day}. {month} {year}",
-
   "ui.month.1": "Januar",
   "ui.month.2": "Februar",
   "ui.month.3": "März",
@@ -31,12 +26,10 @@
   "ui.month.10": "Oktober",
   "ui.month.11": "November",
   "ui.month.12": "Dezember",
-
   "ui.company.title": "Firma",
   "ui.company.name": "Name",
   "ui.company.color": "Farbe",
   "ui.company.rename": "Umbenennen",
-
   "ui.finance.title": "Finanzen",
   "ui.finance.cash": "Kontostand",
   "ui.finance.loan": "Kredit",
@@ -45,7 +38,6 @@
   "ui.finance.borrow": "Kredit aufnehmen ({amount})",
   "ui.finance.repay": "Tilgen ({amount})",
   "ui.finance.interestHint": "Zinsen werden zum Monatsende gebucht.",
-
   "ui.mapgen.title": "Karte wird erzeugt",
   "ui.mapgen.starting": "Vorbereitung …",
   "ui.mapgen.phase.0": "Relief und Erosion",
@@ -56,7 +48,6 @@
   "ui.mapgen.phase.5": "Industrien",
   "ui.mapgen.phase.6": "Prüfung der Startbedingungen",
   "ui.mapgen.retry": "Seed war unspielbar, Versuch {attempt}",
-
   "ui.tile.title": "Gelände",
   "ui.tile.none": "Zeige mit der Maus auf die Karte.",
   "ui.tile.position": "Position",
@@ -64,7 +55,6 @@
   "ui.tile.terrain": "Untergrund",
   "ui.tile.town": "Stadt",
   "ui.tile.openCountry": "freies Land",
-
   "ui.tool.select": "Auswahl",
   "ui.tool.raise": "Anheben",
   "ui.tool.lower": "Absenken",
@@ -86,7 +76,6 @@
   "ui.tool.railDepot": "Bahndepot",
   "ui.tool.pricePlatform": "{amount} je Kachel. Wird auf ein bestehendes Gleis gesetzt.",
   "ui.tool.priceRailDepot": "{amount}. Braucht ein Gleis darunter; hier werden Züge zusammengestellt.",
-
   "ui.train.assemble": "Lokomotive wählen",
   "ui.train.wagons": "Wagen anhängen",
   "ui.train.draft": "Zusammenstellung ({count})",
@@ -98,14 +87,12 @@
   "ui.train.price": "Kaufpreis",
   "ui.train.buy": "Zug kaufen",
   "ui.train.clear": "Zusammenstellung verwerfen",
-
   "ui.station.title": "Station",
   "ui.station.name": "Name",
   "ui.station.rating": "Bewertung",
   "ui.station.waiting": "Wartende Fracht",
   "ui.station.modules": "Module",
   "ui.station.lowRating": "Niedrige Bewertung: Es kommt weniger Fracht hier an. Häufiger bedienen oder Module ergänzen.",
-
   "ui.fleet.title": "Fuhrpark",
   "ui.fleet.buyHere": "In diesem Depot kaufen",
   "ui.fleet.selectDepot": "Wähle ein Depot auf der Karte, um Fahrzeuge zu kaufen.",
@@ -118,7 +105,6 @@
   "ui.fleet.stop": "Anhalten",
   "ui.fleet.sell": "Verkaufen",
   "ui.fleet.plusWagons": "+ {count} Wagen",
-
   "ui.tool.track": "Gleis",
   "ui.tool.priceTrack": "{amount} je Kachel. Erst Anfang, dann Ende — der Assistent sucht die weichste Trasse.",
   "ui.preview.title": "Bauvorschau",
@@ -134,7 +120,6 @@
   "track.reject.onWater": "Gleise über Wasser brauchen eine Brücke.",
   "track.reject.blocked": "Das Ziel ist bebaut.",
   "track.reject.nothingToDo": "Anfang und Ende sind dieselbe Kachel.",
-
   "ui.system.title": "Systemstatus",
   "ui.system.map": "Karte",
   "ui.system.towns": "Städte / Industrien",
@@ -150,12 +135,9 @@
   "ui.system.isolation": "SharedArrayBuffer",
   "ui.system.isolationOk": "verfügbar (cross-origin isolated)",
   "ui.system.isolationMissing": "nicht verfügbar - COOP/COEP-Header fehlen",
-
   "ui.locale.label": "Sprache",
   "ui.debug.toggle": "Debug-Overlay (F3)",
-
   "ui.error.title": "Die Simulation konnte nicht gestartet werden",
-
   "cmd.reject.nameEmpty": "Der Firmenname darf nicht leer sein.",
   "cmd.reject.nameTooLong": "Der Firmenname ist zu lang.",
   "cmd.reject.invalidColor": "Diese Firmenfarbe gibt es nicht.",
@@ -184,7 +166,6 @@
   "cmd.reject.noOrders": "Das Fahrzeug hat noch keine Aufträge.",
   "cmd.reject.noSuchStation": "Diese Station gibt es nicht.",
   "cmd.reject.noRouteToStop": "Das Fahrzeug findet keinen Weg zu seinem ersten Halt. Fehlt eine Straßenverbindung?",
-
   "veh.state.stopped": "Angehalten",
   "veh.state.driving": "Unterwegs",
   "veh.state.braking": "Bremst",
@@ -193,7 +174,6 @@
   "veh.state.brokenDown": "Panne",
   "veh.state.inDepot": "Im Depot",
   "veh.state.noRoute": "Kein Weg",
-
   "veh.bus_o1": "Typ O-1 „Landbus\"",
   "veh.bus_o2": "Typ O-2 „Überland\"",
   "veh.bus_o3": "Typ O-3 „Kurier\"",
@@ -221,7 +201,6 @@
   "veh.lorry_container2": "Typ C-2 „Sattelzug\"",
   "veh.lorry_livestock": "Typ V-1 „Viehwagen\"",
   "veh.lorry_cement": "Typ Z-1 „Zementmischer\"",
-
   "veh.loco_steam1": "Typ D-1 „Veteran\"",
   "veh.loco_steam2": "Typ D-2 „Eilzug\"",
   "veh.loco_steam3": "Typ D-3 „Bergsteiger\"",
@@ -255,7 +234,6 @@
   "veh.railcar4": "Typ T-4 „Elektrotrieb\"",
   "veh.railcar5": "Typ T-5 „Stadtschnellbahn\"",
   "veh.railcar6": "Typ T-6 „Akkutrieb\"",
-
   "veh.wagon_pax1": "Wagen A-1 „Abteil\"",
   "veh.wagon_pax2": "Wagen A-2 „Großraum\"",
   "veh.wagon_pax3": "Wagen A-3 „Schnellzug\"",
@@ -279,7 +257,6 @@
   "veh.wagon_stake": "Wagen R-2 „Rungen\"",
   "veh.wagon_silo": "Wagen Z-1 „Silo\"",
   "veh.wagon_heavy": "Wagen H-1 „Schwerlast\"",
-
   "cargo.passengers": "Passagiere",
   "cargo.mail": "Post",
   "cargo.coal": "Kohle",
@@ -303,13 +280,11 @@
   "cargo.unit.tonne": "t",
   "cargo.unit.head": "Stück",
   "cargo.unit.teu": "TEU",
-
   "terraform.reject.outOfRange": "Dieser Punkt liegt außerhalb der Karte.",
   "terraform.reject.atLimit": "Hier ist die Höhengrenze der Karte erreicht.",
   "terraform.reject.occupied": "Auf diesem Gelände stehen Straßen, Gebäude oder eine Industrie.",
   "terraform.reject.tooExpensive": "Die Erdbewegung ist teurer als der Kontostand.",
   "terraform.reject.tooMuchEarth": "Dafür müsste zu viel Gelände ringsum mitbewegt werden. Arbeite dich von flachem Boden aus vor.",
-
   "terrain.water": "Wasser",
   "terrain.coast": "Küste",
   "terrain.grass": "Wiese",
@@ -319,5 +294,12 @@
   "terrain.snow": "Schnee",
   "terrain.desert": "Wüste",
   "terrain.marsh": "Moor",
-  "terrain.townGround": "Stadtboden"
+  "terrain.townGround": "Stadtboden",
+  "ui.tool.signal": "Signal",
+  "ui.tool.priceSignal": "{amount}. Nur auf freier Strecke — teilt das Gleis in Blockabschnitte.",
+  "veh.state.waitingForPath": "Wartet am Signal",
+  "cmd.reject.notPlainTrack": "Ein Signal steht nur auf freier Strecke, nicht in einer Weiche.",
+  "cmd.reject.signalOnStructure": "Auf einer Brücke oder in einem Tunnel steht kein Signal.",
+  "cmd.reject.signalExists": "Hier steht schon ein Signal.",
+  "cmd.reject.noSignalHere": "Hier steht kein Signal."
 }

@@ -16,7 +16,8 @@ export type Tool =
   | 'demolish'
   | 'track'
   | 'platform'
-  | 'raildepot';
+  | 'raildepot'
+  | 'signal';
 
 /**
  * What the build preview shows before the player commits (section 17.3).

@@ -496,6 +496,15 @@ export class MapView {
           }
         }
 
+        if (map.signal[index] !== 0) {
+          this.place(
+            this.take(used++),
+            this.frameTexture('signal', atlas.signalFrame()),
+            world.x,
+            world.y,
+          );
+        }
+
         const buildingKind = map.buildingKind[index]!;
         if (buildingKind !== 0) {
           const level = map.buildingLevel[index]!;

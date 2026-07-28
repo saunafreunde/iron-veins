@@ -6,6 +6,8 @@ import {
   RAIL_PLATFORM_COST_CT,
   RAIL_PLATFORM_UPKEEP_CT,
   RESALE_SHARE,
+  SIGNAL_COST_CT,
+  SIGNAL_UPKEEP_CT_PER_YEAR,
   ROAD_COST_PER_TILE_CT,
   ROAD_DEPOT_COST_CT,
   ROAD_DEPOT_UPKEEP_CT,
@@ -16,11 +18,13 @@ import {
   TICKS_PER_YEAR,
   TOWN_ROAD_MAX_SLOPE,
 } from '../constants';
+import { SignalKind, SIGNAL_TRACK_DEGREE } from '../map/signals';
 import { Structure, structureUpkeepCt } from '../map/structures';
 import { slopeRise, Terrain } from '../map/terrain';
 import {
   directionFromDelta,
   oppositeDir,
+  trackDegree,
   RAIL_TYPE_COST_CT,
   RAIL_TYPE_UPKEEP_CT,
   trackBit,
@@ -35,6 +39,7 @@ import { assignStationCatchment } from '../town/update';
 import { RoadBit } from '../town/types';
 import { defaultCargo, vehicleSpec, VehicleKind } from '../vehicles/catalog';
 import { aggregateConsist, consistDefaultCargo, validateConsist } from '../vehicles/consist';
+import { releaseAll } from '../vehicles/reservations';
 import { VehicleState } from '../vehicles/VehicleStore';
 import type { World } from '../World';
 import { ACCEPTED, RejectReason, type CommandOutcome } from './types';
@@ -245,6 +250,14 @@ export function buildTrack(
     map.railType[to] = railType;
   }
 
+  // A spur laid through a signalled tile turns it into a junction, and a signal
+  // standing in a junction is the one state the placement rule exists to
+  // prevent. It comes down with a refund rather than silently becoming illegal.
+  for (const tile of route.tiles) {
+    if (map.signal[tile] === SignalKind.None) continue;
+    if (trackDegree(map.trackBits[tile]!) !== SIGNAL_TRACK_DEGREE) clearSignal(world, tile);
+  }
+
   bookExpense(world.company, route.costCt);
   world.company.upkeepPerYearCt += upkeepDelta;
   world.company.fixedAssetsCt += route.costCt;
@@ -272,6 +285,7 @@ export function demolishTrack(world: World, x: number, y: number): CommandOutcom
   }
   map.trackBits[tile] = 0;
   map.railType[tile] = 0;
+  clearSignal(world, tile);
 
   // Taking out one tile of a bridge takes out the bridge: half a viaduct is not
   // a thing, and leaving the deck standing with a hole in it would be worse.
@@ -286,6 +300,55 @@ export function demolishTrack(world: World, x: number, y: number): CommandOutcom
   world.company.upkeepPerYearCt -= RAIL_TYPE_UPKEEP_CT[railType]!;
   map.revision++;
   return ACCEPTED;
+}
+
+/**
+ * Place a signal on plain line (section 9).
+ *
+ * Everything this refuses is refused for one reason: a train held here has to
+ * be standing somewhere that does not block anybody else. A junction throat is
+ * the case that matters, and refusing the placement removes it entirely -
+ * which is why there are no pre-signals in this design (DECISIONS.md D-055).
+ */
+export function buildSignal(world: World, x: number, y: number): CommandOutcome {
+  if (!world.map.contains(x, y)) return reject(RejectReason.OutsideMap);
+  const map = world.map;
+  const tile = map.tileIndex(x, y);
+
+  if (map.trackBits[tile] === 0) return reject(RejectReason.NeedsTrack);
+  if (trackDegree(map.trackBits[tile]!) !== SIGNAL_TRACK_DEGREE) {
+    return reject(RejectReason.NotPlainTrack);
+  }
+  if (map.structure[tile] !== Structure.None) return reject(RejectReason.SignalOnStructure);
+  if (stationAt(world, tile) !== null) return reject(RejectReason.Occupied);
+  if (map.signal[tile] !== SignalKind.None) return reject(RejectReason.SignalExists);
+  if (SIGNAL_COST_CT > world.company.cashCt) return reject(RejectReason.InsufficientFunds);
+
+  map.signal[tile] = SignalKind.Block;
+  bookExpense(world.company, SIGNAL_COST_CT);
+  world.company.upkeepPerYearCt += SIGNAL_UPKEEP_CT_PER_YEAR;
+  world.company.fixedAssetsCt += SIGNAL_COST_CT;
+  map.revision++;
+  return ACCEPTED;
+}
+
+export function demolishSignal(world: World, x: number, y: number): CommandOutcome {
+  if (!world.map.contains(x, y)) return reject(RejectReason.OutsideMap);
+  const tile = world.map.tileIndex(x, y);
+  if (world.map.signal[tile] === SignalKind.None) return reject(RejectReason.NoSignalHere);
+
+  clearSignal(world, tile);
+  world.map.revision++;
+  return ACCEPTED;
+}
+
+/** Take a signal away and unwind what it cost, wherever that happens. */
+function clearSignal(world: World, tile: number): void {
+  if (world.map.signal[tile] === SignalKind.None) return;
+  world.map.signal[tile] = SignalKind.None;
+  world.company.cashCt += Math.round(SIGNAL_COST_CT * DEMOLITION_REFUND);
+  world.company.upkeepPerYearCt -= SIGNAL_UPKEEP_CT_PER_YEAR;
+  world.company.fixedAssetsCt -= SIGNAL_COST_CT;
 }
 
 /** Station that owns a tile, or null. */
@@ -524,6 +587,9 @@ export function sellVehicle(world: World, vehicleId: number): CommandOutcome {
   world.company.cashCt += refund;
   world.company.upkeepPerYearCt -= upkeepCt;
   world.company.fixedAssetsCt -= priceCt;
+  // The store holds no reference to the world, so the track it claimed has to
+  // be given back here rather than inside destroy().
+  releaseAll(world, vehicleId);
   world.vehicles.destroy(vehicleId);
   return ACCEPTED;
 }

@@ -24,6 +24,8 @@ export const CommandKind = {
   DemolishTrack: 16,
   BuildRailStop: 17,
   BuyTrain: 18,
+  BuildSignal: 19,
+  DemolishSignal: 20,
 } as const;
 export type CommandKind = (typeof CommandKind)[keyof typeof CommandKind];
 
@@ -166,7 +168,22 @@ export interface BuyTrainCommand {
   readonly specIds: readonly number[];
 }
 
+/** Place a signal on a piece of plain line. */
+export interface BuildSignalCommand {
+  readonly kind: typeof CommandKind.BuildSignal;
+  readonly x: number;
+  readonly y: number;
+}
+
+export interface DemolishSignalCommand {
+  readonly kind: typeof CommandKind.DemolishSignal;
+  readonly x: number;
+  readonly y: number;
+}
+
 export type Command =
+  | BuildSignalCommand
+  | DemolishSignalCommand
   | BuildTrackCommand
   | DemolishTrackCommand
   | BuildRailStopCommand
@@ -219,6 +236,10 @@ export const RejectReason = {
   NothingToDo: 'cmd.reject.nothingToDo',
   NeedsRoad: 'cmd.reject.needsRoad',
   NeedsTrack: 'cmd.reject.needsTrack',
+  NotPlainTrack: 'cmd.reject.notPlainTrack',
+  SignalOnStructure: 'cmd.reject.signalOnStructure',
+  SignalExists: 'cmd.reject.signalExists',
+  NoSignalHere: 'cmd.reject.noSignalHere',
   NeedsDepot: 'cmd.reject.needsDepot',
   NeedsRailDepot: 'cmd.reject.needsRailDepot',
   UnknownModule: 'cmd.reject.unknownModule',

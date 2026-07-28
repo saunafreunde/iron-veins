@@ -19,6 +19,7 @@ import {
   createCompany,
 } from './economy/company';
 import { RailPathfinder } from './net/railPath';
+import { ReservationTable } from './net/reservations';
 import { RoadPathfinder } from './net/roadPath';
 import {
   buildVehicleStore,
@@ -26,6 +27,7 @@ import {
   encodeVehicles,
   type VehicleSave,
 } from './save/entities';
+import { SaveFormatError } from './save/format';
 import type { Station } from './station/types';
 import { growTowns, produceTownCargo } from './town/update';
 import { ageVehicles, expireStaleCargo, rollBreakdowns } from './vehicles/lifecycle';
@@ -66,6 +68,7 @@ export interface TileMapData {
   roadBits: Uint8Array;
   trackBits: Uint8Array;
   railType: Uint8Array;
+  signal: Uint8Array;
   structure: Uint8Array;
   structureHeight: Uint8Array;
   townId: Uint8Array;
@@ -108,6 +111,13 @@ export class World {
   vehicles = new VehicleStore();
   readonly roadPathfinder: RoadPathfinder;
   readonly railPathfinder: RailPathfinder;
+  /**
+   * Which train holds which piece of track. Derived from the per-vehicle
+   * reservation indices plus each train's saved route, so it is never
+   * serialised and never hashed - it is rebuilt on load, exactly as the land
+   * masses and the ocean mask are.
+   */
+  readonly reservations: ReservationTable;
 
   /** The company the local player controls. AI companies get 1..n in M8. */
   readonly playerCompanyId = 0;
@@ -123,6 +133,7 @@ export class World {
     this.industries = generated.industries;
     this.roadPathfinder = new RoadPathfinder(generated.map.tileCount);
     this.railPathfinder = new RailPathfinder(generated.map.tileCount);
+    this.reservations = new ReservationTable(generated.map.tileCount);
   }
 
   /**
@@ -230,6 +241,7 @@ export class World {
         roadBits: this.map.roadBits,
         trackBits: this.map.trackBits,
         railType: this.map.railType,
+        signal: this.map.signal,
         structure: this.map.structure,
         structureHeight: this.map.structureHeight,
         townId: bytesOf(this.map.townId),
@@ -252,6 +264,7 @@ export class World {
     map.roadBits.set(data.map.roadBits);
     map.trackBits.set(data.map.trackBits);
     map.railType.set(data.map.railType);
+    map.signal.set(data.map.signal);
     map.structure.set(data.map.structure);
     map.structureHeight.set(data.map.structureHeight);
     map.buildingKind.set(data.map.buildingKind);
@@ -280,6 +293,7 @@ export class World {
     world.rng.setState(data.rng);
     world.stations.push(...data.stations);
     world.vehicles = buildVehicleStore(data.vehicles);
+    rebuildReservations(world);
     world.company.cashCt = data.company.cashCt;
     world.company.loanCt = data.company.loanCt;
     world.company.profitThisYearCt = data.company.profitThisYearCt;
@@ -289,6 +303,38 @@ export class World {
     world.company.expensesThisMonthCt = data.company.expensesThisMonthCt;
     world.company.upkeepPerYearCt = data.company.upkeepPerYearCt;
     return world;
+  }
+}
+
+/**
+ * Rebuild the reservation table from what the trains say they hold.
+ *
+ * The table is a pure function of the two saved indices and the saved route, so
+ * it is recomputed on load rather than stored - the treatment `landmassId` and
+ * `oceanMask` already get. Two trains claiming one tile is not a state the
+ * simulation can produce, so meeting it here means the file is corrupt and
+ * saying so is better than starting a world with an invisible deadlock in it.
+ */
+function rebuildReservations(world: World): void {
+  world.reservations.reset();
+  const vehicles = world.vehicles;
+
+  for (let id = 0; id < vehicles.count; id++) {
+    if (vehicles.alive[id] !== 1) continue;
+    const to = vehicles.reservedToIndex[id]!;
+    if (to < 0) continue;
+
+    const path = vehicles.paths[id]!;
+    for (let index = vehicles.reservedFromIndex[id]!; index <= to; index++) {
+      const tile = path[index]!;
+      const owner = world.reservations.ownerOf(tile);
+      if (owner !== -1 && owner !== id) {
+        throw new SaveFormatError(
+          `save.state.vehicles: tile ${tile} is claimed by both vehicle ${owner} and ${id}`,
+        );
+      }
+      world.reservations.set(tile, id);
+    }
   }
 }
 
@@ -359,6 +405,7 @@ function hashDynamicState(h: Fnv1a64, world: World): void {
     h.u32(vehicles.specId[id]!).u32(vehicles.state[id]!).u32(vehicles.tileIndex[id]!);
     h.f64(vehicles.progressM[id]!).f64(vehicles.speedMs[id]!);
     h.f64(vehicles.routeRemainingM[id]!);
+    h.int(vehicles.reservedFromIndex[id]!).int(vehicles.reservedToIndex[id]!);
     h.u32(vehicles.consist[id]!.length);
     for (const unit of vehicles.consist[id]!) h.u32(unit);
     h.u32(vehicles.pathIndex[id]!).u32(vehicles.pathLength[id]!);
@@ -389,6 +436,7 @@ export function hashWorld(world: World): string {
   h.intArray(map.roadBits);
   h.intArray(map.trackBits);
   h.intArray(map.railType);
+  h.intArray(map.signal);
   h.intArray(map.structure);
   h.intArray(map.structureHeight);
   h.intArray(map.townId);

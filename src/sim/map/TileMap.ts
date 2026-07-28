@@ -29,6 +29,13 @@ export class TileMap {
   readonly railType: Uint8Array;
 
   /**
+   * Signal on this tile, see {@link SignalKind}. A signal is a property of the
+   * tile rather than of a direction: it faces both ways, which is what a
+   * passing loop needs and what keeps the build tool a single click.
+   */
+  readonly signal: Uint8Array;
+
+  /**
    * Bridge or tunnel on this tile, see {@link Structure}. Only the tiles
    * BETWEEN the two ends carry it; the ends themselves are ordinary track.
    */
@@ -105,6 +112,8 @@ export class TileMap {
     offset += tiles;
     this.railType = new Uint8Array(this.buffer, offset, tiles);
     offset += tiles;
+    this.signal = new Uint8Array(this.buffer, offset, tiles);
+    offset += tiles;
     this.structure = new Uint8Array(this.buffer, offset, tiles);
     offset += tiles;
     this.structureHeight = new Uint8Array(this.buffer, offset, tiles);
@@ -130,10 +139,10 @@ export class TileMap {
   static bufferBytes(size: number): number {
     const tiles = size * size;
     const corners = (size + 1) * (size + 1);
-    // 4-byte landmass, two 2-byte id layers, the corner heights, and nine
-    // single-byte layers: terrain, road, track, rail type, structure,
+    // 4-byte landmass, two 2-byte id layers, the corner heights, and ten
+    // single-byte layers: terrain, road, track, rail type, signal, structure,
     // structure height, building kind, building level, ocean mask.
-    return tiles * 8 + corners + tiles * 9;
+    return tiles * 8 + corners + tiles * 10;
   }
 
   /** Read-side view on a map the worker owns. */

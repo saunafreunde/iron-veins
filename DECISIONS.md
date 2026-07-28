@@ -543,3 +543,117 @@ longitudinal solver, the renderer, the vehicle sprites - has to ask
 ground where there is not. Asking `baseHeight` on a bridge tile measures the
 river bed, which reads as a cliff down and back up: the route would be refused
 as too steep, and a train that did cross would be dragged into the water.
+
+## M4 - signals
+
+### D-054 Reservations are keyed by tile, and the table is derived
+
+A train claims a contiguous run of its own route and holds it until its tail is
+clear. The table that records this is one entry per map tile holding the id of
+the owning train, or -1. No block graph, no flood fill, no node numbering.
+
+Keying by TILE INDEX is the whole reason this is cheap to own. A key derived
+from anything else - a dense track-node id, a block id - would have to be
+rebuilt every time `map.revision` moves, which is every time a player lays a
+single road tile, and a renumbering would silently retarget live reservations.
+A tile index survives every one of those untouched.
+
+The table is a pure function of each train's two saved reservation indices plus
+its saved route, so it is neither serialised nor hashed; it is rebuilt in
+`World.fromData`, exactly as `landmassId` and `oceanMask` are (D-025). Two
+trains claiming one tile is not a state the simulation can produce, so meeting
+it during that rebuild means the file is corrupt and it is refused.
+
+### D-055 A signal stands on plain line, and that is why there are no pre-signals
+
+A signal may only go on a tile with exactly two track connections. A train held
+at a signal stands still on the tile before it; if signals could stand in a
+junction, a waiting train would block the throat of that junction for every
+other route through it. The genre's answer to that is pre-signals and combo
+signals - a second and third signal type, each with rules the player has to
+learn before their first junction works.
+
+Refusing the placement removes the case instead of modelling it. A player who
+wants to protect a junction signals its approaches, which is what real
+signalling does anyway.
+
+### D-056 One signal type, two-way, and one-way deferred
+
+The signal is a property of the TILE, not of a direction. It therefore faces
+both ways: it needs no mirrored bit when the track under it comes up, it needs
+no direction on the command, and the build tool is a single click.
+
+One-way signals would buy tidier double-track working, and `SignalKind` is
+numbered so they can be added without touching the tile layer. They are not in
+M4 because they change what the pathfinder may plan, and a route that worked in
+M3 turning into "no route" is a far worse first impression than a train taking
+a passing loop the long way round.
+
+### D-057 The claim is a range of route indices, not a list of tiles
+
+`reservedFromIndex` and `reservedToIndex` per vehicle, both -1 when the train
+holds nothing. A contiguous claim needs nothing more, it is two integers in the
+save instead of a variable-length list, and it is what makes the reservation
+table itself derived rather than saved.
+
+The claim is all-or-nothing: the whole range is tested before a single tile is
+written. A partial claim that then fails leaves tiles owned by a train that
+never entered them - a deadlock nobody can reproduce and nothing detects. And
+because the range always covers the train's own body as well as the run ahead,
+two trains can never hold the same tile even transiently, which is what makes
+the load-time rebuild a sound check rather than a guess.
+
+### D-058 A train under-claims its own tail for a moment after a repath
+
+`routeTo` resets the route index to 0, so the tiles a 400 m train's body still
+stands on lie behind the start of the new route and no route index can reach
+them. The backward walk clamps to 0 and the train briefly holds less than it
+occupies.
+
+This is accepted rather than fixed. A train is always standing still when it is
+given a new route - at a stop, in a depot, or retrying after "no route" - and M3
+already let a following train drive through a standing one. Fixing it properly
+means an explicit list of occupied tiles: three more fields to save, hash and
+migrate, for a case that is no worse than the status quo.
+
+### D-059 Deadlock is avoided by construction for following trains, not proven impossible
+
+Two trains running the SAME way down a signalled line cannot collide and cannot
+deadlock: claims are all-or-nothing and the follower simply waits. That is the
+acceptance case and it is tested.
+
+Two trains meeting NOSE TO NOSE on single track will deadlock. The pathfinder is
+deliberately blind to occupancy - giving `stepSeconds` a fourth impassable case
+would drop trains into "no route" the moment a line got busy, and that state
+retries only every five real seconds. A passing loop does not help either,
+because nothing makes a train prefer the loop. The honest statement is that M4
+delivers block safety, not traffic management; scheduling and occupancy-aware
+routing belong with the order system.
+
+### D-060 The claim is attempted from where the train is, not where it is about to be
+
+This is the bug the tests caught, and it is worth writing down because the
+mechanism reads correctly right up until it deadlocks.
+
+The braking term brings a train to a stand a few metres short of a red signal.
+Once stopped, its wheels never cross a tile boundary again - so a claim
+attempted at the boundary, inside the tile-advance loop, would never be
+attempted again. The train would wait for ever at a signal that went green
+seconds later.
+
+So the claim runs every tick a train is driving, from its current position, and
+looks only as far ahead as it could brake from. The gate in the tile advance
+remains as a backstop for the case where the signal was beyond the lookahead,
+but it is not the primary mechanism.
+
+### D-061 Lowest id wins a contended section, permanently
+
+`updateVehicles` iterates in ascending id order and a claim is written
+immediately, which gives a total and reproducible arbitration for free. It also
+gives a permanent priority: at a busy junction a high-id train can be starved by
+a low-id one.
+
+Determinism is not negotiable. Fairness would need a deferred resolution phase
+with a total comparator of its own, which is a different design rather than a
+tweak. Named here so that it is a known property rather than a bug report about
+favouritism.

@@ -76,8 +76,9 @@ const PLATFORM_COLUMN = BUILDING_VARIANTS + 4;
 const RAIL_DEPOT_COLUMN = BUILDING_VARIANTS + 5;
 const TRAIN_COLUMN = BUILDING_VARIANTS + 6;
 const BRIDGE_COLUMN = BUILDING_VARIANTS + 7;
+const SIGNAL_COLUMN = BUILDING_VARIANTS + 8;
 
-const ATLAS_COLUMNS = Math.max(SLOPE_COUNT, BRIDGE_COLUMN + 1);
+const ATLAS_COLUMNS = Math.max(SLOPE_COUNT, SIGNAL_COLUMN + 1);
 const ATLAS_ROWS = TERRAIN_COUNT + 3;
 
 export interface AtlasFrame {
@@ -110,6 +111,8 @@ export interface TerrainAtlas {
   trainFrame(): AtlasFrame;
   /** Deck slab of a bridge, drawn at the deck's height rather than the ground's. */
   bridgeFrame(): AtlasFrame;
+  /** Signal post beside the track. */
+  signalFrame(): AtlasFrame;
   /** Half a track segment leaving the tile centre in one of the 8 directions. */
   trackFrame(direction: number): AtlasFrame;
 }
@@ -405,6 +408,8 @@ export function buildTerrainAtlas(): TerrainAtlas {
   drawBox(ctx, TRAIN_COLUMN * CELL_W, BUILDING_ROW * CELL_H, 0.55, 6 * ATLAS_SCALE, '#ffffff');
   // The deck is a wide, very shallow slab; the ground it spans shows around it.
   drawBox(ctx, BRIDGE_COLUMN * CELL_W, BUILDING_ROW * CELL_H, 0.98, 3 * ATLAS_SCALE, '#8e8a84');
+  // A thin, tall post: narrow enough not to hide the track it stands on.
+  drawBox(ctx, SIGNAL_COLUMN * CELL_W, BUILDING_ROW * CELL_H, 0.12, 14 * ATLAS_SCALE, '#d8d4cc');
 
   for (let direction = 0; direction < 8; direction++) {
     drawTrackCell(ctx, direction * CELL_W, TRACK_ROW * CELL_H, direction);
@@ -434,6 +439,7 @@ export function buildTerrainAtlas(): TerrainAtlas {
     vehicleFrame: () => frame(VEHICLE_COLUMN, BUILDING_ROW),
     trainFrame: () => frame(TRAIN_COLUMN, BUILDING_ROW),
     bridgeFrame: () => frame(BRIDGE_COLUMN, BUILDING_ROW),
+    signalFrame: () => frame(SIGNAL_COLUMN, BUILDING_ROW),
     trackFrame: (direction) => frame(direction & 7, TRACK_ROW),
   };
 }
