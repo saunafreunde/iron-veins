@@ -1,5 +1,12 @@
 import type { MainToWorkerMessage, WorkerToMainMessage } from '../shared/protocol';
-import { SnapshotF64, SnapshotI32, SnapshotWriter } from '../shared/snapshot';
+import {
+  SNAPSHOT_MAX_VEHICLES,
+  SNAPSHOT_VEHICLE_STRIDE,
+  SnapshotF64,
+  SnapshotI32,
+  SnapshotVehicle,
+  SnapshotWriter,
+} from '../shared/snapshot';
 import { CommandQueue } from './commands/queue';
 import type { CommandEnvelope, CommandOutcome } from './commands/types';
 import {
@@ -8,8 +15,12 @@ import {
   SPEED_FACTORS,
   STATE_HASH_INTERVAL_TICKS,
   TICK_MS,
+  TILE_SIZE_M,
 } from './constants';
+import type { Cargo } from './cargo/types';
 import { loanLimitCt } from './economy/company';
+import { stationRating } from './station/types';
+import { capacityFor, vehicleSpec } from './vehicles/catalog';
 import { hashWorldLive, World } from './World';
 
 /**
@@ -56,6 +67,10 @@ let lastHashedTick = -1;
 
 let publishedName = '';
 let publishedColorIndex = -1;
+let publishedStructure = '';
+
+/** How often the fleet list is refreshed while nothing structural changed. */
+const FLEET_REFRESH_TICKS = 200;
 
 /** Reused across ticks so command feedback does not allocate per call. */
 const outcomeSink = (_envelope: CommandEnvelope, outcome: CommandOutcome): void => {
@@ -70,6 +85,89 @@ function refreshStateHash(current: World): void {
   stateHashHi = Number.parseInt(digest.slice(0, 8), 16) | 0;
   stateHashLo = Number.parseInt(digest.slice(8, 16), 16) | 0;
   lastHashedTick = current.tick;
+}
+
+/**
+ * Structural changes - a station built, a bus bought - travel by message
+ * rather than through the snapshot: they are rare, they carry strings and
+ * variable length lists, and packing those into a shared buffer would make the
+ * layout churn for no gain. A cheap signature decides when to send.
+ */
+function structureSignature(current: World): string {
+  let modules = 0;
+  for (const station of current.stations) modules += station.modules.length;
+  return `${current.stations.length}:${modules}:${current.vehicles.livingCount}`;
+}
+
+function postStructure(current: World): void {
+  scope.postMessage({
+    type: 'stationsChanged',
+    stations: current.stations.map((station) => ({
+      id: station.id,
+      name: station.name,
+      x: station.x,
+      y: station.y,
+      rating: stationRating(station, current.tick),
+      waiting: Math.round(station.waiting.reduce((sum, stack) => sum + stack.amount, 0)),
+      modules: station.modules.map((module) => ({ kind: module.kind, x: module.x, y: module.y })),
+    })),
+  });
+  postFleet(current);
+}
+
+function postFleet(current: World): void {
+  const vehicles = current.vehicles;
+  const markers = [];
+
+  for (let id = 0; id < vehicles.count; id++) {
+    if (vehicles.alive[id] !== 1) continue;
+    const spec = vehicleSpec(vehicles.specId[id]!);
+    const cargo = vehicles.refitCargo[id]! as Cargo;
+    let units = 0;
+    for (const stack of vehicles.cargo[id]!) units += stack.amount;
+
+    markers.push({
+      id,
+      specId: vehicles.specId[id]!,
+      state: vehicles.state[id]!,
+      cargoUnits: Math.round(units),
+      capacity: capacityFor(spec, cargo),
+      earnedCt: vehicles.earnedCt[id]!,
+      orderStationIds: vehicles.orders[id]!.map((order) => order.targetId),
+    });
+  }
+  scope.postMessage({ type: 'fleetChanged', vehicles: markers });
+}
+
+/**
+ * Copy the drawable state of every vehicle into the snapshot block.
+ *
+ * Only what changes per tick travels: which tile, which tile next, how far
+ * between them, and what the vehicle is doing. Everything static about it - its
+ * type, its name, its orders - the renderer already knows or does not need.
+ */
+function writeVehicles(current: World, block: Int32Array): number {
+  const vehicles = current.vehicles;
+  let written = 0;
+
+  for (let id = 0; id < vehicles.count && written < SNAPSHOT_MAX_VEHICLES; id++) {
+    if (vehicles.alive[id] !== 1) continue;
+
+    const tile = vehicles.tileIndex[id]!;
+    const index = vehicles.pathIndex[id]!;
+    const hasNext = index + 1 < vehicles.pathLength[id]!;
+    const next = hasNext ? vehicles.paths[id]![index + 1]! : tile;
+
+    const base = written * SNAPSHOT_VEHICLE_STRIDE;
+    block[base + SnapshotVehicle.Tile] = tile;
+    block[base + SnapshotVehicle.NextTile] = next;
+    block[base + SnapshotVehicle.ProgressMilli] = Math.round(
+      (vehicles.progressM[id]! / TILE_SIZE_M) * 1000,
+    );
+    block[base + SnapshotVehicle.State] = vehicles.state[id]!;
+    written++;
+  }
+  return written;
 }
 
 function publishSnapshot(current: World, sink: SnapshotWriter): void {
@@ -96,7 +194,20 @@ function publishSnapshot(current: World, sink: SnapshotWriter): void {
   f64[SnapshotF64.LoanCt] = current.company.loanCt;
   f64[SnapshotF64.LoanLimitCt] = loanLimitCt(current.company);
 
+  i32[SnapshotI32.VehicleCount] = writeVehicles(current, sink.draftVehicles);
+
   sink.publish();
+
+  const signature = structureSignature(current);
+  if (signature !== publishedStructure) {
+    publishedStructure = signature;
+    postStructure(current);
+  } else if (current.tick % FLEET_REFRESH_TICKS === 0) {
+    // The list also shows state and earnings, which change without the fleet
+    // changing size; a refresh once per game day keeps it honest without
+    // sending a message per tick.
+    postFleet(current);
+  }
 
   if (
     current.company.name !== publishedName ||
@@ -189,6 +300,7 @@ function startGame(message: Extract<MainToWorkerMessage, { type: 'init' }>): voi
   lastHashedTick = -1;
   publishedName = '';
   publishedColorIndex = -1;
+  publishedStructure = '';
 
   publishSnapshot(world, writer);
 

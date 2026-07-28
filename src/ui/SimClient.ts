@@ -32,6 +32,9 @@ export interface StartGameOptions {
  */
 const UI_REFRESH_MS = 66;
 
+/** Returned before the worker has published anything. */
+const EMPTY_VEHICLES = new Int32Array(0);
+
 function hexWord(value: number): string {
   return (value >>> 0).toString(16).padStart(8, '0');
 }
@@ -85,6 +88,14 @@ export class SimClient {
     this.timerId = window.setInterval(this.readSnapshot, UI_REFRESH_MS);
   }
 
+  /**
+   * Per-tick vehicle block, read straight out of the shared buffer.
+   * The renderer pulls this every frame; it is never copied.
+   */
+  readVehicles(): { data: Int32Array; count: number } {
+    return this.reader?.currentVehicles() ?? { data: EMPTY_VEHICLES, count: 0 };
+  }
+
   /** Change the simulation speed. Control traffic - never affects the result. */
   setSpeed(speedIndex: number): void {
     this.post({ type: 'setSpeed', speedIndex });
@@ -131,6 +142,12 @@ export class SimClient {
         return;
       case 'companyChanged':
         store.setCompany(message.name, message.colorIndex);
+        return;
+      case 'stationsChanged':
+        store.setStations(message.stations);
+        return;
+      case 'fleetChanged':
+        store.setFleet(message.vehicles);
         return;
       case 'commandRejected':
         store.setRejection(message.reasonKey);

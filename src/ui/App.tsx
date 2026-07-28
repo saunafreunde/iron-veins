@@ -3,6 +3,7 @@ import { LOCALES, t } from '../i18n';
 import { MAPGEN_PHASE_COUNT } from '../sim/mapgen';
 import { CompanyPanel } from './CompanyPanel';
 import { FinancePanel } from './FinancePanel';
+import { FleetPanel } from './FleetPanel';
 import { MapCanvas } from './MapCanvas';
 import { TilePanel } from './TilePanel';
 import type { SimClient } from './SimClient';
@@ -102,6 +103,7 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
           <MapCanvas client={client} />
           <aside className="sidebar">
             <TilePanel />
+            <FleetPanel client={client} />
             <CompanyPanel client={client} />
             <FinancePanel client={client} />
             <SystemPanel />

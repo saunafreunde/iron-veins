@@ -1,7 +1,9 @@
 import { useEffect, useRef, type ReactElement } from 'react';
 import { MapView, type TileInfo } from '../render/MapView';
-import { CommandKind } from '../sim/commands/types';
+import { COMPANY_COLORS } from '../shared/palette';
+import { CommandKind, type Command } from '../sim/commands/types';
 import { TileMap } from '../sim/map/TileMap';
+import { ModuleKind } from '../sim/station/types';
 import type { SimClient } from './SimClient';
 import { useSimStore, type Tool } from './store';
 
@@ -13,15 +15,38 @@ import { useSimStore, type Tool } from './store';
  * shared map buffer and forwards its hover and click events into the store.
  */
 
-/** Which command a tool sends. `none` just selects. */
-function commandFor(tool: Tool, tile: TileInfo) {
+/**
+ * Turn a click into a command.
+ *
+ * The road tool is the one that needs two clicks - the first sets an anchor,
+ * the second builds the run - so it reports back whether it consumed the click
+ * or is still waiting for the second one.
+ */
+function commandForClick(tool: Tool, tile: TileInfo): Command | null {
   switch (tool) {
     case 'raise':
-      return { kind: CommandKind.RaiseLand, x: tile.x, y: tile.y } as const;
+      return { kind: CommandKind.RaiseLand, x: tile.x, y: tile.y };
     case 'lower':
-      return { kind: CommandKind.LowerLand, x: tile.x, y: tile.y } as const;
+      return { kind: CommandKind.LowerLand, x: tile.x, y: tile.y };
     case 'level':
-      return { kind: CommandKind.LevelLand, x: tile.x, y: tile.y } as const;
+      return { kind: CommandKind.LevelLand, x: tile.x, y: tile.y };
+    case 'stop':
+      return {
+        kind: CommandKind.BuildRoadStop,
+        x: tile.x,
+        y: tile.y,
+        moduleKind: ModuleKind.BusStop,
+      };
+    case 'depot':
+      return {
+        kind: CommandKind.BuildRoadStop,
+        x: tile.x,
+        y: tile.y,
+        moduleKind: ModuleKind.RoadDepot,
+      };
+    case 'demolish':
+      return { kind: CommandKind.DemolishRoad, x: tile.x, y: tile.y };
+    case 'road':
     case 'none':
       return null;
   }
@@ -36,6 +61,8 @@ export function MapCanvas({ client }: { readonly client: SimClient }): ReactElem
   const towns = useSimStore((s) => s.towns);
   const industries = useSimStore((s) => s.industries);
   const mapRevision = useSimStore((s) => s.mapRevision);
+  const stations = useSimStore((s) => s.stations);
+  const companyColorIndex = useSimStore((s) => s.companyColorIndex);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -49,10 +76,30 @@ export function MapCanvas({ client }: { readonly client: SimClient }): ReactElem
       const state = useSimStore.getState();
       state.setSelectedTile(tile);
       if (tile === null) return;
-      const command = commandFor(state.tool, tile);
+
+      if (state.tool === 'road') {
+        // Two clicks: anchor, then the far end of the run.
+        const anchor = state.roadAnchor;
+        if (anchor === null) {
+          state.setRoadAnchor({ x: tile.x, y: tile.y });
+          return;
+        }
+        client.send({
+          kind: CommandKind.BuildRoad,
+          x1: anchor.x,
+          y1: anchor.y,
+          x2: tile.x,
+          y2: tile.y,
+        });
+        state.setRoadAnchor(null);
+        return;
+      }
+
+      const command = commandForClick(state.tool, tile);
       if (command !== null) client.send(command);
     };
 
+    view.setVehicleSource(() => client.readVehicles());
     void view.attach(host);
 
     return () => {
@@ -69,6 +116,15 @@ export function MapCanvas({ client }: { readonly client: SimClient }): ReactElem
   useEffect(() => {
     viewRef.current?.setMapRevision(mapRevision);
   }, [mapRevision]);
+
+  useEffect(() => {
+    viewRef.current?.setStations(stations);
+  }, [stations]);
+
+  useEffect(() => {
+    const hex = COMPANY_COLORS[companyColorIndex] ?? '#f08020';
+    viewRef.current?.setCompanyColor(Number.parseInt(hex.slice(1), 16));
+  }, [companyColorIndex]);
 
   return <div className="mapcanvas" ref={hostRef} />;
 }

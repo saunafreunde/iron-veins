@@ -4,6 +4,7 @@ import type { ModuleKind } from '../station/types';
 import type { OrderLoad, OrderUnload } from '../vehicles/VehicleStore';
 import { OrderTarget, VehicleState, type Order } from '../vehicles/VehicleStore';
 import { buildRoad, buildRoadStop, buyRoadVehicle, demolishRoad, sellVehicle } from './build';
+import { startVehicle } from '../vehicles/update';
 import { applyTerraform, estimateTerraform, levelTile, TerraformDirection } from '../map/terraform';
 import type { World } from '../World';
 import { ACCEPTED, CommandKind, RejectReason, type Command, type CommandOutcome } from './types';
@@ -110,8 +111,9 @@ export function executeCommand(world: World, command: Command): CommandOutcome {
       if (world.vehicles.orders[id]!.length === 0) {
         return { ok: false, reasonKey: RejectReason.NoOrders };
       }
-      // Starting from a standstill: pick up the current order again.
-      world.vehicles.state[id] = VehicleState.NoRoute;
+      if (!startVehicle(world, id)) {
+        return { ok: false, reasonKey: RejectReason.NoRouteToStop };
+      }
       return ACCEPTED;
     }
   }

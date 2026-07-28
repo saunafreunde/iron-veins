@@ -12,7 +12,7 @@
  * refuses to interpret a buffer written by a different layout.
  */
 
-export const SNAPSHOT_LAYOUT_VERSION = 1;
+export const SNAPSHOT_LAYOUT_VERSION = 2;
 
 /** Header fields, shared by both slots. */
 export const SnapshotHeader = {
@@ -42,13 +42,15 @@ export const SnapshotI32 = {
   StateHashLo: 9,
   /** Bumped whenever the ground changed; the renderer rebuilds its tiles then. */
   MapRevision: 10,
+  /** How many entries of the vehicle block are in use. */
+  VehicleCount: 11,
 } as const;
 export const SNAPSHOT_I32_COUNT = 12;
 
 /**
  * Float fields of one slot. Money is an exact integer number of cents; it lives
- * in a Float64 because cent amounts legitimately exceed the Int32 range and
- * doubles represent integers below 2^53 exactly.
+ * in a Float64 because cent amounts exceed the Int32 range and doubles
+ * represent integers below 2^53 exactly.
  */
 export const SnapshotF64 = {
   CashCt: 0,
@@ -57,8 +59,34 @@ export const SnapshotF64 = {
 } as const;
 export const SNAPSHOT_F64_COUNT = 3;
 
+/**
+ * Vehicles the renderer may draw in one tick.
+ *
+ * Everything about a vehicle that changes per tick is four Int32 values, so the
+ * whole block is one typed array rather than four - fewer views to create, and
+ * the layout stays trivially aligned.
+ */
+export const SNAPSHOT_MAX_VEHICLES = 1_500;
+
+/** Fields per vehicle, in the order they appear in the block. */
+export const SnapshotVehicle = {
+  /** Tile the vehicle is on. */
+  Tile: 0,
+  /** Tile it is heading for; equal to Tile when standing still. */
+  NextTile: 1,
+  /** Progress between the two, in thousandths. */
+  ProgressMilli: 2,
+  /** A value of VehicleState. */
+  State: 3,
+} as const;
+export const SNAPSHOT_VEHICLE_STRIDE = 4;
+
 const HEADER_BYTES = HEADER_I32_COUNT * 4;
-const SLOT_BYTES = SNAPSHOT_I32_COUNT * 4 + SNAPSHOT_F64_COUNT * 8;
+const STATUS_I32_BYTES = SNAPSHOT_I32_COUNT * 4;
+const STATUS_F64_BYTES = SNAPSHOT_F64_COUNT * 8;
+const VEHICLE_BYTES = SNAPSHOT_MAX_VEHICLES * SNAPSHOT_VEHICLE_STRIDE * 4;
+const SLOT_BYTES = STATUS_I32_BYTES + STATUS_F64_BYTES + VEHICLE_BYTES;
+
 export const SNAPSHOT_BYTES = HEADER_BYTES + 2 * SLOT_BYTES;
 
 function slotByteOffset(slot: number): number {
@@ -70,10 +98,14 @@ function i32View(buffer: SharedArrayBuffer, slot: number): Int32Array {
 }
 
 function f64View(buffer: SharedArrayBuffer, slot: number): Float64Array {
-  return new Float64Array(
+  return new Float64Array(buffer, slotByteOffset(slot) + STATUS_I32_BYTES, SNAPSHOT_F64_COUNT);
+}
+
+function vehicleView(buffer: SharedArrayBuffer, slot: number): Int32Array {
+  return new Int32Array(
     buffer,
-    slotByteOffset(slot) + SNAPSHOT_I32_COUNT * 4,
-    SNAPSHOT_F64_COUNT,
+    slotByteOffset(slot) + STATUS_I32_BYTES + STATUS_F64_BYTES,
+    SNAPSHOT_MAX_VEHICLES * SNAPSHOT_VEHICLE_STRIDE,
   );
 }
 
@@ -87,12 +119,14 @@ export class SnapshotWriter {
   private readonly header: Int32Array;
   private readonly i32Slots: readonly [Int32Array, Int32Array];
   private readonly f64Slots: readonly [Float64Array, Float64Array];
+  private readonly vehicleSlots: readonly [Int32Array, Int32Array];
   private generation = 0;
 
   constructor(readonly buffer: SharedArrayBuffer) {
     this.header = new Int32Array(buffer, 0, HEADER_I32_COUNT);
     this.i32Slots = [i32View(buffer, 0), i32View(buffer, 1)];
     this.f64Slots = [f64View(buffer, 0), f64View(buffer, 1)];
+    this.vehicleSlots = [vehicleView(buffer, 0), vehicleView(buffer, 1)];
     Atomics.store(this.header, SnapshotHeader.LayoutVersion, SNAPSHOT_LAYOUT_VERSION);
     Atomics.store(this.header, SnapshotHeader.Generation, 0);
   }
@@ -107,6 +141,11 @@ export class SnapshotWriter {
     return this.f64Slots[(this.generation + 1) & 1]!;
   }
 
+  /** Vehicle block of the slot currently being filled. */
+  get draftVehicles(): Int32Array {
+    return this.vehicleSlots[(this.generation + 1) & 1]!;
+  }
+
   /** Make the drafted slot visible to the reader. */
   publish(): void {
     this.generation++;
@@ -119,6 +158,7 @@ export class SnapshotReader {
   private readonly header: Int32Array;
   private readonly i32Slots: readonly [Int32Array, Int32Array];
   private readonly f64Slots: readonly [Float64Array, Float64Array];
+  private readonly vehicleSlots: readonly [Int32Array, Int32Array];
   /** 0 means "nothing published yet"; the writer starts publishing at 1. */
   private lastGeneration = 0;
 
@@ -126,6 +166,7 @@ export class SnapshotReader {
     this.header = new Int32Array(buffer, 0, HEADER_I32_COUNT);
     this.i32Slots = [i32View(buffer, 0), i32View(buffer, 1)];
     this.f64Slots = [f64View(buffer, 0), f64View(buffer, 1)];
+    this.vehicleSlots = [vehicleView(buffer, 0), vehicleView(buffer, 1)];
 
     const layout = Atomics.load(this.header, SnapshotHeader.LayoutVersion);
     if (layout !== 0 && layout !== SNAPSHOT_LAYOUT_VERSION) {
@@ -144,6 +185,14 @@ export class SnapshotReader {
     return true;
   }
 
+  /**
+   * Latest published generation, without advancing the read marker.
+   * The renderer draws every frame, not only when a new tick arrived.
+   */
+  peekGeneration(): number {
+    return Atomics.load(this.header, SnapshotHeader.Generation);
+  }
+
   get generation(): number {
     return this.lastGeneration;
   }
@@ -154,5 +203,19 @@ export class SnapshotReader {
 
   get f64(): Float64Array {
     return this.f64Slots[this.lastGeneration & 1]!;
+  }
+
+  get vehicles(): Int32Array {
+    return this.vehicleSlots[this.lastGeneration & 1]!;
+  }
+
+  /** Views of the currently published generation, for a renderer that polls. */
+  currentVehicles(): { readonly data: Int32Array; readonly count: number } {
+    const generation = this.peekGeneration();
+    const slot = generation & 1;
+    return {
+      data: this.vehicleSlots[slot]!,
+      count: this.i32Slots[slot]![SnapshotI32.VehicleCount]!,
+    };
   }
 }

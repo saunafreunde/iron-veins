@@ -64,8 +64,11 @@ const BUILDING_ROW = TERRAIN_COUNT + 1;
 /** Three zones times two expansion stages, plus one generic industry block. */
 const BUILDING_VARIANTS = 6;
 const INDUSTRY_COLUMN = BUILDING_VARIANTS;
+const STATION_COLUMN = BUILDING_VARIANTS + 1;
+const DEPOT_COLUMN = BUILDING_VARIANTS + 2;
+const VEHICLE_COLUMN = BUILDING_VARIANTS + 3;
 
-const ATLAS_COLUMNS = SLOPE_COUNT;
+const ATLAS_COLUMNS = Math.max(SLOPE_COUNT, VEHICLE_COLUMN + 1);
 const ATLAS_ROWS = TERRAIN_COUNT + 2;
 
 export interface AtlasFrame {
@@ -85,6 +88,11 @@ export interface TerrainAtlas {
   roadFrame(roadBits: number): AtlasFrame;
   buildingFrame(kind: number, level: number): AtlasFrame;
   industryFrame(): AtlasFrame;
+  /** Platform canopy of a road stop; tinted with the company colour. */
+  stationFrame(): AtlasFrame;
+  depotFrame(): AtlasFrame;
+  /** Small box for a road vehicle; tinted with the company colour. */
+  vehicleFrame(): AtlasFrame;
 }
 
 /** Corner offsets of the base diamond inside a cell, in draw order N-E-S-W. */
@@ -298,8 +306,12 @@ export function buildTerrainAtlas(): TerrainAtlas {
       BUILDING_COLORS[kind]!,
     );
   }
-  // Generic industry block; the concrete type is applied as a sprite tint.
+  // Generic blocks; the concrete colour is applied as a sprite tint, which is
+  // why they are drawn white.
   drawBox(ctx, INDUSTRY_COLUMN * CELL_W, BUILDING_ROW * CELL_H, 0.95, 22 * ATLAS_SCALE, '#ffffff');
+  drawBox(ctx, STATION_COLUMN * CELL_W, BUILDING_ROW * CELL_H, 0.8, 9 * ATLAS_SCALE, '#ffffff');
+  drawBox(ctx, DEPOT_COLUMN * CELL_W, BUILDING_ROW * CELL_H, 0.8, 16 * ATLAS_SCALE, '#ffffff');
+  drawBox(ctx, VEHICLE_COLUMN * CELL_W, BUILDING_ROW * CELL_H, 0.3, 7 * ATLAS_SCALE, '#ffffff');
 
   const frame = (column: number, row: number): AtlasFrame => ({
     x: column * CELL_W,
@@ -318,5 +330,8 @@ export function buildTerrainAtlas(): TerrainAtlas {
     buildingFrame: (kind, level) =>
       frame(Math.min(2, Math.max(0, kind - 1)) + (level >= 2 ? 3 : 0), BUILDING_ROW),
     industryFrame: () => frame(INDUSTRY_COLUMN, BUILDING_ROW),
+    stationFrame: () => frame(STATION_COLUMN, BUILDING_ROW),
+    depotFrame: () => frame(DEPOT_COLUMN, BUILDING_ROW),
+    vehicleFrame: () => frame(VEHICLE_COLUMN, BUILDING_ROW),
   };
 }

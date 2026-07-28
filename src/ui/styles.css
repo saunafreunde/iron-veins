@@ -208,6 +208,46 @@ body {
   height: 6px;
 }
 
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.row {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font: inherit;
+  padding: 6px 8px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.row:hover {
+  border-color: var(--accent);
+}
+
+.row--active {
+  border-color: var(--accent);
+}
+
+.row__meta {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
 .panel {
   background: var(--card);
   border: 1px solid var(--border);

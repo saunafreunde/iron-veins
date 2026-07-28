@@ -178,5 +178,6 @@ export const RejectReason = {
   NoSuchVehicle: 'cmd.reject.noSuchVehicle',
   NoOrders: 'cmd.reject.noOrders',
   NoSuchStation: 'cmd.reject.noSuchStation',
+  NoRouteToStop: 'cmd.reject.noRouteToStop',
 } as const;
 export type RejectReason = (typeof RejectReason)[keyof typeof RejectReason];

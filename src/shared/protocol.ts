@@ -32,6 +32,34 @@ export interface IndustryMarker {
   readonly y: number;
 }
 
+/** One module of a station, as the renderer needs to draw it. */
+export interface StationModuleMarker {
+  readonly kind: number;
+  readonly x: number;
+  readonly y: number;
+}
+
+export interface StationMarker {
+  readonly id: number;
+  readonly name: string;
+  readonly x: number;
+  readonly y: number;
+  readonly rating: number;
+  readonly waiting: number;
+  readonly modules: readonly StationModuleMarker[];
+}
+
+/** A vehicle as the fleet list shows it. */
+export interface VehicleMarker {
+  readonly id: number;
+  readonly specId: number;
+  readonly state: number;
+  readonly cargoUnits: number;
+  readonly capacity: number;
+  readonly earnedCt: number;
+  readonly orderStationIds: readonly number[];
+}
+
 export type MainToWorkerMessage =
   | {
       readonly type: 'init';
@@ -63,4 +91,8 @@ export type WorkerToMainMessage =
     }
   | { readonly type: 'companyChanged'; readonly name: string; readonly colorIndex: number }
   | { readonly type: 'commandRejected'; readonly reasonKey: string }
+  /** Sent whenever a station was built, extended or removed. */
+  | { readonly type: 'stationsChanged'; readonly stations: readonly StationMarker[] }
+  /** Fleet overview for the vehicle list; sent when it changes, not per tick. */
+  | { readonly type: 'fleetChanged'; readonly vehicles: readonly VehicleMarker[] }
   | { readonly type: 'error'; readonly message: string };

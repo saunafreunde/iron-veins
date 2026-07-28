@@ -1,11 +1,11 @@
 import { create } from 'zustand';
 import { setLocale as applyLocale, type Locale } from '../i18n';
 import type { TileInfo } from '../render/MapView';
-import type { IndustryMarker, TownMarker } from '../shared/protocol';
+import type { IndustryMarker, StationMarker, TownMarker, VehicleMarker } from '../shared/protocol';
 import type { MapGenPhase } from '../sim/mapgen';
 
 /** What a left click on the map does. */
-export type Tool = 'none' | 'raise' | 'lower' | 'level';
+export type Tool = 'none' | 'raise' | 'lower' | 'level' | 'road' | 'stop' | 'depot' | 'demolish';
 
 /** The part of the store that is refreshed from the shared snapshot buffer. */
 export interface SnapshotValues {
@@ -42,6 +42,11 @@ export interface SimUiState extends SnapshotValues {
   selectedTile: TileInfo | null;
   /** Active construction tool; decides what a left click does. */
   tool: Tool;
+  stations: readonly StationMarker[];
+  fleet: readonly VehicleMarker[];
+  selectedVehicleId: number | null;
+  /** First corner of a road drag; the second click completes it. */
+  roadAnchor: { readonly x: number; readonly y: number } | null;
   companyName: string;
   companyColorIndex: number;
   appVersion: string;
@@ -67,6 +72,10 @@ export interface SimUiState extends SnapshotValues {
   setHoveredTile: (tile: TileInfo | null) => void;
   setSelectedTile: (tile: TileInfo | null) => void;
   setTool: (tool: Tool) => void;
+  setStations: (stations: readonly StationMarker[]) => void;
+  setFleet: (vehicles: readonly VehicleMarker[]) => void;
+  setSelectedVehicle: (id: number | null) => void;
+  setRoadAnchor: (anchor: { readonly x: number; readonly y: number } | null) => void;
   setReady: (seed: number) => void;
   setCompany: (name: string, colorIndex: number) => void;
   setPlatform: (appVersion: string, isDesktop: boolean) => void;
@@ -104,6 +113,10 @@ export const useSimStore = create<SimUiState>((set) => ({
   hoveredTile: null,
   selectedTile: null,
   tool: 'none',
+  stations: [],
+  fleet: [],
+  selectedVehicleId: null,
+  roadAnchor: null,
   companyName: '',
   companyColorIndex: 0,
   appVersion: '',
@@ -131,7 +144,11 @@ export const useSimStore = create<SimUiState>((set) => ({
     }),
   setHoveredTile: (tile) => set({ hoveredTile: tile }),
   setSelectedTile: (tile) => set({ selectedTile: tile }),
-  setTool: (tool) => set({ tool }),
+  setTool: (tool) => set({ tool, roadAnchor: null }),
+  setStations: (stations) => set({ stations }),
+  setFleet: (vehicles) => set({ fleet: vehicles }),
+  setSelectedVehicle: (id) => set({ selectedVehicleId: id }),
+  setRoadAnchor: (anchor) => set({ roadAnchor: anchor }),
   setReady: (seed) => set({ ready: true, seed, generatingPhase: null }),
   setCompany: (name, colorIndex) => set({ companyName: name, companyColorIndex: colorIndex }),
   setPlatform: (appVersion, isDesktop) => set({ appVersion, isDesktop }),

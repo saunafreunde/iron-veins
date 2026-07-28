@@ -1,5 +1,6 @@
 import { Application, Container, Graphics, Rectangle, Sprite, Texture } from 'pixi.js';
-import type { IndustryMarker, TownMarker } from '../shared/protocol';
+import type { IndustryMarker, StationMarker, TownMarker } from '../shared/protocol';
+import { SNAPSHOT_VEHICLE_STRIDE, SnapshotVehicle } from '../shared/snapshot';
 import { MAX_HEIGHT } from '../sim/constants';
 import type { TileMap } from '../sim/map/TileMap';
 import { Terrain } from '../sim/map/terrain';
@@ -25,6 +26,9 @@ const CULL_MARGIN = MAX_HEIGHT + 4;
 
 /** Below this zoom the map is drawn as a plain overview: no roads, no houses. */
 const DETAIL_ZOOM_MIN = 0.5;
+
+/** ModuleKind.RoadDepot; duplicated as a constant to keep render free of sim enums. */
+const ROAD_DEPOT_KIND = 2;
 
 /** Accent colour per industry type, applied to the generic block as a tint. */
 const INDUSTRY_TINTS = [
@@ -77,6 +81,14 @@ export class MapView {
   /** Called on a left click on the map. */
   onSelect: ((info: TileInfo | null) => void) | null = null;
 
+  private stations: readonly StationMarker[] = [];
+  /** Company colour, applied to stations and vehicles as a tint. */
+  private companyTint = 0xf08020;
+  /** Where the renderer fetches the per-tick vehicle block from. */
+  private vehicleSource: (() => { data: Int32Array; count: number }) | null = null;
+  private readonly vehicleSprites: Sprite[] = [];
+  private readonly vehicleLayer = new Container();
+
   /**
    * Create the WebGL context and start rendering.
    *
@@ -105,6 +117,7 @@ export class MapView {
     this.atlasTexture.source.scaleMode = 'nearest';
 
     this.world.addChild(this.tiles);
+    this.world.addChild(this.vehicleLayer);
     this.world.addChild(this.overlay);
     this.app.stage.addChild(this.world);
 
@@ -127,6 +140,25 @@ export class MapView {
   /** Tell the view that the simulation changed the ground. */
   setMapRevision(revision: number): void {
     if (this.map !== null) this.map.revision = revision;
+  }
+
+  /** Station list, refreshed whenever one is built or extended. */
+  setStations(stations: readonly StationMarker[]): void {
+    this.stations = stations;
+    this.builtRevision = -1; // stations are drawn with the tiles
+  }
+
+  setCompanyColor(hex: number): void {
+    this.companyTint = hex;
+    this.builtRevision = -1;
+  }
+
+  /**
+   * Where to read the per-tick vehicle block. Pulled every frame rather than
+   * pushed, because the renderer runs at 60 Hz and the simulation at 20.
+   */
+  setVehicleSource(source: () => { data: Int32Array; count: number }): void {
+    this.vehicleSource = source;
   }
 
   get zoom(): number {
@@ -273,6 +305,7 @@ export class MapView {
       this.builtZoom = this.zoom;
       this.builtBounds = bounds;
     }
+    this.drawVehicles(map);
     this.drawOverlay(map);
   };
 
@@ -432,7 +465,81 @@ export class MapView {
       }
     }
 
+    // Station modules go on last so a canopy is never cut in half by the
+    // diamond of the tile behind it.
+    for (const station of this.stations) {
+      for (const module of station.modules) {
+        if (
+          module.x < bounds.minX ||
+          module.x > bounds.maxX ||
+          module.y < bounds.minY ||
+          module.y > bounds.maxY
+        ) {
+          continue;
+        }
+        const world = tileToWorld(module.x, module.y, map.baseHeight(module.x, module.y));
+        const sprite = this.take(used++);
+        const frame = module.kind === ROAD_DEPOT_KIND ? atlas.depotFrame() : atlas.stationFrame();
+        this.place(
+          sprite,
+          this.frameTexture(module.kind === ROAD_DEPOT_KIND ? 'depot' : 'station', frame),
+          world.x,
+          world.y,
+        );
+        sprite.tint = this.companyTint;
+      }
+    }
+
     for (let i = used; i < this.pool.length; i++) this.pool[i]!.visible = false;
+  }
+
+  /**
+   * Vehicles are redrawn every frame, not with the tiles: they move between
+   * simulation ticks and the renderer interpolates along the tile they are
+   * crossing, which is what keeps them smooth at 60 Hz over a 20 Hz sim.
+   */
+  private drawVehicles(map: TileMap): void {
+    const source = this.vehicleSource;
+    const atlas = this.atlas;
+    if (source === null || atlas === null) return;
+
+    const { data, count } = source();
+    const size = map.size;
+
+    for (let i = 0; i < count; i++) {
+      const base = i * SNAPSHOT_VEHICLE_STRIDE;
+      const tile = data[base + SnapshotVehicle.Tile]!;
+      const next = data[base + SnapshotVehicle.NextTile]!;
+      const progress = data[base + SnapshotVehicle.ProgressMilli]! / 1000;
+
+      const fromX = tile % size;
+      const fromY = (tile / size) | 0;
+      const toX = next % size;
+      const toY = (next / size) | 0;
+      if (!map.contains(fromX, fromY) || !map.contains(toX, toY)) continue;
+
+      const from = tileToWorld(fromX, fromY, map.baseHeight(fromX, fromY));
+      const to = tileToWorld(toX, toY, map.baseHeight(toX, toY));
+
+      let sprite = this.vehicleSprites[i];
+      if (sprite === undefined) {
+        sprite = new Sprite(this.frameTexture('vehicle', atlas.vehicleFrame()));
+        sprite.scale.set(1 / ATLAS_SCALE);
+        this.vehicleSprites.push(sprite);
+        this.vehicleLayer.addChild(sprite);
+      }
+
+      sprite.visible = true;
+      sprite.tint = this.companyTint;
+      sprite.position.set(
+        from.x + (to.x - from.x) * progress - TILE_W / 2,
+        from.y + (to.y - from.y) * progress - HEIGHT_PX,
+      );
+    }
+
+    for (let i = count; i < this.vehicleSprites.length; i++) {
+      this.vehicleSprites[i]!.visible = false;
+    }
   }
 
   /** Cursor highlight and selection marker. */

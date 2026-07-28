@@ -121,6 +121,23 @@ function orderTargetTile(world: World, id: number): number {
   return station === undefined ? -1 : stationAccessTile(station);
 }
 
+/**
+ * Send a standing vehicle to its current order.
+ *
+ * Called by the start command so a vehicle that cannot reach its first stop
+ * says so immediately, instead of sitting in "no route" while the player
+ * wonders what is wrong.
+ */
+export function startVehicle(world: World, id: number): boolean {
+  const target = orderTargetTile(world, id);
+  if (target === -1 || !routeTo(world, id, target)) {
+    world.vehicles.state[id] = VehicleState.NoRoute;
+    return false;
+  }
+  world.vehicles.state[id] = VehicleState.Driving;
+  return true;
+}
+
 /** Move to the next order and start driving towards it. */
 function advanceOrder(world: World, id: number): void {
   const vehicles = world.vehicles;
