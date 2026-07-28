@@ -318,6 +318,19 @@ export const BANKRUPTCY_MONTHS = 12;
 /** Nominal annual interest rate per difficulty, booked monthly. [1/year] */
 export const LOAN_INTEREST_RATE_PER_YEAR: readonly number[] = [0.04, 0.04, 0.065];
 
+// ---------------------------------------------------------------- accounting
+
+/**
+ * Months the cash-flow chart of section 14.1 looks back over.
+ *
+ * Twenty-four is two game years, which is exactly the comparison the
+ * profit-and-loss view is specified to offer, so one window serves both.
+ */
+export const LEDGER_HISTORY_MONTHS = 24;
+
+/** Game years of company value kept for the value history. */
+export const COMPANY_VALUE_YEARS = 25;
+
 // ---------------------------------------------------------------- economy
 
 /** Inflation applied to revenue and costs alike, per game year. [1/year] */
@@ -695,6 +708,17 @@ export const MIN_STATION_STOP_TICKS = 20;
 export const RELIABILITY_MAX = 10_000;
 export const RELIABILITY_DECAY_PER_YEAR = 400;
 export const RELIABILITY_SERVICE_GAIN = 600;
+
+/**
+ * What happens to a vehicle past its design life (section 11.3).
+ *
+ * Upkeep doubles and reliability falls twice as fast. Both at once is what
+ * makes replacing a vehicle a decision rather than a formality: an old vehicle
+ * still works, it just costs more and stops more often, and the player has to
+ * weigh that against the price of a new one.
+ */
+export const OBSOLETE_UPKEEP_FACTOR = 2;
+export const OBSOLETE_DECAY_FACTOR = 2;
 
 /** Breakdown roll happens once per game day: rng < (max - reliability) / this. */
 export const BREAKDOWN_DIVISOR = 40_000;

@@ -129,7 +129,7 @@ describe('where a signal may stand', () => {
     layTrack(bench, 10, 10, 30, 10);
 
     const cashBefore = bench.world.company.cashCt;
-    const upkeepBefore = bench.world.company.upkeepPerYearCt;
+    const upkeepBefore = bench.world.company.infrastructureUpkeepPerYearCt;
     run(bench, {
       kind: CommandKind.BuildSignal,
       x: 20,
@@ -142,7 +142,9 @@ describe('where a signal may stand', () => {
       SignalKind.Block,
     );
     expect(cashBefore - bench.world.company.cashCt).toBe(SIGNAL_COST_CT);
-    expect(bench.world.company.upkeepPerYearCt - upkeepBefore).toBe(SIGNAL_UPKEEP_CT_PER_YEAR);
+    expect(bench.world.company.infrastructureUpkeepPerYearCt - upkeepBefore).toBe(
+      SIGNAL_UPKEEP_CT_PER_YEAR,
+    );
   });
 
   it('refuses ground with no track on it', () => {
@@ -263,13 +265,13 @@ describe('where a signal may stand', () => {
       direction: TrackDir.East,
     });
 
-    const upkeep = bench.world.company.upkeepPerYearCt;
+    const upkeep = bench.world.company.infrastructureUpkeepPerYearCt;
     run(bench, { kind: CommandKind.DemolishTrack, x: 20, y: 10 });
 
     expect(signalKind(bench.world.map.signal[bench.world.map.tileIndex(20, 10)]!)).toBe(
       SignalKind.None,
     );
-    expect(bench.world.company.upkeepPerYearCt).toBeLessThan(upkeep);
+    expect(bench.world.company.infrastructureUpkeepPerYearCt).toBeLessThan(upkeep);
   });
 
   it('comes down when a spur turns its tile into a junction', () => {

@@ -26,8 +26,41 @@ export interface CompanyState {
   revenueThisMonthCt: number;
   /** Expenses booked since the start of the current game month. [cent] */
   expensesThisMonthCt: number;
-  /** Yearly upkeep of everything owned, recomputed on every build. [cent] */
-  upkeepPerYearCt: number;
+  /**
+   * Yearly upkeep, kept apart so section 14.1 can show the two accounts it
+   * asks for. [cent]
+   *
+   * The infrastructure half is maintained by the build commands, because a
+   * station costs the same the day it is built and the day it is demolished.
+   * The FLEET half is recomputed from the vehicles once a year instead: a
+   * vehicle's upkeep doubles when it passes its design life (11.3), and that
+   * happens with age rather than with a command, so a running total would have
+   * to be corrected from the yearly hook and any drift would be invisible.
+   */
+  vehicleUpkeepPerYearCt: number;
+  infrastructureUpkeepPerYearCt: number;
+
+  /**
+   * The accounts of section 14.1 for the month in progress, indexed by
+   * `Account`. [cent]
+   */
+  accounts: number[];
+  /** The same, accumulated over the year so far, and over the last one. */
+  yearAccounts: number[];
+  lastYearAccounts: number[];
+  /**
+   * Twenty-four months of accounts as a flat ring, row major, oldest slot
+   * pointed at by `historyCursor`. Read through `monthsInOrder`.
+   */
+  monthHistory: number[];
+  historyCursor: number;
+  /** Company value at the end of each of the last game years, oldest first. */
+  valueHistory: number[];
+  /**
+   * Depreciation charged against the fleet so far. Book value is
+   * `fixedAssetsCt - accumulatedDepreciationCt`. [cent]
+   */
+  accumulatedDepreciationCt: number;
   /**
    * Consecutive months closed with a negative balance (section 14.2).
    *

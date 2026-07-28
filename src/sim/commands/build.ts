@@ -176,7 +176,7 @@ export function buildRoad(
   }
 
   bookExpense(world.company, cost);
-  world.company.upkeepPerYearCt += newTiles * ROAD_UPKEEP_PER_TILE_CT;
+  world.company.infrastructureUpkeepPerYearCt += newTiles * ROAD_UPKEEP_PER_TILE_CT;
   world.company.fixedAssetsCt += cost;
   world.map.revision++;
   return ACCEPTED;
@@ -207,7 +207,7 @@ export function demolishRoad(world: World, x: number, y: number): CommandOutcome
   bits[tile] = 0;
 
   world.company.cashCt += Math.round(ROAD_COST_PER_TILE_CT * DEMOLITION_REFUND);
-  world.company.upkeepPerYearCt -= ROAD_UPKEEP_PER_TILE_CT;
+  world.company.infrastructureUpkeepPerYearCt -= ROAD_UPKEEP_PER_TILE_CT;
   world.map.revision++;
   return ACCEPTED;
 }
@@ -289,7 +289,7 @@ export function buildTrack(
   }
 
   bookExpense(world.company, route.costCt);
-  world.company.upkeepPerYearCt += upkeepDelta;
+  world.company.infrastructureUpkeepPerYearCt += upkeepDelta;
   world.company.fixedAssetsCt += route.costCt;
   map.revision++;
 
@@ -367,13 +367,13 @@ export function demolishTrack(world: World, x: number, y: number): CommandOutcom
   // a thing, and leaving the deck standing with a hole in it would be worse.
   const structure = map.structure[tile]! as Structure;
   if (structure !== Structure.None) {
-    world.company.upkeepPerYearCt -= structureUpkeepCt(structure);
+    world.company.infrastructureUpkeepPerYearCt -= structureUpkeepCt(structure);
     map.structure[tile] = Structure.None;
     map.structureHeight[tile] = 0;
   }
 
   world.company.cashCt += Math.round(RAIL_TYPE_COST_CT[railType]! * DEMOLITION_REFUND);
-  world.company.upkeepPerYearCt -= RAIL_TYPE_UPKEEP_CT[railType]!;
+  world.company.infrastructureUpkeepPerYearCt -= RAIL_TYPE_UPKEEP_CT[railType]!;
   map.revision++;
   return ACCEPTED;
 }
@@ -416,7 +416,7 @@ export function buildSignal(
 
   map.signal[tile] = packSignal(kind, direction);
   bookExpense(world.company, SIGNAL_COST_CT);
-  world.company.upkeepPerYearCt += SIGNAL_UPKEEP_CT_PER_YEAR;
+  world.company.infrastructureUpkeepPerYearCt += SIGNAL_UPKEEP_CT_PER_YEAR;
   world.company.fixedAssetsCt += SIGNAL_COST_CT;
   map.revision++;
   return ACCEPTED;
@@ -439,7 +439,7 @@ function clearSignal(world: World, tile: number): void {
   if (signalKind(world.map.signal[tile]!) === SignalKind.None) return;
   world.map.signal[tile] = SignalKind.None;
   world.company.cashCt += Math.round(SIGNAL_COST_CT * DEMOLITION_REFUND);
-  world.company.upkeepPerYearCt -= SIGNAL_UPKEEP_CT_PER_YEAR;
+  world.company.infrastructureUpkeepPerYearCt -= SIGNAL_UPKEEP_CT_PER_YEAR;
   world.company.fixedAssetsCt -= SIGNAL_COST_CT;
 }
 
@@ -534,7 +534,7 @@ export function buildRoadStop(
   attachModule(world, { kind, tileIndex: tile, x, y });
 
   bookExpense(world.company, cost);
-  world.company.upkeepPerYearCt += upkeep;
+  world.company.infrastructureUpkeepPerYearCt += upkeep;
   world.company.fixedAssetsCt += cost;
   world.map.revision++;
   return ACCEPTED;
@@ -569,7 +569,7 @@ export function buildRailStop(
   attachModule(world, { kind, tileIndex: tile, x, y });
 
   bookExpense(world.company, cost);
-  world.company.upkeepPerYearCt += upkeep;
+  world.company.infrastructureUpkeepPerYearCt += upkeep;
   world.company.fixedAssetsCt += cost;
   world.map.revision++;
   return ACCEPTED;
@@ -612,7 +612,7 @@ export function buildStationModule(
   attachModule(world, { kind, tileIndex: tile, x, y });
 
   bookExpense(world.company, cost);
-  world.company.upkeepPerYearCt += SUPPORT_MODULE_UPKEEP_CT[kind]!;
+  world.company.infrastructureUpkeepPerYearCt += SUPPORT_MODULE_UPKEEP_CT[kind]!;
   world.company.fixedAssetsCt += cost;
   map.revision++;
   return ACCEPTED;
@@ -673,7 +673,7 @@ export function buyTrain(
   world.vehicles.state[id] = VehicleState.Stopped;
 
   bookExpense(world.company, aggregate.priceCt);
-  world.company.upkeepPerYearCt += aggregate.upkeepCtPerYear;
+  world.company.vehicleUpkeepPerYearCt += aggregate.upkeepCtPerYear;
   world.company.fixedAssetsCt += aggregate.priceCt;
   return ACCEPTED;
 }
@@ -714,7 +714,7 @@ export function buyRoadVehicle(
   world.vehicles.state[id] = VehicleState.Stopped;
 
   bookExpense(world.company, spec.priceCt);
-  world.company.upkeepPerYearCt += spec.upkeepCtPerYear;
+  world.company.vehicleUpkeepPerYearCt += spec.upkeepCtPerYear;
   world.company.fixedAssetsCt += spec.priceCt;
   return ACCEPTED;
 }
@@ -798,7 +798,7 @@ export function sellVehicle(world: World, vehicleId: number): CommandOutcome {
   const refund = Math.round(priceCt * (1 - wear) * RESALE_SHARE);
 
   world.company.cashCt += refund;
-  world.company.upkeepPerYearCt -= upkeepCt;
+  world.company.vehicleUpkeepPerYearCt -= upkeepCt;
   world.company.fixedAssetsCt -= priceCt;
   // The store holds no reference to the world, so the track it claimed has to
   // be given back here rather than inside destroy().

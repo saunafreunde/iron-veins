@@ -8,6 +8,7 @@ import {
   newIndustry,
   type Industry,
 } from '../../src/sim/industry/types';
+import { upkeepPerYearCt } from '../../src/sim/economy/ledger';
 import { ModuleKind, stationRating } from '../../src/sim/station/types';
 import type { World } from '../../src/sim/World';
 import { apply, flatScenario, makeTown, runYears, type Scenario } from './scenario';
@@ -154,7 +155,9 @@ function describeChain(world: World): string {
     );
   }
   parts.push(`  town: ${world.towns[0]!.population} inhabitants`);
-  parts.push(`  upkeep ${Math.round(world.company.upkeepPerYearCt / CENTS_PER_EURO)} EUR per year`);
+  parts.push(
+    `  upkeep ${Math.round(upkeepPerYearCt(world.company) / CENTS_PER_EURO)} EUR per year`,
+  );
   return parts.join('\n');
 }
 

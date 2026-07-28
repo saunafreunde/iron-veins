@@ -21,6 +21,7 @@ import {
 import { LinkGraph, type CargoLinkSave } from './cargo/linkGraph';
 import { refreshCargoRouting } from './cargo/routing';
 import { reviewBankruptcy } from './economy/bankruptcy';
+import { bookDepreciation } from './economy/depreciation';
 import { RailPathfinder } from './net/railPath';
 import { ReservationTable } from './net/reservations';
 import { BlockIndex } from './signals/blocks';
@@ -41,7 +42,12 @@ import {
   reviewIndustries,
 } from './industry/production';
 import { growTowns, produceTownCargo } from './town/update';
-import { ageVehicles, expireStaleCargo, rollBreakdowns } from './vehicles/lifecycle';
+import {
+  ageVehicles,
+  expireStaleCargo,
+  fleetUpkeepCtPerYear,
+  rollBreakdowns,
+} from './vehicles/lifecycle';
 import { updateVehicles } from './vehicles/update';
 import { VehicleStore } from './vehicles/VehicleStore';
 import { Fnv1a64 } from './hash';
@@ -229,6 +235,7 @@ export class World {
     if (this.tick % TICKS_PER_MONTH === 0) {
       bookMonthlyInterest(this.company, this.difficulty);
       bookMonthlyUpkeep(this.company);
+      bookDepreciation(this);
       // Judge the month that has just ended, THEN make the next month's
       // output. The other way round would compare this month's production
       // against last month's collection, and every industry would look badly
@@ -244,6 +251,9 @@ export class World {
     if (this.tick % TICKS_PER_YEAR === 0) {
       closeFinancialYear(this.company);
       ageVehicles(this);
+      // After ageing, so a vehicle that has just passed its design life is
+      // charged the doubled upkeep from the year it becomes obsolete.
+      this.company.vehicleUpkeepPerYearCt = fleetUpkeepCtPerYear(this);
       // One new works a year, by preference where nothing is served yet.
       openNewIndustries(this);
     }
@@ -352,7 +362,15 @@ export class World {
     world.company.fixedAssetsCt = data.company.fixedAssetsCt;
     world.company.revenueThisMonthCt = data.company.revenueThisMonthCt;
     world.company.expensesThisMonthCt = data.company.expensesThisMonthCt;
-    world.company.upkeepPerYearCt = data.company.upkeepPerYearCt;
+    world.company.vehicleUpkeepPerYearCt = data.company.vehicleUpkeepPerYearCt;
+    world.company.infrastructureUpkeepPerYearCt = data.company.infrastructureUpkeepPerYearCt;
+    world.company.accounts = [...data.company.accounts];
+    world.company.yearAccounts = [...data.company.yearAccounts];
+    world.company.lastYearAccounts = [...data.company.lastYearAccounts];
+    world.company.monthHistory = [...data.company.monthHistory];
+    world.company.historyCursor = data.company.historyCursor;
+    world.company.valueHistory = [...data.company.valueHistory];
+    world.company.accumulatedDepreciationCt = data.company.accumulatedDepreciationCt;
     world.company.monthsInDebt = data.company.monthsInDebt;
     world.company.bankrupt = data.company.bankrupt;
     return world;
@@ -421,6 +439,18 @@ function hashDynamicState(h: Fnv1a64, world: World): void {
   h.int(c.lastYearProfitCt);
   h.int(c.fixedAssetsCt);
   h.u32(c.monthsInDebt).u32(c.bankrupt ? 1 : 0);
+  h.int(c.vehicleUpkeepPerYearCt).int(c.infrastructureUpkeepPerYearCt);
+  h.int(c.accumulatedDepreciationCt).u32(c.historyCursor);
+  // The whole ledger is hashed. It is state the simulation writes every month,
+  // and anything left out here silently stops being covered by the determinism
+  // suite - which is exactly how a counter drifts for a milestone and nobody
+  // notices.
+  for (const amount of c.accounts) h.int(amount);
+  for (const amount of c.yearAccounts) h.int(amount);
+  for (const amount of c.lastYearAccounts) h.int(amount);
+  for (const amount of c.monthHistory) h.int(amount);
+  h.u32(c.valueHistory.length);
+  for (const value of c.valueHistory) h.int(value);
 
   h.u32(world.towns.length);
   for (let i = 0; i < world.towns.length; i++) {

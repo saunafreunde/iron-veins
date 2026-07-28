@@ -4,6 +4,7 @@ import { CommandKind } from '../../src/sim/commands/types';
 import { CENTS_PER_EURO } from '../../src/sim/constants';
 import { IndustryType, newIndustry } from '../../src/sim/industry/types';
 import { RailType } from '../../src/sim/map/track';
+import { upkeepPerYearCt } from '../../src/sim/economy/ledger';
 import { ModuleKind, stationRating } from '../../src/sim/station/types';
 import { VEHICLE_STATE_KEYS } from '../../src/sim/vehicles/VehicleStore';
 import type { World } from '../../src/sim/World';
@@ -157,7 +158,9 @@ function describeLine(world: World, years: number): string {
     `  train: ${VEHICLE_STATE_KEYS[train.state[0]!] ?? ''}, ` +
       `earned ${Math.round(train.earnedCt[0]! / CENTS_PER_EURO / years)} EUR per year`,
   );
-  parts.push(`  upkeep ${Math.round(world.company.upkeepPerYearCt / CENTS_PER_EURO)} EUR per year`);
+  parts.push(
+    `  upkeep ${Math.round(upkeepPerYearCt(world.company) / CENTS_PER_EURO)} EUR per year`,
+  );
   return parts.join('\n');
 }
 

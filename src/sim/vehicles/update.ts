@@ -37,6 +37,8 @@ import {
   turnSteps,
   type RailType,
 } from '../map/track';
+import { bookRevenue } from '../economy/company';
+import { serviceVehicle } from './lifecycle';
 import { deliverToIndustry } from '../industry/production';
 import { isOneWay, signalDirection, signalKind, SignalKind } from '../map/signals';
 import { hasModule, ModuleKind, platformLength, type Station } from '../station/types';
@@ -388,9 +390,7 @@ function serveStation(world: World, id: number, station: Station): number {
         year: world.date.year,
       });
 
-      world.company.cashCt += revenue;
-      world.company.profitThisYearCt += revenue;
-      world.company.revenueThisMonthCt += revenue;
+      bookRevenue(world.company, revenue, stack.cargo);
       vehicles.earnedCt[id] = vehicles.earnedCt[id]! + revenue;
 
       if (disposition === CargoDisposition.Deliver) {
@@ -781,6 +781,11 @@ function stepVehicle(world: World, id: number): void {
         return;
       }
       if (order.target === OrderTarget.Depot) {
+        // Arriving at a shed IS the service of section 11.3: some reliability
+        // goes back, capped at what the vehicle was worth when it was new.
+        // Without this there is no reason a player would ever route through
+        // one, and RELIABILITY_SERVICE_GAIN was a constant nothing read.
+        serviceVehicle(world, id);
         vehicles.state[id] = VehicleState.InDepot;
         return;
       }

@@ -1,6 +1,13 @@
 import { CommandKind, type Command, type CommandEnvelope } from '../commands/types';
 import type { CargoLinkSave } from '../cargo/linkGraph';
-import { COMPANY_COLOR_COUNT, Difficulty, LINK_SAMPLE_COUNT, MapClimate } from '../constants';
+import { ACCOUNT_COUNT } from '../economy/ledger';
+import {
+  COMPANY_COLOR_COUNT,
+  Difficulty,
+  LEDGER_HISTORY_MONTHS,
+  LINK_SAMPLE_COUNT,
+  MapClimate,
+} from '../constants';
 import { INDUSTRY_TYPE_COUNT, type Industry } from '../industry/types';
 import { TownSize, type Town } from '../town/types';
 import type { TileMapData, WorldStateData } from '../World';
@@ -30,9 +37,9 @@ export const SAVE_MAGIC = 'IRVN';
  * delivery counters, 9 the block claim and the deadlock clock, 10 the cargo
  * destinations and the measured connection table of section 7.4, 11 industry
  * closure and the three support modules of section 10, 12 the bankruptcy
- * countdown of section 14.2.
+ * countdown of section 14.2, 13 the accounts of section 14.1.
  */
-export const SAVE_VERSION = 12;
+export const SAVE_VERSION = 13;
 
 /** File extension used for manual and automatic saves. */
 export const SAVE_EXTENSION = '.ironsave';
@@ -126,6 +133,15 @@ function parseRngState(value: unknown, path: string): RngState {
   ];
 }
 
+/** A row of accounts of exactly the expected length, all whole cents. */
+function parseAccounts(value: unknown, path: string, length: number): number[] {
+  const entries = asArray(value, path);
+  if (entries.length !== length) {
+    throw new SaveFormatError(`${path}: expected ${length} entries, got ${entries.length}`);
+  }
+  return entries.map((entry, i) => asInt(entry, `${path}[${i}]`));
+}
+
 function parseCompany(value: unknown, path: string): CompanyState {
   const raw = asRecord(value, path);
   const colorIndex = asInt(raw['colorIndex'], `${path}.colorIndex`);
@@ -144,7 +160,31 @@ function parseCompany(value: unknown, path: string): CompanyState {
     expensesThisMonthCt: asInt(raw['expensesThisMonthCt'], `${path}.expensesThisMonthCt`),
     monthsInDebt: asInt(raw['monthsInDebt'], `${path}.monthsInDebt`),
     bankrupt: asBoolean(raw['bankrupt'], `${path}.bankrupt`),
-    upkeepPerYearCt: asInt(raw['upkeepPerYearCt'], `${path}.upkeepPerYearCt`),
+    vehicleUpkeepPerYearCt: asInt(raw['vehicleUpkeepPerYearCt'], `${path}.vehicleUpkeepPerYearCt`),
+    infrastructureUpkeepPerYearCt: asInt(
+      raw['infrastructureUpkeepPerYearCt'],
+      `${path}.infrastructureUpkeepPerYearCt`,
+    ),
+    accounts: parseAccounts(raw['accounts'], `${path}.accounts`, ACCOUNT_COUNT),
+    yearAccounts: parseAccounts(raw['yearAccounts'], `${path}.yearAccounts`, ACCOUNT_COUNT),
+    lastYearAccounts: parseAccounts(
+      raw['lastYearAccounts'],
+      `${path}.lastYearAccounts`,
+      ACCOUNT_COUNT,
+    ),
+    monthHistory: parseAccounts(
+      raw['monthHistory'],
+      `${path}.monthHistory`,
+      LEDGER_HISTORY_MONTHS * ACCOUNT_COUNT,
+    ),
+    historyCursor: asInt(raw['historyCursor'], `${path}.historyCursor`),
+    valueHistory: asArray(raw['valueHistory'], `${path}.valueHistory`).map((value, i) =>
+      asInt(value, `${path}.valueHistory[${i}]`),
+    ),
+    accumulatedDepreciationCt: asInt(
+      raw['accumulatedDepreciationCt'],
+      `${path}.accumulatedDepreciationCt`,
+    ),
   };
 }
 

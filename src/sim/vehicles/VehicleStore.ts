@@ -324,6 +324,14 @@ export class VehicleStore {
     this.lastArrivalTick[id] = -1;
     this.orderIndex[id] = 0;
     this.builtTick[id] = tick;
+    // A train is only as reliable as its worst unit, which is what
+    // aggregateConsist already works out. Leaving this unset made every vehicle
+    // in the game start at reliability ZERO - a one in four chance of breaking
+    // down every single game day (DECISIONS.md D-089).
+    this.reliability[id] =
+      consist !== undefined && consist.length > 0
+        ? aggregateConsist(consist).reliability0
+        : vehicleSpec(specId).reliability0;
     this.breakdownTicks[id] = 0;
     this.loadTicks[id] = 0;
     this.refitCargo[id] = cargo;

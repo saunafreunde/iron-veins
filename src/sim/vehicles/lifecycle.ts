@@ -7,11 +7,17 @@ import {
   BREAKDOWN_MIN_TICKS,
   CARGO_EXPIRY_FRACTION_PER_DAY,
   CARGO_MAX_WAIT_DAYS,
+  OBSOLETE_DECAY_FACTOR,
+  OBSOLETE_UPKEEP_FACTOR,
   RELIABILITY_DECAY_PER_YEAR,
   RELIABILITY_MAX,
+  RELIABILITY_SERVICE_GAIN,
   TICKS_PER_DAY,
+  TICKS_PER_YEAR,
 } from '../constants';
 import { hasModule, ModuleKind, trimVisits } from '../station/types';
+import { vehicleSpec } from './catalog';
+import { aggregateConsist } from './consist';
 import type { World } from '../World';
 import { VehicleState } from './VehicleStore';
 
@@ -41,16 +47,90 @@ export function rollBreakdowns(world: World): void {
   }
 }
 
-/** Yearly wear. A vehicle past its design life ages twice as fast. */
+/** Age of a vehicle in game years, from the tick it was built. */
+export function vehicleAgeYears(world: World, id: number): number {
+  return (world.tick - world.vehicles.builtTick[id]!) / TICKS_PER_YEAR;
+}
+
+/** Design life of a vehicle; for a train, the shortest life in the consist. */
+export function vehicleLifetimeYears(world: World, id: number): number {
+  const units = world.vehicles.consist[id]!;
+  if (units.length === 0) return vehicleSpec(world.vehicles.specId[id]!).lifetimeYears;
+
+  let shortest = Infinity;
+  for (const unit of units) {
+    const life = vehicleSpec(unit).lifetimeYears;
+    if (life < shortest) shortest = life;
+  }
+  return shortest;
+}
+
+/** True once a vehicle is past its design life (section 11.3). */
+export function isObsolete(world: World, id: number): boolean {
+  return vehicleAgeYears(world, id) > vehicleLifetimeYears(world, id);
+}
+
+/**
+ * Yearly wear. A vehicle past its design life ages twice as fast (11.3).
+ *
+ * The doubling is the visible half of obsolescence; the other half is the
+ * doubled upkeep, which is applied where the fleet's upkeep is totalled rather
+ * than here, because that figure is a company-level aggregate.
+ */
 export function ageVehicles(world: World): void {
   const vehicles = world.vehicles;
 
   for (let id = 0; id < vehicles.count; id++) {
     if (vehicles.alive[id] !== 1) continue;
-    const decay = RELIABILITY_DECAY_PER_YEAR;
+    const decay = isObsolete(world, id)
+      ? RELIABILITY_DECAY_PER_YEAR * OBSOLETE_DECAY_FACTOR
+      : RELIABILITY_DECAY_PER_YEAR;
     const next = vehicles.reliability[id]! - decay;
     vehicles.reliability[id] = next < 0 ? 0 : next;
   }
+}
+
+/**
+ * A stay in the depot puts some reliability back (section 11.3).
+ *
+ * Capped at what the vehicle was worth when it was new: servicing keeps a
+ * vehicle going, it does not make it better than new, and without the cap a
+ * player could park a fleet in a shed and come back with a perfect one.
+ */
+export function serviceVehicle(world: World, id: number): void {
+  const vehicles = world.vehicles;
+  const units = vehicles.consist[id]!;
+  const ceiling =
+    units.length > 0
+      ? aggregateConsist(units).reliability0
+      : vehicleSpec(vehicles.specId[id]!).reliability0;
+
+  const restored = vehicles.reliability[id]! + RELIABILITY_SERVICE_GAIN;
+  vehicles.reliability[id] = restored > ceiling ? ceiling : restored;
+}
+
+/**
+ * What the fleet costs to keep this year, obsolescence included.
+ *
+ * Recomputed from the fleet rather than maintained as a running total. The
+ * doubling of section 11.3 arrives with AGE, not with a purchase, so a cached
+ * sum would have to be adjusted from the yearly hook and any drift between it
+ * and the truth would be invisible until a save was reloaded.
+ */
+export function fleetUpkeepCtPerYear(world: World): number {
+  const vehicles = world.vehicles;
+  let total = 0;
+
+  for (let id = 0; id < vehicles.count; id++) {
+    if (vehicles.alive[id] !== 1) continue;
+    const units = vehicles.consist[id]!;
+    const upkeep =
+      units.length > 0
+        ? aggregateConsist(units).upkeepCtPerYear
+        : vehicleSpec(vehicles.specId[id]!).upkeepCtPerYear;
+    total += isObsolete(world, id) ? upkeep * OBSOLETE_UPKEEP_FACTOR : upkeep;
+  }
+  return total;
 }
 
 /**

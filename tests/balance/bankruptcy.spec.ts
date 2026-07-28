@@ -10,6 +10,7 @@ import {
   Difficulty,
 } from '../../src/sim/constants';
 import { isInTrouble } from '../../src/sim/economy/company';
+import { upkeepPerYearCt } from '../../src/sim/economy/ledger';
 import { ModuleKind } from '../../src/sim/station/types';
 import { apply, flatScenario, makeTown, type Scenario } from './scenario';
 
@@ -99,7 +100,7 @@ describe('scenario 4: a company that stops playing', () => {
     const scenario = idleCompany();
     const world = scenario.world;
     const investedCt = CAPITAL_CT - world.company.cashCt;
-    const upkeepCt = world.company.upkeepPerYearCt;
+    const upkeepCt = upkeepPerYearCt(world.company);
     const year = yearOfRuin(scenario, 12);
 
     console.log(

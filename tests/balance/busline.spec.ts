@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { CENTS_PER_EURO } from '../../src/sim/constants';
 import { stationRating } from '../../src/sim/station/types';
 import { VEHICLE_STATE_KEYS } from '../../src/sim/vehicles/VehicleStore';
+import { upkeepPerYearCt } from '../../src/sim/economy/ledger';
 import type { World } from '../../src/sim/World';
 import { buildBusLine, runYears, twoTownScenario } from './scenario';
 
@@ -78,7 +79,7 @@ function describeLine(world: World, years: number): string {
     );
   }
 
-  parts.push(`upkeep ${(world.company.upkeepPerYearCt / CENTS_PER_EURO).toFixed(0)} EUR per year`);
+  parts.push(`upkeep ${(upkeepPerYearCt(world.company) / CENTS_PER_EURO).toFixed(0)} EUR per year`);
   return parts.join('\n  ');
 }
 

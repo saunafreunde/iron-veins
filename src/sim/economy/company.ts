@@ -1,6 +1,7 @@
 import {
   BANKRUPTCY_WARNING_MONTHS,
   COMPANY_COLOR_COUNT,
+  COMPANY_VALUE_YEARS,
   LOAN_INTEREST_RATE_PER_YEAR,
   LOAN_LIMIT_ASSET_FACTOR,
   LOAN_LIMIT_PROFIT_FACTOR,
@@ -11,7 +12,18 @@ import {
   START_CAPITAL_CT,
   type Difficulty,
 } from '../constants';
+import { Cargo } from '../cargo/types';
 import type { CompanyState } from '../types';
+import {
+  Account,
+  archiveMonth,
+  archiveYear,
+  book,
+  companyValueCt,
+  emptyAccounts,
+  emptyHistory,
+  monthlyShareCt,
+} from './ledger';
 
 /** Build the initial company state for a new game. */
 export function createCompany(
@@ -29,7 +41,15 @@ export function createCompany(
     fixedAssetsCt: 0,
     revenueThisMonthCt: 0,
     expensesThisMonthCt: 0,
-    upkeepPerYearCt: 0,
+    vehicleUpkeepPerYearCt: 0,
+    infrastructureUpkeepPerYearCt: 0,
+    accounts: emptyAccounts(),
+    yearAccounts: emptyAccounts(),
+    lastYearAccounts: emptyAccounts(),
+    monthHistory: emptyHistory(),
+    historyCursor: 0,
+    valueHistory: [],
+    accumulatedDepreciationCt: 0,
     monthsInDebt: 0,
     bankrupt: false,
   };
@@ -57,10 +77,35 @@ export function isInTrouble(company: CompanyState): boolean {
 }
 
 /** Book a one-off expense against cash and the running annual profit. */
-export function bookExpense(company: CompanyState, amountCt: number): void {
+export function bookExpense(
+  company: CompanyState,
+  amountCt: number,
+  account: Account = Account.Construction,
+): void {
   company.cashCt -= amountCt;
   company.profitThisYearCt -= amountCt;
   company.expensesThisMonthCt += amountCt;
+  book(company, account, amountCt);
+}
+
+/**
+ * Book revenue, split by what was carried (section 14.1).
+ *
+ * The cargo is in scope where the payment is made and was being thrown away;
+ * three accounts out of one branch is the whole of the split the spec asks for.
+ */
+export function bookRevenue(company: CompanyState, amountCt: number, cargo: Cargo): void {
+  company.cashCt += amountCt;
+  company.profitThisYearCt += amountCt;
+  company.revenueThisMonthCt += amountCt;
+
+  const account =
+    cargo === Cargo.Passengers
+      ? Account.RevenuePassengers
+      : cargo === Cargo.Mail
+        ? Account.RevenueMail
+        : Account.RevenueFreight;
+  book(company, account, amountCt);
 }
 
 /**
@@ -69,14 +114,49 @@ export function bookExpense(company: CompanyState, amountCt: number): void {
  * (balancing scenario 4 of section 19.4).
  */
 export function bookMonthlyUpkeep(company: CompanyState): number {
-  const amount = Math.round(company.upkeepPerYearCt / MONTHS_PER_YEAR);
-  if (amount === 0) return 0;
-  bookExpense(company, amount);
+  const fleet = monthlyShareCt(company.vehicleUpkeepPerYearCt);
+  const infrastructure = monthlyShareCt(company.infrastructureUpkeepPerYearCt);
+
+  if (fleet !== 0) bookExpense(company, fleet, Account.VehicleUpkeep);
+  if (infrastructure !== 0) {
+    bookExpense(company, infrastructure, Account.InfrastructureUpkeep);
+  }
+  return fleet + infrastructure;
+}
+
+/**
+ * Charge a month of straight-line depreciation on the fleet (section 14.1).
+ *
+ * Deliberately NOT through `bookExpense`: depreciation is what an asset costs
+ * to USE, and the money left the bank when it was bought. Charging it against
+ * cash a second time would make every company insolvent twice as fast.
+ *
+ * The charge stops once an asset is fully written down, which is what the cap
+ * against `fixedAssetsCt` does - otherwise a company that keeps a vehicle for
+ * forty years would end up with a negative book value.
+ */
+export function bookMonthlyDepreciation(company: CompanyState, yearlyCt: number): number {
+  const room = company.fixedAssetsCt - company.accumulatedDepreciationCt;
+  if (room <= 0) return 0;
+
+  const wanted = monthlyShareCt(yearlyCt);
+  const amount = wanted > room ? room : wanted;
+  if (amount <= 0) return 0;
+
+  company.accumulatedDepreciationCt += amount;
+  company.profitThisYearCt -= amount;
+  book(company, Account.Depreciation, amount);
   return amount;
 }
 
-/** Start a new month's revenue and expense counters. */
+/**
+ * File the month and start a new one.
+ *
+ * The archive happens FIRST. This function used to zero the counters and keep
+ * nothing at all, which is why there was no history for a chart to show.
+ */
 export function closeMonth(company: CompanyState): void {
+  archiveMonth(company);
   company.revenueThisMonthCt = 0;
   company.expensesThisMonthCt = 0;
 }
@@ -137,13 +217,22 @@ export function bookMonthlyInterest(company: CompanyState, difficulty: Difficult
   const rate = LOAN_INTEREST_RATE_PER_YEAR[difficulty]!;
   const interestCt = Math.round((company.loanCt * rate) / MONTHS_PER_YEAR);
   if (interestCt === 0) return 0;
-  company.cashCt -= interestCt;
-  company.profitThisYearCt -= interestCt;
+  // Through bookExpense like everything else, so it reaches the month's
+  // expenses and its own account. It used to touch cash directly and was the
+  // one cost the monthly figure did not include.
+  bookExpense(company, interestCt, Account.Interest);
   return interestCt;
 }
 
-/** Close the game year: this year's running profit becomes last year's figure. */
+/**
+ * Close the game year: this year's figures become last year's, and what the
+ * company was worth at the end of it is added to the history.
+ */
 export function closeFinancialYear(company: CompanyState): void {
   company.lastYearProfitCt = company.profitThisYearCt;
   company.profitThisYearCt = 0;
+  archiveYear(company);
+
+  company.valueHistory.push(companyValueCt(company));
+  if (company.valueHistory.length > COMPANY_VALUE_YEARS) company.valueHistory.shift();
 }

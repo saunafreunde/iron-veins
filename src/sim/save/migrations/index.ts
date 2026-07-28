@@ -1,3 +1,5 @@
+import { LEDGER_HISTORY_MONTHS } from '../../constants';
+import { ACCOUNT_COUNT } from '../../economy/ledger';
 import { SaveFormatError, SAVE_VERSION } from '../format';
 
 /**
@@ -299,6 +301,52 @@ const v11_to_v12: SaveMigration = (payload) => {
 };
 
 /**
+ * M6 gave the company the accounts of section 14.1.
+ *
+ * A version 12 world had one lump of upkeep and no ledger at all. The lump is
+ * entered as INFRASTRUCTURE upkeep and the fleet half as zero, because the
+ * fleet's share is recomputed from the vehicles on the first yearly hook
+ * anyway - guessing at a split here would be wrong for one game month and
+ * would then be overwritten.
+ *
+ * The history starts empty rather than being invented. A chart that shows two
+ * flat years and then real data is honest; one that shows fabricated data is
+ * not.
+ */
+const v12_to_v13: SaveMigration = (payload) => {
+  const inner = state(payload);
+  const company = inner['company'];
+  if (typeof company !== 'object' || company === null || Array.isArray(company)) {
+    throw new SaveFormatError('save.state.company: expected an object');
+  }
+  const previous = company as Record<string, unknown>;
+  const upkeep = typeof previous['upkeepPerYearCt'] === 'number' ? previous['upkeepPerYearCt'] : 0;
+  const zeros = (length: number): number[] => new Array<number>(length).fill(0);
+
+  const next: Record<string, unknown> = { ...previous };
+  delete next['upkeepPerYearCt'];
+
+  return {
+    ...payload,
+    state: {
+      ...inner,
+      company: {
+        ...next,
+        vehicleUpkeepPerYearCt: 0,
+        infrastructureUpkeepPerYearCt: upkeep,
+        accounts: zeros(ACCOUNT_COUNT),
+        yearAccounts: zeros(ACCOUNT_COUNT),
+        lastYearAccounts: zeros(ACCOUNT_COUNT),
+        monthHistory: zeros(LEDGER_HISTORY_MONTHS * ACCOUNT_COUNT),
+        historyCursor: 0,
+        valueHistory: [],
+        accumulatedDepreciationCt: 0,
+      },
+    },
+  };
+};
+
+/**
  * Registry keyed by the version a migration reads (section 19.1).
  *
  * There is deliberately no entry for 1 -> 2: a version 1 world had no map at
@@ -316,6 +364,7 @@ export const SAVE_MIGRATIONS: ReadonlyMap<number, SaveMigration> = new Map<numbe
   [9, v9_to_v10],
   [10, v10_to_v11],
   [11, v11_to_v12],
+  [12, v12_to_v13],
 ]);
 
 /**
