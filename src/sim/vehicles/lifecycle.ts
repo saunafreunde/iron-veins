@@ -65,6 +65,10 @@ export function expireStaleCargo(world: World): void {
     station.overflowUnits = Math.max(0, station.overflowUnits - 20);
 
     for (const stack of station.waiting) {
+      // Cargo with nowhere to go is the routing sweep's business: it writes the
+      // parcel off whole and charges the station for it. Nibbling at it here as
+      // well would take the same loss twice (section 7.4).
+      if (stack.destinationStationId < 0) continue;
       if (world.tick - stack.createdTick <= cutoff) continue;
       // A share, not the lot. Cargo merges into one stack per origin, so
       // zeroing it would take two thousand units off an over-supplied station

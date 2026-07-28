@@ -608,10 +608,34 @@ export function buyRoadVehicle(
  * unreachable: `refitCargo` is written once, when the vehicle is bought, and
  * nothing else ever touched it.
  */
+/**
+ * Is this vehicle standing in a shed it could be converted in?
+ *
+ * Two states mean that, and only one of them is called InDepot: a vehicle that
+ * has just been bought is Stopped on the depot tile it was built at, and has
+ * never left it. Testing the state alone made a brand new vehicle impossible to
+ * convert until it had been sent away and ordered back (DECISIONS.md D-076).
+ */
+function standsInDepot(world: World, vehicleId: number): boolean {
+  const vehicles = world.vehicles;
+  const state = vehicles.state[vehicleId]!;
+  if (state === VehicleState.InDepot) return true;
+  if (state !== VehicleState.Stopped) return false;
+
+  const station = stationAt(world, vehicles.tileIndex[vehicleId]!);
+  if (station === null) return false;
+  const wanted =
+    vehicles.kind[vehicleId] === VehicleKind.Train ? ModuleKind.RailDepot : ModuleKind.RoadDepot;
+  for (const module of station.modules) {
+    if (module.tileIndex === vehicles.tileIndex[vehicleId] && module.kind === wanted) return true;
+  }
+  return false;
+}
+
 export function refitVehicle(world: World, vehicleId: number, cargo: Cargo): CommandOutcome {
   const vehicles = world.vehicles;
   if (!vehicles.isAlive(vehicleId)) return reject(RejectReason.NoSuchVehicle);
-  if (vehicles.state[vehicleId] !== VehicleState.InDepot) return reject(RejectReason.NotInDepot);
+  if (!standsInDepot(world, vehicleId)) return reject(RejectReason.NotInDepot);
   if (vehicles.cargo[vehicleId]!.length > 0) return reject(RejectReason.NotEmpty);
 
   const units = vehicles.consist[vehicleId]!;

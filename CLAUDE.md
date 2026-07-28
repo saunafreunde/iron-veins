@@ -214,6 +214,26 @@ run one line.
 - following trains are safe and live; two trains meeting nose to nose on single
   track deadlock, and that is a stated limitation, not a bug (D-059).
 
+## M5 - cargo routing (section 7.4)
+
+Every parcel knows where it is going, and no vehicle carries one anywhere else.
+
+- **the connection table is ONE graph** keyed by station, not a table per
+  station: a stop cannot work out on its own what lies two lines and a transfer
+  away (D-075). Legs come from the vehicles' ORDERS; the mean of the last eight
+  trips is the measurement.
+- **a vehicle loads a parcel only when its next stop is on a shortest route to
+  that parcel's destination**, and sets it down the moment that stops being
+  true. Feeder chains are what those two rules produce, not something modelled.
+- **the comparison has no detour allowance, only a one-tick epsilon** (D-078).
+  Payment is measured from a POSITION, so a parcel that accepts a detour can be
+  carried out and back on one line and be paid for both legs.
+- a leg nobody has driven is credited with a straight line at 54 km/h, or the
+  first cargo ever produced would expire while its line is being driven for the
+  first time. A leg is measured ARRIVAL to ARRIVAL (D-077).
+- routeless cargo is written off WHOLE at thirty days and charged as overflow;
+  cargo that has a route just decays. Different failures, different treatment.
+
 ## M5 - industry chains
 
 Industries produce, accept and transform cargo on the calendar, and the loop
@@ -258,15 +278,9 @@ respects, the deadlock clock, and the regression network of 19.5. Missing:
   it yet, because there is no message log until M8.
 
 **M5 (sections 7 and 10 of SPEC.md).** Delivered: production, the service gate,
-the monthly level, acceptance, town demand, refit. Missing:
+the monthly level, acceptance, town demand, refit, and **cargo routing (7.4)**.
+Missing:
 
-- **Cargo has no destination.** Section 7.4 is the heart of the milestone: a
-  `CargoStack` carries `zielStationId`, every station keeps a connection table
-  of reachable destinations and expected remaining times, and waiting cargo
-  picks the vehicle that gets it there soonest - including via a transfer. None
-  of that exists; cargo is currently taken by whoever stops.
-- **The M5 acceptance case** - forest to sawmill to town with a lorry feeder
-  onto a freight train, billed proportionally - therefore cannot be shown.
 - **Industry closure**: 24 months without collection closes an industry, with
   warnings at 12 and 20 (D-069 records the cut; the spec asks for it).
 - **Output store full drops production to 25 %** with a log warning. Production

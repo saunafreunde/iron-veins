@@ -1,4 +1,10 @@
-import { addCargo, amountOf, compactStacks, transferCargo } from '../cargo/stack';
+import { amountOf } from '../cargo/stack';
+import {
+  CargoDisposition,
+  dispositionOf,
+  loadFromStation,
+  transferToStation,
+} from '../cargo/routing';
 import { deliveryRevenueCt, tileDistance } from '../cargo/payment';
 import { Cargo } from '../cargo/types';
 import {
@@ -14,7 +20,6 @@ import {
   ROLLING_RESISTANCE_ROAD,
   ROTATING_MASS_FACTOR,
   SIGNAL_STOP_OFFSET_M,
-  STATION_CARGO_CAPACITY,
   STOPPED_SPEED_MS,
   TICK_SECONDS,
   TILE_DIAGONAL_M,
@@ -28,7 +33,6 @@ import {
   turnSteps,
   type RailType,
 } from '../map/track';
-import { stationAccepts } from '../industry/catchment';
 import { deliverToIndustry } from '../industry/production';
 import { isOneWay, signalDirection, signalKind, SignalKind } from '../map/signals';
 import { ModuleKind, type Station } from '../station/types';
@@ -315,17 +319,38 @@ function serveStation(world: World, id: number, station: Station): number {
   const hasCooling = vehicles.hasCooling[id] === 1;
   let units = 0;
 
+  // The leg that has just ended, arrival to arrival. This is the measurement the
+  // whole connection table of section 7.4 is built out of.
+  const previous = vehicles.lastStationId[id]!;
+  const departed = vehicles.lastArrivalTick[id]!;
+  if (previous >= 0 && previous !== station.id && departed >= 0) {
+    world.cargoLinks.observe(previous, station.id, world.tick - departed);
+  }
+  vehicles.lastStationId[id] = station.id;
+  vehicles.lastArrivalTick[id] = world.tick;
+
   if (order.unload === OrderUnload.All) {
     for (let i = carried.length - 1; i >= 0; i--) {
       const stack = carried[i]!;
-      // Nothing is paid for where nobody wants it. Refusal rather than a
-      // discount: a lorry that leaves still loaded is visible in the fleet
-      // list, whereas a quiet fraction of the fare is a leak no test can see.
-      if (!stationAccepts(station, stack.cargo)) continue;
+      const disposition = dispositionOf(world, id, station, stack);
+      if (disposition === CargoDisposition.Stay) continue;
+
+      // A parcel that cannot be set down - the station is full - stays aboard
+      // and is not paid for. Destroying cargo that has already been carried
+      // would be a worse answer than carrying it round once more.
+      let paidFor = stack.amount;
+      if (disposition === CargoDisposition.Transfer) {
+        paidFor = transferToStation(station, stack);
+        if (paidFor <= 0) continue;
+      }
+
+      // Every leg is paid for the distance IT covered, measured from the point
+      // this parcel was last paid up to. Feeder chains therefore add up to
+      // exactly one direct payment (section 7.4).
       const distance = tileDistance(stack.paidFromX, stack.paidFromY, station.x, station.y);
       const revenue = deliveryRevenueCt({
         cargo: stack.cargo,
-        amount: stack.amount,
+        amount: paidFor,
         distanceTiles: distance,
         ticksInTransit: world.tick - stack.createdTick,
         hasCooling,
@@ -337,9 +362,12 @@ function serveStation(world: World, id: number, station: Station): number {
       world.company.revenueThisMonthCt += revenue;
       vehicles.earnedCt[id] = vehicles.earnedCt[id]! + revenue;
 
-      deliverCargo(world, station, stack.cargo, stack.amount);
-      units += stack.amount;
-      carried.splice(i, 1);
+      if (disposition === CargoDisposition.Deliver) {
+        deliverCargo(world, station, stack.cargo, paidFor);
+      }
+      units += paidFor;
+      stack.amount -= paidFor;
+      if (stack.amount <= 0) carried.splice(i, 1);
     }
   }
 
@@ -347,13 +375,12 @@ function serveStation(world: World, id: number, station: Station): number {
     const cargo = vehicles.refitCargo[id]! as Cargo;
     const space = vehicles.capacityUnits[id]! - amountOf(carried, cargo);
     if (space > 0) {
-      const moved = transferCargo(station.waiting, carried, cargo, space);
+      const moved = loadFromStation(world, id, station, cargo, space);
       units += moved;
       if (station.townId >= 0 && (cargo === Cargo.Passengers || cargo === Cargo.Mail)) {
         const town = world.towns[station.townId];
         if (town !== undefined) town.transportedThisMonth += moved;
       }
-      compactStacks(station.waiting);
     }
   }
 
@@ -538,9 +565,7 @@ export function updateVehicles(world: World): void {
         }
         const cargo = vehicles.refitCargo[id]! as Cargo;
         const space = vehicles.capacityUnits[id]! - amountOf(vehicles.cargo[id]!, cargo);
-        if (space > 0) {
-          transferCargo(station.waiting, vehicles.cargo[id]!, cargo, space);
-          compactStacks(station.waiting);
+        if (space > 0 && loadFromStation(world, id, station, cargo, space) > 0) {
           vehicles.refreshAggregate(id);
         }
         if (isFull(world, id)) advanceOrder(world, id);
@@ -660,39 +685,4 @@ export function updateVehicles(world: World): void {
         continue;
     }
   }
-}
-
-/**
- * Put cargo produced nearby into a station, respecting its capacity.
- * Returns how much was actually taken - which is what tells an industry
- * whether anybody is collecting from it.
- */
-export function depositAtStation(
-  station: Station,
-  cargo: Cargo,
-  amount: number,
-  tick: number,
-): number {
-  if (amount <= 0) return 0;
-
-  let waiting = 0;
-  for (const stack of station.waiting) waiting += stack.amount;
-
-  const space = STATION_CARGO_CAPACITY - waiting;
-  if (space <= 0) {
-    station.overflowUnits += amount;
-    return 0;
-  }
-  const accepted = Math.min(space, amount);
-  station.overflowUnits += amount - accepted;
-
-  addCargo(station.waiting, {
-    cargo,
-    amount: accepted,
-    createdTick: tick,
-    originStationId: station.id,
-    paidFromX: station.x,
-    paidFromY: station.y,
-  });
-  return accepted;
 }

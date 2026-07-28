@@ -55,6 +55,9 @@ export interface VehicleSave {
   reservedBlockTile: number;
   /** Tick the train last made progress towards a claim, or -1. */
   waitingSinceTick: number;
+  /** Station last called at and the tick of that arrival, or -1. */
+  lastStationId: number;
+  lastArrivalTick: number;
   /** Catalogue ids of a train's units; empty for anything else. */
   consist: number[];
   pathIndex: number;
@@ -115,6 +118,8 @@ export function encodeVehicles(store: VehicleStore): VehicleSave[] {
       reservedToIndex: store.reservedToIndex[id]!,
       reservedBlockTile: store.reservedBlockTile[id]!,
       waitingSinceTick: store.waitingSinceTick[id]!,
+      lastStationId: store.lastStationId[id]!,
+      lastArrivalTick: store.lastArrivalTick[id]!,
       consist: [...store.consist[id]!],
       pathIndex: store.pathIndex[id]!,
       path,
@@ -177,6 +182,10 @@ function decodeStacks(value: unknown, path: string): CargoStack[] {
       amount: num(raw['amount'], `${path}[${i}].amount`),
       createdTick: num(raw['createdTick'], `${path}[${i}].createdTick`),
       originStationId: int(raw['originStationId'], `${path}[${i}].originStationId`),
+      destinationStationId: int(
+        raw['destinationStationId'],
+        `${path}[${i}].destinationStationId`,
+      ),
       paidFromX: num(raw['paidFromX'], `${path}[${i}].paidFromX`),
       paidFromY: num(raw['paidFromY'], `${path}[${i}].paidFromY`),
     };
@@ -261,6 +270,8 @@ export function decodeVehicles(value: unknown, path: string): VehicleSave[] {
       reservedToIndex: int(raw['reservedToIndex'], `${path}[${i}].reservedToIndex`),
       reservedBlockTile: int(raw['reservedBlockTile'], `${path}[${i}].reservedBlockTile`),
       waitingSinceTick: int(raw['waitingSinceTick'], `${path}[${i}].waitingSinceTick`),
+      lastStationId: int(raw['lastStationId'], `${path}[${i}].lastStationId`),
+      lastArrivalTick: int(raw['lastArrivalTick'], `${path}[${i}].lastArrivalTick`),
       consist,
       pathIndex: int(raw['pathIndex'], `${path}[${i}].pathIndex`),
       path: pathTiles.map((tile, t) => int(tile, `${path}[${i}].path[${t}]`)),
@@ -320,6 +331,8 @@ export function buildVehicleStore(saves: readonly VehicleSave[]): VehicleStore {
     store.reservedToIndex[id] = save.reservedToIndex;
     store.reservedBlockTile[id] = save.reservedBlockTile;
     store.waitingSinceTick[id] = save.waitingSinceTick;
+    store.lastStationId[id] = save.lastStationId;
+    store.lastArrivalTick[id] = save.lastArrivalTick;
     store.consist[id] = [...save.consist];
     store.pathIndex[id] = save.pathIndex;
     store.pathLength[id] = save.path.length;

@@ -143,6 +143,20 @@ export class VehicleStore {
    */
   readonly waitingSinceTick: Int32Array;
 
+  /**
+   * The station this vehicle last called at, and when it got there, or -1.
+   *
+   * Together they measure one leg of a line: arrival to arrival, which is what
+   * cargo standing on the platform actually waits through - the loading at this
+   * end included. That measurement is the only thing that keeps the connection
+   * table of section 7.4 honest about a line that is slower than it looks.
+   *
+   * Cleared whenever the orders change or the vehicle is stopped: the time
+   * between two arrivals either side of that is not a measurement of anything.
+   */
+  readonly lastStationId: Int32Array;
+  readonly lastArrivalTick: Int32Array;
+
   // --- aggregate of the whole vehicle, recomputed when it or its load changes.
   // For a road vehicle these are simply its own figures; for a train they are
   // the sums of section 11.2. Caching them keeps the solver free of catalogue
@@ -206,6 +220,8 @@ export class VehicleStore {
     this.reservedToIndex = new Int32Array(capacity).fill(-1);
     this.reservedBlockTile = new Int32Array(capacity).fill(-1);
     this.waitingSinceTick = new Int32Array(capacity).fill(-1);
+    this.lastStationId = new Int32Array(capacity).fill(-1);
+    this.lastArrivalTick = new Int32Array(capacity).fill(-1);
     this.massKg = new Float32Array(capacity);
     this.tractiveN = new Float32Array(capacity);
     this.powerW = new Float32Array(capacity);
@@ -304,6 +320,8 @@ export class VehicleStore {
     this.reservedToIndex[id] = -1;
     this.reservedBlockTile[id] = -1;
     this.waitingSinceTick[id] = -1;
+    this.lastStationId[id] = -1;
+    this.lastArrivalTick[id] = -1;
     this.orderIndex[id] = 0;
     this.builtTick[id] = tick;
     this.breakdownTicks[id] = 0;
@@ -327,6 +345,8 @@ export class VehicleStore {
     this.reservedToIndex[id] = -1;
     this.reservedBlockTile[id] = -1;
     this.waitingSinceTick[id] = -1;
+    this.lastStationId[id] = -1;
+    this.lastArrivalTick[id] = -1;
     this.orders[id] = [];
     this.cargo[id] = [];
     this.consist[id] = [];

@@ -13,7 +13,7 @@ import {
 } from '../constants';
 import { assignStationIndustries } from '../industry/catchment';
 import { inCatchment, stationRating, type Station } from '../station/types';
-import { depositAtStation } from '../vehicles/update';
+import { depositAtStation } from '../cargo/routing';
 import type { World } from '../World';
 
 /**
@@ -95,8 +95,8 @@ export function produceTownCargo(world: World): void {
       // What a town produces is counted whether or not the station could take
       // it: the growth ratio has to divide by the offer, not by the acceptance.
       town.producedThisMonth += passengers * share;
-      depositAtStation(station, Cargo.Passengers, passengers * share, world.tick);
-      depositAtStation(station, Cargo.Mail, mail * share, world.tick);
+      depositAtStation(world, station, Cargo.Passengers, passengers * share);
+      depositAtStation(world, station, Cargo.Mail, mail * share);
     }
   }
 }

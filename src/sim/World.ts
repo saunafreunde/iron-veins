@@ -18,6 +18,8 @@ import {
   closeMonth,
   createCompany,
 } from './economy/company';
+import { LinkGraph, type CargoLinkSave } from './cargo/linkGraph';
+import { refreshCargoRouting } from './cargo/routing';
 import { RailPathfinder } from './net/railPath';
 import { ReservationTable } from './net/reservations';
 import { BlockIndex } from './signals/blocks';
@@ -66,6 +68,8 @@ export interface WorldStateData {
   industries: Industry[];
   stations: Station[];
   vehicles: VehicleSave[];
+  /** Measured travel times between stations; the connection table of 7.4. */
+  cargoLinks: CargoLinkSave[];
 }
 
 /** The tile layers, as raw bytes. Derived layers are recomputed on load. */
@@ -130,6 +134,14 @@ export class World {
    * layers, rebuilt whenever the map revision moves, never serialised.
    */
   readonly blocks: BlockIndex;
+  /**
+   * How long cargo takes to get from any station to any other, measured from
+   * the trips the fleet actually made (section 7.4).
+   *
+   * The measurements are real state and are saved and hashed; which legs are
+   * currently served, and the all-pairs table built from them, are derived.
+   */
+  readonly cargoLinks = new LinkGraph();
 
   /** The company the local player controls. AI companies get 1..n in M8. */
   readonly playerCompanyId = 0;
@@ -201,6 +213,9 @@ export class World {
     this.tick++;
 
     if (this.tick % TICKS_PER_DAY === 0) {
+      // Before anything is produced: cargo made today needs somewhere to go,
+      // and that answer comes out of the connections the fleet is running now.
+      refreshCargoRouting(this);
       produceTownCargo(this);
       // Production before collection, so a batch can leave the day it is made;
       // both before the write-off, so nothing made today is aged out today.
@@ -273,6 +288,7 @@ export class World {
       industries: this.industries.map((industry) => ({ ...industry })),
       stations: encodeStations(this.stations),
       vehicles: encodeVehicles(this.vehicles),
+      cargoLinks: this.cargoLinks.toData(),
     };
   }
 
@@ -316,6 +332,8 @@ export class World {
     // worked out again here rather than trusted from the file.
     for (const station of world.stations) assignStationIndustries(world, station);
     world.vehicles = buildVehicleStore(data.vehicles);
+    world.cargoLinks.loadData(data.cargoLinks);
+    world.cargoLinks.refreshLinks(world);
     rebuildReservations(world);
     world.company.cashCt = data.company.cashCt;
     world.company.loanCt = data.company.loanCt;
@@ -420,10 +438,20 @@ function hashDynamicState(h: Fnv1a64, world: World): void {
     h.u32(station.waiting.length);
     for (const stack of station.waiting) {
       h.u32(stack.cargo).f64(stack.amount).f64(stack.createdTick);
+      h.int(stack.originStationId).int(stack.destinationStationId);
       h.f64(stack.paidFromX).f64(stack.paidFromY);
     }
     h.u32(station.visitTicks.length);
     for (const tick of station.visitTicks) h.u32(tick);
+  }
+
+  const links = world.cargoLinks.links;
+  h.u32(links.length);
+  for (let i = 0; i < links.length; i++) {
+    const link = links[i]!;
+    h.u32(link.fromStationId).u32(link.toStationId).f64(link.meanTicks);
+    h.u32(link.samples.length).u32(link.cursor);
+    for (const sample of link.samples) h.f64(sample);
   }
 
   const vehicles = world.vehicles;
@@ -442,8 +470,10 @@ function hashDynamicState(h: Fnv1a64, world: World): void {
     h.u32(vehicles.orderIndex[id]!).u32(vehicles.reliability[id]!);
     h.u32(vehicles.breakdownTicks[id]!).f64(vehicles.loadTicks[id]!);
     h.f64(vehicles.earnedCt[id]!);
+    h.int(vehicles.lastStationId[id]!).int(vehicles.lastArrivalTick[id]!);
     for (const stack of vehicles.cargo[id]!) {
       h.u32(stack.cargo).f64(stack.amount).f64(stack.createdTick);
+      h.int(stack.originStationId).int(stack.destinationStationId);
       h.f64(stack.paidFromX).f64(stack.paidFromY);
     }
   }

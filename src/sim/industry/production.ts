@@ -13,7 +13,7 @@ import {
   INDUSTRY_STOCK_CAP,
 } from '../constants';
 import { stationRating } from '../station/types';
-import { depositAtStation } from '../vehicles/update';
+import { depositAtStation } from '../cargo/routing';
 import type { World } from '../World';
 import { coveredShareOf } from './catchment';
 import { industrySpec, type Industry } from './types';
@@ -164,7 +164,7 @@ export function collectIndustryOutput(world: World): void {
         const covered = coveredShareOf(station, industry);
         if (covered <= 0) continue;
         const share = ((stationRating(station, world.tick) / 100) * covered) / totalWeight;
-        shipped += depositAtStation(station, spec.outputs[slot]!, offered * share, world.tick);
+        shipped += depositAtStation(world, station, spec.outputs[slot]!, offered * share);
       }
 
       setOutputStock(industry, slot, available - offered);

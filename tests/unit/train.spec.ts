@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import de from '../../src/i18n/de.json';
 import en from '../../src/i18n/en.json';
-import { depositAtStation } from '../../src/sim/vehicles/update';
+import { depositAtStation } from '../../src/sim/cargo/routing';
 import { CommandQueue } from '../../src/sim/commands/queue';
 import { CommandKind, type Command } from '../../src/sim/commands/types';
 import { Cargo } from '../../src/sim/cargo/types';
@@ -766,6 +766,7 @@ describe('train physics', () => {
       amount: 25,
       createdTick: 0,
       originStationId: 0,
+      destinationStationId: -1,
       paidFromX: 0,
       paidFromY: 0,
     });
@@ -871,12 +872,12 @@ describe('a working rail line', () => {
     run(bench, { kind: CommandKind.SetVehicleRunning, vehicleId: 0, running: true });
     expect(bench.world.vehicles.state[0]).toBe(VehicleState.Driving);
 
-    depositAtStation(west, Cargo.Passengers, 120, bench.world.tick);
+    depositAtStation(bench.world, west, Cargo.Passengers, 120);
     const cashBefore = bench.world.company.cashCt;
 
     for (let i = 0; i < TICKS_PER_DAY * 20; i++) {
       bench.world.step(bench.queue, null);
-      depositAtStation(west, Cargo.Passengers, 1, bench.world.tick);
+      depositAtStation(bench.world, west, Cargo.Passengers, 1);
     }
 
     expect(bench.world.company.cashCt).toBeGreaterThan(cashBefore);

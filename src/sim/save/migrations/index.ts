@@ -191,6 +191,51 @@ const v8_to_v9: SaveMigration = (payload) => {
 };
 
 /**
+ * M5 gave cargo a destination and the network a measured connection table
+ * (section 7.4).
+ *
+ * A version 9 world had neither. Every parcel in it is entered with no
+ * destination rather than being guessed at: the daily sweep gives each of them
+ * one from the connections the loaded fleet turns out to be running, which is
+ * the same answer the world would have reached had it always had them. The
+ * table itself starts empty and is measured again from the first trips.
+ */
+const v9_to_v10: SaveMigration = (payload) => {
+  const inner = state(payload);
+  const vehicles = inner['vehicles'];
+  const stations = inner['stations'];
+  if (!Array.isArray(vehicles)) throw new SaveFormatError('save.state.vehicles: expected an array');
+  if (!Array.isArray(stations)) throw new SaveFormatError('save.state.stations: expected an array');
+
+  const route = (stack: unknown): Record<string, unknown> => ({
+    ...(stack as Record<string, unknown>),
+    destinationStationId: -1,
+  });
+  const stacks = (value: unknown, where: string): Record<string, unknown>[] => {
+    if (!Array.isArray(value)) throw new SaveFormatError(`${where}: expected an array`);
+    return value.map(route);
+  };
+
+  return {
+    ...payload,
+    state: {
+      ...inner,
+      cargoLinks: [],
+      stations: stations.map((station) => ({
+        ...(station as Record<string, unknown>),
+        waiting: stacks((station as Record<string, unknown>)['waiting'], 'save.state.stations[].waiting'),
+      })),
+      vehicles: vehicles.map((vehicle) => ({
+        ...(vehicle as Record<string, unknown>),
+        lastStationId: -1,
+        lastArrivalTick: -1,
+        cargo: stacks((vehicle as Record<string, unknown>)['cargo'], 'save.state.vehicles[].cargo'),
+      })),
+    },
+  };
+};
+
+/**
  * Registry keyed by the version a migration reads (section 19.1).
  *
  * There is deliberately no entry for 1 -> 2: a version 1 world had no map at
@@ -205,6 +250,7 @@ export const SAVE_MIGRATIONS: ReadonlyMap<number, SaveMigration> = new Map<numbe
   [6, v6_to_v7],
   [7, v7_to_v8],
   [8, v8_to_v9],
+  [9, v9_to_v10],
 ]);
 
 /**

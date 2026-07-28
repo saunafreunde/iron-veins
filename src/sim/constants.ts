@@ -338,6 +338,59 @@ export const CARGO_EXPIRY_FRACTION_PER_DAY = 0.1;
 /** Units of cargo one waiting stack holds at most before the station is full. */
 export const STATION_CARGO_CAPACITY = 2_000;
 
+// ----------------------------------------------------------- cargo routing
+
+/**
+ * Completed trips a connection averages over (section 7.4).
+ *
+ * Eight is short enough that a line which has just been given a faster
+ * locomotive is believed within one round of the timetable, and long enough
+ * that one train held at a signal does not rewrite the map of the network.
+ */
+export const LINK_SAMPLE_COUNT = 8;
+
+/**
+ * Speed a leg is credited with until it has actually been driven once. [m/s]
+ *
+ * A connection has to have a time before the first vehicle has completed it, or
+ * the first load of cargo ever produced would find no route and expire while the
+ * line it needs is being driven for the first time. 54 km/h is roughly what a
+ * road vehicle averages once stops are counted, and it is only ever a seed - the
+ * first measurement replaces it.
+ */
+export const LINK_ESTIMATE_SPEED_MS = 15;
+
+/**
+ * A measured trip longer than this is thrown away rather than averaged. [ticks]
+ *
+ * A vehicle that was stopped, sold off its orders or sent to a depot half way
+ * would otherwise report a leg time of several game months and make the whole
+ * network look unreachable.
+ */
+export const LINK_SAMPLE_MAX_TICKS = 10 * TICKS_PER_DAY;
+
+/**
+ * How many destinations one batch of produced cargo is split between.
+ *
+ * One destination would send every passenger a town produces to the single
+ * nearest stop, which is neither believable nor a network. Three is enough for
+ * traffic to fan out and few enough that the split stays legible in the station
+ * panel. Freight normally has one candidate anyway - there is usually only one
+ * works that takes iron ore.
+ */
+export const CARGO_DESTINATION_FANOUT = 3;
+
+/**
+ * Slack when deciding whether a vehicle carries a parcel closer to its
+ * destination. [ticks]
+ *
+ * Purely to absorb floating point noise: the expected time IS the minimum over
+ * exactly these sums, so the comparison would be exact but for rounding. It is
+ * deliberately not a real detour allowance - cargo that accepts a detour can be
+ * carried out and back on the same line and would then be paid for both legs.
+ */
+export const CARGO_ROUTE_EPSILON_TICKS = 1;
+
 // ---------------------------------------------------------------- industry
 
 /**

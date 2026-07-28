@@ -915,3 +915,89 @@ The test asserts a 6_000 tick bound so the number stays visible and cannot
 regress, and says in its own comment which half of section 19.5 it is checking.
 Calling this "M4 done" would be false; calling it a signalling defect would be
 equally false.
+
+### D-075 The connection table is one graph, not a table per station
+
+Section 7.4 words it as a table kept BY each station: which destinations are
+reachable over which line, in how many ticks. It is implemented as a single
+graph indexed by station (`cargo/linkGraph.ts`), and that is a departure worth
+stating.
+
+The reason is that a station cannot answer the question on its own. "How long
+to the sawmill" is only knowable to a stop whose lorries never go there if
+something holds the whole network at once - the sawmill is two lines and one
+transfer away, and neither line knows about the other. A per-station table would
+either have to duplicate the same all-pairs computation n times or gossip
+between stations, and gossip has no deterministic fixed point.
+
+So: legs come from the vehicles' orders, each leg carries the mean of its last
+eight trips, and one backwards Dijkstra per destination fills an all-pairs table
+of expected times. The table IS the per-station table of the spec; it is just
+stored once. Reading `expectedTicks(station, destination)` is the operation the
+spec describes.
+
+Rebuild cadence: whenever the set of legs changes (an order edited, a vehicle
+bought or stopped), and otherwise once per game day to fold in new measurements.
+A rebuild on every arrival would be one search per vehicle per stop.
+
+### D-076 refitVehicle could never convert a vehicle that had just been bought
+
+Found while writing the M5 acceptance case, which needs a lorry and a wagon
+converted to timber. `refitVehicle` required `state === InDepot`, and a vehicle
+that has just been bought is `Stopped` on the depot tile it was built at - it
+has never left, so nothing ever set InDepot. The command had no test.
+
+A player would have had to send a brand new lorry away and order it back before
+they could choose what it carries. Fixed by asking the question that was meant:
+is this vehicle standing still in a shed of its own mode? Both states answer yes.
+
+### D-077 How a parcel's destination is chosen, which the spec does not say
+
+Section 7.4 gives `CargoStack` a `zielStationId` and says nothing about where it
+comes from. The rule is: candidates are the stations that ACCEPT this cargo and
+that the network can reach from here; the batch is split between the best three,
+weighted by the reciprocal of the expected journey.
+
+One destination would have been simpler and is wrong for passengers - every
+passenger a town makes would queue for the single nearest stop, which is not a
+network. Three is enough to fan out and few enough to stay legible in a station
+panel. Freight normally has one candidate anyway: there is usually one works in
+range that takes iron ore.
+
+Two supporting decisions fall out of it:
+
+* A leg nobody has driven yet is credited with a straight line at 54 km/h. Some
+  number is required or the first cargo ever produced would find no route and
+  expire while the line it needs is being driven for the first time. The first
+  completed trip replaces the estimate outright.
+* A leg is measured ARRIVAL to ARRIVAL, not departure to arrival. That includes
+  the loading stop at the near end, which is time the cargo standing on that
+  platform genuinely waits through. A trip that straddles a stop, a sale or an
+  order change is thrown away rather than averaged in.
+
+### D-078 A vehicle takes a parcel only if it carries it closer - with no detour allowance
+
+A vehicle may load a parcel when its own next stop lies on a shortest route to
+that parcel's destination, and it sets the parcel down again the moment that
+stops being true. Feeder chains are not modelled anywhere; they are what those
+two rules produce.
+
+The tolerance on that comparison is one tick, and it exists to absorb floating
+point noise - the expected time IS the minimum over exactly these sums, so the
+comparison would be exact but for rounding. It is deliberately NOT a detour
+allowance, and the reason is an exploit: payment is measured from the point a
+parcel was last paid up to, which is a POSITION. A parcel allowed to accept a
+five percent detour can be carried out and back along the same line, and both
+legs would be paid. A strict comparison makes that unreachable.
+
+Consequences worth knowing:
+
+* Cargo with no destination is never loaded. Nobody knows where to take it.
+* A parcel set down at a station that is full is not set down at all - it rides
+  on. Destroying cargo that has already been carried and paid for would be worse
+  than carrying it round once more.
+* Routeless cargo is written off WHOLE after thirty days and charged to the
+  station as overflow, which is the rating penalty section 7.4 asks for. Cargo
+  that has a route but is slow to move keeps the old ten percent a day decay and
+  no penalty: a station nobody serves is a different failure from a station
+  nobody could ever serve.

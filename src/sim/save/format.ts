@@ -1,5 +1,6 @@
 import { CommandKind, type Command, type CommandEnvelope } from '../commands/types';
-import { COMPANY_COLOR_COUNT, Difficulty, MapClimate } from '../constants';
+import type { CargoLinkSave } from '../cargo/linkGraph';
+import { COMPANY_COLOR_COUNT, Difficulty, LINK_SAMPLE_COUNT, MapClimate } from '../constants';
 import { INDUSTRY_TYPE_COUNT, type Industry } from '../industry/types';
 import { TownSize, type Town } from '../town/types';
 import type { TileMapData, WorldStateData } from '../World';
@@ -26,9 +27,10 @@ export const SAVE_MAGIC = 'IRVN';
  * vehicles, 4 the two rail tile layers, 5 the train composition and the running
  * distance-to-go, 6 the bridge and tunnel layers, 7 signals and the two
  * reservation indices a train carries, 8 industry production and the town
- * delivery counters, 9 the block claim and the deadlock clock.
+ * delivery counters, 9 the block claim and the deadlock clock, 10 the cargo
+ * destinations and the measured connection table of section 7.4.
  */
-export const SAVE_VERSION = 9;
+export const SAVE_VERSION = 10;
 
 /** File extension used for manual and automatic saves. */
 export const SAVE_EXTENSION = '.ironsave';
@@ -439,6 +441,26 @@ export function readSaveHeader(value: unknown): { magic: string; saveVersion: nu
 }
 
 /** Strictly validate a payload that has already been migrated to SAVE_VERSION. */
+/** The measured connection table (section 7.4). */
+function parseCargoLinks(value: unknown, path: string): CargoLinkSave[] {
+  return asArray(value, path).map((entry, i) => {
+    const raw = asRecord(entry, `${path}[${i}]`);
+    const samples = asArray(raw['samples'], `${path}[${i}].samples`);
+    if (samples.length > LINK_SAMPLE_COUNT) {
+      throw new SaveFormatError(
+        `${path}[${i}].samples: ${samples.length} is more than the ${LINK_SAMPLE_COUNT} kept`,
+      );
+    }
+    return {
+      fromStationId: asInt(raw['fromStationId'], `${path}[${i}].fromStationId`),
+      toStationId: asInt(raw['toStationId'], `${path}[${i}].toStationId`),
+      samples: samples.map((sample, k) => asFinite(sample, `${path}[${i}].samples[${k}]`)),
+      cursor: asInt(raw['cursor'], `${path}[${i}].cursor`),
+      meanTicks: asFinite(raw['meanTicks'], `${path}[${i}].meanTicks`),
+    };
+  });
+}
+
 export function parseSaveFile(value: unknown): SaveFile {
   const raw = asRecord(value, 'save');
   const header = readSaveHeader(raw);
@@ -472,6 +494,7 @@ export function parseSaveFile(value: unknown): SaveFile {
     industries: parseIndustries(stateRaw['industries'], 'save.state.industries'),
     stations: decodeStations(stateRaw['stations'], 'save.state.stations'),
     vehicles: decodeVehicles(stateRaw['vehicles'], 'save.state.vehicles'),
+    cargoLinks: parseCargoLinks(stateRaw['cargoLinks'], 'save.state.cargoLinks'),
   };
 
   const tick = asInt(raw['tick'], 'save.tick');

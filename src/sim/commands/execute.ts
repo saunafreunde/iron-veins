@@ -149,6 +149,11 @@ export function executeCommand(world: World, command: Command): CommandOutcome {
       // track claimed along it, which would otherwise hold a section for ever.
       releaseAll(world, command.vehicleId);
       world.vehicles.pathLength[command.vehicleId] = 0;
+      // The leg in progress is no longer a leg of anything, and the connections
+      // the fleet runs have just changed - cargo produced today has to be able
+      // to see the new line rather than wait a day for it (section 7.4).
+      forgetTrip(world, command.vehicleId);
+      world.cargoLinks.refreshLinks(world);
       return ACCEPTED;
     }
 
@@ -160,6 +165,7 @@ export function executeCommand(world: World, command: Command): CommandOutcome {
       if (!command.running) {
         world.vehicles.state[id] = VehicleState.Stopped;
         world.vehicles.speedMs[id] = 0;
+        forgetTrip(world, id);
         return ACCEPTED;
       }
       if (world.vehicles.orders[id]!.length === 0) {
@@ -171,6 +177,19 @@ export function executeCommand(world: World, command: Command): CommandOutcome {
       return ACCEPTED;
     }
   }
+}
+
+/**
+ * Forget the leg a vehicle was part way through.
+ *
+ * The time between the arrival before an interruption and the arrival after it
+ * is not a measurement of how long that leg takes - it is a measurement of how
+ * long the vehicle was stopped - and averaging it in would make the line look
+ * unusable to every parcel deciding where to go.
+ */
+function forgetTrip(world: World, id: number): void {
+  world.vehicles.lastStationId[id] = -1;
+  world.vehicles.lastArrivalTick[id] = -1;
 }
 
 /** Shared body of the raise and lower commands. */
