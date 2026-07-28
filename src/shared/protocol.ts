@@ -23,6 +23,31 @@ export interface TownMarker {
   readonly x: number;
   readonly y: number;
   readonly sizeClass: number;
+  /** Inhabitants - the one column a town list is actually for. */
+  readonly population: number;
+}
+
+/**
+ * The company's books, as the finance panel shows them (section 14.1).
+ *
+ * Sent by message rather than through the snapshot: it is a hundred numbers
+ * that change once a game month, and packing that into a shared buffer would
+ * make the layout churn for nothing.
+ */
+export interface FinanceReport {
+  /** Accounts of the month in progress, indexed by Account. [cent] */
+  readonly month: readonly number[];
+  readonly year: readonly number[];
+  readonly lastYear: readonly number[];
+  /** The last twenty-four months, oldest first, one row per month. */
+  readonly history: readonly (readonly number[])[];
+  /** Company value at the end of each of the last game years. [cent] */
+  readonly valueHistory: readonly number[];
+  readonly companyValueCt: number;
+  readonly bookValueCt: number;
+  readonly loanCt: number;
+  readonly cashCt: number;
+  readonly autoRenew: boolean;
 }
 
 export interface IndustryMarker {
@@ -119,6 +144,10 @@ export type WorkerToMainMessage =
   | { readonly type: 'stationsChanged'; readonly stations: readonly StationMarker[] }
   /** Industry production state; sent on the same cadence as the stations. */
   | { readonly type: 'industriesChanged'; readonly industries: readonly IndustryMarker[] }
+  /** Town populations; they change monthly, so they travel with the finances. */
+  | { readonly type: 'townsChanged'; readonly towns: readonly TownMarker[] }
+  /** The books, sent when the game month rolls over. */
+  | { readonly type: 'financesChanged'; readonly report: FinanceReport }
   /** Fleet overview for the vehicle list; sent when it changes, not per tick. */
   | { readonly type: 'fleetChanged'; readonly vehicles: readonly VehicleMarker[] }
   | { readonly type: 'error'; readonly message: string };

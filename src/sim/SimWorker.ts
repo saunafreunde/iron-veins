@@ -1,4 +1,9 @@
-import type { IndustryMarker, MainToWorkerMessage, WorkerToMainMessage } from '../shared/protocol';
+import type {
+  IndustryMarker,
+  MainToWorkerMessage,
+  TownMarker,
+  WorkerToMainMessage,
+} from '../shared/protocol';
 import {
   SNAPSHOT_MAX_RESERVED_TILES,
   SNAPSHOT_MAX_VEHICLES,
@@ -19,10 +24,12 @@ import {
   SPEED_FACTORS,
   STATE_HASH_INTERVAL_TICKS,
   TICK_MS,
+  TICKS_PER_MONTH,
   TILE_DIAGONAL_M,
   TILE_SIZE_M,
 } from './constants';
 import { loanLimitCt } from './economy/company';
+import { bookValueCt, companyValueCt, monthsInOrder } from './economy/ledger';
 import { stationRating } from './station/types';
 import { hashWorldLive, World } from './World';
 
@@ -71,6 +78,7 @@ let lastHashedTick = -1;
 let publishedName = '';
 let publishedColorIndex = -1;
 let publishedStructure = '';
+let publishedMonthTick = -1;
 
 /** How often the fleet list is refreshed while nothing structural changed. */
 const FLEET_REFRESH_TICKS = 200;
@@ -124,6 +132,44 @@ function industryMarkers(current: World): IndustryMarker[] {
     neglectedMonths: industry.monthsWithoutCollection,
     open: industry.open,
   }));
+}
+
+/** Town markers, which carry a population that changes every month. */
+function townMarkers(current: World): TownMarker[] {
+  return current.towns.map((town) => ({
+    id: town.id,
+    name: town.name,
+    x: town.x,
+    y: town.y,
+    sizeClass: town.sizeClass,
+    population: town.population,
+  }));
+}
+
+/**
+ * The books and the town populations, sent when the game month rolls over.
+ *
+ * Both change exactly once a month, so one cadence serves both and neither has
+ * to ride in the snapshot.
+ */
+function postMonthly(current: World): void {
+  const company = current.company;
+  scope.postMessage({
+    type: 'financesChanged',
+    report: {
+      month: [...company.accounts],
+      year: [...company.yearAccounts],
+      lastYear: [...company.lastYearAccounts],
+      history: monthsInOrder(company),
+      valueHistory: [...company.valueHistory],
+      companyValueCt: companyValueCt(company),
+      bookValueCt: bookValueCt(company),
+      loanCt: company.loanCt,
+      cashCt: company.cashCt,
+      autoRenew: company.autoRenew,
+    },
+  });
+  scope.postMessage({ type: 'townsChanged', towns: townMarkers(current) });
 }
 
 function postStructure(current: World): void {
@@ -272,6 +318,12 @@ function publishSnapshot(current: World, sink: SnapshotWriter): void {
 
   sink.publish();
 
+  // The books and the town populations move once a game month and nowhere else.
+  if (current.tick % TICKS_PER_MONTH === 0 && current.tick !== publishedMonthTick) {
+    publishedMonthTick = current.tick;
+    postMonthly(current);
+  }
+
   const signature = structureSignature(current);
   if (signature !== publishedStructure) {
     publishedStructure = signature;
@@ -377,6 +429,7 @@ function startGame(message: Extract<MainToWorkerMessage, { type: 'init' }>): voi
   publishedStructure = '';
 
   publishSnapshot(world, writer);
+  postMonthly(world);
 
   if (timer !== null) clearInterval(timer);
   timer = setInterval(runFrame, TICK_MS);
@@ -389,13 +442,7 @@ function startGame(message: Extract<MainToWorkerMessage, { type: 'init' }>): voi
     mapBuffer: world.map.buffer,
     townCount: world.towns.length,
     industryCount: world.industries.length,
-    towns: world.towns.map((town) => ({
-      id: town.id,
-      name: town.name,
-      x: town.x,
-      y: town.y,
-      sizeClass: town.sizeClass,
-    })),
+    towns: townMarkers(world),
     industries: industryMarkers(world),
   });
 }

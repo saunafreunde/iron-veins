@@ -395,3 +395,78 @@ body {
   font-size: 13px;
   color: var(--text-muted);
 }
+
+/* -------------------------------------------------------------- list panels */
+
+/*
+ * The sortable, filterable, searchable lists of section 17.1. The header row
+ * reuses the button row so a sort control looks like every other control, and
+ * the rows are a grid so columns line up without a table.
+ */
+.list__search {
+  width: 100%;
+  box-sizing: border-box;
+  margin-bottom: 0.5rem;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+
+.list__headers .button {
+  flex: 1 1 0;
+  min-width: 0;
+  font-size: 0.75rem;
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 22rem;
+  overflow-y: auto;
+}
+
+.list .row {
+  display: flex;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.list .row > span {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+}
+
+/* --------------------------------------------------------- cash flow chart */
+
+/*
+ * Twenty-four bars, one per month, drawn with divs. It changes once a game
+ * month; a canvas would be a second rendering path to keep alive for no gain.
+ */
+.chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 4rem;
+  padding: 0.25rem;
+  background: var(--surface);
+  border-radius: 4px;
+}
+
+.chart__bar {
+  flex: 1 1 0;
+  min-width: 0;
+  background: var(--accent);
+  border-radius: 1px 1px 0 0;
+}
+
+.chart__bar--loss {
+  background: var(--danger);
+}

@@ -236,6 +236,8 @@ export function MapCanvas({ client }: { readonly client: SimClient }): ReactElem
       if (command !== null) client.send(command);
     };
 
+    // A list row jumps to what it names (section 17.1).
+    useSimStore.getState().setCentreOnTile((x, y) => view.centreOnTile(x, y));
     view.setVehicleSource(() => client.readVehicles());
     view.setReservedSource(() => client.readReserved());
     void view.attach(host);

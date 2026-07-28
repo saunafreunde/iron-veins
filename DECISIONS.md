@@ -1202,3 +1202,106 @@ change that lowers upkeep will push it out. The bankruptcy rule of 14.2 itself -
 three months in the red is a warning, twelve is a forced auction of the fleet -
 was missing entirely and is implemented here rather than being deferred to M6,
 because none of this is measurable without it.
+
+### D-089 Every vehicle in the game started at reliability zero
+
+`VehicleStore.create()` set fifteen fields and not `reliability`. A `Uint16Array`
+is zero filled, so every vehicle ever bought began at 0 out of 10_000 - a one in
+four chance of breaking down every game day, against the eight percent its
+catalogue entry asks for. `reliability0` was on all seventy-eight entries and
+read by nothing.
+
+Found by the M6 survey rather than by a test, which is the point worth keeping:
+no test asserted what a new vehicle's reliability was, so nothing noticed.
+
+Measured after the fix, the balancing scenarios do not move at all - not by a
+cent. That is stated rather than assumed: a bus that stops for 40 to 120 ticks
+on a twenty day round trip loses very little, and what it carries is gated by
+the station rating rather than by how many trips it makes. The fix is right
+regardless; the field means nothing otherwise.
+
+### D-090 Only the fleet is depreciated
+
+Section 14.1 wants straight-line depreciation over the design life. Vehicles
+have a design life in the catalogue; track, roads, stations and their modules do
+not, and nothing in the simulation wears them out - a station works exactly as
+well in 2050 as the day it was built.
+
+Writing infrastructure down would mean inventing both a lifetime and a wear
+model that the game does not otherwise have, and it would shrink the credit line
+of section 14.2 as a side effect, because that is derived from the fixed assets.
+So the fleet is written down and the infrastructure is carried at cost.
+
+The charge is recomputed from the fleet each month rather than carried as a
+running total, for the same reason the fleet's upkeep is: it changes when a
+vehicle is bought, sold or replaced, and a cached total would drift silently.
+
+### D-091 The energy meter is a double, and it is emptied every month
+
+Traction force reaches 300 kN and a tick covers up to 2.8 m, so one tick is up
+to 840 kJ. A game year is 72_000 ticks and the playable span is a hundred of
+them. A `Float32Array` has 24 bits of mantissa - about 1.7e7 - so a per-vehicle
+accumulator would have stopped growing meaningfully inside the first game MONTH
+and the energy bill would have quietly flattened out.
+
+It is a `Float64Array`, and it is reset every month when the bill is drawn,
+which keeps the running value far inside what a double represents exactly.
+
+Two more things about it are decisions rather than oversights:
+
+* the work is accumulated with the SAME distance the position uses, not with a
+  recomputed one. Two accumulators fed the same numbers drift apart - that is
+  D-043 wearing a different hat - and here it would put the energy bill and the
+  odometer permanently out of step;
+* braking sets traction to zero, so nothing is recovered on the way down.
+  Regenerative braking is not modelled. Saying so is better than leaving a
+  reader to infer it from an absence.
+
+The price per carrier folds in efficiency rather than modelling it separately: a
+steam locomotive turns perhaps eight percent of what it burns into work and an
+electric one ninety, and without that the account would cost the same per joule
+either way - which would make electrification worthless and the account
+pointless. The absolute level was set against balancing scenario 2; the ratios
+between carriers are the part that is not negotiable.
+
+### D-092 Inflation is fixed when the game starts
+
+Section 14.2 calls inflation switchable. It is switchable at NEW GAME time and
+not afterwards, and it is saved and hashed.
+
+The reason is that it changes what every command costs. Two worlds with the same
+seed and the same command log but different settings genuinely diverge, so the
+flag is part of the state a replay has to reproduce. A checkbox that could be
+flipped mid-game would either break the replay or have to be a command like
+everything else (law #6) - and a mid-game change of price level is not something
+a player would want anyway.
+
+It had been applied to REVENUE since M2 and to nothing else, which meant fares
+climbed for a century while costs stood still. Every build, every purchase, the
+upkeep and the energy bill now go through the same factor.
+
+The build preview applies it too. A preview that shows the table price while the
+command charges the inflated one is the exact frustration section 17.3 exists to
+prevent, and it would have appeared in game year two.
+
+### D-093 Auto-renewal is company-wide, and it touches no randomness
+
+Section 11.3 attaches auto-renewal to a LINE. Lines are section 12.2 and no
+milestone has built them, so it is a company-wide switch. The rule itself is per
+vehicle, so moving it onto lines later is a change of where the flag is read
+from and nothing else.
+
+Two properties matter more than the feature does, and both are tested:
+
+* it consumes NO randomness. Breakdowns draw from the world rng once per vehicle
+  per day; a replacement that drew as well would shift every subsequent draw and
+  send every existing seed down a different future the moment a player enabled
+  the switch;
+* the successor is chosen by a TOTAL order - longest design life, then capacity,
+  then the lower id - so two runs of the same world replace the same vehicle
+  with the same thing. Catalogue ordering cannot influence it.
+
+A vehicle that needs catenary never replaces one that does not: the line it runs
+on may have no wires, and stranding a fleet is worse than an old fleet. The old
+vehicle is sold through the ordinary command, so its track claim is released
+(the D-057 class of bug) and its book value moves exactly as it would by hand.

@@ -1,7 +1,13 @@
 import { create } from 'zustand';
 import { setLocale as applyLocale, type Locale } from '../i18n';
 import type { TileInfo } from '../render/MapView';
-import type { IndustryMarker, StationMarker, TownMarker, VehicleMarker } from '../shared/protocol';
+import type {
+  FinanceReport,
+  IndustryMarker,
+  StationMarker,
+  TownMarker,
+  VehicleMarker,
+} from '../shared/protocol';
 import type { MapGenPhase } from '../sim/mapgen';
 
 /** What a left click on the map does. */
@@ -80,6 +86,10 @@ export interface SimUiState extends SnapshotValues {
   autoSignal: boolean;
   stations: readonly StationMarker[];
   fleet: readonly VehicleMarker[];
+  /** The books, as the finance panel shows them (section 14.1). */
+  finances: FinanceReport | null;
+  /** Which entity list is open, or null. The V/T/I keys of section 17.2. */
+  openList: 'vehicles' | 'stations' | 'towns' | 'industries' | null;
   selectedVehicleId: number | null;
   /** First corner of a road drag; the second click completes it. */
   roadAnchor: { readonly x: number; readonly y: number } | null;
@@ -114,6 +124,12 @@ export interface SimUiState extends SnapshotValues {
   setAutoSignal: (on: boolean) => void;
   setStations: (stations: readonly StationMarker[]) => void;
   setIndustries: (industries: readonly IndustryMarker[]) => void;
+  setTowns: (towns: readonly TownMarker[]) => void;
+  setFinances: (report: FinanceReport) => void;
+  toggleList: (list: 'vehicles' | 'stations' | 'towns' | 'industries') => void;
+  /** Wired to the map view so a list row can jump to what it names. */
+  centreOnTile: (x: number, y: number) => void;
+  setCentreOnTile: (centre: (x: number, y: number) => void) => void;
   setFleet: (vehicles: readonly VehicleMarker[]) => void;
   setSelectedVehicle: (id: number | null) => void;
   setRoadAnchor: (anchor: { readonly x: number; readonly y: number } | null) => void;
@@ -162,6 +178,8 @@ export const useSimStore = create<SimUiState>((set) => ({
   autoSignal: false,
   stations: [],
   fleet: [],
+  finances: null,
+  openList: null,
   selectedVehicleId: null,
   roadAnchor: null,
   trackPreview: null,
@@ -196,6 +214,11 @@ export const useSimStore = create<SimUiState>((set) => ({
   setTool: (tool) => set({ tool, roadAnchor: null, trackPreview: null }),
   setAutoSignal: (autoSignal) => set({ autoSignal }),
   setIndustries: (industries) => set({ industries }),
+  setTowns: (towns) => set({ towns }),
+  setFinances: (finances) => set({ finances }),
+  toggleList: (list) => set((state) => ({ openList: state.openList === list ? null : list })),
+  centreOnTile: () => undefined,
+  setCentreOnTile: (centreOnTile) => set({ centreOnTile }),
   setTrackPreview: (preview) => set({ trackPreview: preview }),
   setStations: (stations) => set({ stations }),
   setFleet: (vehicles) => set({ fleet: vehicles }),

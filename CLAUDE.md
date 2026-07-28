@@ -160,6 +160,8 @@ install - prepend `%USERPROFILE%\.cargo\bin` to PATH.
   | 4 idle company | bankrupt yr 6-9 | year 9 | **upkeep as a share of price** |
   | 6 mine closure | 24 +/- 1 months | month 25 | the closure clock on the calendar |
 
+  M6's acceptance criterion is exactly this table being in band, and it is.
+
   Scenario 5 (an AI company alone on a 512 map) belongs to M8, which is where AI
   companies arrive.
 
@@ -301,14 +303,41 @@ into deadlock cycles is recorded there so nobody builds it again.
 the monthly level, acceptance, town demand, refit, cargo routing (7.4), the
 industry clock (7.3) and the station modules (10).
 
-Still open across both, and none of it is M4 or M5:
+Still open, and none of it is M4, M5 or M6:
 
+- **Lines** (section 12.2) and with them the line list, the timetable of 12.3
+  and per-line auto-renewal. No milestone has assigned them; M6 needed the
+  renewal switch, so that one is company-wide for now (D-093).
 - **The news log** (section 15, due with M8). Until it exists, an industry's
   closure warning is visible only in the tile panel and a stuck train only in
   the fleet list and the F3 overlay.
 - **A reversing train** ("Wendezug") in the regression network. The pathfinder
   refuses a 180 degree turn, so a train that runs round its own train is not
   something the simulation can express yet.
+
+## M6 - economic depth
+
+The books, the fleet's mortality and the lists. Four things here are easy to get
+wrong and expensive to notice late:
+
+- **depreciation never touches cash** (D-090). The money left when the vehicle
+  was bought; charging it against the bank again makes every company insolvent
+  twice as fast. Only the FLEET is written down - infrastructure has no design
+  life and no wear model.
+- **the fleet's upkeep and its depreciation are RECOMPUTED from the vehicles**,
+  not carried as running totals. Obsolescence arrives with age rather than with
+  a command, so a cached sum would need correcting from the yearly hook and any
+  drift would be invisible until a save was reloaded.
+- **the energy meter is a Float64 and is emptied every month** (D-091). One tick
+  is up to 840 kJ and a century is 7.2 million ticks; a Float32 stops
+  accumulating meaningfully inside the first game month.
+- **auto-renewal draws no randomness** (D-093). Breakdowns do, and a stray draw
+  would send every existing seed down a different future the moment a player
+  enabled the switch. The successor is picked by a total order.
+
+Inflation is fixed at new-game time, saved and hashed, and applies to costs as
+well as fares (D-092) - including in the build preview, or the preview and the
+bill disagree from game year two.
 
 ## Still outstanding
 

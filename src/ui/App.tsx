@@ -2,6 +2,7 @@ import { useEffect, useRef, type ReactElement } from 'react';
 import { LOCALES, t } from '../i18n';
 import { MAPGEN_PHASE_COUNT } from '../sim/mapgen';
 import { CompanyPanel } from './CompanyPanel';
+import { IndustryList, StationList, TownList, VehicleList } from './EntityLists';
 import { FinancePanel } from './FinancePanel';
 import { FleetPanel } from './FleetPanel';
 import { MapCanvas } from './MapCanvas';
@@ -38,6 +39,8 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
   const locale = useSimStore((s) => s.locale);
   const setLocale = useSimStore((s) => s.setLocale);
   const toggleDebug = useSimStore((s) => s.toggleDebug);
+  const toggleList = useSimStore((s) => s.toggleList);
+  const openList = useSimStore((s) => s.openList);
   const ready = useSimStore((s) => s.ready);
   const fatalError = useSimStore((s) => s.fatalError);
   const rejectionKey = useSimStore((s) => s.rejectionKey);
@@ -71,13 +74,31 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
           event.preventDefault();
           toggleDebug();
           return;
+        // The list keys of section 17.2. Four lists cannot all be on screen at
+        // once, so each key toggles its own and closes whatever was open.
+        case 'v':
+        case 'V':
+          toggleList('vehicles');
+          return;
+        case 'b':
+        case 'B':
+          toggleList('stations');
+          return;
+        case 't':
+        case 'T':
+          toggleList('towns');
+          return;
+        case 'i':
+        case 'I':
+          toggleList('industries');
+          return;
         default:
           return;
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [client, speedIndex, toggleDebug]);
+  }, [client, speedIndex, toggleDebug, toggleList]);
 
   useEffect(() => {
     if (rejectionKey === null) return;
@@ -102,6 +123,13 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
         <main className="workspace workspace--map">
           <MapCanvas client={client} />
           <aside className="sidebar">
+            {/* One list at a time, opened with V, B, T or I (section 17.2).
+                Four always-visible lists would not fit beside the map, and the
+                spec puts them behind keys for exactly that reason. */}
+            {openList === 'vehicles' && <VehicleList />}
+            {openList === 'stations' && <StationList />}
+            {openList === 'towns' && <TownList />}
+            {openList === 'industries' && <IndustryList />}
             <TilePanel />
             <FleetPanel client={client} />
             <CompanyPanel client={client} />

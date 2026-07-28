@@ -154,6 +154,12 @@ export class SimClient {
       case 'industriesChanged':
         store.setIndustries(message.industries);
         return;
+      case 'townsChanged':
+        store.setTowns(message.towns);
+        return;
+      case 'financesChanged':
+        store.setFinances(message.report);
+        return;
       case 'fleetChanged':
         store.setFleet(message.vehicles);
         return;
