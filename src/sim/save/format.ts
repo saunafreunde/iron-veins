@@ -1,3 +1,4 @@
+import type { AiProject, AiState } from '../ai/types';
 import type { Contract } from '../economy/contracts';
 import { CommandKind, type Command, type CommandEnvelope } from '../commands/types';
 import type { CargoLinkSave } from '../cargo/linkGraph';
@@ -46,9 +47,10 @@ export const SAVE_MAGIC = 'IRVN';
  * occupancy of section 8.4, 17 the news log of section 17.1, 18 the several
  * companies of section 15 with the tile ownership and the command authorship
  * that come with them, 19 the town councils of section 13.3, 20 the carbon
- * account of section 14.3, 21 the tenders of section 14.4.
+ * account of section 14.3, 21 the tenders of section 14.4, 22 the AI
+ * competitors of section 15.
  */
-export const SAVE_VERSION = 21;
+export const SAVE_VERSION = 22;
 
 /** File extension used for manual and automatic saves. */
 export const SAVE_EXTENSION = '.ironsave';
@@ -140,6 +142,61 @@ function parseRngState(value: unknown, path: string): RngState {
     asUint32(words[2], `${path}[2]`),
     asUint32(words[3], `${path}[3]`),
   ];
+}
+
+/** The AI competitors of section 15 and what each has built. */
+function parseAi(value: unknown, path: string): AiState[] {
+  return asArray(value, path).map((entry, i) => {
+    const raw = asRecord(entry, `${path}[${i}]`);
+    const project = raw['project'];
+
+    return {
+      companyId: asInt(raw['companyId'], `${path}[${i}].companyId`),
+      personality: asInt(raw['personality'], `${path}[${i}].personality`),
+      nextDecisionTick: asInt(raw['nextDecisionTick'], `${path}[${i}].nextDecisionTick`),
+      lastBuildTick: asInt(raw['lastBuildTick'], `${path}[${i}].lastBuildTick`),
+      lines: asArray(raw['lines'], `${path}[${i}].lines`).map((line, j) => {
+        const row = asRecord(line, `${path}[${i}].lines[${j}]`);
+        return {
+          fromStationId: asInt(row['fromStationId'], `${path}[${i}].lines[${j}].fromStationId`),
+          toStationId: asInt(row['toStationId'], `${path}[${i}].lines[${j}].toStationId`),
+          depotTile: asInt(row['depotTile'], `${path}[${i}].lines[${j}].depotTile`),
+          rail: asBoolean(row['rail'], `${path}[${i}].lines[${j}].rail`),
+          specIds: parseNumbers(row['specIds'], `${path}[${i}].lines[${j}].specIds`),
+          cargo: asInt(row['cargo'], `${path}[${i}].lines[${j}].cargo`),
+          builtTick: asInt(row['builtTick'], `${path}[${i}].lines[${j}].builtTick`),
+          vehicleIds: parseNumbers(row['vehicleIds'], `${path}[${i}].lines[${j}].vehicleIds`),
+          reviewTick: asInt(row['reviewTick'], `${path}[${i}].lines[${j}].reviewTick`),
+          earnedAtReviewCt: asInt(
+            row['earnedAtReviewCt'],
+            `${path}[${i}].lines[${j}].earnedAtReviewCt`,
+          ),
+        };
+      }),
+      project:
+        project === null || project === undefined
+          ? null
+          : parseAiProject(project, `${path}[${i}].project`),
+    };
+  });
+}
+
+function parseAiProject(value: unknown, path: string): AiProject {
+  const raw = asRecord(value, path);
+  return {
+    stage: asInt(raw['stage'], `${path}.stage`),
+    fromX: asInt(raw['fromX'], `${path}.fromX`),
+    fromY: asInt(raw['fromY'], `${path}.fromY`),
+    toX: asInt(raw['toX'], `${path}.toX`),
+    toY: asInt(raw['toY'], `${path}.toY`),
+    depotX: asInt(raw['depotX'], `${path}.depotX`),
+    depotY: asInt(raw['depotY'], `${path}.depotY`),
+    rail: asBoolean(raw['rail'], `${path}.rail`),
+    cargo: asInt(raw['cargo'], `${path}.cargo`),
+    specIds: parseNumbers(raw['specIds'], `${path}.specIds`),
+    startedTick: asInt(raw['startedTick'], `${path}.startedTick`),
+    lineIndex: asInt(raw['lineIndex'], `${path}.lineIndex`),
+  };
 }
 
 /** The tenders of section 14.4. */
@@ -730,6 +787,7 @@ export function parseSaveFile(value: unknown): SaveFile {
     news: parseNews(stateRaw['news'], 'save.state.news'),
     contracts: parseContracts(stateRaw['contracts'], 'save.state.contracts'),
     nextContractId: asInt(stateRaw['nextContractId'], 'save.state.nextContractId'),
+    ai: parseAi(stateRaw['ai'], 'save.state.ai'),
   };
 
   const tick = asInt(raw['tick'], 'save.tick');

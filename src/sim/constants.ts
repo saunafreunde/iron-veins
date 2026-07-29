@@ -346,6 +346,116 @@ export const ENERGY_COST_CT_PER_MJ: readonly number[] = [
   36, // battery
 ];
 
+// ------------------------------------------------------------------ AI (15)
+
+/**
+ * How often a competitor thinks, in ticks (section 15).
+ *
+ * Twenty seconds of real time at normal speed. Fast enough that a company
+ * reacts inside a game month, slow enough that five of them cost nothing
+ * measurable per tick.
+ */
+export const AI_DECISION_INTERVAL_TICKS = 400;
+
+/** Shortest and longest haul a competitor will consider. [tiles] */
+export const AI_MIN_DISTANCE = 15;
+export const AI_MAX_DISTANCE = 120;
+
+/**
+ * Capital a competitor wants before it builds, as a multiple of the estimate.
+ * Section 15 names 1.4; the personalities move it either way.
+ */
+export const AI_BUILD_CAPITAL_FACTOR = 1.4;
+
+/** How far down the ranked opportunity list one cycle will look. */
+export const AI_CANDIDATES_TRIED = 8;
+
+/** Lines one competitor will run at once. */
+export const AI_MAX_LINES = 6;
+
+/**
+ * Vehicles a new line starts with, and the most it can ever be given.
+ *
+ * ONE. A line's fleet is most of what it costs to open, and a competitor that
+ * buys two of everything can afford half as many lines - which matters far more
+ * than the frequency does, because an unfinished chain kills the works at the
+ * end of it. Cargo piling up at the first stop is what buys the second vehicle,
+ * and that is the reinforcement rule doing its job.
+ */
+export const AI_VEHICLES_PER_LINE = 1;
+export const AI_MAX_VEHICLES_PER_LINE = 6;
+
+/** Cargo waiting at a line's first stop before it is reinforced. [units] */
+export const AI_REINFORCE_WAITING = 300;
+
+/**
+ * How long a competitor waits after a build attempt before trying again.
+ *
+ * A game month. Three cycles - six game days - let a company put six lines down
+ * before the first had carried anything, and it was bankrupt inside five years
+ * with a network it could not pay for.
+ */
+export const AI_RETRY_TICKS = TICKS_PER_MONTH;
+
+/**
+ * Cash a competitor keeps back before it repays a loan. [cent]
+ *
+ * Enough for a few months of upkeep. Repaying down to nothing and then being
+ * unable to pay the wage bill is a worse mistake than the interest.
+ */
+export const AI_CASH_RESERVE_CT = 200_000_00;
+
+/**
+ * How long a line is given before it is judged, and how long between reviews.
+ * [ticks]
+ *
+ * Half a year. Shorter and a line is closed before its industry has got going;
+ * a whole year and a dead line - one whose works has shut and whose vehicles
+ * are waiting for a load that will never come - is paid for through two more
+ * seasons, which is most of what killed the first competitors that were
+ * measured over twenty-five years.
+ */
+export const AI_LINE_REVIEW_TICKS = TICKS_PER_YEAR / 2;
+
+/** Wagons a competitor puts behind a locomotive. */
+export const AI_RAIL_WAGONS = 5;
+
+/** Signal spacing on AI track, in tiles. */
+export const AI_SIGNAL_SPACING = 6;
+
+/**
+ * What a pair already served by somebody is worth, as a share.
+ *
+ * Not zero: section 15 asks for existing service to be taken into account, and
+ * a competitor's stop at one end of a good chain does not make the chain bad.
+ */
+export const AI_RIVAL_PENALTY = 0.4;
+
+/**
+ * What a sink that PRODUCES something of its own is worth, as a share.
+ *
+ * A factory that is supplied but whose output nobody collects shuts down in
+ * twenty-four months (section 7.3), and when it does, the line feeding it has
+ * nowhere to send its cargo and its vehicles wait for a load that never comes.
+ * That is not a bug in either rule - it is what a one-legged chain is - and a
+ * competitor that cannot see it builds the same doomed line for a century.
+ *
+ * So terminal sinks - a power station, a town - are strongly preferred, and a
+ * producing one is a fallback rather than a first choice.
+ */
+export const AI_PRODUCING_SINK_PENALTY = 0.25;
+
+/**
+ * What the NEXT leg of a chain the company already feeds is worth, as a
+ * multiplier.
+ *
+ * It is the most valuable thing a competitor can build and the easiest thing
+ * for it to miss. A works it supplies but never collects from shuts down in
+ * twenty-four months and takes the line feeding it with it, so finishing the
+ * chain is worth far more than the tonnage alone says.
+ */
+export const AI_CHAIN_BONUS = 5;
+
 // ---------------------------------------------------------- contracts (14.4)
 
 /** How many tenders stand open at once (section 14.4). */

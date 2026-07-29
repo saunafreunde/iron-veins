@@ -579,6 +579,19 @@ const v20_to_v21: SaveMigration = (payload) => {
 };
 
 /**
+ * M8 added the AI competitors of section 15.
+ *
+ * A version 21 world had no competitors, and it cannot be given any now: the
+ * companies would have fifty years of catching up to do against a player who
+ * has had the map to themselves. An empty roster is the honest reading - the
+ * save was a single-company game and stays one.
+ */
+const v21_to_v22: SaveMigration = (payload) => {
+  const inner = state(payload);
+  return { ...payload, state: { ...inner, ai: [] } };
+};
+
+/**
  * Registry keyed by the version a migration reads (section 19.1).
  *
  * There is deliberately no entry for 1 -> 2: a version 1 world had no map at
@@ -605,6 +618,7 @@ export const SAVE_MIGRATIONS: ReadonlyMap<number, SaveMigration> = new Map<numbe
   [18, v18_to_v19],
   [19, v19_to_v20],
   [20, v20_to_v21],
+  [21, v21_to_v22],
 ]);
 
 /**

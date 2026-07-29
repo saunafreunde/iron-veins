@@ -481,5 +481,14 @@
   "ui.contracts.rivals": "{count} Mitbewerber",
   "ui.contracts.estimate": "Schätzung: {value}",
   "news.contractWon": "{company} hat die Ausschreibung nach {town} erfüllt (+{bonusCt}).",
-  "news.contractFailed": "Ausschreibung nach {town} verfehlt – Konventionalstrafe {penaltyCt}."
+  "news.contractFailed": "Ausschreibung nach {town} verfehlt – Konventionalstrafe {penaltyCt}.",
+  "ai.personality.rail": "Schienenfokus",
+  "ai.personality.road": "Straßenfokus",
+  "ai.personality.expansive": "Expansiv",
+  "ai.personality.conservative": "Konservativ",
+  "ai.personality.townNetwork": "Städtenetz",
+  "ui.companies.title": "Firmen",
+  "ui.companies.value": "Firmenwert",
+  "ui.companies.you": "(Sie)",
+  "ui.companies.bankrupt": "abgewickelt"
 }

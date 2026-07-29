@@ -481,5 +481,14 @@
   "ui.contracts.rivals": "{count} competitors",
   "ui.contracts.estimate": "Estimate: {value}",
   "news.contractWon": "{company} completed the tender to {town} (+{bonusCt}).",
-  "news.contractFailed": "Tender to {town} missed - penalty {penaltyCt}."
+  "news.contractFailed": "Tender to {town} missed - penalty {penaltyCt}.",
+  "ai.personality.rail": "Rail focus",
+  "ai.personality.road": "Road focus",
+  "ai.personality.expansive": "Expansive",
+  "ai.personality.conservative": "Conservative",
+  "ai.personality.townNetwork": "Town network",
+  "ui.companies.title": "Companies",
+  "ui.companies.value": "Company value",
+  "ui.companies.you": "(you)",
+  "ui.companies.bankrupt": "wound up"
 }

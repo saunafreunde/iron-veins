@@ -1588,3 +1588,57 @@ Contracts that are completed or missed stay in the list, marked, until their
 deadline has been past for longer than the longest possible deadline. Ids are
 never reused. A recycled id would let a click on a stale panel accept a contract
 the player never saw, and there is no way for the player to tell that happened.
+
+### D-108 An AI line is built over three cycles, because the AI cannot see the future
+
+Everything a competitor does it does by enqueueing the player's own commands for
+the NEXT tick. That is what makes an AI build indistinguishable from a player's:
+same route assistant, same prices, same refusals, and the whole of it in the
+replay log. It also means the AI cannot know what any of it will produce - which
+station id, which vehicle id - because none of it has run yet.
+
+So a line is built in three stages, and each stage OBSERVES what the previous
+one left behind: order the infrastructure, then find the stations that actually
+exist and order vehicles at the depot, then find the vehicles standing in that
+depot and crew them. A route the assistant refused, a stop the council blocked
+or a purchase there was no money for simply ends the project. Whatever DID get
+built stays standing and stays paid for, which is exactly what a failed project
+costs a player.
+
+The alternative - predicting the ids the commands will produce - works right up
+until one command in the middle is refused, and then the AI gives orders to
+somebody else's lorry.
+
+### D-109 What the twenty-five year game actually measured, and what it changed
+
+The M8 acceptance run is `tests/balance/aiGame.spec.ts`, and its first version
+was red in the way that matters: all three competitors were wound up, with
+railways standing and no vehicles left. Four things came out of measuring it,
+and all four are in the constants rather than in the prose:
+
+1. **A line's fleet is most of what it costs to open.** The estimate costed only
+   the track, so a company put six lines down before the first had carried
+   anything. `AI_VEHICLES_PER_LINE` is now ONE - cargo piling up buys the second
+   vehicle, which is what the reinforcement rule is for.
+2. **A dead line is invisible.** Its works shuts, its lorries wait for a full
+   load that will never come, and nothing in the simulation notices while the
+   upkeep runs. Section 15 step 3 asks for unprofitable lines to be closed;
+   without it the competitors paid for their corpses until they were wound up.
+   A line is judged every half year on what it earned SINCE the last look.
+3. **Borrowing has to be paid back.** Letting every personality use the credit
+   line was tried: all three ran it to the limit inside a decade and the
+   interest finished them. Only the expansive personality borrows now, and every
+   competitor repays as soon as it can cover the debt and keep a reserve.
+4. **A competitor must not build a line that is going to die.** A works that
+   produces something shuts down in twenty-four months if nobody collects it
+   (section 7.3), and takes the line feeding it with it. A pair ending at a
+   producing works is only offered when the NEXT leg exists to be built, and
+   finishing a chain the company already feeds is worth five times the tonnage.
+
+What is still weak, stated rather than hidden: by year twenty-five the
+competitors have usually pruned themselves back to nothing. They build, they
+run, they cut their losses and they survive - two of three end the run solvent -
+but they do not compound. The evaluation function finds fewer completable chains
+as the industry map thins out, and nothing in the cycle rebuilds one that lapsed.
+That is the next thing to work on, and it is a scoring problem rather than a
+structural one.

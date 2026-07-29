@@ -50,6 +50,9 @@ import {
   produceIndustryCargo,
   reviewIndustries,
 } from './industry/production';
+import { updateAi } from './ai/ai';
+import { createAiStates } from './ai/roster';
+import type { AiState } from './ai/types';
 import { reviewContracts, type Contract } from './economy/contracts';
 import { reviewCouncils } from './town/council';
 import { growTowns, produceTownCargo } from './town/update';
@@ -98,6 +101,8 @@ export interface WorldStateData {
   /** Tenders, open and recently settled (section 14.4). */
   contracts: Contract[];
   nextContractId: number;
+  /** The AI competitors and what they have built (section 15). */
+  ai: AiState[];
 }
 
 /** The tile layers, as raw bytes. Derived layers are recomputed on load. */
@@ -218,6 +223,11 @@ export class World {
    */
   contracts: Contract[] = [];
   /**
+   * One entry per AI competitor (section 15). Empty in a single company game,
+   * which is what makes the whole subsystem cost nothing when it is not used.
+   */
+  ai: AiState[] = [];
+  /**
    * Next contract id. Monotonic and never reused: the id is what a command
    * refers to, and reusing one would let a stale click accept a contract the
    * player never saw.
@@ -264,6 +274,7 @@ export class World {
         this.rng,
       ),
     );
+    this.ai = createAiStates(this.companies.length, this.rng);
     this.map = generated.map;
     this.towns = generated.towns;
     this.industries = generated.industries;
@@ -323,6 +334,10 @@ export class World {
   step(queue: CommandQueue, sink: CommandOutcomeSink | null): void {
     this.drainCommands(queue, sink);
     updateVehicles(this);
+    // After the commands of this tick have run and before the clock moves, so
+    // what a competitor sees is the world as it stands and what it orders runs
+    // at the very next tick.
+    this.runAi(queue);
     this.tick++;
 
     if (this.tick % TICKS_PER_DAY === 0) {
@@ -421,6 +436,19 @@ export class World {
    * command is still stamped and logged for the current tick, so a replay
    * produces exactly the same world.
    */
+  /**
+   * Let the AI competitors of section 15 think.
+   *
+   * Called from `step`, and given the QUEUE: everything a competitor does it
+   * does by enqueueing an ordinary command for the next tick. That is what
+   * makes an AI build indistinguishable from a player's - same prices, same
+   * refusals, and all of it in the replay log.
+   */
+  private runAi(queue: CommandQueue): void {
+    if (this.ai.length === 0) return;
+    updateAi(this, queue);
+  }
+
   drainCommands(queue: CommandQueue, sink: CommandOutcomeSink | null): void {
     let due = queue.shiftDue(this.tick);
     while (due !== null) {
@@ -494,6 +522,11 @@ export class World {
         progress: [...contract.progress],
       })),
       nextContractId: this.nextContractId,
+      ai: this.ai.map((state) => ({
+        ...state,
+        lines: state.lines.map((line) => ({ ...line, vehicleIds: [...line.vehicleIds] })),
+        project: state.project === null ? null : { ...state.project },
+      })),
     };
   }
 
@@ -548,6 +581,11 @@ export class World {
       progress: [...contract.progress],
     }));
     world.nextContractId = data.nextContractId;
+    world.ai = data.ai.map((state) => ({
+      ...state,
+      lines: state.lines.map((line) => ({ ...line, vehicleIds: [...line.vehicleIds] })),
+      project: state.project === null ? null : { ...state.project },
+    }));
     world.cargoLinks.refreshLinks(world);
     rebuildReservations(world);
     // The constructor built the player from the parameters and the AI roster
@@ -675,6 +713,35 @@ function hashDynamicState(h: Fnv1a64, world: World): void {
     for (const done of contract.progress) h.f64(done);
   }
   h.u32(world.nextContractId);
+
+  // Every competitor's plan is state the simulation writes, so it is hashed
+  // like any other. An AI left out of the digest is an AI the determinism
+  // suite stops watching, and its builds move the whole world.
+  h.u32(world.ai.length);
+  for (let i = 0; i < world.ai.length; i++) {
+    const state = world.ai[i]!;
+    h.u32(state.companyId).u32(state.personality);
+    h.u32(state.nextDecisionTick).int(state.lastBuildTick);
+    h.u32(state.lines.length);
+    for (const line of state.lines) {
+      h.int(line.fromStationId).int(line.toStationId).u32(line.depotTile);
+      h.u32(line.rail ? 1 : 0).u32(line.cargo).u32(line.builtTick);
+      h.u32(line.reviewTick).int(line.earnedAtReviewCt);
+      h.u32(line.specIds.length);
+      for (const specId of line.specIds) h.u32(specId);
+      h.u32(line.vehicleIds.length);
+      for (const vehicleId of line.vehicleIds) h.u32(vehicleId);
+    }
+    const project = state.project;
+    h.u32(project === null ? 0 : 1);
+    if (project === null) continue;
+    h.u32(project.stage).u32(project.fromX).u32(project.fromY);
+    h.u32(project.toX).u32(project.toY).u32(project.depotX).u32(project.depotY);
+    h.u32(project.rail ? 1 : 0).u32(project.cargo).u32(project.startedTick);
+    h.int(project.lineIndex);
+    h.u32(project.specIds.length);
+    for (const specId of project.specIds) h.u32(specId);
+  }
 
   h.u32(world.industries.length);
   for (let i = 0; i < world.industries.length; i++) {
