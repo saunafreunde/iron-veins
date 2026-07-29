@@ -362,13 +362,56 @@ joins a chain with no changes to the routing at all.
   below sea level", so the game has exactly one water surface and a lock has no
   second level to connect. That is the one thing in M7's sentence not delivered.
 
+## M8 - opponents and goals
+
+Five subsystems, and the order they were built in is the order they depend on
+each other.
+
+- **The news log** (section 15) is one place that reads every warning clock the
+  simulation already kept - the deadlock timer of 9.3, the closure count of 7.3,
+  the solvency months of 14.2 - and turns it into something the player sees.
+  Everything in it uses `postOnce`: a clock that ticks daily otherwise writes
+  the same sentence seven hundred times a game year.
+- **Several companies.** `world.company` now means the company currently ACTING,
+  set from the command envelope for the length of one command and back to the
+  player straight afterwards (D-100). Three places run OUTSIDE a command and had
+  to be told: the monthly hooks take a `CompanyState`, a vehicle's revenue is
+  booked to its OWNER, and the winding-up acts as the company being wound up.
+- **Tiles have an owner** (D-101). Stations and vehicles already did; the town
+  council of 13.3 rates a company on the track IT laid, and no company may tear
+  up another's line. A tile is claimed by the first ROAD on it or by any TRACK;
+  a town's own street stays public however much a company extends it (D-104).
+- **The town council** rates every company 0-100 on service and nuisance,
+  recomputing three of the four inputs every month and remembering only what a
+  company DID, which decays (D-102). At 75 exclusive building rights are for
+  sale; below 25 the council refuses the company. `DemolishBuilding` exists so
+  that "buildings demolished" is a real term (D-103).
+- **The carbon levy** is metered from ENERGY rather than kilometres (D-105) -
+  the same question with a better answer, and no new number on any vehicle. The
+  grant that pays for electrification is the other half of the same policy.
+- **Tenders** are opt-in bets, and every one is a race (D-107). They draw from
+  their own RNG stream, because taking those draws from the gameplay stream
+  moved every later breakdown roll and turned balancing scenario 3 red (D-106).
+- **The AI** enqueues the player's own commands as its own company, which is
+  what makes "no cheating" structural. Read D-108 and D-109 before touching it:
+  the first is why a line is built over three cycles instead of one, and the
+  second is what the twenty-five year acceptance run measured and what it
+  changed.
+
+The acceptance run is `tests/balance/aiGame.spec.ts`. It passes: a twenty-five
+year game against three competitors runs through untouched, they build networks
+that can be told apart, and two of three finish solvent. What they do not do is
+COMPOUND - by year twenty-five they have usually pruned back to nothing. That is
+a scoring problem and it is written up in D-109.
+
 ## Still outstanding
 
 - The **minimap** (owed since M1) and **vehicle selection on the map** (M2).
-- **Balancing scenarios 2, 3, 4 and 5** of section 19.4. The chain scenarios own
-  the freight figures that M5 set by first draft.
-- **Industry opening and closure** at runtime (D-069).
-- The **industry panel**: production level and stock are simulated but nothing
-  shows them.
+- **Lines** (section 12.2), the line list and the timetable of 12.3. No
+  milestone has assigned them; the AI keeps its own list of lines internally,
+  which is not the same thing.
+- **Balancing scenario 5** of section 19.4 - an AI company alone on a 512 map.
+  The AI exists now, so this one is finally writable.
+- The AI does not compound (D-109).
 
-Then M6 (water) onwards.
+Then M9: tutorial, handbook, options, save/load UI, audio, installer.
