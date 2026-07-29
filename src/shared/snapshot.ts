@@ -97,8 +97,20 @@ export const SnapshotVehicle = {
    * cheaper to send than to look up per frame.
    */
   Kind: 4,
+  /**
+   * The vehicle's id in the store.
+   *
+   * The block is COMPACTED - dead vehicles are skipped - so a row's position
+   * says nothing about which vehicle it is. Without the id the renderer cannot
+   * answer "which vehicle did the player just click on", which is what section
+   * 17 has owed since M2, and a sound cannot be kept attached to the same
+   * vehicle from one frame to the next.
+   */
+  VehicleId: 5,
+  /** Company that owns it, so the map can colour it (section 15). */
+  Owner: 6,
 } as const;
-export const SNAPSHOT_VEHICLE_STRIDE = 5;
+export const SNAPSHOT_VEHICLE_STRIDE = 7;
 
 /**
  * Track claims the F3 overlay may draw in one tick (section 9.3).

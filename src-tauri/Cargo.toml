@@ -5,6 +5,7 @@ description = "Iron Veins - a modern transport tycoon"
 authors = ["Iron Veins"]
 edition = "2021"
 rust-version = "1.77.2"
+license = "UNLICENSED"
 
 # The binary is a thin wrapper around the library so the same entry point can be
 # reused if a second target (installer helper, headless replay) is ever added.
@@ -20,6 +21,11 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = [] }
+# The two capabilities the front end genuinely needs: a place to keep settings
+# and saves (%APPDATA%/IronVeins), and the dialogs that let a player put a save
+# somewhere of their own. Nothing else is granted - see capabilities/default.json.
+tauri-plugin-fs = "2"
+tauri-plugin-dialog = "2"
 
 [profile.release]
 codegen-units = 1

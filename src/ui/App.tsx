@@ -1,5 +1,7 @@
 import { useEffect, useRef, type ReactElement } from 'react';
 import { LOCALES, t } from '../i18n';
+import { SaveSlotKind } from '../shared/protocol';
+import { AUTOSAVE_EVERY_MONTHS } from './saves';
 import { MAPGEN_PHASE_COUNT } from '../sim/mapgen';
 import { CompanyPanel } from './CompanyPanel';
 import { IndustryList, StationList, TownList, VehicleList } from './EntityLists';
@@ -7,6 +9,16 @@ import { FinancePanel } from './FinancePanel';
 import { FleetPanel } from './FleetPanel';
 import { CompanyList } from './CompanyList';
 import { ContractPanel } from './ContractPanel';
+import { HandbookPanel } from './HandbookPanel';
+import { MainMenu } from './MainMenu';
+import { Minimap } from './Minimap';
+import { NewGameDialog } from './NewGameDialog';
+import { OptionsPanel } from './OptionsPanel';
+import { SaveLoadPanel } from './SaveLoadPanel';
+import { TutorialPanel } from './TutorialPanel';
+import { TOOL_KEYS } from './keymap';
+import { quickLoad } from './saves';
+import { updateSettings } from './settings';
 import { MapCanvas } from './MapCanvas';
 import { NewsPanel } from './NewsPanel';
 import { TilePanel } from './TilePanel';
@@ -40,7 +52,6 @@ function MapGenProgress(): ReactElement {
 
 export function App({ client }: { readonly client: SimClient }): ReactElement {
   const locale = useSimStore((s) => s.locale);
-  const setLocale = useSimStore((s) => s.setLocale);
   const toggleDebug = useSimStore((s) => s.toggleDebug);
   const toggleList = useSimStore((s) => s.toggleList);
   const openList = useSimStore((s) => s.openList);
@@ -50,6 +61,14 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
   const rejectionSeq = useSimStore((s) => s.rejectionSeq);
   const setRejection = useSimStore((s) => s.setRejection);
   const speedIndex = useSimStore((s) => s.speedIndex);
+  const autoSignal = useSimStore((s) => s.autoSignal);
+  const setAutoSignal = useSimStore((s) => s.setAutoSignal);
+  const overlay = useSimStore((s) => s.overlay);
+  const setOverlay = useSimStore((s) => s.setOverlay);
+  const setTool = useSimStore((s) => s.setTool);
+  const settings = useSimStore((s) => s.settings);
+  const year = useSimStore((s) => s.year);
+  const month = useSimStore((s) => s.month);
 
   // Space toggles between pause and the speed that was running before.
   const lastRunningSpeed = useRef(1);
@@ -62,10 +81,38 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
       const target = event.target;
       if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return;
 
+      // A build tool the scheme assigns a letter to. Checked first so the
+      // list keys below cannot shadow one of them.
+      const tool = TOOL_KEYS[event.key.toLowerCase()];
+      if (tool !== undefined && !event.ctrlKey && !event.altKey) {
+        setTool(tool);
+        return;
+      }
+
       switch (event.key) {
         case ' ':
           event.preventDefault();
           client.setSpeed(speedIndex === 0 ? lastRunningSpeed.current : 0);
+          return;
+        case 'Escape':
+          event.preventDefault();
+          setOverlay(overlay === null ? 'menu' : null);
+          return;
+        case 'F1':
+          event.preventDefault();
+          setOverlay(overlay === 'handbook' ? null : 'handbook');
+          return;
+        case 'F5':
+          event.preventDefault();
+          client.save(SaveSlotKind.Quick, '');
+          return;
+        case 'F9':
+          event.preventDefault();
+          void quickLoad(client);
+          return;
+        case 'm':
+        case 'M':
+          setAutoSignal(!autoSignal);
           return;
         case '1':
         case '2':
@@ -83,8 +130,8 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
         case 'V':
           toggleList('vehicles');
           return;
-        case 'b':
-        case 'B':
+        case 'l':
+        case 'L':
           toggleList('stations');
           return;
         case 't':
@@ -101,7 +148,21 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [client, speedIndex, toggleDebug, toggleList]);
+  }, [client, speedIndex, toggleDebug, toggleList, overlay, setOverlay, setTool, autoSignal, setAutoSignal]);
+
+  // ------------------------------------------------------------- autosave
+  //
+  // Driven from here rather than from the worker because the SETTING lives
+  // here: the simulation has no opinion about whether the player wants
+  // autosaves, and giving it one would mean a second copy of the preference.
+  const lastAutosave = useRef(-1);
+  useEffect(() => {
+    if (!ready || !settings.autosave) return;
+    const months = year * 12 + month;
+    if (months % AUTOSAVE_EVERY_MONTHS !== 0 || months === lastAutosave.current) return;
+    lastAutosave.current = months;
+    client.save(SaveSlotKind.Auto, '');
+  }, [client, ready, settings.autosave, year, month]);
 
   useEffect(() => {
     if (rejectionKey === null) return;
@@ -118,6 +179,36 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
     );
   }
 
+  if (overlay !== null) {
+    return (
+      <div className="app">
+        <StatusBar client={client} />
+        <main className="workspace workspace--overlay">
+          {overlay === 'menu' && (
+            <MainMenu onSelect={(next) => setOverlay(next)} onClose={() => setOverlay(null)} />
+          )}
+          {overlay === 'newGame' && (
+            <NewGameDialog
+              onStart={(options) => {
+                client.newGame(options);
+                setOverlay(null);
+              }}
+              onCancel={ready ? () => setOverlay('menu') : null}
+            />
+          )}
+          {overlay === 'options' && <OptionsPanel onClose={() => setOverlay('menu')} />}
+          {overlay === 'saves' && (
+            <SaveLoadPanel client={client} onClose={() => setOverlay('menu')} />
+          )}
+          {overlay === 'handbook' && <HandbookPanel onClose={() => setOverlay(null)} />}
+          {overlay === 'tutorial' && (
+            <TutorialPanel client={client} onClose={() => setOverlay(null)} />
+          )}
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div className="app">
       <StatusBar client={client} />
@@ -125,6 +216,7 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
       {ready ? (
         <main className="workspace workspace--map">
           <MapCanvas client={client} />
+          <Minimap />
           <aside className="sidebar">
             {/* One list at a time, opened with V, B, T or I (section 17.2).
                 Four always-visible lists would not fit beside the map, and the
@@ -154,13 +246,19 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
       )}
 
       <footer className="appbar">
+        <button type="button" className="chip" onClick={() => setOverlay('menu')}>
+          {t('ui.menu.title')}
+        </button>
+        <button type="button" className="chip" onClick={() => setOverlay('handbook')}>
+          {t('ui.menu.handbook')}
+        </button>
         <span className="appbar__label">{t('ui.locale.label')}</span>
         {LOCALES.map((code) => (
           <button
             key={code}
             type="button"
             className={code === locale ? 'chip chip--active' : 'chip'}
-            onClick={() => setLocale(code)}
+            onClick={() => updateSettings({ locale: code })}
           >
             {code.toUpperCase()}
           </button>

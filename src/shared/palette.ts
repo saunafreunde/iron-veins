@@ -20,6 +20,40 @@ export const COMPANY_COLORS: readonly string[] = [
   '#cc79a7',
 ];
 
+/**
+ * The same eight hues, redrawn for the colour-blind mode of section 17.4.
+ *
+ * Okabe-Ito is already deficiency-safe as a set, so what this alternative
+ * palette changes is not the hues but the LIGHTNESS spread: eight colours that
+ * differ in brightness as well as in hue survive being printed in grey, being
+ * seen by somebody with achromatopsia, and being drawn two pixels wide on a
+ * minimap - which the original set does not.
+ */
+export const COMPANY_COLORS_CVD: readonly string[] = [
+  '#ffffff',
+  '#ffd21f',
+  '#7fd4ff',
+  '#00a878',
+  '#c0c0c0',
+  '#0057a8',
+  '#ff6a13',
+  '#8b2f6b',
+];
+
+/** Ground colour per terrain type, indexed by Terrain. Shared by atlas and minimap. */
+export const TERRAIN_COLORS: readonly string[] = [
+  '#4a86a8', // water
+  '#cbb682', // coast
+  '#6f9b58', // grass
+  '#b09a4e', // field
+  '#3f6b3a', // forest
+  '#8a8578', // rock
+  '#e8eef2', // snow
+  '#d6bc86', // desert
+  '#5a6b4a', // marsh
+  '#b8b4ac', // town ground
+];
+
 /** Interface chrome. */
 export const UI_COLORS = {
   surface: '#1c2128',

@@ -1,3 +1,4 @@
+import { TERRAIN_COLORS } from '../shared/palette';
 import { SlopeBit, SLOPE_COUNT, Terrain, TERRAIN_COUNT } from '../sim/map/terrain';
 
 /**
@@ -28,20 +29,6 @@ const CELL_H = TILE_H + STEP * 2;
 
 /** Vertical offset of the base diamond inside its cell. */
 const CELL_TOP = STEP;
-
-/** Base colour per terrain type, indexed by {@link Terrain}. */
-const TERRAIN_COLORS: readonly string[] = [
-  '#4a86a8', // water
-  '#cbb682', // coast
-  '#6f9b58', // grass
-  '#b09a4e', // field
-  '#3f6b3a', // forest
-  '#8a8578', // rock
-  '#e8eef2', // snow
-  '#d6bc86', // desert
-  '#5a6b4a', // marsh
-  '#b8b4ac', // town ground
-];
 
 /** Speckle colour per terrain, used for a little surface texture. */
 const TERRAIN_SPECKLE: readonly string[] = [

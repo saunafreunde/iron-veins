@@ -1642,3 +1642,94 @@ but they do not compound. The evaluation function finds fewer completable chains
 as the industry map thins out, and nothing in the cycle rebuilds one that lapsed.
 That is the next thing to work on, and it is a scoring problem rather than a
 structural one.
+
+### D-110 A setting is not a game rule, and the two must not share a screen
+
+M9's brief names an options menu with "Spielregeln" in it. Two different kinds
+of thing were hiding under that word and they behave in opposite ways.
+
+A SETTING is the player's: the language, the interface scale, the volumes, the
+colour-blind palette. It is the same for every game they play, it must never
+reach `src/sim`, and two worlds with the same seed and the same commands are
+identical whatever is in it. It lives in `AppSettings`, is written to disk on
+every change, and is applied by one function so that "stored" and "in effect"
+cannot drift apart.
+
+A GAME RULE is the world's: inflation, the carbon levy, how many competitors,
+the difficulty, the climate, the map size. Every one of them changes what the
+simulation does, is written into the save and is part of the state hash. They
+are chosen once, on the new-game screen, and cannot be moved afterwards.
+
+Putting them in the same menu would say they can both be changed mid-game. One
+of them cannot: a mid-game toggle of inflation would break the promise that a
+seed plus a command log reproduces a world, silently and unrecoverably.
+
+### D-111 The worker encodes a save; the main thread decides where it goes
+
+`requestSave` comes back as bytes in a message rather than as a written file,
+and the main thread names it, gives it a picture and puts it away.
+
+Architecture law #1 forces the split - the simulation may no more reach a
+filesystem than it may reach the renderer - but it turns out to be the right
+split for its own reasons. Naming and rotation are POLICY: which of five
+autosave slots is next, whether this is the quick save, what a player called
+it. The encoder should have no opinion about any of that. And the thumbnail is
+a picture of the map as the MAIN THREAD holds it: the worker owns the tile
+layers but has no canvas, and shipping a megabyte of pixels across the boundary
+to paint them on the other side would be absurd.
+
+The autosave clock is on the main thread for the same reason: whether the
+player wants autosaves is a SETTING, and giving the simulation an opinion about
+it would mean a second copy of the preference.
+
+### D-112 The minimap is a pure function, and the save thumbnail is the same one
+
+`paintMinimap` takes the tile layers and fills a byte buffer. It owns no
+canvas, no Pixi object and no state, and it is called from exactly two places:
+the panel in the corner of the screen, and the thumbnail a save carries.
+
+One painter, so a save's picture is the map the player was looking at rather
+than a second drawing of the same world that drifts away from it. It repaints
+only when the map revision moves - the signal the renderer has carried since
+M1 - because a megapixel per frame would cost more than the map itself.
+
+The "Frachtfluss" mode is stations and industries lit by how much is waiting
+and how hard each works is running. A flow needs two endpoints and a rate, and
+the simulation measures neither per tile; this is the same question answered
+from the side the data is actually on, and it is labelled honestly.
+
+### D-113 The tutorial watches; it never plays
+
+A lesson is a list of sentences, each with a predicate over the state the
+interface already has. It never builds anything, never moves the camera and
+never touches the simulation.
+
+Two reasons, and the second is the binding one. A tutorial that plays itself
+teaches nobody - the player watches a demo and then faces the same blank map.
+And a tutorial that wrote into the world would be a second author of state
+beside the command queue, which architecture law #6 does not allow: the replay
+would then be missing half of what happened.
+
+What the predicates read is the store and a count of the commands the player
+issued, which the worker already reports for its own reasons. Between them they
+cover every goal section 17.5 names without one new signal.
+
+### D-114 The keyboard scheme is a table, not a switch statement
+
+Section 17.2's bindings are needed in two places: the handler that acts on them
+and the options screen that shows them. A list of keys typed out a second time
+in a help panel is a list that is wrong the first time a key moves, so both
+read `src/ui/keymap.ts`.
+
+Two bindings differ from the table in 17.2 and both are deliberate. `B` is the
+station tool, as the section says, which meant the station LIST moved to `L` -
+the section gives `L` to lines, and lines do not exist. And `M` toggles the
+route assistant rather than selecting a mode, which is what "manueller
+Bau-Modus" means with the assistant this game actually has.
+
+Undo and redo are NOT bound. They are the one item in 17.2 that needs machinery
+the simulation does not have: an exact inverse for every build command,
+including the money, the upkeep totals and everything a demolition destroys.
+A partial undo that silently covered half the commands would be worse than
+none, so the keys are unbound and this is written down rather than left as a
+key that does nothing.

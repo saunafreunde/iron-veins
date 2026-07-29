@@ -11,7 +11,22 @@ import type {
   TownMarker,
   VehicleMarker,
 } from '../shared/protocol';
+import type { SaveEntry } from '../platform/Storage';
+import { DEFAULT_SETTINGS, type AppSettings } from '../shared/settings';
 import type { MapGenPhase } from '../sim/mapgen';
+
+/**
+ * The full-screen panels of M9. One at a time, because each of them wants the
+ * whole window and two of them at once would mean deciding which is on top.
+ */
+export type OverlayKind =
+  | 'menu'
+  | 'newGame'
+  | 'options'
+  | 'saves'
+  | 'handbook'
+  | 'tutorial'
+  | null;
 
 /** What a left click on the map does. */
 export type Tool =
@@ -99,6 +114,18 @@ export interface SimUiState extends SnapshotValues {
   news: readonly NewsMarker[];
   companies: readonly CompanyMarker[];
   contracts: readonly ContractMarker[];
+  /** Settings, mirrored here so React re-renders when one changes. */
+  settings: AppSettings;
+  /** Saves on the shelf, newest first (section 19.1). */
+  saves: readonly SaveEntry[];
+  /**
+   * What the last load said when it failed, or null. A raw exception message
+   * from the format layer is the wrong thing to show, so the key is the
+   * sentence and the detail is what a bug report needs.
+   */
+  loadError: { readonly reasonKey: string; readonly detail: string } | null;
+  /** Which full-screen overlay is open, if any. */
+  overlay: OverlayKind;
   /** Which entity list is open, or null. The V/T/I keys of section 17.2. */
   openList: 'vehicles' | 'stations' | 'towns' | 'industries' | null;
   selectedVehicleId: number | null;
@@ -140,6 +167,10 @@ export interface SimUiState extends SnapshotValues {
   setNews: (news: readonly NewsMarker[]) => void;
   setCompanies: (companies: readonly CompanyMarker[]) => void;
   setContracts: (contracts: readonly ContractMarker[]) => void;
+  setSettings: (settings: AppSettings) => void;
+  setSaves: (saves: readonly SaveEntry[]) => void;
+  setLoadError: (error: { readonly reasonKey: string; readonly detail: string } | null) => void;
+  setOverlay: (overlay: OverlayKind) => void;
   toggleList: (list: 'vehicles' | 'stations' | 'towns' | 'industries') => void;
   /** Wired to the map view so a list row can jump to what it names. */
   centreOnTile: (x: number, y: number) => void;
@@ -152,6 +183,14 @@ export interface SimUiState extends SnapshotValues {
   removeTrainUnit: (index: number) => void;
   clearTrainDraft: () => void;
   setReady: (seed: number) => void;
+  /**
+   * Forget the world the player was in.
+   *
+   * Everything a world owns has to go at once. Leaving the station list behind
+   * across a load is not a cosmetic bug: the panels index into it by id, and
+   * the new world's ids mean something else.
+   */
+  resetWorld: () => void;
   setCompany: (name: string, colorIndex: number) => void;
   setPlatform: (appVersion: string, isDesktop: boolean) => void;
   setSharedMemoryAvailable: (available: boolean) => void;
@@ -196,6 +235,10 @@ export const useSimStore = create<SimUiState>((set) => ({
   news: [],
   companies: [],
   contracts: [],
+  settings: DEFAULT_SETTINGS,
+  saves: [],
+  loadError: null,
+  overlay: null,
   openList: null,
   selectedVehicleId: null,
   roadAnchor: null,
@@ -236,6 +279,10 @@ export const useSimStore = create<SimUiState>((set) => ({
   setNews: (news) => set({ news }),
   setCompanies: (companies) => set({ companies }),
   setContracts: (contracts) => set({ contracts }),
+  setSettings: (settings) => set({ settings, locale: settings.locale === 'en' ? 'en' : 'de' }),
+  setSaves: (saves) => set({ saves }),
+  setLoadError: (loadError) => set({ loadError }),
+  setOverlay: (overlay) => set({ overlay }),
   toggleList: (list) => set((state) => ({ openList: state.openList === list ? null : list })),
   centreOnTile: () => undefined,
   setCentreOnTile: (centreOnTile) => set({ centreOnTile }),
@@ -249,6 +296,27 @@ export const useSimStore = create<SimUiState>((set) => ({
     set((state) => ({ trainDraft: state.trainDraft.filter((_, i) => i !== index) })),
   clearTrainDraft: () => set({ trainDraft: [] }),
   setReady: (seed) => set({ ready: true, seed, generatingPhase: null }),
+  resetWorld: () =>
+    set({
+      ready: false,
+      towns: [],
+      industries: [],
+      stations: [],
+      fleet: [],
+      companies: [],
+      contracts: [],
+      news: [],
+      finances: null,
+      hoveredTile: null,
+      selectedTile: null,
+      selectedVehicleId: null,
+      roadAnchor: null,
+      trackPreview: null,
+      trainDraft: [],
+      openList: null,
+      mapBuffer: null,
+      mapSize: 0,
+    }),
   setCompany: (name, colorIndex) => set({ companyName: name, companyColorIndex: colorIndex }),
   setPlatform: (appVersion, isDesktop) => set({ appVersion, isDesktop }),
   setSharedMemoryAvailable: (available) => set({ sharedMemoryAvailable: available }),

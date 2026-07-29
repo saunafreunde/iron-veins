@@ -178,7 +178,43 @@ export type MainToWorkerMessage =
     }
   | { readonly type: 'setSpeed'; readonly speedIndex: number }
   | { readonly type: 'command'; readonly command: Command }
+  /**
+   * Write a save. The worker answers with `saveWritten`; the main thread is the
+   * only side that may touch a disk (architecture law #1).
+   */
+  | { readonly type: 'requestSave'; readonly slot: SaveSlotKind; readonly label: string }
+  /** Load a save from bytes the main thread read. */
+  | { readonly type: 'loadSave'; readonly bytes: Uint8Array }
+  /** Throw the world away and generate a new one with these parameters. */
+  | { readonly type: 'newGame'; readonly options: NewGameOptions }
   | { readonly type: 'shutdown' };
+
+/** Everything the player chooses on the new-game screen (section 20, M9). */
+export interface NewGameOptions {
+  readonly seed: number;
+  readonly difficulty: Difficulty;
+  readonly climate: MapClimate;
+  readonly mapSize: number;
+  readonly companyName: string;
+  readonly companyColorIndex: number;
+  readonly inflation: boolean;
+  readonly emissions: boolean;
+  readonly aiCompanies: number;
+}
+
+/**
+ * Which shelf a save belongs on.
+ *
+ * Section 19.1 keeps autosaves apart from manual ones on purpose: an autosave
+ * ring that could overwrite the file a player deliberately made is the one way
+ * a save system loses somebody's game.
+ */
+export const SaveSlotKind = {
+  Manual: 0,
+  Quick: 1,
+  Auto: 2,
+} as const;
+export type SaveSlotKind = (typeof SaveSlotKind)[keyof typeof SaveSlotKind];
 
 export type WorkerToMainMessage =
   | { readonly type: 'generating'; readonly phase: MapGenPhase; readonly seedAttempt: number }
@@ -212,4 +248,21 @@ export type WorkerToMainMessage =
   | { readonly type: 'newsChanged'; readonly news: readonly NewsMarker[] }
   /** Fleet overview for the vehicle list; sent when it changes, not per tick. */
   | { readonly type: 'fleetChanged'; readonly vehicles: readonly VehicleMarker[] }
+  /** A save the worker encoded. The main thread decides where it goes. */
+  | {
+      readonly type: 'saveWritten';
+      readonly bytes: Uint8Array;
+      readonly slot: SaveSlotKind;
+      readonly label: string;
+      readonly year: number;
+      readonly month: number;
+      readonly companyValueCt: number;
+    }
+  /** A load that did not work out, named by a translation key. */
+  | { readonly type: 'loadFailed'; readonly reasonKey: string; readonly detail: string }
+  /**
+   * One command ran. The tutorial of section 17.5 watches these to know when a
+   * lesson's goal is met, and the audio of section 18 turns them into clicks.
+   */
+  | { readonly type: 'commandExecuted'; readonly kind: number; readonly accepted: boolean }
   | { readonly type: 'error'; readonly message: string };

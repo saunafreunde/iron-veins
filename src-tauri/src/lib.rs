@@ -22,11 +22,14 @@ fn startup_report(
 /// Boots the Tauri shell.
 ///
 /// The game itself lives entirely in the web view: simulation, rendering and
-/// storage are TypeScript. The Rust side only provides the window, the file
-/// dialogs and the installer - anything the front end needs is reached through
-/// `src/platform/Platform.ts`.
+/// storage are TypeScript. The Rust side provides the window, the application
+/// data directory, the file dialogs and the installer - and the front end
+/// reaches all of it through `src/platform/`, which is the only directory
+/// allowed to import `@tauri-apps/*`.
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![startup_report])
         .run(tauri::generate_context!())
         .expect("Iron Veins failed to start");

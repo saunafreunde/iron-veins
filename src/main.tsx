@@ -4,6 +4,10 @@ import { t } from './i18n';
 import { getPlatformInfo, reportStartupDiagnostics } from './platform/Platform';
 import { DEFAULT_MAP_SIZE, Difficulty, MapClimate } from './sim/constants';
 import { App } from './ui/App';
+import { startAudio } from './ui/audioBridge';
+import { captureThumbnail } from './ui/Minimap';
+import { refreshSaves, storeSave } from './ui/saves';
+import { loadSettings } from './ui/settings';
 import { SimClient } from './ui/SimClient';
 import { useSimStore } from './ui/store';
 import './ui/styles.css';
@@ -18,6 +22,28 @@ if (container === null) {
  * the application, not to a component tree that StrictMode mounts twice.
  */
 const client = new SimClient();
+
+/**
+ * A save the worker encoded has to be given a picture and a home.
+ *
+ * The picture is taken here rather than in the worker because it is a picture
+ * of the map as the MAIN THREAD already holds it: the worker owns the tile
+ * layers but has no canvas to draw them on, and sending a megabyte of pixels
+ * across the boundary to paint them on the other side would be absurd.
+ */
+client.onSaveWritten = (message) => {
+  void storeSave(
+    message.bytes,
+    message.slot,
+    message.label,
+    message.year,
+    message.month,
+    message.companyValueCt,
+    captureThumbnail(),
+    Date.now(),
+  );
+};
+
 client.start({
   // Main-thread randomness is fine - the seed becomes part of the world state
   // and everything downstream of it is derived deterministically.
@@ -28,6 +54,23 @@ client.start({
   companyName: t('ui.defaultCompanyName'),
   companyColorIndex: 1,
 });
+
+// Settings first, so the language, the scale and the palette are right before
+// anything is drawn rather than a frame after it.
+void loadSettings().then(() => refreshSaves());
+
+/**
+ * No browser starts an AudioContext before the player has touched something,
+ * so the engine waits for the first gesture of any kind. Built at boot it
+ * would be silently dead for the whole session.
+ */
+function armAudio(): void {
+  startAudio(client);
+  window.removeEventListener('pointerdown', armAudio);
+  window.removeEventListener('keydown', armAudio);
+}
+window.addEventListener('pointerdown', armAudio);
+window.addEventListener('keydown', armAudio);
 
 void getPlatformInfo().then(async (info) => {
   useSimStore.getState().setPlatform(info.appVersion, info.isDesktop);

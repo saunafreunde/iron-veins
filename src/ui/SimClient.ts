@@ -1,4 +1,9 @@
-import type { MainToWorkerMessage, WorkerToMainMessage } from '../shared/protocol';
+import type {
+  MainToWorkerMessage,
+  NewGameOptions,
+  SaveSlotKind,
+  WorkerToMainMessage,
+} from '../shared/protocol';
 import { createSnapshotBuffer, SnapshotF64, SnapshotI32, SnapshotReader } from '../shared/snapshot';
 import type { Command } from '../sim/commands/types';
 import type { Difficulty, MapClimate } from '../sim/constants';
@@ -111,6 +116,40 @@ export class SimClient {
     this.post({ type: 'command', command });
   }
 
+  /**
+   * Ask the worker to encode the game. The bytes come back as a message and
+   * the main thread decides where they go - the simulation never sees a file.
+   */
+  save(slot: SaveSlotKind, label: string): void {
+    this.post({ type: 'requestSave', slot, label });
+  }
+
+  /** Replace the running world with one out of a file. */
+  load(bytes: Uint8Array): void {
+    useSimStore.getState().setLoadError(null);
+    this.post({ type: 'loadSave', bytes });
+  }
+
+  /** Throw the world away and generate a new one. */
+  newGame(options: NewGameOptions): void {
+    const store = useSimStore.getState();
+    store.resetWorld();
+    this.post({ type: 'newGame', options });
+  }
+
+  /**
+   * Called for every command the PLAYER issued, accepted or not.
+   *
+   * A single hook rather than a store field: the tutorial and the audio engine
+   * both want the event and neither wants a re-render for it.
+   */
+  onCommandExecuted: ((kind: number, accepted: boolean) => void) | null = null;
+
+  /** Called when the worker hands back an encoded save. */
+  onSaveWritten:
+    | ((message: Extract<WorkerToMainMessage, { type: 'saveWritten' }>) => void)
+    | null = null;
+
   /** Stop the worker and the read loop. */
   dispose(): void {
     if (this.timerId !== 0) {
@@ -174,6 +213,15 @@ export class SimClient {
         return;
       case 'commandRejected':
         store.setRejection(message.reasonKey);
+        return;
+      case 'saveWritten':
+        this.onSaveWritten?.(message);
+        return;
+      case 'loadFailed':
+        store.setLoadError({ reasonKey: message.reasonKey, detail: message.detail });
+        return;
+      case 'commandExecuted':
+        this.onCommandExecuted?.(message.kind, message.accepted);
         return;
       case 'error':
         store.setFatalError(message.message);

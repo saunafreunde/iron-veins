@@ -31,8 +31,10 @@ import {
   TILE_SIZE_M,
 } from './constants';
 import { loanLimitCt } from './economy/company';
+import type { NewGameOptions, SaveSlotKind } from '../shared/protocol';
 import { bookValueCt, companyValueCt, monthsInOrder } from './economy/ledger';
 import { contractProgress, isOpen } from './economy/contracts';
+import { decodeSave, encodeSave } from './save/serialize';
 import { stationRating } from './station/types';
 import { councilRating, exclusiveRightsCostCt, TOWN_MEASURE_COUNT } from './town/council';
 import { calendarFromTick, hashWorldLive, World } from './World';
@@ -89,10 +91,20 @@ let publishedNewsRevision = -1;
 const FLEET_REFRESH_TICKS = 200;
 
 /** Reused across ticks so command feedback does not allocate per call. */
-const outcomeSink = (_envelope: CommandEnvelope, outcome: CommandOutcome): void => {
+const outcomeSink = (envelope: CommandEnvelope, outcome: CommandOutcome): void => {
   if (!outcome.ok) {
     scope.postMessage({ type: 'commandRejected', reasonKey: outcome.reasonKey });
   }
+  // The player's own commands are reported either way. The tutorial of section
+  // 17.5 watches them to know when a lesson's goal is met, and the audio of
+  // section 18 turns them into a click. A competitor's are not: five AI
+  // companies build constantly and nobody is being taught by that.
+  if (envelope.companyId !== 0) return;
+  scope.postMessage({
+    type: 'commandExecuted',
+    kind: envelope.command.kind,
+    accepted: outcome.ok,
+  });
 };
 
 function refreshStateHash(current: World): void {
@@ -341,6 +353,11 @@ function writeVehicles(current: World, block: Int32Array): number {
     );
     block[base + SnapshotVehicle.State] = vehicles.state[id]!;
     block[base + SnapshotVehicle.Kind] = vehicles.kind[id]!;
+    // The block is compacted, so the row index says nothing about which
+    // vehicle this is. The id is what lets the map answer a click and what
+    // keeps a sound attached to the same vehicle between frames.
+    block[base + SnapshotVehicle.VehicleId] = id;
+    block[base + SnapshotVehicle.Owner] = vehicles.ownerId[id]!;
     written++;
   }
   return written;
@@ -510,6 +527,98 @@ function startGame(message: Extract<MainToWorkerMessage, { type: 'init' }>): voi
   queue = new CommandQueue();
   writer = new SnapshotWriter(message.buffer);
 
+  if (timer !== null) clearInterval(timer);
+  timer = setInterval(runFrame, TICK_MS);
+
+  adoptWorld(world, writer);
+}
+
+/**
+ * Encode the current game and hand the bytes to the main thread.
+ *
+ * The worker never touches a file. It cannot: the filesystem lives behind
+ * `src/platform`, and the simulation may not reach the platform layer any more
+ * than it may reach the renderer. So a save is bytes crossing the boundary, and
+ * where they land is somebody else's decision.
+ */
+function writeSave(slot: SaveSlotKind, label: string): void {
+  const current = world;
+  if (current === null) return;
+
+  const bytes = encodeSave(current, queue, __APP_VERSION__);
+  const date = current.date;
+  scope.postMessage({
+    type: 'saveWritten',
+    bytes,
+    slot,
+    label,
+    year: date.year,
+    month: date.month,
+    companyValueCt: companyValueCt(current.playerCompany),
+  });
+}
+
+/**
+ * Replace the running world with one out of a file.
+ *
+ * A bad file is a message, not a crash: the format layer already names the
+ * exact field it choked on, and that string is worth far more in a bug report
+ * than "could not load".
+ */
+function loadSave(bytes: Uint8Array): void {
+  let loaded;
+  try {
+    loaded = decodeSave(bytes);
+  } catch (error) {
+    scope.postMessage({
+      type: 'loadFailed',
+      reasonKey: 'ui.save.loadFailed',
+      detail: error instanceof Error ? error.message : String(error),
+    });
+    return;
+  }
+
+  const sink = writer;
+  if (sink === null) return;
+  world = loaded.world;
+  queue = loaded.queue;
+  adoptWorld(world, sink);
+}
+
+/** Throw the world away and generate a new one (section 20, M9). */
+function restart(options: NewGameOptions): void {
+  const sink = writer;
+  if (sink === null) return;
+
+  world = World.create(
+    {
+      seed: options.seed,
+      difficulty: options.difficulty,
+      climate: options.climate,
+      mapSize: options.mapSize,
+      companyName: options.companyName,
+      companyColorIndex: options.companyColorIndex,
+      inflation: options.inflation,
+      emissions: options.emissions,
+      aiCompanies: options.aiCompanies,
+    },
+    (phase, seedAttempt) => {
+      scope.postMessage({ type: 'generating', phase, seedAttempt });
+    },
+  );
+  queue = new CommandQueue();
+  adoptWorld(world, sink);
+}
+
+/**
+ * Everything that has to be forgotten when the world underneath changes.
+ *
+ * The published-state trackers are the trap here: they exist so a message is
+ * only sent when something actually moved, and a stale one after a load means
+ * the interface keeps showing the previous game's stations until something
+ * happens to change them.
+ */
+function adoptWorld(current: World, sink: SnapshotWriter): void {
   speedIndex = 0;
   accumulatorMs = 0;
   lastFrameMs = performance.now();
@@ -521,23 +630,22 @@ function startGame(message: Extract<MainToWorkerMessage, { type: 'init' }>): voi
   publishedColorIndex = -1;
   publishedStructure = '';
   publishedNewsRevision = -1;
+  publishedMonthTick = -1;
 
-  publishSnapshot(world, writer);
-  postMonthly(world);
-
-  if (timer !== null) clearInterval(timer);
-  timer = setInterval(runFrame, TICK_MS);
+  publishSnapshot(current, sink);
+  postMonthly(current);
+  postStructure(current);
 
   scope.postMessage({
     type: 'ready',
-    companyName: world.playerCompany.name,
-    companyColorIndex: world.playerCompany.colorIndex,
-    mapSize: world.map.size,
-    mapBuffer: world.map.buffer,
-    townCount: world.towns.length,
-    industryCount: world.industries.length,
-    towns: townMarkers(world),
-    industries: industryMarkers(world),
+    companyName: current.playerCompany.name,
+    companyColorIndex: current.playerCompany.colorIndex,
+    mapSize: current.map.size,
+    mapBuffer: current.map.buffer,
+    townCount: current.towns.length,
+    industryCount: current.industries.length,
+    towns: townMarkers(current),
+    industries: industryMarkers(current),
   });
 }
 
@@ -562,6 +670,18 @@ function handleMessage(message: MainToWorkerMessage): void {
       queue.enqueue(message.command, current.tick);
       return;
     }
+
+    case 'requestSave':
+      writeSave(message.slot, message.label);
+      return;
+
+    case 'loadSave':
+      loadSave(message.bytes);
+      return;
+
+    case 'newGame':
+      restart(message.options);
+      return;
 
     case 'shutdown':
       if (timer !== null) {

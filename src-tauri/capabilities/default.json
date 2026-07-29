@@ -3,5 +3,26 @@
   "identifier": "default",
   "description": "Permissions granted to the main game window.",
   "windows": ["main"],
-  "permissions": ["core:default", "core:app:allow-version"]
+  "permissions": [
+    "core:default",
+    "core:app:allow-version",
+    "dialog:allow-open",
+    "dialog:allow-save",
+    "fs:allow-mkdir",
+    "fs:allow-exists",
+    "fs:allow-read-file",
+    "fs:allow-read-text-file",
+    "fs:allow-write-file",
+    "fs:allow-write-text-file",
+    "fs:allow-remove",
+    {
+      "identifier": "fs:scope",
+      "allow": [
+        { "path": "$APPCONFIG" },
+        { "path": "$APPCONFIG/**" },
+        { "path": "$APPDATA" },
+        { "path": "$APPDATA/**" }
+      ]
+    }
+  ]
 }
