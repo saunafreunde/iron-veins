@@ -467,5 +467,19 @@
   "account.emissions": "CO₂-Abgabe",
   "ui.finance.co2": "CO₂ (Jahr)",
   "ui.finance.co2Value": "{tonnes} t",
-  "news.carbonLevy": "Ab {year} wird eine CO₂-Abgabe erhoben."
+  "news.carbonLevy": "Ab {year} wird eine CO₂-Abgabe erhoben.",
+  "cmd.reject.noSuchContract": "Diesen Auftrag gibt es nicht.",
+  "cmd.reject.contractClosed": "Dieser Auftrag ist abgeschlossen.",
+  "cmd.reject.alreadyAccepted": "Dieser Auftrag ist bereits angenommen.",
+  "ui.contracts.title": "Ausschreibungen",
+  "ui.contracts.empty": "Zurzeit keine Ausschreibungen.",
+  "ui.contracts.line": "{amount} {cargo} nach {town}",
+  "ui.contracts.deadline": "noch {months} Mon.",
+  "ui.contracts.bonus": "Bonus {bonus}",
+  "ui.contracts.accept": "Annehmen",
+  "ui.contracts.accepted": "Angenommen",
+  "ui.contracts.rivals": "{count} Mitbewerber",
+  "ui.contracts.estimate": "Schätzung: {value}",
+  "news.contractWon": "{company} hat die Ausschreibung nach {town} erfüllt (+{bonusCt}).",
+  "news.contractFailed": "Ausschreibung nach {town} verfehlt – Konventionalstrafe {penaltyCt}."
 }

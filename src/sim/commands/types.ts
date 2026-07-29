@@ -36,6 +36,7 @@ export const CommandKind = {
   BuyExclusiveRights: 28,
   ApplyTownMeasure: 29,
   DemolishBuilding: 30,
+  AcceptContract: 31,
 } as const;
 export type CommandKind = (typeof CommandKind)[keyof typeof CommandKind];
 
@@ -187,6 +188,17 @@ export interface BuyTrainCommand {
   readonly specIds: readonly number[];
 }
 
+/**
+ * Take on one of the open tenders of section 14.4.
+ *
+ * Free, and optional. The bet is entirely at the far end: deliver and the bonus
+ * is paid, miss the deadline and the penalty and the rating malus are.
+ */
+export interface AcceptContractCommand {
+  readonly kind: typeof CommandKind.AcceptContract;
+  readonly contractId: number;
+}
+
 /** Buy twelve months of exclusive building rights in a town (section 13.3). */
 export interface BuyExclusiveRightsCommand {
   readonly kind: typeof CommandKind.BuyExclusiveRights;
@@ -301,6 +313,7 @@ export interface RefitVehicleCommand {
 }
 
 export type Command =
+  | AcceptContractCommand
   | BuyExclusiveRightsCommand
   | ApplyTownMeasureCommand
   | DemolishBuildingCommand
@@ -399,6 +412,9 @@ export const RejectReason = {
   CannotCarry: 'cmd.reject.cannotCarry',
   NotYours: 'cmd.reject.notYours',
   NoSuchTown: 'cmd.reject.noSuchTown',
+  NoSuchContract: 'cmd.reject.noSuchContract',
+  ContractClosed: 'cmd.reject.contractClosed',
+  AlreadyAccepted: 'cmd.reject.alreadyAccepted',
   UnknownMeasure: 'cmd.reject.unknownMeasure',
   MeasureNotReady: 'cmd.reject.measureNotReady',
   RatingTooLow: 'cmd.reject.ratingTooLow',

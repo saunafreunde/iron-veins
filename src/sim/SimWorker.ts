@@ -1,5 +1,6 @@
 import type {
   CompanyMarker,
+  ContractMarker,
   IndustryMarker,
   MainToWorkerMessage,
   TownMarker,
@@ -31,6 +32,7 @@ import {
 } from './constants';
 import { loanLimitCt } from './economy/company';
 import { bookValueCt, companyValueCt, monthsInOrder } from './economy/ledger';
+import { contractProgress, isOpen } from './economy/contracts';
 import { stationRating } from './station/types';
 import { councilRating, exclusiveRightsCostCt, TOWN_MEASURE_COUNT } from './town/council';
 import { calendarFromTick, hashWorldLive, World } from './World';
@@ -166,6 +168,30 @@ function townMarkers(current: World): TownMarker[] {
   });
 }
 
+/** The tenders a player can still do something about. */
+function contractMarkers(current: World): ContractMarker[] {
+  const player = current.playerCompanyId;
+  const markers: ContractMarker[] = [];
+
+  for (const contract of current.contracts) {
+    if (!isOpen(current, contract)) continue;
+    const town = current.towns[contract.townId];
+    markers.push({
+      id: contract.id,
+      cargo: contract.cargo,
+      townId: contract.townId,
+      townName: town?.name ?? '',
+      amountUnits: contract.amountUnits,
+      monthsLeft: Math.ceil((contract.deadlineTick - current.tick) / TICKS_PER_MONTH),
+      bonusCt: contract.bonusCt,
+      progress: contractProgress(contract, player),
+      accepted: contract.acceptedBy.includes(player),
+      rivals: contract.acceptedBy.filter((id) => id !== player).length,
+    });
+  }
+  return markers;
+}
+
 /** Every company, for the council panel and the competitor list. */
 function companyMarkers(current: World): CompanyMarker[] {
   return current.companies.map((company) => ({
@@ -204,6 +230,7 @@ function postMonthly(current: World): void {
   });
   scope.postMessage({ type: 'townsChanged', towns: townMarkers(current) });
   scope.postMessage({ type: 'companiesChanged', companies: companyMarkers(current) });
+  scope.postMessage({ type: 'contractsChanged', contracts: contractMarkers(current) });
 }
 
 /**

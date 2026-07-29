@@ -1,3 +1,4 @@
+import type { Contract } from '../economy/contracts';
 import { CommandKind, type Command, type CommandEnvelope } from '../commands/types';
 import type { CargoLinkSave } from '../cargo/linkGraph';
 import { ACCOUNT_COUNT } from '../economy/ledger';
@@ -45,9 +46,9 @@ export const SAVE_MAGIC = 'IRVN';
  * occupancy of section 8.4, 17 the news log of section 17.1, 18 the several
  * companies of section 15 with the tile ownership and the command authorship
  * that come with them, 19 the town councils of section 13.3, 20 the carbon
- * account of section 14.3.
+ * account of section 14.3, 21 the tenders of section 14.4.
  */
-export const SAVE_VERSION = 20;
+export const SAVE_VERSION = 21;
 
 /** File extension used for manual and automatic saves. */
 export const SAVE_EXTENSION = '.ironsave';
@@ -139,6 +140,25 @@ function parseRngState(value: unknown, path: string): RngState {
     asUint32(words[2], `${path}[2]`),
     asUint32(words[3], `${path}[3]`),
   ];
+}
+
+/** The tenders of section 14.4. */
+function parseContracts(value: unknown, path: string): Contract[] {
+  return asArray(value, path).map((entry, i) => {
+    const raw = asRecord(entry, `${path}[${i}]`);
+    return {
+      id: asInt(raw['id'], `${path}[${i}].id`),
+      cargo: asInt(raw['cargo'], `${path}[${i}].cargo`),
+      townId: asInt(raw['townId'], `${path}[${i}].townId`),
+      amountUnits: asFinite(raw['amountUnits'], `${path}[${i}].amountUnits`),
+      offeredTick: asInt(raw['offeredTick'], `${path}[${i}].offeredTick`),
+      deadlineTick: asInt(raw['deadlineTick'], `${path}[${i}].deadlineTick`),
+      bonusCt: asInt(raw['bonusCt'], `${path}[${i}].bonusCt`),
+      acceptedBy: parseNumbers(raw['acceptedBy'], `${path}[${i}].acceptedBy`),
+      progress: parseNumbers(raw['progress'], `${path}[${i}].progress`),
+      completedBy: asInt(raw['completedBy'], `${path}[${i}].completedBy`),
+    };
+  });
 }
 
 /** A list of finite numbers of any length - the per-company council rows. */
@@ -463,6 +483,12 @@ function parseCommand(value: unknown, path: string): Command {
           asInt(id, `${path}.specIds[${i}]`),
         ),
       };
+    case CommandKind.AcceptContract:
+      return {
+        kind: CommandKind.AcceptContract,
+        contractId: asInt(raw['contractId'], `${path}.contractId`),
+      };
+
     case CommandKind.BuyExclusiveRights:
       return {
         kind: CommandKind.BuyExclusiveRights,
@@ -702,6 +728,8 @@ export function parseSaveFile(value: unknown): SaveFile {
     vehicles: decodeVehicles(stateRaw['vehicles'], 'save.state.vehicles'),
     cargoLinks: parseCargoLinks(stateRaw['cargoLinks'], 'save.state.cargoLinks'),
     news: parseNews(stateRaw['news'], 'save.state.news'),
+    contracts: parseContracts(stateRaw['contracts'], 'save.state.contracts'),
+    nextContractId: asInt(stateRaw['nextContractId'], 'save.state.nextContractId'),
   };
 
   const tick = asInt(raw['tick'], 'save.tick');

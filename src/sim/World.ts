@@ -50,6 +50,7 @@ import {
   produceIndustryCargo,
   reviewIndustries,
 } from './industry/production';
+import { reviewContracts, type Contract } from './economy/contracts';
 import { reviewCouncils } from './town/council';
 import { growTowns, produceTownCargo } from './town/update';
 import {
@@ -94,6 +95,9 @@ export interface WorldStateData {
   cargoLinks: CargoLinkSave[];
   /** The news log, oldest first. */
   news: NewsEntry[];
+  /** Tenders, open and recently settled (section 14.4). */
+  contracts: Contract[];
+  nextContractId: number;
 }
 
 /** The tile layers, as raw bytes. Derived layers are recomputed on load. */
@@ -207,6 +211,18 @@ export class World {
    * up, and it is why they were worth recording.
    */
   readonly news = new NewsLog();
+
+  /**
+   * The open tenders of section 14.4, plus the ones settled recently enough
+   * that the panel still has something to say about them.
+   */
+  contracts: Contract[] = [];
+  /**
+   * Next contract id. Monotonic and never reused: the id is what a command
+   * refers to, and reusing one would let a stale click accept a contract the
+   * player never saw.
+   */
+  nextContractId = 0;
 
   /** The company the local player controls. */
   readonly playerCompanyId = 0;
@@ -351,6 +367,7 @@ export class World {
       for (let index = 0; index < this.companies.length; index++) {
         closeMonth(this.companies[index]!);
       }
+      reviewContracts(this);
       // Last, so the month it judges is the one that has just been booked.
       for (let index = 0; index < this.companies.length; index++) {
         reviewBankruptcy(this, this.companies[index]!);
@@ -471,6 +488,12 @@ export class World {
       vehicles: encodeVehicles(this.vehicles),
       cargoLinks: this.cargoLinks.toData(),
       news: this.news.toData(),
+      contracts: this.contracts.map((contract) => ({
+        ...contract,
+        acceptedBy: [...contract.acceptedBy],
+        progress: [...contract.progress],
+      })),
+      nextContractId: this.nextContractId,
     };
   }
 
@@ -519,6 +542,12 @@ export class World {
     world.vehicles = buildVehicleStore(data.vehicles);
     world.cargoLinks.loadData(data.cargoLinks);
     world.news.loadData(data.news);
+    world.contracts = data.contracts.map((contract) => ({
+      ...contract,
+      acceptedBy: [...contract.acceptedBy],
+      progress: [...contract.progress],
+    }));
+    world.nextContractId = data.nextContractId;
     world.cargoLinks.refreshLinks(world);
     rebuildReservations(world);
     // The constructor built the player from the parameters and the AI roster
@@ -633,6 +662,19 @@ function hashDynamicState(h: Fnv1a64, world: World): void {
     h.u32(town.measureReadyTick.length);
     for (const tick of town.measureReadyTick) h.u32(tick);
   }
+
+  h.u32(world.contracts.length);
+  for (let i = 0; i < world.contracts.length; i++) {
+    const contract = world.contracts[i]!;
+    h.u32(contract.id).u32(contract.cargo).int(contract.townId);
+    h.f64(contract.amountUnits).u32(contract.offeredTick).u32(contract.deadlineTick);
+    h.int(contract.bonusCt).int(contract.completedBy);
+    h.u32(contract.acceptedBy.length);
+    for (const companyId of contract.acceptedBy) h.u32(companyId);
+    h.u32(contract.progress.length);
+    for (const done of contract.progress) h.f64(done);
+  }
+  h.u32(world.nextContractId);
 
   h.u32(world.industries.length);
   for (let i = 0; i < world.industries.length; i++) {

@@ -570,6 +570,15 @@ const v19_to_v20: SaveMigration = (payload) => {
 };
 
 /**
+ * M8 added the tenders of section 14.4. A version 20 world had none, and the
+ * monthly review puts the first offers on the board within a game month.
+ */
+const v20_to_v21: SaveMigration = (payload) => {
+  const inner = state(payload);
+  return { ...payload, state: { ...inner, contracts: [], nextContractId: 0 } };
+};
+
+/**
  * Registry keyed by the version a migration reads (section 19.1).
  *
  * There is deliberately no entry for 1 -> 2: a version 1 world had no map at
@@ -595,6 +604,7 @@ export const SAVE_MIGRATIONS: ReadonlyMap<number, SaveMigration> = new Map<numbe
   [17, v17_to_v18],
   [18, v18_to_v19],
   [19, v19_to_v20],
+  [20, v20_to_v21],
 ]);
 
 /**

@@ -29,6 +29,7 @@ import {
 import { releaseAll } from '../vehicles/reservations';
 import { startVehicle } from '../vehicles/update';
 import { applyTerraform, estimateTerraform, levelTile, TerraformDirection } from '../map/terraform';
+import { acceptContract, isOpen } from '../economy/contracts';
 import { applyTownMeasure, buyExclusiveRights } from '../town/measures';
 import type { TownMeasure } from '../town/council';
 import type { World } from '../World';
@@ -111,6 +112,17 @@ export function executeCommand(world: World, command: Command): CommandOutcome {
 
     case CommandKind.BuildRailStop:
       return buildRailStop(world, command.x, command.y, command.moduleKind as ModuleKind);
+
+    case CommandKind.AcceptContract: {
+      const contract = world.contracts.find((entry) => entry.id === command.contractId);
+      if (contract === undefined) return { ok: false, reasonKey: RejectReason.NoSuchContract };
+      if (!isOpen(world, contract)) return { ok: false, reasonKey: RejectReason.ContractClosed };
+      if (contract.acceptedBy.includes(world.company.id)) {
+        return { ok: false, reasonKey: RejectReason.AlreadyAccepted };
+      }
+      acceptContract(contract, world.company.id);
+      return ACCEPTED;
+    }
 
     case CommandKind.BuyExclusiveRights:
       return buyExclusiveRights(world, command.townId);

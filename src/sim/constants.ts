@@ -346,6 +346,34 @@ export const ENERGY_COST_CT_PER_MJ: readonly number[] = [
   36, // battery
 ];
 
+// ---------------------------------------------------------- contracts (14.4)
+
+/** How many tenders stand open at once (section 14.4). */
+export const CONTRACT_MIN_OPEN = 2;
+export const CONTRACT_MAX_OPEN = 5;
+
+/** The size of an order, and the step it is rounded to. [units] */
+export const CONTRACT_MIN_AMOUNT = 400;
+export const CONTRACT_MAX_AMOUNT = 2_400;
+export const CONTRACT_AMOUNT_STEP = 200;
+
+/** How long a company has to deliver. [months] */
+export const CONTRACT_MONTHS_MIN = 9;
+export const CONTRACT_MONTHS_MAX = 18;
+
+/**
+ * What the bonus is worth against the ordinary freight revenue for the same
+ * tonnage - "typisch 1,5x" in section 14.4, as a bonus ON TOP of the fares the
+ * deliveries earn anyway.
+ */
+export const CONTRACT_BONUS_FACTOR = 0.5;
+
+/** What failing one costs, as a share of the bonus that was on offer. */
+export const CONTRACT_PENALTY_SHARE = 0.3;
+
+/** Council goodwill lost in the destination town for failing a contract. */
+export const CONTRACT_RATING_MALUS = 10;
+
 // -------------------------------------------------------- environment (14.3)
 
 /**

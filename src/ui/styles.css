@@ -494,3 +494,19 @@ body {
 .news__entry:disabled {
   cursor: default;
 }
+
+/* One tender: a clickable heading, its terms, and either a button or a bar. */
+.contract__where {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.contract__where:disabled {
+  cursor: default;
+}

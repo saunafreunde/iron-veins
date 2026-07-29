@@ -1554,3 +1554,37 @@ The environmental rating a council reads is an INTENSITY - carbon per unit of
 work - and never a total. A total would mean a company improves its standing by
 running fewer trains, and the one thing an environmental rule in a transport
 game must not reward is doing less transport.
+
+### D-106 Contracts draw from their own RNG stream
+
+The monthly tender review draws a handful of random numbers: how many offers to
+put out, and for each one a town, a cargo, an amount and a deadline. Taking them
+from `world.rng` moved every later draw in the game by however many tenders
+happened to be offered that month.
+
+That is not a theoretical concern. Adding the feature turned balancing scenario
+3 red: the shifted breakdown rolls were enough to starve one link of the wood
+chain and close a farm. The scenario was not wrong and the contract code was not
+wrong - they were sharing a stream.
+
+So the review reseeds a stream of its own from `(seed + tick)`. It needs no
+saved state, because both of those are saved already, and it cannot disturb
+anything: the gameplay RNG sees exactly the draws it saw before contracts
+existed.
+
+The general rule this is an instance of: a new subsystem that needs randomness
+on a periodic hook gets its own stream. Sharing one makes every existing
+balancing figure a hostage to the next feature.
+
+### D-107 Every tender is a race, and a settled one is kept rather than deleted
+
+Section 14.4 mentions exclusive contracts as a case. Here every contract is one:
+several companies may accept the same tender and the first to finish takes the
+money. A private task list per company would make tenders a solo optimisation
+problem, and the section's own reason for them - "wer zuerst liefert, gewinnt" -
+is the interesting half.
+
+Contracts that are completed or missed stay in the list, marked, until their
+deadline has been past for longer than the longest possible deadline. Ids are
+never reused. A recycled id would let a click on a stale panel accept a contract
+the player never saw, and there is no way for the player to tell that happened.

@@ -55,6 +55,7 @@ import {
   stationAirportSize,
   type Station,
 } from '../station/types';
+import { creditDelivery } from '../economy/contracts';
 import type { World } from '../World';
 import { holdBody, releaseAll, releaseBehind, tryClaim } from './reservations';
 import { pathDirection, pathStepM, routeLengthM } from './route';
@@ -468,6 +469,15 @@ function serveStation(world: World, id: number, station: Station): number {
 
       if (disposition === CargoDisposition.Deliver) {
         deliverCargo(world, station, stack.cargo, paidFor);
+        // A contract is satisfied by cargo that actually REACHED the town, so
+        // it is credited on the delivery path and nowhere else.
+        creditDelivery(
+          world,
+          vehicles.ownerId[id]!,
+          station.townId,
+          stack.cargo,
+          paidFor,
+        );
       }
       units += paidFor;
       stack.amount -= paidFor;

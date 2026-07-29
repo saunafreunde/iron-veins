@@ -166,6 +166,9 @@ export class SimClient {
       case 'companiesChanged':
         store.setCompanies(message.companies);
         return;
+      case 'contractsChanged':
+        store.setContracts(message.contracts);
+        return;
       case 'fleetChanged':
         store.setFleet(message.vehicles);
         return;

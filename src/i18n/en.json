@@ -467,5 +467,19 @@
   "account.emissions": "Carbon levy",
   "ui.finance.co2": "CO₂ (year)",
   "ui.finance.co2Value": "{tonnes} t",
-  "news.carbonLevy": "A carbon levy applies from {year}."
+  "news.carbonLevy": "A carbon levy applies from {year}.",
+  "cmd.reject.noSuchContract": "There is no such contract.",
+  "cmd.reject.contractClosed": "That contract is closed.",
+  "cmd.reject.alreadyAccepted": "That contract has already been accepted.",
+  "ui.contracts.title": "Tenders",
+  "ui.contracts.empty": "No tenders at the moment.",
+  "ui.contracts.line": "{amount} {cargo} to {town}",
+  "ui.contracts.deadline": "{months} months left",
+  "ui.contracts.bonus": "Bonus {bonus}",
+  "ui.contracts.accept": "Accept",
+  "ui.contracts.accepted": "Accepted",
+  "ui.contracts.rivals": "{count} competitors",
+  "ui.contracts.estimate": "Estimate: {value}",
+  "news.contractWon": "{company} completed the tender to {town} (+{bonusCt}).",
+  "news.contractFailed": "Tender to {town} missed - penalty {penaltyCt}."
 }

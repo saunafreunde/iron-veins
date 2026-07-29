@@ -37,6 +37,22 @@ export interface TownMarker {
   readonly measureReady: readonly boolean[];
 }
 
+/** One open tender, as the contract panel shows it (section 14.4). */
+export interface ContractMarker {
+  readonly id: number;
+  readonly cargo: number;
+  readonly townId: number;
+  readonly townName: string;
+  readonly amountUnits: number;
+  readonly monthsLeft: number;
+  readonly bonusCt: number;
+  /** How far the PLAYER has got, 0..1. */
+  readonly progress: number;
+  readonly accepted: boolean;
+  /** How many other companies are racing for it. */
+  readonly rivals: number;
+}
+
 /** A company as the interface names it. */
 export interface CompanyMarker {
   readonly id: number;
@@ -188,6 +204,8 @@ export type WorkerToMainMessage =
   | { readonly type: 'townsChanged'; readonly towns: readonly TownMarker[] }
   /** Every company in the game, the player first. */
   | { readonly type: 'companiesChanged'; readonly companies: readonly CompanyMarker[] }
+  /** The open tenders of section 14.4. */
+  | { readonly type: 'contractsChanged'; readonly contracts: readonly ContractMarker[] }
   /** The books, sent when the game month rolls over. */
   | { readonly type: 'financesChanged'; readonly report: FinanceReport }
   /** The news log, sent whenever something was posted to it. */
