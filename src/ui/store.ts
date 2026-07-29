@@ -4,6 +4,7 @@ import type { TileInfo } from '../render/MapView';
 import type {
   FinanceReport,
   IndustryMarker,
+  NewsMarker,
   StationMarker,
   TownMarker,
   VehicleMarker,
@@ -93,6 +94,7 @@ export interface SimUiState extends SnapshotValues {
   fleet: readonly VehicleMarker[];
   /** The books, as the finance panel shows them (section 14.1). */
   finances: FinanceReport | null;
+  news: readonly NewsMarker[];
   /** Which entity list is open, or null. The V/T/I keys of section 17.2. */
   openList: 'vehicles' | 'stations' | 'towns' | 'industries' | null;
   selectedVehicleId: number | null;
@@ -131,6 +133,7 @@ export interface SimUiState extends SnapshotValues {
   setIndustries: (industries: readonly IndustryMarker[]) => void;
   setTowns: (towns: readonly TownMarker[]) => void;
   setFinances: (report: FinanceReport) => void;
+  setNews: (news: readonly NewsMarker[]) => void;
   toggleList: (list: 'vehicles' | 'stations' | 'towns' | 'industries') => void;
   /** Wired to the map view so a list row can jump to what it names. */
   centreOnTile: (x: number, y: number) => void;
@@ -184,6 +187,7 @@ export const useSimStore = create<SimUiState>((set) => ({
   stations: [],
   fleet: [],
   finances: null,
+  news: [],
   openList: null,
   selectedVehicleId: null,
   roadAnchor: null,
@@ -221,6 +225,7 @@ export const useSimStore = create<SimUiState>((set) => ({
   setIndustries: (industries) => set({ industries }),
   setTowns: (towns) => set({ towns }),
   setFinances: (finances) => set({ finances }),
+  setNews: (news) => set({ news }),
   toggleList: (list) => set((state) => ({ openList: state.openList === list ? null : list })),
   centreOnTile: () => undefined,
   setCentreOnTile: (centreOnTile) => set({ centreOnTile }),

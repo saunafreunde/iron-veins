@@ -50,6 +50,23 @@ export interface FinanceReport {
   readonly autoRenew: boolean;
 }
 
+/** One line of the news log, as the panel shows it (section 17.1). */
+export interface NewsMarker {
+  readonly tick: number;
+  /** Calendar of the event, ready to format - the UI has no tick clock. */
+  readonly year: number;
+  readonly month: number;
+  readonly day: number;
+  /** A value of NewsCategory. */
+  readonly category: number;
+  /** A value of NewsSeverity. */
+  readonly severity: number;
+  readonly messageKey: string;
+  readonly params: Readonly<Record<string, number | string>>;
+  /** Tile to jump to, or -1 when the event has no place. */
+  readonly tileIndex: number;
+}
+
 export interface IndustryMarker {
   readonly id: number;
   readonly type: number;
@@ -148,6 +165,8 @@ export type WorkerToMainMessage =
   | { readonly type: 'townsChanged'; readonly towns: readonly TownMarker[] }
   /** The books, sent when the game month rolls over. */
   | { readonly type: 'financesChanged'; readonly report: FinanceReport }
+  /** The news log, sent whenever something was posted to it. */
+  | { readonly type: 'newsChanged'; readonly news: readonly NewsMarker[] }
   /** Fleet overview for the vehicle list; sent when it changes, not per tick. */
   | { readonly type: 'fleetChanged'; readonly vehicles: readonly VehicleMarker[] }
   | { readonly type: 'error'; readonly message: string };

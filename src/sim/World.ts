@@ -20,6 +20,8 @@ import {
 } from './economy/company';
 import { LinkGraph, type CargoLinkSave } from './cargo/linkGraph';
 import { refreshCargoRouting } from './cargo/routing';
+import { NewsCategory, NewsLog, NewsSeverity, type NewsEntry } from './news/log';
+import { reportNews } from './news/report';
 import { reviewBankruptcy } from './economy/bankruptcy';
 import { bookDepreciation } from './economy/depreciation';
 import { bookMonthlyEnergy } from './economy/energy';
@@ -83,6 +85,8 @@ export interface WorldStateData {
   vehicles: VehicleSave[];
   /** Measured travel times between stations; the connection table of 7.4. */
   cargoLinks: CargoLinkSave[];
+  /** The news log, oldest first. */
+  news: NewsEntry[];
 }
 
 /** The tile layers, as raw bytes. Derived layers are recomputed on load. */
@@ -163,6 +167,15 @@ export class World {
    * currently served, and the all-pairs table built from them, are derived.
    */
   readonly cargoLinks = new LinkGraph();
+  /**
+   * What the game has told the player (section 17.1).
+   *
+   * Every warning clock in the simulation - the deadlock timer of 9.3, the
+   * industry closure count of 7.3, the solvency months of 14.2 - has existed
+   * since its own milestone and surfaced nowhere. This is where they all end
+   * up, and it is why they were worth recording.
+   */
+  readonly news = new NewsLog();
 
   /** The company the local player controls. AI companies get 1..n in M8. */
   readonly playerCompanyId = 0;
@@ -246,6 +259,9 @@ export class World {
       collectIndustryOutput(this);
       rollBreakdowns(this);
       expireStaleCargo(this);
+      // Last of the daily pass, so what it reports is the state the day ended
+      // in rather than a half-updated one.
+      reportNews(this);
     }
     if (this.tick % TICKS_PER_MONTH === 0) {
       bookMonthlyInterest(this.company, this.difficulty);
@@ -267,6 +283,14 @@ export class World {
       reviewBankruptcy(this);
     }
     if (this.tick % TICKS_PER_YEAR === 0) {
+      this.news.post({
+        tick: this.tick,
+        category: NewsCategory.Finance,
+        severity: this.company.lastYearProfitCt < 0 ? NewsSeverity.Warning : NewsSeverity.Info,
+        messageKey: 'news.yearClosed',
+        params: { year: this.date.year - 1, profitCt: this.company.profitThisYearCt },
+        tileIndex: -1,
+      });
       closeFinancialYear(this.company);
       ageVehicles(this);
       // After ageing, so a vehicle that has just passed its design life is
@@ -347,6 +371,7 @@ export class World {
       stations: encodeStations(this.stations),
       vehicles: encodeVehicles(this.vehicles),
       cargoLinks: this.cargoLinks.toData(),
+      news: this.news.toData(),
     };
   }
 
@@ -392,6 +417,7 @@ export class World {
     for (const station of world.stations) assignStationIndustries(world, station);
     world.vehicles = buildVehicleStore(data.vehicles);
     world.cargoLinks.loadData(data.cargoLinks);
+    world.news.loadData(data.news);
     world.cargoLinks.refreshLinks(world);
     rebuildReservations(world);
     world.company.cashCt = data.company.cashCt;
@@ -532,6 +558,15 @@ function hashDynamicState(h: Fnv1a64, world: World): void {
     }
     h.u32(station.visitTicks.length);
     for (const tick of station.visitTicks) h.u32(tick);
+  }
+
+  // The log is state the player reads and it is saved, so it is hashed like
+  // everything else that is.
+  h.u32(world.news.all.length);
+  for (const entry of world.news.all) {
+    h.u32(entry.tick).u32(entry.category).u32(entry.severity);
+    h.u32(entry.messageKey.length).str(entry.messageKey);
+    h.int(entry.tileIndex);
   }
 
   const links = world.cargoLinks.links;

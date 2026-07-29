@@ -422,5 +422,21 @@
   "ui.tool.priceAirstrip": "Landeplatz: {amount} — 1 Bahn, flaches Gelände",
   "ui.tool.priceAirport": "Flughafen: {amount} — 2 Bahnen",
   "ui.tool.priceIntlAirport": "Großflughafen: {amount} — 4 Bahnen, schnellste Abfertigung",
-  "veh.state.holding": "Warteschleife"
+  "veh.state.holding": "Warteschleife",
+  "ui.news.title": "Nachrichten",
+  "ui.news.empty": "Noch nichts passiert.",
+  "news.category.finance": "Finanzen",
+  "news.category.industry": "Industrie",
+  "news.category.fleet": "Fuhrpark",
+  "news.category.network": "Netz",
+  "news.category.town": "Städte",
+  "news.yearClosed": "Geschäftsjahr {year} abgeschlossen – Ergebnis {profitCt}.",
+  "news.trainStuck": "Fahrzeug {id} steht seit {minutes} Min. vor einem Signal.",
+  "news.industryNeglected": "{industry}: seit Monaten kein Abtransport – Stilllegung in {months} Monaten.",
+  "news.industryClosed": "{industry} wurde stillgelegt.",
+  "news.industryOpened": "{industry} hat eröffnet.",
+  "news.vehicleObsolete": "Fahrzeug {id} ist veraltet.",
+  "news.vehicleRenewed": "{count} Fahrzeug(e) automatisch erneuert.",
+  "news.inDebt": "Seit {months} Monaten im Minus – Zwangsversteigerung in {left} Monaten.",
+  "news.bankrupt": "Die Firma wurde abgewickelt."
 }

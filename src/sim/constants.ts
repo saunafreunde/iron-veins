@@ -353,6 +353,17 @@ export const ENERGY_COST_CT_PER_MJ: readonly number[] = [
  */
 export const JOULES_PER_MJ = 1_000_000;
 
+// ------------------------------------------------------------------- news
+
+/**
+ * Entries the news log keeps (section 17.1).
+ *
+ * Two hundred is a few game years of ordinary events and a fraction of a
+ * megabyte in the save. Older entries fall off the front: a log nobody can
+ * scroll to the end of is a log nobody reads.
+ */
+export const NEWS_LOG_SIZE = 200;
+
 // ---------------------------------------------------------------- accounting
 
 /**

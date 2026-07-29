@@ -7,6 +7,7 @@ import { RailRole } from './spec';
 import type { Cargo } from '../cargo/types';
 import type { VehicleSpec } from './spec';
 import { buyRoadVehicle, buyTrain, sellVehicle } from '../commands/build';
+import { reportRenewal } from '../news/report';
 import { startVehicle } from './update';
 import { VehicleState } from './VehicleStore';
 import type { World } from '../World';
@@ -168,6 +169,7 @@ export function renewFleet(world: World): number {
     vehicles.orders[fresh] = orders;
     if (wasRunning) startVehicle(world, fresh);
     replaced++;
+    reportRenewal(world, fresh, replaced);
   }
   return replaced;
 }

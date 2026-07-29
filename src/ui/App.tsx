@@ -6,6 +6,7 @@ import { IndustryList, StationList, TownList, VehicleList } from './EntityLists'
 import { FinancePanel } from './FinancePanel';
 import { FleetPanel } from './FleetPanel';
 import { MapCanvas } from './MapCanvas';
+import { NewsPanel } from './NewsPanel';
 import { TilePanel } from './TilePanel';
 import type { SimClient } from './SimClient';
 import { StatusBar } from './StatusBar';
@@ -134,6 +135,7 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
             <FleetPanel client={client} />
             <CompanyPanel client={client} />
             <FinancePanel client={client} />
+            <NewsPanel />
             <SystemPanel />
           </aside>
         </main>

@@ -31,7 +31,7 @@ import {
 import { loanLimitCt } from './economy/company';
 import { bookValueCt, companyValueCt, monthsInOrder } from './economy/ledger';
 import { stationRating } from './station/types';
-import { hashWorldLive, World } from './World';
+import { calendarFromTick, hashWorldLive, World } from './World';
 
 /**
  * Worker entry point and tick scheduler.
@@ -79,6 +79,7 @@ let publishedName = '';
 let publishedColorIndex = -1;
 let publishedStructure = '';
 let publishedMonthTick = -1;
+let publishedNewsRevision = -1;
 
 /** How often the fleet list is refreshed while nothing structural changed. */
 const FLEET_REFRESH_TICKS = 200;
@@ -170,6 +171,33 @@ function postMonthly(current: World): void {
     },
   });
   scope.postMessage({ type: 'townsChanged', towns: townMarkers(current) });
+}
+
+/**
+ * The news log (section 15).
+ *
+ * Sent whole rather than incrementally: it is capped at a couple of hundred
+ * entries, it moves a handful of times a game month, and a diff would need the
+ * two sides to agree on which entries fell off the front of the ring.
+ */
+function postNews(current: World): void {
+  scope.postMessage({
+    type: 'newsChanged',
+    news: current.news.all.map((entry) => {
+      const date = calendarFromTick(entry.tick);
+      return {
+        tick: entry.tick,
+        year: date.year,
+        month: date.month,
+        day: date.day,
+        category: entry.category,
+        severity: entry.severity,
+        messageKey: entry.messageKey,
+        params: { ...entry.params },
+        tileIndex: entry.tileIndex,
+      };
+    }),
+  });
 }
 
 function postStructure(current: World): void {
@@ -324,6 +352,11 @@ function publishSnapshot(current: World, sink: SnapshotWriter): void {
     postMonthly(current);
   }
 
+  if (current.news.revision !== publishedNewsRevision) {
+    publishedNewsRevision = current.news.revision;
+    postNews(current);
+  }
+
   const signature = structureSignature(current);
   if (signature !== publishedStructure) {
     publishedStructure = signature;
@@ -427,6 +460,7 @@ function startGame(message: Extract<MainToWorkerMessage, { type: 'init' }>): voi
   publishedName = '';
   publishedColorIndex = -1;
   publishedStructure = '';
+  publishedNewsRevision = -1;
 
   publishSnapshot(world, writer);
   postMonthly(world);

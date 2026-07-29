@@ -1,6 +1,7 @@
 import { CommandKind, type Command, type CommandEnvelope } from '../commands/types';
 import type { CargoLinkSave } from '../cargo/linkGraph';
 import { ACCOUNT_COUNT } from '../economy/ledger';
+import { NEWS_CATEGORY_COUNT, type NewsEntry } from '../news/log';
 import {
   COMPANY_COLOR_COUNT,
   Difficulty,
@@ -40,9 +41,9 @@ export const SAVE_MAGIC = 'IRVN';
  * countdown of section 14.2, 13 the accounts of section 14.1, 14 the traction
  * work each vehicle has done since its last energy bill, 15 the inflation
  * setting of section 14.2 and the auto-renewal switch of 11.3, 16 the runway
- * occupancy of section 8.4.
+ * occupancy of section 8.4, 17 the news log of section 17.1.
  */
-export const SAVE_VERSION = 16;
+export const SAVE_VERSION = 17;
 
 /** File extension used for manual and automatic saves. */
 export const SAVE_EXTENSION = '.ironsave';
@@ -564,6 +565,37 @@ function parseCargoLinks(value: unknown, path: string): CargoLinkSave[] {
   });
 }
 
+/** The news log (section 17.1). */
+function parseNews(value: unknown, path: string): NewsEntry[] {
+  return asArray(value, path).map((entry, i) => {
+    const raw = asRecord(entry, `${path}[${i}]`);
+    const category = asInt(raw['category'], `${path}[${i}].category`);
+    if (category < 0 || category >= NEWS_CATEGORY_COUNT) {
+      throw new SaveFormatError(`${path}[${i}].category: ${category} is not a known category`);
+    }
+    // Parameters are whatever the message needed; only numbers and strings can
+    // have got in, and only those are let back out.
+    const params: Record<string, number | string> = {};
+    const rawParams = asRecord(raw['params'], `${path}[${i}].params`);
+    // Sorted with an explicit total comparator: object keys are unique, so
+    // this is a total order, and the default sort is engine dependent (law #14).
+    const keys = Object.keys(rawParams).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+    for (const key of keys) {
+      const value = rawParams[key];
+      if (typeof value === 'number' || typeof value === 'string') params[key] = value;
+    }
+
+    return {
+      tick: asInt(raw['tick'], `${path}[${i}].tick`),
+      category: category as NewsEntry['category'],
+      severity: asInt(raw['severity'], `${path}[${i}].severity`) as NewsEntry['severity'],
+      messageKey: asString(raw['messageKey'], `${path}[${i}].messageKey`),
+      params,
+      tileIndex: asInt(raw['tileIndex'], `${path}[${i}].tileIndex`),
+    };
+  });
+}
+
 export function parseSaveFile(value: unknown): SaveFile {
   const raw = asRecord(value, 'save');
   const header = readSaveHeader(raw);
@@ -599,6 +631,7 @@ export function parseSaveFile(value: unknown): SaveFile {
     stations: decodeStations(stateRaw['stations'], 'save.state.stations'),
     vehicles: decodeVehicles(stateRaw['vehicles'], 'save.state.vehicles'),
     cargoLinks: parseCargoLinks(stateRaw['cargoLinks'], 'save.state.cargoLinks'),
+    news: parseNews(stateRaw['news'], 'save.state.news'),
   };
 
   const tick = asInt(raw['tick'], 'save.tick');

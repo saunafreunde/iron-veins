@@ -422,5 +422,21 @@
   "ui.tool.priceAirstrip": "Airstrip: {amount} - 1 runway, level ground",
   "ui.tool.priceAirport": "Airport: {amount} - 2 runways",
   "ui.tool.priceIntlAirport": "International: {amount} - 4 runways, fastest turnround",
-  "veh.state.holding": "Holding"
+  "veh.state.holding": "Holding",
+  "ui.news.title": "News",
+  "ui.news.empty": "Nothing has happened yet.",
+  "news.category.finance": "Finance",
+  "news.category.industry": "Industry",
+  "news.category.fleet": "Fleet",
+  "news.category.network": "Network",
+  "news.category.town": "Towns",
+  "news.yearClosed": "Financial year {year} closed - result {profitCt}.",
+  "news.trainStuck": "Vehicle {id} has been held at a signal for {minutes} min.",
+  "news.industryNeglected": "{industry}: nothing collected for months - closes in {months} months.",
+  "news.industryClosed": "{industry} has closed down.",
+  "news.industryOpened": "{industry} has opened.",
+  "news.vehicleObsolete": "Vehicle {id} is obsolete.",
+  "news.vehicleRenewed": "{count} vehicle(s) renewed automatically.",
+  "news.inDebt": "In the red for {months} months - forced auction in {left} months.",
+  "news.bankrupt": "The company has been wound up."
 }

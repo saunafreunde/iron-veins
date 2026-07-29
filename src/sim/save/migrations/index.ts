@@ -415,6 +415,16 @@ const v15_to_v16: SaveMigration = (payload) => {
 };
 
 /**
+ * M8 gave the game a news log. A version 16 world was never told anything, so
+ * its log is empty - inventing entries for events it did not record would be
+ * writing history rather than migrating it.
+ */
+const v16_to_v17: SaveMigration = (payload) => {
+  const inner = state(payload);
+  return { ...payload, state: { ...inner, news: [] } };
+};
+
+/**
  * Registry keyed by the version a migration reads (section 19.1).
  *
  * There is deliberately no entry for 1 -> 2: a version 1 world had no map at
@@ -436,6 +446,7 @@ export const SAVE_MIGRATIONS: ReadonlyMap<number, SaveMigration> = new Map<numbe
   [13, v13_to_v14],
   [14, v14_to_v15],
   [15, v15_to_v16],
+  [16, v16_to_v17],
 ]);
 
 /**

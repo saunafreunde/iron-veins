@@ -5,6 +5,7 @@ import {
   INDUSTRY_WARNING_MONTHS,
 } from '../constants';
 import { buildWeightTable, drawType, findSpot, occupy, release } from '../mapgen/industries';
+import { reportNewIndustry } from '../news/report';
 import { inCatchment } from '../station/types';
 import type { World } from '../World';
 import { assignStationIndustries } from './catchment';
@@ -103,6 +104,7 @@ export function openNewIndustries(world: World): void {
     );
     world.industries.push(industry);
     occupy(world.map, industry);
+    reportNewIndustry(world, industry);
 
     // A station that now reaches it starts serving it this month.
     for (const station of world.stations) {

@@ -470,3 +470,27 @@ body {
 .chart__bar--loss {
   background: var(--danger);
 }
+
+/*
+ * The news log of section 17.1. Its own list rather than `.list`, because the
+ * entity lists lay their rows out as ellipsised columns and a sentence needs
+ * to wrap.
+ */
+.news {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 14rem;
+  overflow-y: auto;
+}
+
+.news__entry {
+  white-space: normal;
+}
+
+.news__entry:disabled {
+  cursor: default;
+}
