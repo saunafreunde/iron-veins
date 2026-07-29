@@ -18,7 +18,9 @@
     "test:perf": "vitest run tests/perf",
     "test:balance": "vitest run tests/balance",
     "icons": "node tools/make-icons.mjs",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "version:sync": "node tools/sync-version.mjs",
+    "build:desktop": "npm run version:sync && npm run tauri build"
   },
   "dependencies": {
     "@msgpack/msgpack": "^3.0.0",

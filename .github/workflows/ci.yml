@@ -1,0 +1,44 @@
+name: CI
+
+# Everything that can be checked without a GPU, on every push.
+#
+# The determinism suite is the reason this file exists. It replays fifty
+# thousand ticks four times and compares hashes, and it is the one test in the
+# project that cannot be repaired after the fact - a divergence found a month
+# later is a month of commits to bisect. So it runs on its own step, before the
+# rest, and its failure is unambiguous in the log.
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  check:
+    runs-on: windows-latest
+    # The balance suite plays several twenty-five year games and the
+    # determinism suite four fifty-thousand-tick runs; the default ten minutes
+    # is not enough and a timeout that fires is indistinguishable from a bug.
+    timeout-minutes: 40
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - name: Types
+        run: npm run typecheck
+
+      - name: Lint, including the architecture laws
+        run: npm run lint
+
+      - name: Determinism - must never be red
+        run: npm run test:determinism
+
+      - name: Everything else
+        run: npm test

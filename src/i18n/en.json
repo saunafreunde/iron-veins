@@ -660,5 +660,6 @@
   "ui.tutorial.transfer.step2": "Refit a vehicle to carry something else.",
   "ui.tutorial.transfer.step3": "Get at least three vehicles running.",
   "ui.tutorial.transfer.step4": "Earn freight revenue in the current financial year.",
-  "ui.companies.personality": "Focus"
+  "ui.companies.personality": "Focus",
+  "ui.error.noSharedMemory": "This window is not cross-origin isolated, so the shared memory the simulation needs does not exist."
 }

@@ -32,12 +32,40 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["msi", "nsis"],
-    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.ico"],
+    "targets": [
+      "msi",
+      "nsis"
+    ],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico"
+    ],
     "windows": {
       "webviewInstallMode": {
         "type": "downloadBootstrapper"
+      },
+      "nsis": {
+        "languages": [
+          "German",
+          "English"
+        ],
+        "installMode": "currentUser",
+        "displayLanguageSelector": true
+      },
+      "wix": {
+        "upgradeCode": "8f3a6d21-4c7e-5b90-9d14-2ae6f0c37b58",
+        "language": [
+          "de-DE",
+          "en-US"
+        ]
       }
-    }
+    },
+    "publisher": "Iron Veins",
+    "copyright": "Copyright (c) Iron Veins",
+    "category": "Game",
+    "shortDescription": "A transport tycoon for the desktop.",
+    "longDescription": "Build railways, roads, shipping and air routes across a generated world from 1950 to 2050. Feed the industries, grow the towns and stay solvent while up to five competitors do the same. Offline, single player, deterministic."
   }
 }

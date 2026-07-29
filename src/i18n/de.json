@@ -660,5 +660,6 @@
   "ui.tutorial.transfer.step2": "Rüste ein Fahrzeug auf eine andere Fracht um.",
   "ui.tutorial.transfer.step3": "Bringe mindestens drei Fahrzeuge zum Fahren.",
   "ui.tutorial.transfer.step4": "Erwirtschafte Frachterlöse im laufenden Geschäftsjahr.",
-  "ui.companies.personality": "Ausrichtung"
+  "ui.companies.personality": "Ausrichtung",
+  "ui.error.noSharedMemory": "Dieses Fenster ist nicht cross-origin-isoliert, deshalb fehlt der gemeinsame Speicher, den die Simulation braucht."
 }

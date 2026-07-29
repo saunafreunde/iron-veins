@@ -404,14 +404,60 @@ that can be told apart, and two of three finish solvent. What they do not do is
 COMPOUND - by year twenty-five they have usually pruned back to nothing. That is
 a scoring problem and it is written up in D-109.
 
+## M9 - finishing
+
+The last milestone: a menu, options, save and load, a minimap, a handbook, a
+tutorial, audio, an installer and a README. Read `README.md` first - it is
+written for somebody who has never seen the project.
+
+- **A setting is not a game rule** (D-110). A setting is the player's, is the
+  same for every game, and must never reach `src/sim`. A rule - inflation, the
+  carbon levy, how many competitors - is the world's, lives in the save and the
+  hash, and is chosen once on the new-game screen. They are deliberately on
+  different screens.
+- **The worker encodes a save; the main thread decides where it goes** (D-111).
+  Architecture law #1 forces it, and it is right anyway: naming and rotation
+  are policy, and the thumbnail is a picture of the map as the MAIN thread
+  holds it.
+- **The minimap is a pure function, and the save thumbnail is the same one**
+  (D-112). It repaints when the map revision moves and never per frame.
+- **The tutorial watches and never plays** (D-113). A lesson is a sentence plus
+  a predicate over the store. It cannot write to the world: that would make it
+  a second author of state beside the command queue.
+- **The keyboard scheme is one table** both the handler and the options screen
+  read (D-114). Undo and redo are deliberately unbound - see D-114 for why a
+  partial undo would be worse than none.
+- **Audio is injected an AudioContext** rather than constructing one, which is
+  the whole reason its graph can be asserted in a headless test.
+
+### Performance, and what is measured by hand
+
+`npm run test:perf` holds three of section 21's budgets: the tick with a fleet
+that is actually RUNNING (a parked fleet is skipped by the update loop and
+measuring one says the simulation is thirty times faster than it is), the read
+of a large save, and map generation. Measured: 300 working vehicles on a 1024
+map, p99 about 1.5 ms against a budget of 8.
+
+The two frame-rate budgets need a GPU and a compositor. The procedure for
+measuring them by hand is in README.md. There is deliberately no browser test
+runner: adding one would pull PixiJS into the simulation's own test runs.
+
 ## Still outstanding
 
-- The **minimap** (owed since M1) and **vehicle selection on the map** (M2).
+- **Two of the five AI personalities cannot run a line.** The rail and
+  town-network competitors build their infrastructure and never crew it - the
+  rail one ends twenty-five years with ninety-five tiles of railway, two
+  stations and no train. The road-freight one, which differs only in what it
+  builds, works and compounds. D-116 says exactly where the defect is.
+- **Balancing scenario 5** of section 19.4 therefore cannot be met: the AI
+  finishes a 512-map quarter century worth about 580 000 against a band of five
+  to twenty-five million. The test is NOT in the suite - see D-116 for why a
+  red light nobody can act on is worse than a written-down gap.
 - **Lines** (section 12.2), the line list and the timetable of 12.3. No
-  milestone has assigned them; the AI keeps its own list of lines internally,
-  which is not the same thing.
-- **Balancing scenario 5** of section 19.4 - an AI company alone on a 512 map.
-  The AI exists now, so this one is finally writable.
-- The AI does not compound (D-109).
-
-Then M9: tutorial, handbook, options, save/load UI, audio, installer.
+  milestone assigned them; the AI keeps its own list internally, which is not
+  the same thing.
+- **Undo and redo** (section 17.2). See D-114.
+- **The installer has never been built here** - this environment has no DNS, so
+  `npm run tauri build` cannot fetch the toolchain. The configuration is
+  complete and reviewed; producing and installing the MSI is the one acceptance
+  step that has to happen on a real machine.

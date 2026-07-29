@@ -761,11 +761,16 @@ export class MapView {
    */
   vehicleAudioInputs(out: VehicleAudioInput[]): number {
     const source = this.vehicleSource;
-    if (source === null) return 0;
+    // `attach` is asynchronous and the caller polls on a timer, so the first
+    // few calls can arrive before Pixi has a screen to measure - and before
+    // any vehicle has been drawn there is nothing to say anyway.
+    if (source === null || this.map === null || this.drawnVehicles === 0) return 0;
+    const screenSize = this.app.screen;
+    if (screenSize === undefined) return 0;
     const { data } = source();
 
-    const halfWidth = this.app.screen.width / 2;
-    const halfHeight = this.app.screen.height / 2;
+    const halfWidth = screenSize.width / 2;
+    const halfHeight = screenSize.height / 2;
     let written = 0;
 
     for (let i = 0; i < this.drawnVehicles; i++) {

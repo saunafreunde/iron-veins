@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 import type {
   MainToWorkerMessage,
   NewGameOptions,
@@ -57,9 +58,12 @@ export class SimClient {
       // Failure #12: without COOP/COEP the buffer simply does not exist. Say so
       // instead of failing later with an opaque constructor error.
       store.setSharedMemoryAvailable(false);
+      // Translated, because it is the only thing the player will ever see of
+      // this application; the technical half stays in English on purpose,
+      // because it is for whoever gets the bug report.
       store.setFatalError(
-        'SharedArrayBuffer is unavailable. The document is not cross-origin isolated - ' +
-          'check the COOP/COEP headers in vite.config.ts and src-tauri/tauri.conf.json.',
+        `${t('ui.error.noSharedMemory')} ` +
+          'COOP/COEP: vite.config.ts, src-tauri/tauri.conf.json.',
       );
       return;
     }
