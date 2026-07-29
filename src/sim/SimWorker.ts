@@ -198,6 +198,8 @@ function postMonthly(current: World): void {
       loanCt: company.loanCt,
       cashCt: company.cashCt,
       autoRenew: company.autoRenew,
+      co2ThisYearKg: company.co2ThisYearKg,
+      co2LastYearKg: company.co2LastYearKg,
     },
   });
   scope.postMessage({ type: 'townsChanged', towns: townMarkers(current) });

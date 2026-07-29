@@ -68,6 +68,9 @@ export interface FinanceReport {
   readonly loanCt: number;
   readonly cashCt: number;
   readonly autoRenew: boolean;
+  /** Carbon emitted this game year and last, in kilograms (section 14.3). */
+  readonly co2ThisYearKg: number;
+  readonly co2LastYearKg: number;
 }
 
 /** One line of the news log, as the panel shows it (section 17.1). */

@@ -3,7 +3,12 @@ import { formatMoney, t } from '../i18n';
 import type { FinanceReport } from '../shared/protocol';
 import { CommandKind } from '../sim/commands/types';
 import { ACCOUNT_COUNT, ACCOUNT_NAME_KEYS, isRevenue, profitCt } from '../sim/economy/ledger';
-import { BANKRUPTCY_MONTHS, BANKRUPTCY_WARNING_MONTHS, LOAN_STEP_CT } from '../sim/constants';
+import {
+  BANKRUPTCY_MONTHS,
+  BANKRUPTCY_WARNING_MONTHS,
+  KG_PER_TONNE,
+  LOAN_STEP_CT,
+} from '../sim/constants';
 import type { SimClient } from './SimClient';
 import { useSimStore } from './store';
 
@@ -71,6 +76,19 @@ export function FinancePanel({ client }: { readonly client: SimClient }): ReactE
         </p>
       )}
       <p className="panel__hint">{t('ui.finance.interestHint')}</p>
+
+      {finances !== null && finances.co2ThisYearKg > 0 && (
+        <dl className="readout">
+          <div>
+            <dt>{t('ui.finance.co2')}</dt>
+            <dd className="value value--mono">
+              {t('ui.finance.co2Value', {
+                tonnes: Math.round(finances.co2ThisYearKg / KG_PER_TONNE),
+              })}
+            </dd>
+          </div>
+        </dl>
+      )}
 
       <label className="panel__hint">
         <input

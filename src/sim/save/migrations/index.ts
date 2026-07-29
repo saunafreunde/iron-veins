@@ -507,6 +507,69 @@ const v18_to_v19: SaveMigration = (payload) => {
 };
 
 /**
+ * M8 added the carbon levy of section 14.3.
+ *
+ * That is a tenth ledger account, so every row in every company's books grows
+ * by one - including the twenty-four month history, which is a FLAT ring and
+ * has to be re-laid row by row rather than padded at the end. Getting that
+ * wrong would not throw; it would silently shear every historical month by one
+ * account and the finance panel would show plausible nonsense.
+ *
+ * The levy itself does not exist before the year 2000, so a save from any
+ * earlier year loses nothing by starting its carbon account at zero. The
+ * setting is ON, because that is the default a new game gets and a save that
+ * predates the choice cannot express one.
+ */
+const v19_to_v20: SaveMigration = (payload) => {
+  const inner = state(payload);
+  const companies = inner['companies'];
+  if (!Array.isArray(companies)) {
+    throw new SaveFormatError('save.state.companies: expected an array');
+  }
+  const oldCount = ACCOUNT_COUNT - 1;
+
+  const widen = (value: unknown, path: string): number[] => {
+    if (!Array.isArray(value)) throw new SaveFormatError(`${path}: expected an array`);
+    return [...(value as number[]), 0];
+  };
+
+  return {
+    ...payload,
+    state: {
+      ...inner,
+      emissions: true,
+      companies: companies.map((entry, index) => {
+        const company = entry as Record<string, unknown>;
+        const history = company['monthHistory'];
+        if (!Array.isArray(history)) {
+          throw new SaveFormatError(`save.state.companies[${index}].monthHistory: expected an array`);
+        }
+        const months = history.length / oldCount;
+        const relaid: number[] = [];
+        for (let month = 0; month < months; month++) {
+          for (let account = 0; account < oldCount; account++) {
+            relaid.push((history as number[])[month * oldCount + account] ?? 0);
+          }
+          relaid.push(0);
+        }
+        return {
+          ...company,
+          accounts: widen(company['accounts'], `save.state.companies[${index}].accounts`),
+          yearAccounts: widen(company['yearAccounts'], `save.state.companies[${index}].yearAccounts`),
+          lastYearAccounts: widen(
+            company['lastYearAccounts'],
+            `save.state.companies[${index}].lastYearAccounts`,
+          ),
+          monthHistory: relaid,
+          co2ThisYearKg: 0,
+          co2LastYearKg: 0,
+        };
+      }),
+    },
+  };
+};
+
+/**
  * Registry keyed by the version a migration reads (section 19.1).
  *
  * There is deliberately no entry for 1 -> 2: a version 1 world had no map at
@@ -531,6 +594,7 @@ export const SAVE_MIGRATIONS: ReadonlyMap<number, SaveMigration> = new Map<numbe
   [16, v16_to_v17],
   [17, v17_to_v18],
   [18, v18_to_v19],
+  [19, v19_to_v20],
 ]);
 
 /**

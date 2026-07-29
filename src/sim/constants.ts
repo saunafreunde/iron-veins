@@ -346,6 +346,61 @@ export const ENERGY_COST_CT_PER_MJ: readonly number[] = [
   36, // battery
 ];
 
+// -------------------------------------------------------- environment (14.3)
+
+/**
+ * Carbon per megajoule of USEFUL work, by energy carrier.
+ *
+ * Indexed by PowerSource, exactly as ENERGY_COST_CT_PER_MJ is, and derived the
+ * same way: the carbon in the fuel divided by how much of it reaches the
+ * drawbar. That is why steam is so far above everything else - it is not that
+ * coal is uniquely dirty, it is that a steam locomotive wastes ninety per cent
+ * of it.
+ *
+ * Electric is not zero. The grid of 1950 burned coal too, and a figure of zero
+ * would say the game believes electrification is free of consequence rather
+ * than very much better. [kg CO2 per megajoule of work at the drawbar]
+ */
+export const CO2_KG_PER_MJ: readonly number[] = [
+  1.15, // steam
+  0.42, // diesel
+  0.09, // electric
+  0.31, // hydrogen
+  0.12, // battery
+];
+
+export const KG_PER_TONNE = 1000;
+
+/** The first year a carbon levy exists at all (section 14.3). */
+export const CO2_LEVY_FROM_YEAR = 2000;
+
+/** Up to this year the levy is flat; after it, it climbs. */
+export const CO2_LEVY_RISE_FROM_YEAR = 2005;
+
+/** The levy between 2000 and 2005. [cent per tonne] */
+export const CO2_LEVY_CT_PER_TONNE = 2_500;
+
+/** How much it climbs each year after 2005. [cent per tonne per year] */
+export const CO2_LEVY_RISE_PER_YEAR = 900;
+
+/** The first year electrification is subsidised. Same year as the levy. */
+export const CO2_GRANT_FROM_YEAR = 2000;
+
+/** Share of an electrification bill the state pays back. */
+export const CO2_ELECTRIFICATION_GRANT_SHARE = 0.4;
+
+/**
+ * A fleet at or below this carbon intensity is treated as clean by a town
+ * council (section 14.3). [kg CO2 per megajoule]
+ *
+ * Set between the diesel and the electric figure, so the bonus is what a
+ * company gets for having electrified rather than for existing.
+ */
+export const COUNCIL_GREEN_INTENSITY = 0.2;
+
+/** Rating points a town adds for a clean fleet. */
+export const COUNCIL_GREEN_BONUS = 8;
+
 /**
  * Megajoules in a joule, the other way up. Work is accumulated in joules
  * because that is what force times distance gives, and priced in megajoules

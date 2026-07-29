@@ -463,5 +463,9 @@
   "ui.council.cooldown": "läuft nach",
   "news.exclusiveRights": "{company} hat exklusive Baurechte in {town} erworben.",
   "news.councilRefuses": "Der Stadtrat von {town} verweigert uns Baugenehmigungen.",
-  "ui.list.refusing": "Verweigert Genehmigung"
+  "ui.list.refusing": "Verweigert Genehmigung",
+  "account.emissions": "CO₂-Abgabe",
+  "ui.finance.co2": "CO₂ (Jahr)",
+  "ui.finance.co2Value": "{tonnes} t",
+  "news.carbonLevy": "Ab {year} wird eine CO₂-Abgabe erhoben."
 }

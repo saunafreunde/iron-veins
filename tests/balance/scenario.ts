@@ -102,6 +102,7 @@ export function flatScenario(
   industries: Industry[],
   seed = 9,
   aiCompanies = 0,
+  emissions = true,
 ): Scenario {
   const map = new TileMap(size);
   map.cornerHeight.fill(GROUND_HEIGHT);
@@ -126,6 +127,7 @@ export function flatScenario(
       companyName: 'Balancing AG',
       companyColorIndex: 1,
       aiCompanies,
+      emissions,
     },
     { map, towns, industries, seedUsed: seed },
   );

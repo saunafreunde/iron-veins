@@ -82,6 +82,12 @@ export interface CompanyState {
   /** True once the company has been wound up. The game is over. */
   bankrupt: boolean;
   /**
+   * Carbon emitted since the start of the game year, and in the last completed
+   * one (section 14.3). [kg]
+   */
+  co2ThisYearKg: number;
+  co2LastYearKg: number;
+  /**
    * Replace vehicles automatically as they near the end of their design life
    * (section 11.3).
    *
@@ -129,4 +135,13 @@ export interface NewGameParams {
    * opponents who have had the best routes to themselves for two decades.
    */
   readonly aiCompanies?: number;
+  /**
+   * Whether the carbon levy and its grants of section 14.3 apply.
+   *
+   * Fixed at the start like inflation and for the same reason: it changes what
+   * a month costs, so two worlds with the same seed and the same commands but
+   * different settings diverge. That makes it saved state, part of the hash,
+   * and something a mid-game toggle would have to be a COMMAND to change.
+   */
+  readonly emissions?: boolean;
 }

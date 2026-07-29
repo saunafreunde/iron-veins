@@ -463,5 +463,9 @@
   "ui.council.cooldown": "on cooldown",
   "news.exclusiveRights": "{company} has bought exclusive building rights in {town}.",
   "news.councilRefuses": "The council of {town} is refusing us building permits.",
-  "ui.list.refusing": "Refusing permits"
+  "ui.list.refusing": "Refusing permits",
+  "account.emissions": "Carbon levy",
+  "ui.finance.co2": "CO₂ (year)",
+  "ui.finance.co2Value": "{tonnes} t",
+  "news.carbonLevy": "A carbon levy applies from {year}."
 }

@@ -44,9 +44,10 @@ export const SAVE_MAGIC = 'IRVN';
  * setting of section 14.2 and the auto-renewal switch of 11.3, 16 the runway
  * occupancy of section 8.4, 17 the news log of section 17.1, 18 the several
  * companies of section 15 with the tile ownership and the command authorship
- * that come with them, 19 the town councils of section 13.3.
+ * that come with them, 19 the town councils of section 13.3, 20 the carbon
+ * account of section 14.3.
  */
-export const SAVE_VERSION = 19;
+export const SAVE_VERSION = 20;
 
 /** File extension used for manual and automatic saves. */
 export const SAVE_EXTENSION = '.ironsave';
@@ -194,6 +195,8 @@ function parseCompany(value: unknown, path: string): CompanyState {
     revenueThisMonthCt: asInt(raw['revenueThisMonthCt'], `${path}.revenueThisMonthCt`),
     expensesThisMonthCt: asInt(raw['expensesThisMonthCt'], `${path}.expensesThisMonthCt`),
     monthsInDebt: asInt(raw['monthsInDebt'], `${path}.monthsInDebt`),
+    co2ThisYearKg: asFinite(raw['co2ThisYearKg'], `${path}.co2ThisYearKg`),
+    co2LastYearKg: asFinite(raw['co2LastYearKg'], `${path}.co2LastYearKg`),
     bankrupt: asBoolean(raw['bankrupt'], `${path}.bankrupt`),
     autoRenew: asBoolean(raw['autoRenew'], `${path}.autoRenew`),
     vehicleUpkeepPerYearCt: asInt(raw['vehicleUpkeepPerYearCt'], `${path}.vehicleUpkeepPerYearCt`),
@@ -688,6 +691,7 @@ export function parseSaveFile(value: unknown): SaveFile {
     difficulty: parseDifficulty(stateRaw['difficulty'], 'save.state.difficulty'),
     climate: parseClimate(stateRaw['climate'], 'save.state.climate'),
     inflation: asBoolean(stateRaw['inflation'], 'save.state.inflation'),
+    emissions: asBoolean(stateRaw['emissions'], 'save.state.emissions'),
     mapSize,
     rng: parseRngState(stateRaw['rng'], 'save.state.rng'),
     companies: parseCompanies(stateRaw['companies'], 'save.state.companies'),

@@ -1520,3 +1520,37 @@ Funded streets reach two tiles PAST the built-up area. A town that has filled
 its radius has no bare ground left between the houses, and a measure that could
 only build where there was already room would do nothing in exactly the towns
 worth courting.
+
+### D-105 Carbon is measured from energy, not from kilometres
+
+Section 14.3 puts the company's CO2 figure at "kilometres driven times
+`co2PerKm`". This measures it from the ENERGY each vehicle turned into work,
+which the tick loop has been integrating since M6.
+
+It is the same question with a strictly better answer. A train dragged up a
+gradient emits more than the same train on the level; a heavy one emits more
+than a light one; an electric locomotive emits a fraction of what a steam engine
+emits for the same work. A per-kilometre constant says none of that. It would
+also need a new invented number on every one of the sixty-odd vehicles in the
+catalogue, and those numbers would have to be kept consistent by hand with the
+energy costs that already encode exactly the same physics.
+
+`CO2_KG_PER_MJ` is therefore indexed by power source exactly as
+`ENERGY_COST_CT_PER_MJ` is, and derived the same way: carbon in the fuel divided
+by how much of it reaches the drawbar. That is why steam is so far above
+everything else - not because coal is uniquely dirty, but because a steam
+locomotive wastes ninety per cent of it.
+
+Electric is NOT zero. The grid of 1950 burned coal too, and a zero would say the
+game believes electrification is free of consequence rather than very much
+better.
+
+The levy rises LINEARLY after 2005 rather than exponentially. A player who
+electrified in 2010 has to be able to work out what it saved them, and an
+exponential curve turns the last decades of a century-long game into a decision
+that has already been made for them.
+
+The environmental rating a council reads is an INTENSITY - carbon per unit of
+work - and never a total. A total would mean a company improves its standing by
+running fewer trains, and the one thing an environmental rule in a transport
+game must not reward is doing less transport.

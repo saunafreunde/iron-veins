@@ -2,6 +2,7 @@ import { executeCommand } from './commands/execute';
 import type { CommandQueue } from './commands/queue';
 import type { CommandEnvelope, CommandOutcome } from './commands/types';
 import {
+  CO2_LEVY_FROM_YEAR,
   DAYS_PER_MONTH,
   DAYS_PER_YEAR,
   MAX_COMPANIES,
@@ -26,6 +27,7 @@ import { NewsCategory, NewsLog, NewsSeverity, type NewsEntry } from './news/log'
 import { reportNews } from './news/report';
 import { reviewBankruptcy } from './economy/bankruptcy';
 import { bookDepreciation } from './economy/depreciation';
+import { bookMonthlyEmissions, closeEmissionsYear } from './economy/emissions';
 import { bookMonthlyEnergy } from './economy/energy';
 import { costFactor, inflatedCostCt } from './cargo/payment';
 import { RailPathfinder } from './net/railPath';
@@ -78,6 +80,7 @@ export interface WorldStateData {
   difficulty: Difficulty;
   climate: MapClimate;
   inflation: boolean;
+  emissions: boolean;
   mapSize: number;
   rng: RngState;
   /** Every company, player first. */
@@ -137,6 +140,8 @@ export class World {
   readonly climate: MapClimate;
   /** Whether costs and fares drift upward over the century (section 14.2). */
   readonly inflation: boolean;
+  /** Whether the carbon levy and its grants of section 14.3 apply. */
+  readonly emissions: boolean;
   readonly rng: Rng;
   /**
    * Every company in the game, index = id. Zero is the player, 1..n are the
@@ -230,6 +235,7 @@ export class World {
     this.difficulty = params.difficulty;
     this.climate = params.climate;
     this.inflation = params.inflation ?? true;
+    this.emissions = params.emissions ?? true;
     this.rng = Rng.fromSeed(gameplaySeed(this.seed));
     this.companies.push(
       createCompany(0, params.companyName, params.companyColorIndex, params.difficulty),
@@ -327,6 +333,9 @@ export class World {
         bookMonthlyUpkeep(company, this.costFactor);
         bookDepreciation(this, company);
       }
+      // Emissions first: both read the same work accumulators and the energy
+      // pass is the one that clears them.
+      bookMonthlyEmissions(this);
       // Every company's meter in one pass - reading an accumulator empties it.
       bookMonthlyEnergy(this);
       // Judge the month that has just ended, THEN make the next month's
@@ -359,10 +368,21 @@ export class World {
         params: { year: this.date.year - 1, profitCt: this.playerCompany.profitThisYearCt },
         tileIndex: -1,
       });
+      if (this.emissions && this.date.year === CO2_LEVY_FROM_YEAR) {
+        this.news.post({
+          tick: this.tick,
+          category: NewsCategory.Finance,
+          severity: NewsSeverity.Warning,
+          messageKey: 'news.carbonLevy',
+          params: { year: CO2_LEVY_FROM_YEAR },
+          tileIndex: -1,
+        });
+      }
       ageVehicles(this);
       for (let index = 0; index < this.companies.length; index++) {
         const company = this.companies[index]!;
         closeFinancialYear(company);
+        closeEmissionsYear(company);
         // After ageing, so a vehicle that has just passed its design life is
         // charged the doubled upkeep from the year it becomes obsolete.
         // Renew before the fleet's upkeep is totalled, so a company that just
@@ -426,6 +446,7 @@ export class World {
       difficulty: this.difficulty,
       climate: this.climate,
       inflation: this.inflation,
+      emissions: this.emissions,
       mapSize: this.map.size,
       rng: this.rng.getState(),
       companies: this.companies.map((company) => ({ ...company })),
@@ -481,6 +502,7 @@ export class World {
         difficulty: data.difficulty,
         climate: data.climate,
         inflation: data.inflation,
+        emissions: data.emissions,
         mapSize: data.mapSize,
         companyName: data.companies[0]!.name,
         companyColorIndex: data.companies[0]!.colorIndex,
@@ -557,6 +579,7 @@ function hashDynamicState(h: Fnv1a64, world: World): void {
   h.u32(world.difficulty);
   h.u32(world.climate);
   h.u32(world.inflation ? 1 : 0);
+  h.u32(world.emissions ? 1 : 0);
 
   const rng = world.rng.getState();
   h.u32(rng[0]).u32(rng[1]).u32(rng[2]).u32(rng[3]);
@@ -580,6 +603,7 @@ function hashDynamicState(h: Fnv1a64, world: World): void {
       .u32(c.autoRenew ? 1 : 0);
     h.int(c.vehicleUpkeepPerYearCt).int(c.infrastructureUpkeepPerYearCt);
     h.int(c.accumulatedDepreciationCt).u32(c.historyCursor);
+    h.f64(c.co2ThisYearKg).f64(c.co2LastYearKg);
     // The whole ledger is hashed. It is state the simulation writes every
     // month, and anything left out here silently stops being covered by the
     // determinism suite - which is exactly how a counter drifts for a

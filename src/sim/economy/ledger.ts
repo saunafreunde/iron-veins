@@ -29,10 +29,12 @@ export const Account = {
   Interest: 7,
   /** Building, buying and converting - everything paid for once. */
   Construction: 8,
+  /** The carbon levy of section 14.3, and nothing else. */
+  Emissions: 9,
 } as const;
 export type Account = (typeof Account)[keyof typeof Account];
 
-export const ACCOUNT_COUNT = 9;
+export const ACCOUNT_COUNT = 10;
 
 /** Translation keys, indexed by account. */
 export const ACCOUNT_NAME_KEYS: readonly string[] = [
@@ -45,6 +47,7 @@ export const ACCOUNT_NAME_KEYS: readonly string[] = [
   'account.depreciation',
   'account.interest',
   'account.construction',
+  'account.emissions',
 ];
 
 /** True for the three accounts that bring money in. */

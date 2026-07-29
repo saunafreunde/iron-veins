@@ -56,7 +56,7 @@ import {
   trackBit,
   TRACK_DX,
   TRACK_DY,
-  type RailType,
+  RailType,
   type TrackDir,
 } from '../map/track';
 import { planTrack } from '../net/trackBuilder';
@@ -81,6 +81,7 @@ import {
 } from '../vehicles/consist';
 import { releaseAll } from '../vehicles/reservations';
 import { VehicleState } from '../vehicles/VehicleStore';
+import { electrificationGrantShare } from '../economy/emissions';
 import { bookDemolition, councilRefusal } from '../town/council';
 import type { World } from '../World';
 import { ACCEPTED, RejectReason, type CommandOutcome } from './types';
@@ -313,7 +314,13 @@ export function buildTrack(
     const permission = buildPermission(world, tile);
     if (permission !== null) return reject(permission);
   }
-  const chargeCt = world.costCt(route.costCt);
+  // The electrification grant of section 14.3. It applies to the whole bill of
+  // a route laid or converted as electrified, because the two are the same
+  // decision: a company choosing wires over diesel is what the grant is for,
+  // and paying it only for conversions would reward putting the wrong thing
+  // down first.
+  const grantShare = railType === RailType.Electrified ? electrificationGrantShare(world) : 0;
+  const chargeCt = Math.round(world.costCt(route.costCt) * (1 - grantShare));
   if (chargeCt > world.company.cashCt) return reject(RejectReason.InsufficientFunds);
 
   const map = world.map;

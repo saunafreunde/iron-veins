@@ -1,5 +1,7 @@
 import {
   COUNCIL_DEMOLITION_PENALTY,
+  COUNCIL_GREEN_BONUS,
+  COUNCIL_GREEN_INTENSITY,
   COUNCIL_EXCLUSIVE_COST_CT_PER_HEAD,
   COUNCIL_EXCLUSIVE_MIN_RATING,
   COUNCIL_EXCLUSIVE_MONTHS,
@@ -19,6 +21,7 @@ import {
 import { RoadBit } from './types';
 import { Terrain } from '../map/terrain';
 import type { Town } from './types';
+import { emissionIntensity } from '../economy/emissions';
 import { reportCouncil } from '../news/report';
 import type { World } from '../World';
 
@@ -236,8 +239,19 @@ function ratingFor(world: World, town: Town, companyId: number, goodwill: number
 
   const noise = Math.min(COUNCIL_NOISE_MAX, noiseTiles(world, town, companyId) * COUNCIL_NOISE_PER_TILE);
 
+  // A council rewards a clean fleet, which is the third leg of section 14.3 -
+  // the levy is the stick, the grant pays for the change, and this is what a
+  // town thinks of a company that made it.
+  const intensity = world.emissions ? emissionIntensity(world, companyId) : -1;
+  const green = intensity >= 0 && intensity <= COUNCIL_GREEN_INTENSITY ? COUNCIL_GREEN_BONUS : 0;
+
   const raw =
-    COUNCIL_RATING_NEUTRAL + service + share * COUNCIL_TRANSPORT_WEIGHT - noise + goodwill;
+    COUNCIL_RATING_NEUTRAL +
+    service +
+    share * COUNCIL_TRANSPORT_WEIGHT -
+    noise +
+    green +
+    goodwill;
   return Math.max(0, Math.min(100, Math.round(raw)));
 }
 

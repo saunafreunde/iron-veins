@@ -54,6 +54,8 @@ export function createCompany(
     accumulatedDepreciationCt: 0,
     monthsInDebt: 0,
     bankrupt: false,
+    co2ThisYearKg: 0,
+    co2LastYearKg: 0,
     autoRenew: false,
   };
 }
