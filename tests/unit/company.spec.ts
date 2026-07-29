@@ -21,14 +21,14 @@ import {
 
 describe('company creation', () => {
   it('hands out the starting capital of the chosen difficulty', () => {
-    expect(createCompany('A', 0, Difficulty.Easy).cashCt).toBe(800_000 * CENTS_PER_EURO);
-    expect(createCompany('A', 0, Difficulty.Normal).cashCt).toBe(500_000 * CENTS_PER_EURO);
-    expect(createCompany('A', 0, Difficulty.Hard).cashCt).toBe(250_000 * CENTS_PER_EURO);
+    expect(createCompany(0, 'A', 0, Difficulty.Easy).cashCt).toBe(800_000 * CENTS_PER_EURO);
+    expect(createCompany(0, 'A', 0, Difficulty.Normal).cashCt).toBe(500_000 * CENTS_PER_EURO);
+    expect(createCompany(0, 'A', 0, Difficulty.Hard).cashCt).toBe(250_000 * CENTS_PER_EURO);
     expect(START_CAPITAL_CT[Difficulty.Normal]).toBe(500_000 * CENTS_PER_EURO);
   });
 
   it('starts debt free', () => {
-    const company = createCompany('A', 0, Difficulty.Normal);
+    const company = createCompany(0, 'A', 0, Difficulty.Normal);
     expect(company.loanCt).toBe(0);
     expect(company.profitThisYearCt).toBe(0);
     expect(company.lastYearProfitCt).toBe(0);
@@ -37,12 +37,12 @@ describe('company creation', () => {
 
 describe('credit line', () => {
   it('falls back to the floor for a company without profit or assets', () => {
-    const company = createCompany('A', 0, Difficulty.Normal);
+    const company = createCompany(0, 'A', 0, Difficulty.Normal);
     expect(loanLimitCt(company)).toBe(LOAN_MIN_LIMIT_CT);
   });
 
   it('grows with profit and assets', () => {
-    const company = createCompany('A', 0, Difficulty.Normal);
+    const company = createCompany(0, 'A', 0, Difficulty.Normal);
     company.lastYearProfitCt = 1_000_000 * CENTS_PER_EURO;
     company.fixedAssetsCt = 2_000_000 * CENTS_PER_EURO;
     // 2.5 * 1M + 0.3 * 2M = 3.1M EUR
@@ -50,13 +50,13 @@ describe('credit line', () => {
   });
 
   it('never exceeds the absolute ceiling', () => {
-    const company = createCompany('A', 0, Difficulty.Normal);
+    const company = createCompany(0, 'A', 0, Difficulty.Normal);
     company.lastYearProfitCt = 500_000_000 * CENTS_PER_EURO;
     expect(loanLimitCt(company)).toBe(LOAN_MAX_LIMIT_CT);
   });
 
   it('ignores a loss when the floor is higher', () => {
-    const company = createCompany('A', 0, Difficulty.Normal);
+    const company = createCompany(0, 'A', 0, Difficulty.Normal);
     company.lastYearProfitCt = -50_000_000 * CENTS_PER_EURO;
     expect(loanLimitCt(company)).toBe(LOAN_MIN_LIMIT_CT);
   });
@@ -64,7 +64,7 @@ describe('credit line', () => {
 
 describe('borrowing and repaying', () => {
   it('credits the loan to the account', () => {
-    const company = createCompany('A', 0, Difficulty.Normal);
+    const company = createCompany(0, 'A', 0, Difficulty.Normal);
     const before = company.cashCt;
     expect(takeLoan(company, 50_000 * CENTS_PER_EURO)).toBe(50_000 * CENTS_PER_EURO);
     expect(company.cashCt).toBe(before + 50_000 * CENTS_PER_EURO);
@@ -72,20 +72,20 @@ describe('borrowing and repaying', () => {
   });
 
   it('rounds the requested amount down to a whole step', () => {
-    const company = createCompany('A', 0, Difficulty.Normal);
+    const company = createCompany(0, 'A', 0, Difficulty.Normal);
     expect(takeLoan(company, LOAN_STEP_CT + 1)).toBe(LOAN_STEP_CT);
     expect(takeLoan(company, LOAN_STEP_CT - 1)).toBe(0);
   });
 
   it('stops at the credit line', () => {
-    const company = createCompany('A', 0, Difficulty.Normal);
+    const company = createCompany(0, 'A', 0, Difficulty.Normal);
     expect(takeLoan(company, LOAN_MIN_LIMIT_CT * 4)).toBe(LOAN_MIN_LIMIT_CT);
     expect(availableCreditCt(company)).toBe(0);
     expect(takeLoan(company, LOAN_STEP_CT)).toBe(0);
   });
 
   it('repays at most the principal and only from available cash', () => {
-    const company = createCompany('A', 0, Difficulty.Normal);
+    const company = createCompany(0, 'A', 0, Difficulty.Normal);
     takeLoan(company, 100_000 * CENTS_PER_EURO);
     expect(repayLoan(company, 1_000_000 * CENTS_PER_EURO)).toBe(100_000 * CENTS_PER_EURO);
     expect(company.loanCt).toBe(0);
@@ -98,7 +98,7 @@ describe('borrowing and repaying', () => {
 
 describe('interest and the financial year', () => {
   it('books a twelfth of the annual rate per month', () => {
-    const company = createCompany('A', 0, Difficulty.Normal);
+    const company = createCompany(0, 'A', 0, Difficulty.Normal);
     takeLoan(company, LOAN_MIN_LIMIT_CT);
     const cashBefore = company.cashCt;
 
@@ -113,8 +113,8 @@ describe('interest and the financial year', () => {
   });
 
   it('charges the hard difficulty more', () => {
-    const easy = createCompany('A', 0, Difficulty.Normal);
-    const hard = createCompany('A', 0, Difficulty.Hard);
+    const easy = createCompany(0, 'A', 0, Difficulty.Normal);
+    const hard = createCompany(0, 'A', 0, Difficulty.Hard);
     takeLoan(easy, LOAN_MIN_LIMIT_CT);
     takeLoan(hard, LOAN_MIN_LIMIT_CT);
     expect(bookMonthlyInterest(hard, Difficulty.Hard)).toBeGreaterThan(
@@ -123,13 +123,13 @@ describe('interest and the financial year', () => {
   });
 
   it('books nothing without debt', () => {
-    const company = createCompany('A', 0, Difficulty.Normal);
+    const company = createCompany(0, 'A', 0, Difficulty.Normal);
     expect(bookMonthlyInterest(company, Difficulty.Normal)).toBe(0);
     expect(company.cashCt).toBe(START_CAPITAL_CT[Difficulty.Normal]);
   });
 
   it('rolls the running profit into last year on year end', () => {
-    const company = createCompany('A', 0, Difficulty.Normal);
+    const company = createCompany(0, 'A', 0, Difficulty.Normal);
     company.profitThisYearCt = -12_345;
     closeFinancialYear(company);
     expect(company.lastYearProfitCt).toBe(-12_345);

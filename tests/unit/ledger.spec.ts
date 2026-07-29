@@ -47,7 +47,7 @@ import { apply, flatScenario, makeTown, type Scenario } from '../balance/scenari
 const BUS = 200;
 
 function company() {
-  return createCompany('Buchhaltung AG', 0, Difficulty.Normal);
+  return createCompany(0, 'Buchhaltung AG', 0, Difficulty.Normal);
 }
 
 describe('the accounts', () => {
@@ -62,7 +62,7 @@ describe('the accounts', () => {
     expect(c.accounts[Account.RevenueMail]).toBe(200);
     // Everything that is neither a person nor a letter is freight.
     expect(c.accounts[Account.RevenueFreight]).toBe(1_200);
-    expect(c.cashCt - createCompany('x', 0, Difficulty.Normal).cashCt).toBe(1_500);
+    expect(c.cashCt - createCompany(0, 'x', 0, Difficulty.Normal).cashCt).toBe(1_500);
   });
 
   it('keeps depreciation out of the bank', () => {

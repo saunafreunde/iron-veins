@@ -463,7 +463,7 @@ function serveStation(world: World, id: number, station: Station): number {
         year: world.date.year,
       });
 
-      bookRevenue(world.company, revenue, stack.cargo);
+      bookRevenue(world.companyOf(vehicles.ownerId[id]!), revenue, stack.cargo);
       vehicles.earnedCt[id] = vehicles.earnedCt[id]! + revenue;
 
       if (disposition === CargoDisposition.Deliver) {

@@ -154,7 +154,7 @@ function townMarkers(current: World): TownMarker[] {
  * to ride in the snapshot.
  */
 function postMonthly(current: World): void {
-  const company = current.company;
+  const company = current.playerCompany;
   scope.postMessage({
     type: 'financesChanged',
     report: {
@@ -325,7 +325,7 @@ function publishSnapshot(current: World, sink: SnapshotWriter): void {
   i32[SnapshotI32.Year] = date.year;
   i32[SnapshotI32.Month] = date.month;
   i32[SnapshotI32.Day] = date.day;
-  i32[SnapshotI32.CompanyColorIndex] = current.company.colorIndex;
+  i32[SnapshotI32.CompanyColorIndex] = current.playerCompany.colorIndex;
   i32[SnapshotI32.SpeedIndex] = speedIndex;
   i32[SnapshotI32.CommandsExecuted] = queue.executedCount;
   i32[SnapshotI32.SimRateCentiHz] = simRateCentiHz;
@@ -334,15 +334,15 @@ function publishSnapshot(current: World, sink: SnapshotWriter): void {
   i32[SnapshotI32.MapRevision] = current.map.revision;
 
   const f64 = sink.draftF64;
-  f64[SnapshotF64.CashCt] = current.company.cashCt;
-  f64[SnapshotF64.LoanCt] = current.company.loanCt;
-  f64[SnapshotF64.LoanLimitCt] = loanLimitCt(current.company);
+  f64[SnapshotF64.CashCt] = current.playerCompany.cashCt;
+  f64[SnapshotF64.LoanCt] = current.playerCompany.loanCt;
+  f64[SnapshotF64.LoanLimitCt] = loanLimitCt(current.playerCompany);
 
   i32[SnapshotI32.VehicleCount] = writeVehicles(current, sink.draftVehicles);
   i32[SnapshotI32.ReservedCount] = writeReserved(current, sink.draftReserved);
-  i32[SnapshotI32.MonthsInDebt] = current.company.bankrupt
+  i32[SnapshotI32.MonthsInDebt] = current.playerCompany.bankrupt
     ? BANKRUPTCY_MONTHS
-    : current.company.monthsInDebt;
+    : current.playerCompany.monthsInDebt;
 
   sink.publish();
 
@@ -369,11 +369,11 @@ function publishSnapshot(current: World, sink: SnapshotWriter): void {
   }
 
   if (
-    current.company.name !== publishedName ||
-    current.company.colorIndex !== publishedColorIndex
+    current.playerCompany.name !== publishedName ||
+    current.playerCompany.colorIndex !== publishedColorIndex
   ) {
-    publishedName = current.company.name;
-    publishedColorIndex = current.company.colorIndex;
+    publishedName = current.playerCompany.name;
+    publishedColorIndex = current.playerCompany.colorIndex;
     scope.postMessage({
       type: 'companyChanged',
       name: publishedName,
@@ -470,8 +470,8 @@ function startGame(message: Extract<MainToWorkerMessage, { type: 'init' }>): voi
 
   scope.postMessage({
     type: 'ready',
-    companyName: world.company.name,
-    companyColorIndex: world.company.colorIndex,
+    companyName: world.playerCompany.name,
+    companyColorIndex: world.playerCompany.colorIndex,
     mapSize: world.map.size,
     mapBuffer: world.map.buffer,
     townCount: world.towns.length,

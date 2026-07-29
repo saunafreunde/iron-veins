@@ -27,11 +27,13 @@ import {
 
 /** Build the initial company state for a new game. */
 export function createCompany(
+  id: number,
   name: string,
   colorIndex: number,
   difficulty: Difficulty,
 ): CompanyState {
   return {
+    id,
     name,
     colorIndex: colorIndex % COMPANY_COLOR_COUNT,
     cashCt: START_CAPITAL_CT[difficulty]!,

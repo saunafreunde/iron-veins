@@ -8,6 +8,16 @@ export type RngState = readonly [number, number, number, number];
  * number of cents (architecture law #5).
  */
 export interface CompanyState {
+  /**
+   * Index into `World.companies`. Zero is the player; 1..n are the AI
+   * competitors of section 15.
+   *
+   * Carried on the state rather than left implicit in the array position,
+   * because a company is passed around on its own - to book an expense, to
+   * charge upkeep, to wind it up - and the code holding it has to be able to
+   * ask which one it has without being handed the world as well.
+   */
+  readonly id: number;
   /** Player supplied display name. Never a translation key. */
   name: string;
   /** Index into the colour-blind safe company palette. */
@@ -111,4 +121,12 @@ export interface NewGameParams {
    * (DECISIONS.md D-092).
    */
   readonly inflation?: boolean;
+  /**
+   * How many AI competitors to create, 0..MAX_AI_COMPANIES (section 15).
+   *
+   * Fixed when the world is generated rather than something that can be added
+   * to a running game: a company joining in year 20 would be playing against
+   * opponents who have had the best routes to themselves for two decades.
+   */
+  readonly aiCompanies?: number;
 }

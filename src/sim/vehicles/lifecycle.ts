@@ -117,12 +117,12 @@ export function serviceVehicle(world: World, id: number): void {
  * sum would have to be adjusted from the yearly hook and any drift between it
  * and the truth would be invisible until a save was reloaded.
  */
-export function fleetUpkeepCtPerYear(world: World): number {
+export function fleetUpkeepCtPerYear(world: World, ownerId: number): number {
   const vehicles = world.vehicles;
   let total = 0;
 
   for (let id = 0; id < vehicles.count; id++) {
-    if (vehicles.alive[id] !== 1) continue;
+    if (vehicles.alive[id] !== 1 || vehicles.ownerId[id] !== ownerId) continue;
     const units = vehicles.consist[id]!;
     const upkeep =
       units.length > 0

@@ -15,10 +15,15 @@ import type { World } from '../World';
  *
  * Drawn once a month and the accumulators reset, which is also what keeps them
  * inside the range a double represents exactly (D-091).
+ *
+ * Every company is metered in the same pass, because reading an accumulator
+ * empties it: a pass per company would skip the others' vehicles and would
+ * then never clear them.
  */
 export function bookMonthlyEnergy(world: World): number {
   const vehicles = world.vehicles;
-  let totalCt = 0;
+  const perCompany = world.companyScratch;
+  perCompany.fill(0);
 
   for (let id = 0; id < vehicles.count; id++) {
     if (vehicles.alive[id] !== 1) continue;
@@ -27,11 +32,16 @@ export function bookMonthlyEnergy(world: World): number {
     if (work <= 0) continue;
 
     const rate = ENERGY_COST_CT_PER_MJ[vehicles.powerCode[id]!] ?? 0;
-    totalCt += (work / JOULES_PER_MJ) * rate;
+    perCompany[vehicles.ownerId[id]!]! += (work / JOULES_PER_MJ) * rate;
   }
 
-  const amount = Math.round(totalCt * world.costFactor);
-  if (amount <= 0) return 0;
-  bookExpense(world.company, amount, Account.Energy);
-  return amount;
+  let charged = 0;
+  for (let index = 0; index < world.companies.length; index++) {
+    const company = world.companies[index]!;
+    const amount = Math.round(perCompany[company.id]! * world.costFactor);
+    if (amount <= 0) continue;
+    bookExpense(company, amount, Account.Energy);
+    charged += amount;
+  }
+  return charged;
 }

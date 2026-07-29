@@ -3,7 +3,13 @@ import { zlibSync } from 'fflate';
 import { describe, expect, it } from 'vitest';
 import { CommandQueue } from '../../src/sim/commands/queue';
 import { CommandKind } from '../../src/sim/commands/types';
-import { Difficulty, LOAN_STEP_CT, MapClimate, TICKS_PER_MONTH } from '../../src/sim/constants';
+import {
+  Difficulty,
+  LOAN_STEP_CT,
+  MapClimate,
+  TICKS_PER_MONTH,
+  TILE_PUBLIC,
+} from '../../src/sim/constants';
 import { SAVE_MAGIC, SAVE_VERSION, SaveFormatError } from '../../src/sim/save/format';
 import {
   migrateSavePayload,
@@ -163,7 +169,7 @@ describe('save migrations', () => {
   it('pins the current save version', () => {
     // Bumping SAVE_VERSION has to be a conscious act, because from the first
     // released build onwards it also requires a migration.
-    expect(SAVE_VERSION).toBe(17);
+    expect(SAVE_VERSION).toBe(18);
   });
 
   it('has a real migration for every step from version 2 on', () => {
@@ -200,7 +206,13 @@ describe('the registered migrations', () => {
     expect(map['railType']).toEqual(new Uint8Array(64 * 64));
     expect(map['structure']).toEqual(new Uint8Array(64 * 64));
     expect(map['signal']).toEqual(new Uint8Array(64 * 64));
-    expect((state['company'] as Record<string, unknown>)['bankrupt']).toBe(false);
+    // v18 turned the one company into a list, and the single company of a
+    // version 2 world is the player at index 0.
+    const companies = state['companies'] as Array<Record<string, unknown>>;
+    expect(companies.length).toBe(1);
+    expect(companies[0]!['id']).toBe(0);
+    expect(companies[0]!['bankrupt']).toBe(false);
+    expect(map['owner']).toEqual(new Uint8Array(64 * 64).fill(TILE_PUBLIC));
     expect(migrated['saveVersion']).toBe(SAVE_VERSION);
   });
 

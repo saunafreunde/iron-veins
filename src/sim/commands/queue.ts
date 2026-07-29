@@ -14,7 +14,7 @@ export class CommandQueue {
   private nextSeq = 0;
 
   /** Schedule `command` for the start of `tick`. */
-  enqueue(command: Command, tick: number): CommandEnvelope {
+  enqueue(command: Command, tick: number, companyId = 0): CommandEnvelope {
     const last = this.entries[this.entries.length - 1];
     if (last !== undefined && tick < last.tick) {
       throw new Error(
@@ -22,7 +22,7 @@ export class CommandQueue {
           'the deterministic order would be lost.',
       );
     }
-    const envelope: CommandEnvelope = { tick, seq: this.nextSeq++, command };
+    const envelope: CommandEnvelope = { tick, seq: this.nextSeq++, companyId, command };
     this.entries.push(envelope);
     return envelope;
   }

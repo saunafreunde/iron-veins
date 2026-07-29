@@ -2,6 +2,7 @@ import { bookMonthlyDepreciation } from './company';
 import { aggregateConsist } from '../vehicles/consist';
 import { vehicleSpec } from '../vehicles/catalog';
 import { vehicleLifetimeYears } from '../vehicles/lifecycle';
+import type { CompanyState } from '../types';
 import type { World } from '../World';
 
 /**
@@ -16,12 +17,12 @@ import type { World } from '../World';
  * running figure, for the same reason the fleet's upkeep is: it changes when a
  * vehicle is bought, sold or replaced, and a cached total would drift.
  */
-export function fleetDepreciationCtPerYear(world: World): number {
+export function fleetDepreciationCtPerYear(world: World, ownerId: number): number {
   const vehicles = world.vehicles;
   let total = 0;
 
   for (let id = 0; id < vehicles.count; id++) {
-    if (vehicles.alive[id] !== 1) continue;
+    if (vehicles.alive[id] !== 1 || vehicles.ownerId[id] !== ownerId) continue;
     const units = vehicles.consist[id]!;
     const priceCt =
       units.length > 0
@@ -34,7 +35,7 @@ export function fleetDepreciationCtPerYear(world: World): number {
   return total;
 }
 
-/** Charge this month's depreciation. Called from the monthly hook. */
-export function bookDepreciation(world: World): number {
-  return bookMonthlyDepreciation(world.company, fleetDepreciationCtPerYear(world));
+/** Charge one company's depreciation for the month. */
+export function bookDepreciation(world: World, company: CompanyState): number {
+  return bookMonthlyDepreciation(company, fleetDepreciationCtPerYear(world, company.id));
 }

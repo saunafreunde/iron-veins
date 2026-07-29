@@ -4,6 +4,7 @@ import type { CommandEnvelope, CommandOutcome } from './commands/types';
 import {
   DAYS_PER_MONTH,
   DAYS_PER_YEAR,
+  MAX_COMPANIES,
   START_YEAR,
   TICKS_PER_DAY,
   TICKS_PER_MONTH,
@@ -18,6 +19,7 @@ import {
   closeMonth,
   createCompany,
 } from './economy/company';
+import { createAiCompanies } from './company/roster';
 import { LinkGraph, type CargoLinkSave } from './cargo/linkGraph';
 import { refreshCargoRouting } from './cargo/routing';
 import { NewsCategory, NewsLog, NewsSeverity, type NewsEntry } from './news/log';
@@ -77,7 +79,8 @@ export interface WorldStateData {
   inflation: boolean;
   mapSize: number;
   rng: RngState;
-  company: CompanyState;
+  /** Every company, player first. */
+  companies: CompanyState[];
   map: TileMapData;
   towns: Town[];
   industries: Industry[];
@@ -103,6 +106,8 @@ export interface TileMapData {
   industryId: Uint8Array;
   buildingKind: Uint8Array;
   buildingLevel: Uint8Array;
+  /** Which company built what stands on each tile, or TILE_PUBLIC. */
+  owner: Uint8Array;
 }
 
 /**
@@ -132,7 +137,27 @@ export class World {
   /** Whether costs and fares drift upward over the century (section 14.2). */
   readonly inflation: boolean;
   readonly rng: Rng;
-  readonly company: CompanyState;
+  /**
+   * Every company in the game, index = id. Zero is the player, 1..n are the
+   * AI competitors of section 15.
+   */
+  readonly companies: CompanyState[] = [];
+  /**
+   * Whose command is being executed, or whose hook is running.
+   *
+   * Every build command charges `world.company`, and with more than one company
+   * that has to mean the one ISSUING the command rather than the player. The
+   * alternative - an extra parameter on all twenty-odd build functions - says
+   * the same thing at every call site instead of once here (DECISIONS.md
+   * D-100). Set from the command envelope for the length of one command, and
+   * by the monthly hooks around anything they do on a company's behalf.
+   */
+  actingCompanyId = 0;
+  /**
+   * One number per company, for passes that meter every company at once.
+   * Preallocated because the monthly hooks must not allocate either.
+   */
+  readonly companyScratch = new Float64Array(MAX_COMPANIES);
   readonly map: TileMap;
   readonly towns: Town[];
   readonly industries: Industry[];
@@ -177,8 +202,27 @@ export class World {
    */
   readonly news = new NewsLog();
 
-  /** The company the local player controls. AI companies get 1..n in M8. */
+  /** The company the local player controls. */
   readonly playerCompanyId = 0;
+
+  /**
+   * The company currently acting. Inside a command that is whoever issued it;
+   * everywhere else it is the player, because that is who `actingCompanyId`
+   * rests at.
+   */
+  get company(): CompanyState {
+    return this.companies[this.actingCompanyId] ?? this.companies[0]!;
+  }
+
+  /** The local player's books, whoever happens to be acting. */
+  get playerCompany(): CompanyState {
+    return this.companies[this.playerCompanyId]!;
+  }
+
+  /** One company by id, falling back to the player for an unknown id. */
+  companyOf(id: number): CompanyState {
+    return this.companies[id] ?? this.companies[0]!;
+  }
 
   private constructor(params: NewGameParams, generated: GeneratedWorld) {
     this.seed = params.seed | 0;
@@ -186,7 +230,17 @@ export class World {
     this.climate = params.climate;
     this.inflation = params.inflation ?? true;
     this.rng = Rng.fromSeed(gameplaySeed(this.seed));
-    this.company = createCompany(params.companyName, params.companyColorIndex, params.difficulty);
+    this.companies.push(
+      createCompany(0, params.companyName, params.companyColorIndex, params.difficulty),
+    );
+    this.companies.push(
+      ...createAiCompanies(
+        params.aiCompanies ?? 0,
+        params.companyColorIndex,
+        params.difficulty,
+        this.rng,
+      ),
+    );
     this.map = generated.map;
     this.towns = generated.towns;
     this.industries = generated.industries;
@@ -264,12 +318,16 @@ export class World {
       reportNews(this);
     }
     if (this.tick % TICKS_PER_MONTH === 0) {
-      bookMonthlyInterest(this.company, this.difficulty);
-      // Upkeep and energy are costs like any other and inflate with the rest
-      // of the economy; the fares they are set against have done so since M2.
-      bookMonthlyUpkeep(this.company, this.costFactor);
+      for (let index = 0; index < this.companies.length; index++) {
+        const company = this.companies[index]!;
+        bookMonthlyInterest(company, this.difficulty);
+        // Upkeep and energy are costs like any other and inflate with the rest
+        // of the economy; the fares they are set against have done so since M2.
+        bookMonthlyUpkeep(company, this.costFactor);
+        bookDepreciation(this, company);
+      }
+      // Every company's meter in one pass - reading an accumulator empties it.
       bookMonthlyEnergy(this);
-      bookDepreciation(this);
       // Judge the month that has just ended, THEN make the next month's
       // output. The other way round would compare this month's production
       // against last month's collection, and every industry would look badly
@@ -278,27 +336,39 @@ export class World {
       reviewIndustries(this);
       produceIndustryCargo(this);
       growTowns(this);
-      closeMonth(this.company);
+      for (let index = 0; index < this.companies.length; index++) {
+        closeMonth(this.companies[index]!);
+      }
       // Last, so the month it judges is the one that has just been booked.
-      reviewBankruptcy(this);
+      for (let index = 0; index < this.companies.length; index++) {
+        reviewBankruptcy(this, this.companies[index]!);
+      }
     }
     if (this.tick % TICKS_PER_YEAR === 0) {
+      // Only the player's result is news. A competitor's books are not
+      // something the player is shown, and five year-end lines a year from
+      // companies whose finances are private would bury everything else.
       this.news.post({
         tick: this.tick,
         category: NewsCategory.Finance,
-        severity: this.company.lastYearProfitCt < 0 ? NewsSeverity.Warning : NewsSeverity.Info,
+        severity: this.playerCompany.lastYearProfitCt < 0 ? NewsSeverity.Warning : NewsSeverity.Info,
         messageKey: 'news.yearClosed',
-        params: { year: this.date.year - 1, profitCt: this.company.profitThisYearCt },
+        params: { year: this.date.year - 1, profitCt: this.playerCompany.profitThisYearCt },
         tileIndex: -1,
       });
-      closeFinancialYear(this.company);
       ageVehicles(this);
-      // After ageing, so a vehicle that has just passed its design life is
-      // charged the doubled upkeep from the year it becomes obsolete.
-      // Renew before the fleet's upkeep is totalled, so a company that just
-      // replaced its vehicles is charged for the new ones and not the old.
-      renewFleet(this);
-      this.company.vehicleUpkeepPerYearCt = fleetUpkeepCtPerYear(this);
+      for (let index = 0; index < this.companies.length; index++) {
+        const company = this.companies[index]!;
+        closeFinancialYear(company);
+        // After ageing, so a vehicle that has just passed its design life is
+        // charged the doubled upkeep from the year it becomes obsolete.
+        // Renew before the fleet's upkeep is totalled, so a company that just
+        // replaced its vehicles is charged for the new ones and not the old.
+        this.actingCompanyId = company.id;
+        renewFleet(this, company);
+        this.actingCompanyId = this.playerCompanyId;
+        company.vehicleUpkeepPerYearCt = fleetUpkeepCtPerYear(this, company.id);
+      }
       // One new works a year, by preference where nothing is served yet.
       openNewIndustries(this);
     }
@@ -314,7 +384,11 @@ export class World {
   drainCommands(queue: CommandQueue, sink: CommandOutcomeSink | null): void {
     let due = queue.shiftDue(this.tick);
     while (due !== null) {
+      // The envelope says who is acting, which is what lets an AI company use
+      // the very same commands the player does (section 15).
+      this.actingCompanyId = due.companyId;
       const outcome = executeCommand(this, due.command);
+      this.actingCompanyId = this.playerCompanyId;
       if (sink !== null) sink(due, outcome);
       due = queue.shiftDue(this.tick);
     }
@@ -351,7 +425,7 @@ export class World {
       inflation: this.inflation,
       mapSize: this.map.size,
       rng: this.rng.getState(),
-      company: { ...this.company },
+      companies: this.companies.map((company) => ({ ...company })),
       map: {
         cornerHeight: this.map.cornerHeight,
         terrain: this.map.terrain,
@@ -365,6 +439,7 @@ export class World {
         industryId: bytesOf(this.map.industryId),
         buildingKind: this.map.buildingKind,
         buildingLevel: this.map.buildingLevel,
+        owner: this.map.owner,
       },
       towns: this.towns.map((town) => ({ ...town })),
       industries: this.industries.map((industry) => ({ ...industry })),
@@ -388,6 +463,7 @@ export class World {
     map.structureHeight.set(data.map.structureHeight);
     map.buildingKind.set(data.map.buildingKind);
     map.buildingLevel.set(data.map.buildingLevel);
+    map.owner.set(data.map.owner);
     map.townId.set(new Int16Array(data.map.townId.slice().buffer));
     map.industryId.set(new Int16Array(data.map.industryId.slice().buffer));
 
@@ -403,8 +479,8 @@ export class World {
         climate: data.climate,
         inflation: data.inflation,
         mapSize: data.mapSize,
-        companyName: data.company.name,
-        companyColorIndex: data.company.colorIndex,
+        companyName: data.companies[0]!.name,
+        companyColorIndex: data.companies[0]!.colorIndex,
       },
       { map, towns: data.towns, industries: data.industries, seedUsed: data.seed },
     );
@@ -420,25 +496,10 @@ export class World {
     world.news.loadData(data.news);
     world.cargoLinks.refreshLinks(world);
     rebuildReservations(world);
-    world.company.cashCt = data.company.cashCt;
-    world.company.loanCt = data.company.loanCt;
-    world.company.profitThisYearCt = data.company.profitThisYearCt;
-    world.company.lastYearProfitCt = data.company.lastYearProfitCt;
-    world.company.fixedAssetsCt = data.company.fixedAssetsCt;
-    world.company.revenueThisMonthCt = data.company.revenueThisMonthCt;
-    world.company.expensesThisMonthCt = data.company.expensesThisMonthCt;
-    world.company.vehicleUpkeepPerYearCt = data.company.vehicleUpkeepPerYearCt;
-    world.company.infrastructureUpkeepPerYearCt = data.company.infrastructureUpkeepPerYearCt;
-    world.company.accounts = [...data.company.accounts];
-    world.company.yearAccounts = [...data.company.yearAccounts];
-    world.company.lastYearAccounts = [...data.company.lastYearAccounts];
-    world.company.monthHistory = [...data.company.monthHistory];
-    world.company.historyCursor = data.company.historyCursor;
-    world.company.valueHistory = [...data.company.valueHistory];
-    world.company.accumulatedDepreciationCt = data.company.accumulatedDepreciationCt;
-    world.company.monthsInDebt = data.company.monthsInDebt;
-    world.company.bankrupt = data.company.bankrupt;
-    world.company.autoRenew = data.company.autoRenew;
+    // The constructor built the player from the parameters and the AI roster
+    // from the RNG; the file says who they really are.
+    world.companies.length = 0;
+    for (const saved of data.companies) world.companies.push({ ...saved });
     return world;
   }
 }
@@ -497,29 +558,36 @@ function hashDynamicState(h: Fnv1a64, world: World): void {
   const rng = world.rng.getState();
   h.u32(rng[0]).u32(rng[1]).u32(rng[2]).u32(rng[3]);
 
-  const c = world.company;
-  h.u32(c.name.length).str(c.name);
-  h.u32(c.colorIndex);
-  h.int(c.cashCt);
-  h.int(c.loanCt);
-  h.int(c.profitThisYearCt);
-  h.int(c.lastYearProfitCt);
-  h.int(c.fixedAssetsCt);
-  h.u32(c.monthsInDebt)
-    .u32(c.bankrupt ? 1 : 0)
-    .u32(c.autoRenew ? 1 : 0);
-  h.int(c.vehicleUpkeepPerYearCt).int(c.infrastructureUpkeepPerYearCt);
-  h.int(c.accumulatedDepreciationCt).u32(c.historyCursor);
-  // The whole ledger is hashed. It is state the simulation writes every month,
-  // and anything left out here silently stops being covered by the determinism
-  // suite - which is exactly how a counter drifts for a milestone and nobody
-  // notices.
-  for (const amount of c.accounts) h.int(amount);
-  for (const amount of c.yearAccounts) h.int(amount);
-  for (const amount of c.lastYearAccounts) h.int(amount);
-  for (const amount of c.monthHistory) h.int(amount);
-  h.u32(c.valueHistory.length);
-  for (const value of c.valueHistory) h.int(value);
+  // Every company, not just the player's. A competitor's books are simulation
+  // state like any other, and one left out of the digest is one the
+  // determinism suite stops watching.
+  h.u32(world.companies.length);
+  for (let index = 0; index < world.companies.length; index++) {
+    const c = world.companies[index]!;
+    h.u32(c.id);
+    h.u32(c.name.length).str(c.name);
+    h.u32(c.colorIndex);
+    h.int(c.cashCt);
+    h.int(c.loanCt);
+    h.int(c.profitThisYearCt);
+    h.int(c.lastYearProfitCt);
+    h.int(c.fixedAssetsCt);
+    h.u32(c.monthsInDebt)
+      .u32(c.bankrupt ? 1 : 0)
+      .u32(c.autoRenew ? 1 : 0);
+    h.int(c.vehicleUpkeepPerYearCt).int(c.infrastructureUpkeepPerYearCt);
+    h.int(c.accumulatedDepreciationCt).u32(c.historyCursor);
+    // The whole ledger is hashed. It is state the simulation writes every
+    // month, and anything left out here silently stops being covered by the
+    // determinism suite - which is exactly how a counter drifts for a
+    // milestone and nobody notices.
+    for (const amount of c.accounts) h.int(amount);
+    for (const amount of c.yearAccounts) h.int(amount);
+    for (const amount of c.lastYearAccounts) h.int(amount);
+    for (const amount of c.monthHistory) h.int(amount);
+    h.u32(c.valueHistory.length);
+    for (const value of c.valueHistory) h.int(value);
+  }
 
   h.u32(world.towns.length);
   for (let i = 0; i < world.towns.length; i++) {
@@ -627,6 +695,7 @@ export function hashWorld(world: World): string {
   h.intArray(map.industryId);
   h.intArray(map.buildingKind);
   h.intArray(map.buildingLevel);
+  h.intArray(map.owner);
 
   return h.digest();
 }

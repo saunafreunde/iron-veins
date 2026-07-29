@@ -1,6 +1,7 @@
 import { BANKRUPTCY_MONTHS } from '../constants';
 import { sellVehicle } from '../commands/build';
 import { reviewSolvency } from './company';
+import type { CompanyState } from '../types';
 import type { World } from '../World';
 
 /**
@@ -15,16 +16,23 @@ import type { World } from '../World';
  * a fleet, nobody is bidding for half a branch line, and a map that quietly
  * erased itself would take the evidence of what went wrong with it.
  */
-export function reviewBankruptcy(world: World): void {
-  const company = world.company;
+export function reviewBankruptcy(world: World, company: CompanyState): void {
   if (company.bankrupt) return;
 
   if (reviewSolvency(company) < BANKRUPTCY_MONTHS) return;
 
+  // The auction is the company's own doing, so it acts as that company: the
+  // sale books the proceeds against the books being wound up and not against
+  // whoever happened to be acting last.
+  const previous = world.actingCompanyId;
+  world.actingCompanyId = company.id;
+
   const vehicles = world.vehicles;
   for (let id = 0; id < vehicles.count; id++) {
-    if (vehicles.alive[id] !== 1) continue;
+    if (vehicles.alive[id] !== 1 || vehicles.ownerId[id] !== company.id) continue;
     sellVehicle(world, id);
   }
+
+  world.actingCompanyId = previous;
   company.bankrupt = true;
 }

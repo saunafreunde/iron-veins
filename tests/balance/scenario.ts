@@ -92,6 +92,7 @@ export function flatScenario(
   towns: Town[],
   industries: Industry[],
   seed = 9,
+  aiCompanies = 0,
 ): Scenario {
   const map = new TileMap(size);
   map.cornerHeight.fill(GROUND_HEIGHT);
@@ -115,6 +116,7 @@ export function flatScenario(
       mapSize: size,
       companyName: 'Balancing AG',
       companyColorIndex: 1,
+      aiCompanies,
     },
     { map, towns, industries, seedUsed: seed },
   );
@@ -150,8 +152,8 @@ export function twoTownScenario(population: number, distance: number): TwoTownSc
 }
 
 /** Execute a command immediately, and fail loudly if the world refuses it. */
-export function apply(scenario: Scenario, command: Command): void {
-  scenario.queue.enqueue(command, scenario.world.tick);
+export function apply(scenario: Scenario, command: Command, companyId = 0): void {
+  scenario.queue.enqueue(command, scenario.world.tick, companyId);
   let rejected: string | null = null;
   scenario.world.drainCommands(scenario.queue, (_envelope, outcome) => {
     if (!outcome.ok) rejected = outcome.reasonKey;
@@ -159,6 +161,16 @@ export function apply(scenario: Scenario, command: Command): void {
   if (rejected !== null) {
     throw new Error(`scenario command ${command.kind} was rejected: ${String(rejected)}`);
   }
+}
+
+/** Execute a command and return the rejection key, or null if it was accepted. */
+export function tryApply(scenario: Scenario, command: Command, companyId = 0): string | null {
+  scenario.queue.enqueue(command, scenario.world.tick, companyId);
+  let rejected: string | null = null;
+  scenario.world.drainCommands(scenario.queue, (_envelope, outcome) => {
+    if (!outcome.ok) rejected = outcome.reasonKey;
+  });
+  return rejected;
 }
 
 /**

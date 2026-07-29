@@ -4,6 +4,7 @@ import { ACCOUNT_COUNT } from '../economy/ledger';
 import { NEWS_CATEGORY_COUNT, type NewsEntry } from '../news/log';
 import {
   COMPANY_COLOR_COUNT,
+  MAX_COMPANIES,
   Difficulty,
   LEDGER_HISTORY_MONTHS,
   LINK_SAMPLE_COUNT,
@@ -41,9 +42,11 @@ export const SAVE_MAGIC = 'IRVN';
  * countdown of section 14.2, 13 the accounts of section 14.1, 14 the traction
  * work each vehicle has done since its last energy bill, 15 the inflation
  * setting of section 14.2 and the auto-renewal switch of 11.3, 16 the runway
- * occupancy of section 8.4, 17 the news log of section 17.1.
+ * occupancy of section 8.4, 17 the news log of section 17.1, 18 the several
+ * companies of section 15 with the tile ownership and the command authorship
+ * that come with them.
  */
-export const SAVE_VERSION = 17;
+export const SAVE_VERSION = 18;
 
 /** File extension used for manual and automatic saves. */
 export const SAVE_EXTENSION = '.ironsave';
@@ -146,6 +149,28 @@ function parseAccounts(value: unknown, path: string, length: number): number[] {
   return entries.map((entry, i) => asInt(entry, `${path}[${i}]`));
 }
 
+/**
+ * The companies of a save, player first.
+ *
+ * The ids are checked against the positions rather than trusted: everything
+ * that owns anything - a vehicle, a station, a tile - refers to a company by
+ * index, and a file whose third company calls itself number five would hand
+ * those assets to the wrong books without any of it looking wrong.
+ */
+function parseCompanies(value: unknown, path: string): CompanyState[] {
+  const entries = asArray(value, path);
+  if (entries.length < 1 || entries.length > MAX_COMPANIES) {
+    throw new SaveFormatError(`${path}: expected 1 to ${MAX_COMPANIES} companies`);
+  }
+  return entries.map((entry, index) => {
+    const company = parseCompany(entry, `${path}[${index}]`);
+    if (company.id !== index) {
+      throw new SaveFormatError(`${path}[${index}].id: expected ${index}, got ${company.id}`);
+    }
+    return company;
+  });
+}
+
 function parseCompany(value: unknown, path: string): CompanyState {
   const raw = asRecord(value, path);
   const colorIndex = asInt(raw['colorIndex'], `${path}.colorIndex`);
@@ -153,6 +178,7 @@ function parseCompany(value: unknown, path: string): CompanyState {
     throw new SaveFormatError(`${path}.colorIndex: ${colorIndex} is not a known company colour`);
   }
   return {
+    id: asInt(raw['id'], `${path}.id`),
     name: asString(raw['name'], `${path}.name`),
     colorIndex,
     cashCt: asInt(raw['cashCt'], `${path}.cashCt`),
@@ -244,6 +270,7 @@ function parseTileMap(value: unknown, path: string, mapSize: number): TileMapDat
     industryId: asBytes(raw['industryId'], `${path}.industryId`, tiles * 2),
     buildingKind: asBytes(raw['buildingKind'], `${path}.buildingKind`, tiles),
     buildingLevel: asBytes(raw['buildingLevel'], `${path}.buildingLevel`, tiles),
+    owner: asBytes(raw['owner'], `${path}.owner`, tiles),
   };
 }
 
@@ -520,9 +547,14 @@ function parseCommandLog(value: unknown, path: string): CommandEnvelope[] {
   const log: CommandEnvelope[] = [];
   for (let i = 0; i < entries.length; i++) {
     const raw = asRecord(entries[i], `${path}[${i}]`);
+    const companyId = asInt(raw['companyId'], `${path}[${i}].companyId`);
+    if (companyId < 0 || companyId >= MAX_COMPANIES) {
+      throw new SaveFormatError(`${path}[${i}].companyId: ${companyId} is not a company`);
+    }
     log.push({
       tick: asInt(raw['tick'], `${path}[${i}].tick`),
       seq: asInt(raw['seq'], `${path}[${i}].seq`),
+      companyId,
       command: parseCommand(raw['command'], `${path}[${i}].command`),
     });
   }
@@ -624,7 +656,7 @@ export function parseSaveFile(value: unknown): SaveFile {
     inflation: asBoolean(stateRaw['inflation'], 'save.state.inflation'),
     mapSize,
     rng: parseRngState(stateRaw['rng'], 'save.state.rng'),
-    company: parseCompany(stateRaw['company'], 'save.state.company'),
+    companies: parseCompanies(stateRaw['companies'], 'save.state.companies'),
     map: parseTileMap(stateRaw['map'], 'save.state.map', mapSize),
     towns: parseTowns(stateRaw['towns'], 'save.state.towns'),
     industries: parseIndustries(stateRaw['industries'], 'save.state.industries'),

@@ -31,6 +31,7 @@ import {
   ROAD_STOP_UPKEEP_CT,
   ROAD_UPKEEP_PER_TILE_CT,
   STATION_JOIN_DISTANCE,
+  TILE_PUBLIC,
   TICKS_PER_YEAR,
   TOWN_ROAD_MAX_SLOPE,
 } from '../constants';
@@ -95,6 +96,34 @@ function reject(reasonKey: string): CommandOutcome {
 }
 
 /** Can a road tile exist here at all? */
+/**
+ * May the acting company work on this tile?
+ *
+ * A tile nobody built is PUBLIC - open country, and the roads a town lays for
+ * itself - and anyone may build on it. A tile becomes a company's only when
+ * that company puts the first road or track on it, which is what keeps a town's
+ * own streets public for ever: extending one does not buy it.
+ */
+function mayBuildOn(world: World, tile: number): boolean {
+  const owner = world.map.owner[tile]!;
+  return owner === TILE_PUBLIC || owner === world.company.id;
+}
+
+/**
+ * Record who laid this, if the tile was bare. Call BEFORE writing the bits -
+ * afterwards there is no way to tell whether anything was already there.
+ */
+function claimIfBare(world: World, tile: number): void {
+  const map = world.map;
+  if (map.roadBits[tile] === 0 && map.trackBits[tile] === 0) map.owner[tile] = world.company.id;
+}
+
+/** Hand a tile back once nothing built is left on it. */
+function releaseIfBare(world: World, tile: number): void {
+  const map = world.map;
+  if (map.roadBits[tile] === 0 && map.trackBits[tile] === 0) map.owner[tile] = TILE_PUBLIC;
+}
+
 function roadBuildable(world: World, x: number, y: number): string | null {
   if (!world.map.contains(x, y)) return RejectReason.OutsideMap;
   const index = world.map.tileIndex(x, y);
@@ -169,6 +198,7 @@ export function buildRoad(
   for (const tile of tiles) {
     const blocker = roadBuildable(world, tile % size, (tile / size) | 0);
     if (blocker !== null) return reject(blocker);
+    if (!mayBuildOn(world, tile)) return reject(RejectReason.NotYours);
     if (world.map.roadBits[tile] === 0) newTiles++;
   }
 
@@ -179,6 +209,7 @@ export function buildRoad(
 
   for (let i = 0; i < tiles.length; i++) {
     const tile = tiles[i]!;
+    claimIfBare(world, tile);
     if (world.map.terrain[tile] !== Terrain.TownGround) {
       world.map.terrain[tile] = Terrain.TownGround;
     }
@@ -198,6 +229,7 @@ export function demolishRoad(world: World, x: number, y: number): CommandOutcome
   const tile = world.map.tileIndex(x, y);
   if (world.map.roadBits[tile] === 0) return reject(RejectReason.NothingToDo);
   if (stationAt(world, tile) !== null) return reject(RejectReason.Occupied);
+  if (!mayBuildOn(world, tile)) return reject(RejectReason.NotYours);
 
   const size = world.map.size;
   const bits = world.map.roadBits;
@@ -215,6 +247,7 @@ export function demolishRoad(world: World, x: number, y: number): CommandOutcome
     bits[neighbour] = bits[neighbour]! & ~oppositeBit;
   }
   bits[tile] = 0;
+  releaseIfBare(world, tile);
 
   world.company.cashCt += Math.round(ROAD_COST_PER_TILE_CT * DEMOLITION_REFUND);
   world.company.infrastructureUpkeepPerYearCt -= ROAD_UPKEEP_PER_TILE_CT;
@@ -285,6 +318,8 @@ export function buildTrack(
       ((to / map.size) | 0) - ((from / map.size) | 0),
     );
 
+    claimIfBare(world, from);
+    claimIfBare(world, to);
     map.trackBits[from] = map.trackBits[from]! | trackBit(direction);
     map.trackBits[to] = map.trackBits[to]! | trackBit(oppositeDir(direction));
     map.railType[from] = railType;
@@ -358,6 +393,7 @@ export function demolishTrack(world: World, x: number, y: number): CommandOutcom
   const map = world.map;
   const tile = map.tileIndex(x, y);
   if (map.trackBits[tile] === 0) return reject(RejectReason.NothingToDo);
+  if (!mayBuildOn(world, tile)) return reject(RejectReason.NotYours);
 
   const railType = map.railType[tile]! as RailType;
   for (let direction = 0; direction < 8; direction++) {
@@ -373,6 +409,7 @@ export function demolishTrack(world: World, x: number, y: number): CommandOutcom
   map.trackBits[tile] = 0;
   map.railType[tile] = 0;
   clearSignal(world, tile);
+  releaseIfBare(world, tile);
 
   // Taking out one tile of a bridge takes out the bridge: half a viaduct is not
   // a thing, and leaving the deck standing with a hole in it would be worse.
@@ -474,7 +511,7 @@ function joinTarget(world: World, x: number, y: number): Station | null {
   let bestDistanceSq = Infinity;
 
   for (const station of world.stations) {
-    if (station.ownerId !== world.playerCompanyId) continue;
+    if (station.ownerId !== world.company.id) continue;
     for (const module of station.modules) {
       const dx = module.x - x;
       const dy = module.y - y;
@@ -504,7 +541,7 @@ function attachModule(world: World, module: StationModule): Station {
     station = {
       id: world.stations.length,
       name: world.nextStationName(module.x, module.y),
-      ownerId: world.playerCompanyId,
+      ownerId: world.company.id,
       modules: [module],
       x: module.x,
       y: module.y,
@@ -713,7 +750,7 @@ export function buyAircraft(
 
   const id = world.vehicles.create(
     specId,
-    world.playerCompanyId,
+    world.company.id,
     tile,
     world.tick,
     defaultCargo(spec),
@@ -758,7 +795,7 @@ export function buyShip(
 
   const id = world.vehicles.create(
     specId,
-    world.playerCompanyId,
+    world.company.id,
     tile,
     world.tick,
     defaultCargo(spec),
@@ -859,7 +896,7 @@ export function buyTrain(
 
   const id = world.vehicles.create(
     specIds[0]!,
-    world.playerCompanyId,
+    world.company.id,
     tile,
     world.tick,
     consistDefaultCargo(specIds),
@@ -902,7 +939,7 @@ export function buyRoadVehicle(
 
   const id = world.vehicles.create(
     specId,
-    world.playerCompanyId,
+    world.company.id,
     tile,
     world.tick,
     defaultCargo(spec),
@@ -989,6 +1026,12 @@ function refitCostCt(world: World, vehicleId: number): number {
 
 export function sellVehicle(world: World, vehicleId: number): CommandOutcome {
   if (!world.vehicles.isAlive(vehicleId)) return reject(RejectReason.NoSuchVehicle);
+  // Nobody sells a competitor's lorry. The check is what makes the winding-up
+  // of section 14.2 safe to run for any company: it acts as that company, and
+  // anything it does not own it cannot touch.
+  if (world.vehicles.ownerId[vehicleId] !== world.company.id) {
+    return reject(RejectReason.NotYours);
+  }
 
   // A train is sold whole, so the price and the upkeep are those of the
   // composition, not of the locomotive at its head.

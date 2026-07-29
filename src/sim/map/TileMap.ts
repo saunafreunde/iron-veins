@@ -1,4 +1,4 @@
-import { MAX_HEIGHT, SEA_LEVEL } from '../constants';
+import { MAX_HEIGHT, SEA_LEVEL, TILE_PUBLIC } from '../constants';
 import { SlopeBit, Terrain } from './terrain';
 
 /**
@@ -64,6 +64,17 @@ export class TileMap {
   readonly buildingLevel: Uint8Array;
 
   /**
+   * Which company built what stands on this tile, or TILE_PUBLIC.
+   *
+   * Needed twice over from M8 on: a company may not tear up a competitor's
+   * line, and the town council of section 13.3 rates each company on the track
+   * IT laid inside the town - both of which are questions about a tile that
+   * only a per-tile owner can answer. Town roads stay public for ever, so a
+   * company can extend them and nobody can demolish them.
+   */
+  readonly owner: Uint8Array;
+
+  /**
    * Connected land component per tile, -1 for water. Derived - recomputed on
    * load rather than serialised.
    */
@@ -122,6 +133,8 @@ export class TileMap {
     offset += tiles;
     this.buildingLevel = new Uint8Array(this.buffer, offset, tiles);
     offset += tiles;
+    this.owner = new Uint8Array(this.buffer, offset, tiles);
+    offset += tiles;
     this.oceanMask = new Uint8Array(this.buffer, offset, tiles);
 
     if (fresh) {
@@ -132,6 +145,7 @@ export class TileMap {
       this.townId.fill(-1);
       this.industryId.fill(-1);
       this.landmassId.fill(-1);
+      this.owner.fill(TILE_PUBLIC);
     }
   }
 
@@ -139,10 +153,10 @@ export class TileMap {
   static bufferBytes(size: number): number {
     const tiles = size * size;
     const corners = (size + 1) * (size + 1);
-    // 4-byte landmass, two 2-byte id layers, the corner heights, and ten
+    // 4-byte landmass, two 2-byte id layers, the corner heights, and eleven
     // single-byte layers: terrain, road, track, rail type, signal, structure,
-    // structure height, building kind, building level, ocean mask.
-    return tiles * 8 + corners + tiles * 10;
+    // structure height, building kind, building level, owner, ocean mask.
+    return tiles * 8 + corners + tiles * 11;
   }
 
   /** Read-side view on a map the worker owns. */

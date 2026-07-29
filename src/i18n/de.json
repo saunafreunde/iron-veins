@@ -438,5 +438,6 @@
   "news.vehicleObsolete": "Fahrzeug {id} ist veraltet.",
   "news.vehicleRenewed": "{count} Fahrzeug(e) automatisch erneuert.",
   "news.inDebt": "Seit {months} Monaten im Minus – Zwangsversteigerung in {left} Monaten.",
-  "news.bankrupt": "Die Firma wurde abgewickelt."
+  "news.bankrupt": "Die Firma wurde abgewickelt.",
+  "cmd.reject.notYours": "Das gehört einer anderen Firma."
 }

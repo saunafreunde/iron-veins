@@ -10,6 +10,7 @@ import { buyRoadVehicle, buyTrain, sellVehicle } from '../commands/build';
 import { reportRenewal } from '../news/report';
 import { startVehicle } from './update';
 import { VehicleState } from './VehicleStore';
+import type { CompanyState } from '../types';
 import type { World } from '../World';
 
 /**
@@ -129,8 +130,8 @@ export function renewalCostCt(world: World, replacement: readonly number[]): num
  * Returns how many were replaced, which is what the news log will report once
  * there is one (section 15, M8).
  */
-export function renewFleet(world: World): number {
-  if (!world.company.autoRenew) return 0;
+export function renewFleet(world: World, company: CompanyState): number {
+  if (!company.autoRenew) return 0;
 
   const vehicles = world.vehicles;
   let replaced = 0;
@@ -139,12 +140,12 @@ export function renewFleet(world: World): number {
   // and a freshly bought vehicle must not be considered for renewal itself.
   const count = vehicles.count;
   for (let id = 0; id < count; id++) {
-    if (vehicles.alive[id] !== 1) continue;
+    if (vehicles.alive[id] !== 1 || vehicles.ownerId[id] !== company.id) continue;
     if (!dueForRenewal(world, id)) continue;
 
     const replacement = renewalConsist(world, id);
     if (replacement === null) continue;
-    if (renewalCostCt(world, replacement) > world.company.cashCt) continue;
+    if (renewalCostCt(world, replacement) > company.cashCt) continue;
 
     const depotTile = vehicles.homeDepotTile[id]!;
     const orders = vehicles.orders[id]!.map((order) => ({ ...order }));

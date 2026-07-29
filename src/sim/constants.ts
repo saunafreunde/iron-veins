@@ -1102,6 +1102,19 @@ export const COMPANY_COLOR_COUNT = 8;
 /** Upper bound for a player supplied company name. [UTF-16 code units] */
 export const MAX_COMPANY_NAME_LENGTH = 40;
 
+/** How many AI competitors a game can be started with (section 15). */
+export const MAX_AI_COMPANIES = 5;
+
+/** The player plus the most AI companies there can be. */
+export const MAX_COMPANIES = MAX_AI_COMPANIES + 1;
+
+/**
+ * Owner value for a tile nobody built: town roads, and every tile of open
+ * country. 255 rather than -1 because the layer is a Uint8Array, and company
+ * ids never reach it.
+ */
+export const TILE_PUBLIC = 255;
+
 // ----------------------------------------------------------------- fixed point
 
 /** Fractional bits of the Q16.16 fixed point format used by the trig tables. */

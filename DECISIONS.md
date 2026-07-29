@@ -1422,3 +1422,52 @@ The holding stack of section 8.4 is bounded at four, and the bound is enforced
 where an aircraft can be refused kindly: BEFORE it takes off. An aircraft already
 in the air is never turned away, because that would mean inventing fuel
 exhaustion and a way for a player to lose a vehicle to a rule they could not see.
+
+### D-100 The acting company is on the world, not on twenty function signatures
+
+Every build command charges `world.company`. With more than one company that has
+to mean the company ISSUING the command rather than the player, and there were
+two ways to say so: thread a `CompanyState` parameter through all twenty-odd
+build functions, or let `world.company` resolve to whoever is acting.
+
+The parameter says the same thing at every call site; the field says it once.
+`World.actingCompanyId` is set from the command envelope for the length of one
+command and put back to the player immediately afterwards, so outside a command
+`world.company` still means exactly what it meant before this change - which is
+why sixty-odd call sites needed no edit at all and none of them became wrong.
+
+The trap in this design is a rule that runs OUTSIDE a command and quietly books
+against the player. Three places had to be told: the monthly hooks now take a
+`CompanyState` rather than reading one, a vehicle's revenue is booked to its
+OWNER and not to whoever is acting, and the winding-up of section 14.2 sets the
+acting company around its own auction. Everything else in the simulation reaches
+a company through a vehicle, a station or a tile, all three of which say who
+owns them.
+
+Who issued a command lives on the ENVELOPE and not inside the command. A command
+that carried its own company could claim to be anyone, and the AI of section 15
+uses precisely the commands the player does - which is only true if the command
+types did not change at all.
+
+### D-101 Tiles have an owner; roads a town laid have none
+
+A per-tile owner layer is a megabyte on the largest map, so it was worth asking
+whether stations and vehicles carrying an owner is enough. It is not, twice
+over: a company must not be able to tear up a competitor's line, and the town
+council of section 13.3 rates each company on the track IT laid inside the town.
+Both are questions about a tile.
+
+A tile becomes a company's when that company puts the FIRST road or track on it,
+and goes back to public when the last of it comes up. Extending a town's own
+street therefore never buys it - which matters, because a company that could own
+a town's road network by paving one tile of it could lock every competitor out
+of the town without ever going near the council.
+
+The rule that a company may not build on or demolish another's tile leaves a
+single-company game behaving exactly as it did: everything is either public or
+the player's, and both were always theirs to change.
+
+Version 17 saves have no owner layer and cannot be given one honestly - the file
+does not say who laid which piece of track - so every tile in them becomes
+PUBLIC. That is the reading that changes nothing about what the player may do
+with the map they saved.

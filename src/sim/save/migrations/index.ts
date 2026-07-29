@@ -1,4 +1,4 @@
-import { LEDGER_HISTORY_MONTHS } from '../../constants';
+import { LEDGER_HISTORY_MONTHS, TILE_PUBLIC } from '../../constants';
 import { ACCOUNT_COUNT } from '../../economy/ledger';
 import { SaveFormatError, SAVE_VERSION } from '../format';
 
@@ -425,6 +425,58 @@ const v16_to_v17: SaveMigration = (payload) => {
 };
 
 /**
+ * M8 made the game multi-company (section 15).
+ *
+ * A version 17 world had exactly one company and it was the player's, so it
+ * becomes company 0 and the list has one entry. Every tile it built becomes
+ * PUBLIC rather than the player's: the layer did not exist, so the file cannot
+ * say who laid which piece of track, and public is the reading that changes
+ * nothing about what the player may do with their own map - a public tile is
+ * demolishable by anyone, which is precisely the rule that applied before.
+ *
+ * Every command in the log was issued by the player, because there was nobody
+ * else to issue one.
+ */
+const v17_to_v18: SaveMigration = (payload) => {
+  const inner = state(payload);
+
+  const company = inner['company'];
+  if (typeof company !== 'object' || company === null) {
+    throw new SaveFormatError('save.state.company: expected the single company of version 17');
+  }
+  const rest = { ...inner };
+  delete rest['company'];
+
+  const map = rest['map'];
+  if (typeof map !== 'object' || map === null) {
+    throw new SaveFormatError('save.state.map: expected the tile layers');
+  }
+  const layers = map as Record<string, unknown>;
+  const terrain = layers['terrain'];
+  if (!(terrain instanceof Uint8Array)) {
+    throw new SaveFormatError('save.state.map.terrain: expected a byte array');
+  }
+
+  // A payload with no log at all is left as it is rather than rejected: the
+  // decoder validates the log itself, and saying so twice in two places means
+  // saying it differently in one of them.
+  const log = payload['commandLog'];
+  const stamped = Array.isArray(log)
+    ? log.map((entry) => ({ ...(entry as Record<string, unknown>), companyId: 0 }))
+    : log;
+
+  return {
+    ...payload,
+    commandLog: stamped,
+    state: {
+      ...rest,
+      companies: [{ ...(company as Record<string, unknown>), id: 0 }],
+      map: { ...layers, owner: new Uint8Array(terrain.length).fill(TILE_PUBLIC) },
+    },
+  };
+};
+
+/**
  * Registry keyed by the version a migration reads (section 19.1).
  *
  * There is deliberately no entry for 1 -> 2: a version 1 world had no map at
@@ -447,6 +499,7 @@ export const SAVE_MIGRATIONS: ReadonlyMap<number, SaveMigration> = new Map<numbe
   [14, v14_to_v15],
   [15, v15_to_v16],
   [16, v16_to_v17],
+  [17, v17_to_v18],
 ]);
 
 /**

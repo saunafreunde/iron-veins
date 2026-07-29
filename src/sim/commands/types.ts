@@ -305,6 +305,15 @@ export interface CommandEnvelope {
   readonly tick: number;
   /** Monotonic counter that makes the order inside one tick unambiguous. */
   readonly seq: number;
+  /**
+   * Which company issued it. Zero is the player.
+   *
+   * On the envelope rather than inside the command, because it is not something
+   * the issuer gets to choose - a command carrying its own company could claim
+   * to be anyone. It also leaves every command type unchanged now that the AI
+   * of section 15 uses exactly the ones the player does.
+   */
+  readonly companyId: number;
   readonly command: Command;
 }
 
@@ -355,5 +364,6 @@ export const RejectReason = {
   NotInDepot: 'cmd.reject.notInDepot',
   NotEmpty: 'cmd.reject.notEmpty',
   CannotCarry: 'cmd.reject.cannotCarry',
+  NotYours: 'cmd.reject.notYours',
 } as const;
 export type RejectReason = (typeof RejectReason)[keyof typeof RejectReason];

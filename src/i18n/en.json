@@ -438,5 +438,6 @@
   "news.vehicleObsolete": "Vehicle {id} is obsolete.",
   "news.vehicleRenewed": "{count} vehicle(s) renewed automatically.",
   "news.inDebt": "In the red for {months} months - forced auction in {left} months.",
-  "news.bankrupt": "The company has been wound up."
+  "news.bankrupt": "The company has been wound up.",
+  "cmd.reject.notYours": "That belongs to another company."
 }
