@@ -11,6 +11,24 @@ import type { TileMap } from '../sim/map/TileMap';
 import { Terrain } from '../sim/map/terrain';
 import { BlockIndex } from '../sim/signals/blocks';
 import { HEIGHT_PX, pickTile, TILE_H, TILE_W, tileToWorld } from './projection';
+import { COMPANY_COLORS } from '../shared/palette';
+
+/** The company palette as Pixi tints, parsed once. */
+const COMPANY_TINTS: readonly number[] = COMPANY_COLORS.map((hex) =>
+  Number.parseInt(hex.slice(1), 16),
+);
+
+/** How close a click has to land to count as hitting a vehicle. [world px] */
+const VEHICLE_PICK_PX = 14;
+
+/** One vehicle as the audio engine wants it; reused between frames. */
+export interface VehicleAudioInput {
+  id: number;
+  power: number;
+  panX: number;
+  throttle: number;
+  distance: number;
+}
 import { ATLAS_SCALE, buildTerrainAtlas, type AtlasFrame, type TerrainAtlas } from './TerrainAtlas';
 
 /**
@@ -128,6 +146,14 @@ export class MapView {
   onHover: ((info: TileInfo | null) => void) | null = null;
   /** Called on a left click on the map. */
   onSelect: ((info: TileInfo | null) => void) | null = null;
+  /**
+   * A vehicle was clicked, or the click missed every vehicle (null).
+   *
+   * Separate from `onSelect` so the caller can decide what a click on a lorry
+   * means while a build tool is armed - which is a question about the
+   * interface, not about the renderer.
+   */
+  onSelectVehicle: ((vehicleId: number | null) => void) | null = null;
 
   private stations: readonly StationMarker[] = [];
   /** Company colour, applied to stations and vehicles as a tint. */
@@ -136,6 +162,19 @@ export class MapView {
   private vehicleSource: (() => { data: Int32Array; count: number }) | null = null;
   private previewRoute: readonly number[] | null = null;
   private readonly vehicleSprites: Sprite[] = [];
+  /**
+   * Which vehicle each sprite is drawing, this frame.
+   *
+   * Parallel to `vehicleSprites` and rebuilt every frame, because the snapshot
+   * block is COMPACTED - a row's position says nothing about which vehicle it
+   * is, and a sprite is reused for whatever lands in its slot. This array is
+   * what turns a click on a lorry into a vehicle id (owed since M2).
+   */
+  private readonly vehicleIds: number[] = [];
+  /** Screen positions of the drawn vehicles, for the hit test and for audio. */
+  private readonly vehicleScreen: { x: number; y: number }[] = [];
+  private drawnVehicles = 0;
+  private selectedVehicleId: number | null = null;
   private readonly vehicleLayer = new Container();
 
   /**
@@ -262,6 +301,16 @@ export class MapView {
         lastY = event.clientY;
         canvas.setPointerCapture(event.pointerId);
       } else if (event.button === 0) {
+        // Vehicles first. They are drawn on top of the ground, so a click that
+        // lands on one has to mean the vehicle - anything else and a lorry
+        // becomes a hole the player builds through.
+        const vehicleId = this.vehicleAtClient(event);
+        if (vehicleId !== null) {
+          this.selectedVehicleId = vehicleId;
+          this.onSelectVehicle?.(vehicleId);
+          return;
+        }
+        this.onSelectVehicle?.(null);
         this.selected = this.tileAtClient(event);
         this.onSelect?.(this.infoAt(this.selected));
       }
@@ -619,6 +668,7 @@ export class MapView {
 
     const { data, count } = source();
     const size = map.size;
+    this.drawnVehicles = 0;
 
     for (let i = 0; i < count; i++) {
       const base = i * SNAPSHOT_VEHICLE_STRIDE;
@@ -626,6 +676,8 @@ export class MapView {
       const next = data[base + SnapshotVehicle.NextTile]!;
       const progress = data[base + SnapshotVehicle.ProgressMilli]! / 1000;
       const kind = data[base + SnapshotVehicle.Kind]!;
+      const vehicleId = data[base + SnapshotVehicle.VehicleId]!;
+      const owner = data[base + SnapshotVehicle.Owner]!;
 
       const fromX = tile % size;
       const fromY = (tile / size) | 0;
@@ -652,16 +704,117 @@ export class MapView {
           ? this.frameTexture('train', atlas.trainFrame())
           : this.frameTexture('vehicle', atlas.vehicleFrame());
       sprite.visible = true;
-      sprite.tint = this.companyTint;
-      sprite.position.set(
-        from.x + (to.x - from.x) * progress - TILE_W / 2,
-        from.y + (to.y - from.y) * progress - HEIGHT_PX,
-      );
+      // Every company's own colour, so a competitor's train is recognisable as
+      // one at a glance rather than only in a list.
+      sprite.tint = owner === 0 ? this.companyTint : (COMPANY_TINTS[owner] ?? this.companyTint);
+
+      const worldX = from.x + (to.x - from.x) * progress;
+      const worldY = from.y + (to.y - from.y) * progress;
+      sprite.position.set(worldX - TILE_W / 2, worldY - HEIGHT_PX);
+
+      this.vehicleIds[this.drawnVehicles] = vehicleId;
+      const screen = this.vehicleScreen[this.drawnVehicles] ?? { x: 0, y: 0 };
+      screen.x = worldX;
+      screen.y = worldY;
+      this.vehicleScreen[this.drawnVehicles] = screen;
+      this.drawnVehicles++;
     }
 
     for (let i = count; i < this.vehicleSprites.length; i++) {
       this.vehicleSprites[i]!.visible = false;
     }
+  }
+
+  /**
+   * The vehicle under the pointer, or null.
+   *
+   * Nearest within a small radius rather than an exact sprite test: a lorry is
+   * about ten pixels across at full zoom and two at the far end, and a click
+   * that has to land inside two pixels is a click nobody lands.
+   */
+  private vehicleAtClient(event: PointerEvent): number | null {
+    const world = this.world.toLocal({ x: event.offsetX, y: event.offsetY });
+    const reach = VEHICLE_PICK_PX / this.zoom;
+
+    let best: number | null = null;
+    let bestDistance = reach * reach;
+    for (let i = 0; i < this.drawnVehicles; i++) {
+      const screen = this.vehicleScreen[i]!;
+      const dx = screen.x - world.x;
+      const dy = screen.y - world.y;
+      const distance = dx * dx + dy * dy;
+      if (distance > bestDistance) continue;
+      bestDistance = distance;
+      best = this.vehicleIds[i] ?? null;
+    }
+    return best;
+  }
+
+  /**
+   * What the audio engine needs: the nearest vehicles to the middle of the
+   * screen, with how fast each is going and where it sits left to right.
+   *
+   * Read out of the same arrays the sprites were placed from, so a sound is
+   * exactly where its vehicle is. Speed comes from how far the vehicle moved
+   * between two frames, which is the only speed the renderer knows and is
+   * enough to tell an idling engine from a working one.
+   */
+  vehicleAudioInputs(out: VehicleAudioInput[]): number {
+    const source = this.vehicleSource;
+    if (source === null) return 0;
+    const { data } = source();
+
+    const halfWidth = this.app.screen.width / 2;
+    const halfHeight = this.app.screen.height / 2;
+    let written = 0;
+
+    for (let i = 0; i < this.drawnVehicles; i++) {
+      const screen = this.vehicleScreen[i]!;
+      const dx = (screen.x - this.centreX) * this.zoom;
+      const dy = (screen.y - this.centreY) * this.zoom;
+
+      const base = i * SNAPSHOT_VEHICLE_STRIDE;
+      const state = data[base + SnapshotVehicle.State]!;
+      const progress = data[base + SnapshotVehicle.ProgressMilli]!;
+      const moving = data[base + SnapshotVehicle.Tile] !== data[base + SnapshotVehicle.NextTile];
+
+      const entry = out[written] ?? {
+        id: 0,
+        power: 0,
+        panX: 0,
+        throttle: 0,
+        distance: 0,
+      };
+      entry.id = this.vehicleIds[i] ?? 0;
+      entry.power = this.powerOf(data[base + SnapshotVehicle.Kind]!);
+      entry.panX = Math.max(-1, Math.min(1, dx / Math.max(1, halfWidth)));
+      entry.throttle = moving ? 0.35 + (progress % 1000) / 4000 : 0;
+      entry.distance = Math.min(
+        1,
+        Math.sqrt(dx * dx + dy * dy) / Math.max(1, Math.hypot(halfWidth, halfHeight)),
+      );
+      out[written] = entry;
+      written++;
+      if (state < 0) break;
+    }
+    return written;
+  }
+
+  /**
+   * What a vehicle burns, guessed from what it is.
+   *
+   * The snapshot carries the kind, not the power source: a locomotive's fuel
+   * is a catalogue fact that never changes, and sending it every tick to save
+   * one lookup would be the wrong trade. Trains are the only thing in the game
+   * that can be electric, so this is the whole of the guess.
+   */
+  private powerOf(kind: number): number {
+    return kind === TRAIN_KIND ? 0 : 1;
+  }
+
+  /** Mark a vehicle as selected, or clear it. Driven by the store. */
+  setSelectedVehicle(vehicleId: number | null): void {
+    this.selectedVehicleId = vehicleId;
   }
 
   /** Route the build preview is currently showing, drawn on the overlay. */
@@ -674,6 +827,19 @@ export class MapView {
     this.overlay.clear();
     this.blink++;
     if (this.blockOverlay) this.drawBlocks(map);
+
+    // A ring round the selected vehicle. It follows the sprite rather than a
+    // tile, because a vehicle is between two tiles most of the time and a
+    // marker that snapped to one would sit behind what it is marking.
+    if (this.selectedVehicleId !== null) {
+      for (let i = 0; i < this.drawnVehicles; i++) {
+        if (this.vehicleIds[i] !== this.selectedVehicleId) continue;
+        const screen = this.vehicleScreen[i]!;
+        this.overlay.circle(screen.x, screen.y - HEIGHT_PX / 2, 10 / this.zoom + 4);
+        this.overlay.stroke({ width: 2 / this.zoom, color: 0xe6e9ee, alpha: 0.95 });
+        break;
+      }
+    }
 
     const preview = this.previewRoute;
     if (preview !== null && preview.length > 1) {

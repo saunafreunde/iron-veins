@@ -1,5 +1,5 @@
 import { useEffect, useRef, type ReactElement } from 'react';
-import { MapView, type TileInfo } from '../render/MapView';
+import { MapView, type TileInfo, type VehicleAudioInput } from '../render/MapView';
 import { COMPANY_COLORS } from '../shared/palette';
 import { CommandKind, type Command } from '../sim/commands/types';
 import { TileMap } from '../sim/map/TileMap';
@@ -10,7 +10,20 @@ import { planTrack } from '../sim/net/trackBuilder';
 import { AUTO_SIGNAL_SPACING_TILES, DEADLOCK_WARN_TICKS } from '../sim/constants';
 import { ModuleKind } from '../sim/station/types';
 import type { SimClient } from './SimClient';
+import { audioEngine } from './audioBridge';
 import { useSimStore, type Tool } from './store';
+
+/**
+ * How often the audio engine is told where things are. [ms]
+ *
+ * Not per frame: twelve voices retuned sixty times a second is work whose
+ * result nobody can hear, and the engine needs to know roughly where a lorry
+ * is, not where it is to the pixel.
+ */
+const AUDIO_REFRESH_MS = 120;
+
+/** Reused between refreshes so a running game allocates nothing for sound. */
+const audioScratch: VehicleAudioInput[] = [];
 
 /**
  * Hosts the PixiJS map view inside the React tree.
@@ -171,6 +184,7 @@ export function MapCanvas({ client }: { readonly client: SimClient }): ReactElem
   const towns = useSimStore((s) => s.towns);
   const industries = useSimStore((s) => s.industries);
   const mapRevision = useSimStore((s) => s.mapRevision);
+  const selectedVehicleId = useSimStore((s) => s.selectedVehicleId);
   const stations = useSimStore((s) => s.stations);
   const companyColorIndex = useSimStore((s) => s.companyColorIndex);
 
@@ -276,13 +290,34 @@ export function MapCanvas({ client }: { readonly client: SimClient }): ReactElem
       if (command !== null) client.send(command);
     };
 
+    // Clicking a vehicle selects it (owed since M2). The renderer decides
+    // whether a click hit one; what that MEANS is decided here.
+    view.onSelectVehicle = (vehicleId) => {
+      useSimStore.getState().setSelectedVehicle(vehicleId);
+    };
+
     // A list row jumps to what it names (section 17.1).
     useSimStore.getState().setCentreOnTile((x, y) => view.centreOnTile(x, y));
     view.setVehicleSource(() => client.readVehicles());
     view.setReservedSource(() => client.readReserved());
     void view.attach(host);
 
+    /**
+     * Feed the audio engine, once every few frames.
+     *
+     * Not every frame: twelve voices retuned sixty times a second is work
+     * nobody can hear the result of, and the engine only needs to know where
+     * things are, not where they are to the pixel.
+     */
+    const audioTimer = window.setInterval(() => {
+      const engine = audioEngine();
+      if (engine === null) return;
+      const written = view.vehicleAudioInputs(audioScratch);
+      engine.setVehicles(audioScratch.slice(0, written));
+    }, AUDIO_REFRESH_MS);
+
     return () => {
+      window.clearInterval(audioTimer);
       viewRef.current = null;
       view.dispose();
     };
@@ -298,6 +333,10 @@ export function MapCanvas({ client }: { readonly client: SimClient }): ReactElem
   useEffect(() => {
     viewRef.current?.setMapRevision(mapRevision);
   }, [mapRevision]);
+
+  useEffect(() => {
+    viewRef.current?.setSelectedVehicle(selectedVehicleId);
+  }, [selectedVehicleId]);
 
   useEffect(() => {
     viewRef.current?.setStations(stations);

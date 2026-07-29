@@ -121,6 +121,28 @@ export function opportunities(
   return buildable;
 }
 
+/**
+ * Can this works actually be a SOURCE right now?
+ *
+ * A primary industry makes its output out of the ground and always can. A
+ * factory makes nothing at all until something is delivered to it, and stays
+ * at nothing for ever if nobody does - so a line built to collect from one is
+ * a line that runs empty until it is closed as unprofitable.
+ *
+ * That is not a hypothetical. Measured on balancing scenario 5, the first
+ * company built a railway from a furniture works nobody supplied to the town
+ * next door, ran a locomotive up and down it for six months carrying nothing,
+ * and never recovered.
+ *
+ * The exception is a works WE supply, which is the second leg of a chain and
+ * the most valuable thing there is to build.
+ */
+function canSupply(world: World, works: Industry, companyId: number): boolean {
+  if (industrySpec(works.type).inputs.length === 0) return true;
+  if (works.outputStock0 > 0 || works.producedThisMonth > 0) return true;
+  return weSupply(world, works, companyId);
+}
+
 function collectIndustryPairs(
   world: World,
   into: Opportunity[],
@@ -129,6 +151,7 @@ function collectIndustryPairs(
 ): void {
   for (const source of world.industries) {
     if (!source.open) continue;
+    if (!canSupply(world, source, companyId)) continue;
     const cargo = outputOf(source);
     if (cargo < 0) continue;
 
@@ -205,6 +228,9 @@ function collectTownDeliveries(
     if (!source.open) continue;
     const cargo = outputOf(source);
     if (cargo !== Cargo.Goods && cargo !== Cargo.Food) continue;
+    // Finished goods come out of a factory, and a factory nobody supplies
+    // makes none of them.
+    if (!canSupply(world, source, companyId)) continue;
 
     for (const town of world.towns) {
       const distance = tileDistance(source.x, source.y, town.x, town.y);

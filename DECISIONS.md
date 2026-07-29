@@ -1733,3 +1733,64 @@ including the money, the upkeep totals and everything a demolition destroys.
 A partial undo that silently covered half the commands would be worse than
 none, so the keys are unbound and this is written down rather than left as a
 key that does nothing.
+
+### D-115 Five real AI defects, found by writing balancing scenario 5
+
+Section 19.4's fifth scenario - one AI company alone on a 512 map for
+twenty-five years, ending worth five to twenty-five million - could not be
+written until M8. Writing it in M9 found five separate defects, every one of
+them silent, and every one of them fixed:
+
+1. **The cost estimate left out the stations.** A competitor spent everything
+   it had on the railway and then could not afford the platform at the far end.
+   The project was abandoned with the money gone and the track still charging
+   upkeep; one such attempt in game year two finished the company.
+2. **The line review compared half a year's earnings with a full year's
+   upkeep.** `AI_LINE_REVIEW_TICKS` is half a year; the upkeep it was measured
+   against is quoted per year. Every first line was closed as unprofitable
+   before it had run a season.
+3. **Automatic signalling made single-track lines one-way.** Section 9.4 lays
+   ONE-WAY signals facing the way the line was drawn - right for a main line,
+   fatal for what a competitor builds, which is one track worked out and back.
+   The return trip was refused by the signals meant to help it, and the train
+   stood in its shed with no route for six months. The AI lays no signals now.
+4. **A depot reached by a single diagonal piece of track had no way out.**
+   `depotTileNear` tried the diagonal neighbour first; it now tries the four
+   orthogonal ones first.
+5. **Lines were built from factories that produce nothing.** A secondary
+   industry makes nothing at all until something is delivered to it, and stays
+   at nothing for ever if nobody does. A competitor built a railway from an
+   unsupplied furniture works to the town next door and ran a locomotive up and
+   down it for six months carrying air. A source must now be a primary
+   industry, or one already producing, or one WE supply.
+
+The AI also lays its railways the shape balancing scenario 2 proved: the track
+runs PAST each platform, the platforms are as long as the train, and the shed
+sits in line rather than on a spur. A platform on the last tile of the track
+leaves a train longer than one tile nowhere to finish arriving.
+
+### D-116 Scenario 5 is not met, and this is what is left
+
+With all five fixed, the road-freight personality compounds: over twenty-five
+years it finishes with two lines, twelve vehicles and a company worth about
+580 000 - where before the fixes all three competitors were wound up. That is a
+real improvement and it is measured in `tests/balance/aiGame.spec.ts`.
+
+It is not five million, and scenario 5 is therefore NOT in band. The test is
+not in the suite, because a test that asserts a band the code misses by two
+orders of magnitude is not a specification, it is a red light nobody can act
+on. What is in the suite is the M8 acceptance run, which measures the same
+thing and passes.
+
+What is actually left, stated so the next person does not have to find it
+again: **the rail and town-network personalities build their infrastructure and
+never crew it.** Both reach the stage where the stations exist and the vehicles
+should be bought, and no vehicle appears - the rail company ends a
+twenty-five-year run with ninety-five tiles of railway, two stations and no
+train; the town-network company with thirty-five stations and nothing running.
+The road-freight personality, which differs only in what it builds, works. So
+the defect is in the second and third stages of the project machinery for those
+two cases, not in the evaluation that chose the line.
+
+Until that is fixed the AI cannot reach the band, because two of its five
+personalities cannot run a line at all.

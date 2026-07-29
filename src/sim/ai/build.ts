@@ -1,7 +1,14 @@
 import type { Cargo } from '../cargo/types';
 import { CommandKind, type Command } from '../commands/types';
 import type { CommandQueue } from '../commands/queue';
-import { AI_RAIL_WAGONS, AI_SIGNAL_SPACING, SEA_LEVEL } from '../constants';
+import {
+  AI_PLATFORM_TILES,
+  AI_RAIL_MIN_TILES,
+  AI_RAIL_WAGONS,
+  AI_SIGNAL_SPACING,
+  SEA_LEVEL,
+} from '../constants';
+import { planTrack } from '../net/trackBuilder';
 import { RailType } from '../map/track';
 import { Terrain } from '../map/terrain';
 import { ModuleKind } from '../station/types';
@@ -23,6 +30,21 @@ import type { World } from '../World';
  * the player's: the same route assistant, the same prices, the same refusals,
  * and the whole of it in the replay log.
  */
+
+/**
+ * Where the pieces of a line actually ended up.
+ *
+ * The caller asked for a line between two points; what it gets back is where
+ * the PLATFORMS and the SHED went, which for a railway is not the same thing.
+ * The next stage of the project looks the stations up by tile, so a project
+ * that remembered the points it asked for would find nothing there and throw
+ * the half-built railway away.
+ */
+export interface BuiltLine {
+  readonly from: { x: number; y: number };
+  readonly to: { x: number; y: number };
+  readonly shed: { x: number; y: number };
+}
 
 /** A tile a stop can stand on: bare, flat, dry, and nobody else's. */
 export function clearStopTile(world: World, x: number, y: number): boolean {
@@ -65,12 +87,16 @@ export function depotTileNear(
   const stepX = Math.sign(stop.x - awayFrom.x);
   const stepY = Math.sign(stop.y - awayFrom.y);
 
+  // Orthogonal neighbours FIRST. A depot reached by a single diagonal piece of
+  // track is a depot whose train cannot find its way out - measured on
+  // balancing scenario 5, where six months of a locomotive standing in its
+  // shed with no route was the whole of the company's first year.
   const candidates = [
-    { x: stop.x + stepX, y: stop.y + stepY },
     { x: stop.x + stepX, y: stop.y },
     { x: stop.x, y: stop.y + stepY },
-    { x: stop.x - stepY, y: stop.y + stepX },
-    { x: stop.x + stepY, y: stop.y - stepX },
+    { x: stop.x - stepX, y: stop.y },
+    { x: stop.x, y: stop.y - stepY },
+    { x: stop.x + stepX, y: stop.y + stepY },
   ];
   for (const candidate of candidates) {
     if (candidate.x === stop.x && candidate.y === stop.y) continue;
@@ -154,13 +180,30 @@ export function enqueueInfrastructure(
     readonly depot: { x: number; y: number };
     readonly rail: boolean;
   },
-): void {
+): BuiltLine | null {
   const tick = world.tick + 1;
   const push = (command: Command): void => {
     queue.enqueue(command, tick, companyId);
   };
 
   if (plan.rail) {
+    // The route is planned here as well as in the command, with the same
+    // arguments and therefore the same answer. The AI needs the actual tiles:
+    // where the platforms go depends on the shape of the line, not on the two
+    // points it was asked to join.
+    const planned = planTrack(
+      world.map,
+      plan.from.x,
+      plan.from.y,
+      plan.to.x,
+      plan.to.y,
+      RailType.Plain,
+      true,
+    );
+    if (!planned.ok) return null;
+    const tiles = planned.route.tiles;
+    if (tiles.length < AI_RAIL_MIN_TILES) return null;
+
     push({
       kind: CommandKind.BuildTrack,
       x1: plan.from.x,
@@ -171,37 +214,57 @@ export function enqueueInfrastructure(
       assistant: true,
       signalSpacing: AI_SIGNAL_SPACING,
     });
-    // The depot hangs off the end of the line on a spur of its own, so a train
-    // sitting in it is not standing on the running line.
-    push({
-      kind: CommandKind.BuildTrack,
-      x1: plan.from.x,
-      y1: plan.from.y,
-      x2: plan.depot.x,
-      y2: plan.depot.y,
-      railType: RailType.Plain,
-      assistant: false,
-      signalSpacing: 0,
-    });
+
+    /*
+     * Platforms go one tile IN from each end, two tiles long, and the depot
+     * takes the very first tile of the line.
+     *
+     * This is the shape balancing scenario 2 proved and the shape the AI was
+     * getting wrong. A platform on the LAST tile of the track leaves a train
+     * that is longer than one tile nowhere to finish arriving: it brakes short
+     * of the platform and stands there for the rest of the game. And a
+     * one-tile platform under a six-unit train works only the share that fits,
+     * minus forty percent (section 10), which took a line's throughput to a
+     * third even when it did run.
+     */
+    const map = world.map;
+    const platformAt = (index: number): { x: number; y: number } | null => {
+      const tile = tiles[index];
+      if (tile === undefined) return null;
+      const at = { x: tile % map.size, y: (tile / map.size) | 0 };
+      push({
+        kind: CommandKind.BuildRailStop,
+        x: at.x,
+        y: at.y,
+        moduleKind: ModuleKind.RailPlatform,
+      });
+      return at;
+    };
+
+    const last = tiles.length - 1;
+    const nearEnd = platformAt(1);
+    for (let i = 1; i < AI_PLATFORM_TILES; i++) platformAt(1 + i);
+    const farEnd = platformAt(last - 1);
+    for (let i = 1; i < AI_PLATFORM_TILES; i++) platformAt(last - 1 - i);
+    if (nearEnd === null || farEnd === null) return null;
+
+    // The shed on the first tile of the line, in line rather than on a spur: a
+    // spur makes the tile it leaves from a junction, and a junction with no
+    // signal on it is the one shape section 9 asks for signals.
+    const depotTile = tiles[0]!;
     push({
       kind: CommandKind.BuildRailStop,
-      x: plan.from.x,
-      y: plan.from.y,
-      moduleKind: ModuleKind.RailPlatform,
-    });
-    push({
-      kind: CommandKind.BuildRailStop,
-      x: plan.to.x,
-      y: plan.to.y,
-      moduleKind: ModuleKind.RailPlatform,
-    });
-    push({
-      kind: CommandKind.BuildRailStop,
-      x: plan.depot.x,
-      y: plan.depot.y,
+      x: depotTile % map.size,
+      y: (depotTile / map.size) | 0,
       moduleKind: ModuleKind.RailDepot,
     });
-    return;
+    // Where everything REALLY went. For a railway none of the three is the
+    // point the caller asked for.
+    return {
+      from: nearEnd,
+      to: farEnd,
+      shed: { x: depotTile % map.size, y: (depotTile / map.size) | 0 },
+    };
   }
 
   push({
@@ -236,4 +299,5 @@ export function enqueueInfrastructure(
     y: plan.depot.y,
     moduleKind: ModuleKind.RoadDepot,
   });
+  return { from: plan.from, to: plan.to, shed: plan.depot };
 }

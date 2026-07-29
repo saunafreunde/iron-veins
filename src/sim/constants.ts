@@ -367,11 +367,25 @@ export const AI_MAX_DISTANCE = 120;
  */
 export const AI_BUILD_CAPITAL_FACTOR = 1.4;
 
-/** How far down the ranked opportunity list one cycle will look. */
-export const AI_CANDIDATES_TRIED = 8;
+/**
+ * How far down the ranked opportunity list one cycle will look.
+ *
+ * Deep, and that matters more than it sounds. The list is sorted by return per
+ * euro, not by price, so the best entries are routinely the ones a small
+ * company cannot afford yet - and a competitor that gave up after the first
+ * eight sat on a hundred thousand pounds for twenty-four years while a hundred
+ * cheaper opportunities went past (measured; balancing scenario 5).
+ */
+export const AI_CANDIDATES_TRIED = 60;
 
-/** Lines one competitor will run at once. */
-export const AI_MAX_LINES = 6;
+/**
+ * Lines one competitor will run at once.
+ *
+ * Twenty-five years is long enough to build a network, and section 19.4's
+ * fifth scenario expects one: a company capped at six lines cannot reach the
+ * value that scenario asks for however well each line runs.
+ */
+export const AI_MAX_LINES = 20;
 
 /**
  * Vehicles a new line starts with, and the most it can ever be given.
@@ -420,8 +434,40 @@ export const AI_LINE_REVIEW_TICKS = TICKS_PER_YEAR / 2;
 /** Wagons a competitor puts behind a locomotive. */
 export const AI_RAIL_WAGONS = 5;
 
-/** Signal spacing on AI track, in tiles. */
-export const AI_SIGNAL_SPACING = 6;
+/**
+ * Tiles of platform a competitor builds at each end.
+ *
+ * A locomotive and five wagons is about seventy metres, which is two tiles. A
+ * shorter platform works only the share of the train that fits, minus forty
+ * percent (section 10) - which is what balancing scenario 2 measured when it
+ * was built with one.
+ */
+export const AI_PLATFORM_TILES = 2;
+
+/**
+ * Shortest route a competitor will lay rail over. [tiles]
+ *
+ * Two platforms of two tiles, a shed and an overrun tile at each end have to
+ * fit on it, and a line shorter than that is a line whose platforms would sit
+ * on top of each other.
+ */
+export const AI_RAIL_MIN_TILES = 8;
+
+/**
+ * Signal spacing on AI track, in tiles. ZERO: no automatic signalling.
+ *
+ * The automatic signalling of section 9.4 lays ONE-WAY signals facing the way
+ * the line was drawn, which is exactly right for a main line worked in one
+ * direction and exactly wrong for what a competitor builds: a single track
+ * between two industries, worked out and back. The return trip is refused by
+ * the very signals meant to help, the train sits in its shed with no route,
+ * and the line is closed six months later as unprofitable. That was the whole
+ * of the first company measured against balancing scenario 5.
+ *
+ * An unsignalled single line carries one train, which is what a new line has.
+ * The line review closes it if a second one ever deadlocks against the first.
+ */
+export const AI_SIGNAL_SPACING = 0;
 
 /**
  * What a pair already served by somebody is worth, as a share.

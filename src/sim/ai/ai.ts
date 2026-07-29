@@ -8,10 +8,16 @@ import {
   AI_LINE_REVIEW_TICKS,
   AI_MAX_LINES,
   AI_MAX_VEHICLES_PER_LINE,
+  AI_PLATFORM_TILES,
   AI_REINFORCE_WAITING,
   AI_RETRY_TICKS,
   AI_VEHICLES_PER_LINE,
   LOAN_STEP_CT,
+  RAIL_DEPOT_COST_CT,
+  RAIL_PLATFORM_COST_CT,
+  ROAD_DEPOT_COST_CT,
+  ROAD_STOP_COST_CT,
+  TICKS_PER_YEAR,
 } from '../constants';
 import { loanLimitCt } from '../economy/company';
 import type { Station } from '../station/types';
@@ -90,18 +96,40 @@ function startProject(world: World, queue: CommandQueue, state: AiState): void {
       : [pickRoadVehicle(world, opportunity.cargo)];
     if (specIds.length === 0 || specIds[0]! < 0) continue;
 
-    // The estimate is the WHOLE project: the way, and the vehicles that have to
-    // run on it. Costing only the track let a company put six lines down before
-    // the first had carried anything.
+    // The estimate is the WHOLE project: the way, the two stops, the depot and
+    // the vehicles that have to run on it.
+    //
+    // It used to count only the track, and that was not a rounding error - the
+    // company spent everything it had on the railway and then could not afford
+    // the platform at the far end, so the project was abandoned with the money
+    // gone and the track still charging upkeep. Measured on balancing scenario
+    // 5: one such attempt in game year two finished the company.
     let fleetCt = 0;
     for (const specId of specIds) fleetCt += vehicleSpec(specId).priceCt;
-    const estimateCt = opportunity.buildCostCt + world.costCt(fleetCt) * AI_VEHICLES_PER_LINE;
+    const modulesCt = opportunity.rail
+      ? RAIL_PLATFORM_COST_CT * AI_PLATFORM_TILES * 2 + RAIL_DEPOT_COST_CT
+      : ROAD_STOP_COST_CT * 2 + ROAD_DEPOT_COST_CT;
+    const estimateCt =
+      opportunity.buildCostCt +
+      world.costCt(modulesCt) +
+      world.costCt(fleetCt) * AI_VEHICLES_PER_LINE;
 
     const wanted = estimateCt * capitalFactor(state.personality);
     if (company.cashCt < wanted) {
+      // Too dear for now. The list is sorted by RETURN, not by price, so the
+      // next entry down is very often affordable - which is why this looks on
+      // instead of giving up on the whole cycle.
       if (!borrows(state.personality)) continue;
-      if (takeLoan(world, queue, state, wanted - company.cashCt)) state.lastBuildTick = world.tick;
-      return;
+      // Borrowing is for getting started, or for a company whose nature it is.
+      // A business that already runs lines should be paying for the next one
+      // out of what the last one earns.
+      const bootstrapping = state.lines.length === 0;
+      if (!bootstrapping && state.personality !== Personality.Expansive) continue;
+      if (takeLoan(world, queue, state, wanted - company.cashCt)) {
+        state.lastBuildTick = world.tick;
+        return;
+      }
+      continue;
     }
 
     const from = stopTileNear(world, opportunity.fromX, opportunity.fromY);
@@ -110,21 +138,22 @@ function startProject(world: World, queue: CommandQueue, state: AiState): void {
     const depot = depotTileNear(world, from, to);
     if (depot === null) continue;
 
-    enqueueInfrastructure(queue, world, state.companyId, {
+    const built = enqueueInfrastructure(queue, world, state.companyId, {
       from,
       to,
       depot,
       rail: opportunity.rail,
     });
+    if (built === null) continue;
     state.lastBuildTick = world.tick;
     state.project = {
       stage: 1,
-      fromX: from.x,
-      fromY: from.y,
-      toX: to.x,
-      toY: to.y,
-      depotX: depot.x,
-      depotY: depot.y,
+      fromX: built.from.x,
+      fromY: built.from.y,
+      toX: built.to.x,
+      toY: built.to.y,
+      depotX: built.shed.x,
+      depotY: built.shed.y,
       rail: opportunity.rail,
       cargo: opportunity.cargo,
       specIds,
@@ -245,9 +274,22 @@ function crew(
         vehicleId,
         orders: [
           {
+            // PARTIAL, not full.
+            //
+            // A new station is rated around thirty, and the collection gate of
+            // section 7.3 caps what an industry hands over by that rating - so
+            // a train waiting for a full load at a station nobody has visited
+            // yet waits for a load that cannot arrive. It stood there for six
+            // months, earned nothing, and the line was closed as unprofitable
+            // (measured on balancing scenario 5).
+            //
+            // Leaving with whatever is there is worth less per trip and far
+            // more per year: the visits raise the rating, the rating raises
+            // the gate, and the gate is what decides how much there is to
+            // carry at all.
             target: OrderTarget.Station,
             targetId: from.id,
-            load: OrderLoad.Full,
+            load: OrderLoad.Partial,
             unload: OrderUnload.None,
           },
           {
@@ -363,11 +405,17 @@ function closeDeadLine(world: World, queue: CommandQueue, state: AiState): boole
     const earned = earnedOn(world, line.vehicleIds);
     const gained = earned - line.earnedAtReviewCt;
 
-    let upkeepCt = 0;
-    for (const specId of line.specIds) upkeepCt += vehicleSpec(specId).upkeepCtPerYear;
-    upkeepCt *= line.vehicleIds.length;
+    // Upkeep is quoted per YEAR and the window is half of one. Comparing the
+    // two directly asks a line to earn a year's costs in six months, which a
+    // perfectly good railway does not - and this closed the first line of
+    // every competitor before it had been running a season (measured against
+    // balancing scenario 5).
+    let upkeepCtPerYear = 0;
+    for (const specId of line.specIds) upkeepCtPerYear += vehicleSpec(specId).upkeepCtPerYear;
+    upkeepCtPerYear *= line.vehicleIds.length;
+    const owed = world.costCt(upkeepCtPerYear) * (AI_LINE_REVIEW_TICKS / TICKS_PER_YEAR);
 
-    if (gained >= world.costCt(upkeepCt)) {
+    if (gained >= owed) {
       line.reviewTick = world.tick;
       line.earnedAtReviewCt = earned;
       continue;
@@ -402,14 +450,15 @@ function capitalFactor(personality: number): number {
 /**
  * Who will use the credit line.
  *
- * Only the expansive personality, which is the one section 15 describes as
- * risky. Letting everybody borrow was tried and measured: all three
- * competitors of the twenty-five year game ran their credit to the limit
- * inside a decade and were wound up by the interest, because a company that
- * borrows to build and never repays is a company on a clock.
+ * Everybody except the conservative personality, which section 15 defines as
+ * the low-debt one. This was tried once WITHOUT the repayment rule below and
+ * measured: all three competitors ran their credit to the limit inside a
+ * decade and the interest finished them. Borrowing is only safe next to
+ * repaying, and now that both exist a company can get its first line running
+ * in its first year instead of saving up for four.
  */
 function borrows(personality: number): boolean {
-  return personality === Personality.Expansive;
+  return personality !== Personality.Conservative;
 }
 
 /** Ask for a loan, on exactly the credit line a player would have. */
