@@ -30,6 +30,7 @@ import {
   ROAD_STOP_COST_CT,
   ROAD_STOP_UPKEEP_CT,
   ROAD_UPKEEP_PER_TILE_CT,
+  BUILDING_DEMOLITION_COST_CT,
   STATION_JOIN_DISTANCE,
   TILE_PUBLIC,
   TICKS_PER_YEAR,
@@ -80,6 +81,7 @@ import {
 } from '../vehicles/consist';
 import { releaseAll } from '../vehicles/reservations';
 import { VehicleState } from '../vehicles/VehicleStore';
+import { bookDemolition, councilRefusal } from '../town/council';
 import type { World } from '../World';
 import { ACCEPTED, RejectReason, type CommandOutcome } from './types';
 
@@ -110,18 +112,45 @@ function mayBuildOn(world: World, tile: number): boolean {
 }
 
 /**
- * Record who laid this, if the tile was bare. Call BEFORE writing the bits -
- * afterwards there is no way to tell whether anything was already there.
+ * Record who laid a piece of ROAD, if the tile was bare. Call BEFORE writing
+ * the bits - afterwards there is no way to tell whether anything was there.
+ *
+ * A town street that a company merely extends stays the town's, which is what
+ * stops a company owning a whole town's road network by paving one tile of it.
  */
 function claimIfBare(world: World, tile: number): void {
   const map = world.map;
   if (map.roadBits[tile] === 0 && map.trackBits[tile] === 0) map.owner[tile] = world.company.id;
 }
 
+/**
+ * Record who laid a piece of TRACK.
+ *
+ * Track is never a town's, so laying it across a public street takes the tile -
+ * the level crossing is the company's to maintain, to answer to the council for
+ * as noise, and to pull up again.
+ */
+function claimForTrack(world: World, tile: number): void {
+  if (world.map.owner[tile] === TILE_PUBLIC) world.map.owner[tile] = world.company.id;
+}
+
 /** Hand a tile back once nothing built is left on it. */
 function releaseIfBare(world: World, tile: number): void {
   const map = world.map;
   if (map.roadBits[tile] === 0 && map.trackBits[tile] === 0) map.owner[tile] = TILE_PUBLIC;
+}
+
+/**
+ * Everything the acting company has to be allowed to do before it builds here:
+ * the ground must not be someone else's, and the council must be willing
+ * (section 13.3).
+ *
+ * One helper rather than two checks at twenty call sites, and it returns the
+ * reason rather than a boolean so the refusal says which of the three it was.
+ */
+function buildPermission(world: World, tile: number): string | null {
+  if (!mayBuildOn(world, tile)) return RejectReason.NotYours;
+  return councilRefusal(world, tile);
 }
 
 function roadBuildable(world: World, x: number, y: number): string | null {
@@ -198,7 +227,8 @@ export function buildRoad(
   for (const tile of tiles) {
     const blocker = roadBuildable(world, tile % size, (tile / size) | 0);
     if (blocker !== null) return reject(blocker);
-    if (!mayBuildOn(world, tile)) return reject(RejectReason.NotYours);
+    const permission = buildPermission(world, tile);
+    if (permission !== null) return reject(permission);
     if (world.map.roadBits[tile] === 0) newTiles++;
   }
 
@@ -229,7 +259,8 @@ export function demolishRoad(world: World, x: number, y: number): CommandOutcome
   const tile = world.map.tileIndex(x, y);
   if (world.map.roadBits[tile] === 0) return reject(RejectReason.NothingToDo);
   if (stationAt(world, tile) !== null) return reject(RejectReason.Occupied);
-  if (!mayBuildOn(world, tile)) return reject(RejectReason.NotYours);
+  const permission = buildPermission(world, tile);
+  if (permission !== null) return reject(permission);
 
   const size = world.map.size;
   const bits = world.map.roadBits;
@@ -278,6 +309,10 @@ export function buildTrack(
   if (route.geometry.newTiles === 0 && route.upgradedTiles === 0) {
     return reject(RejectReason.NothingToDo);
   }
+  for (const tile of route.tiles) {
+    const permission = buildPermission(world, tile);
+    if (permission !== null) return reject(permission);
+  }
   const chargeCt = world.costCt(route.costCt);
   if (chargeCt > world.company.cashCt) return reject(RejectReason.InsufficientFunds);
 
@@ -318,8 +353,8 @@ export function buildTrack(
       ((to / map.size) | 0) - ((from / map.size) | 0),
     );
 
-    claimIfBare(world, from);
-    claimIfBare(world, to);
+    claimForTrack(world, from);
+    claimForTrack(world, to);
     map.trackBits[from] = map.trackBits[from]! | trackBit(direction);
     map.trackBits[to] = map.trackBits[to]! | trackBit(oppositeDir(direction));
     map.railType[from] = railType;
@@ -393,7 +428,8 @@ export function demolishTrack(world: World, x: number, y: number): CommandOutcom
   const map = world.map;
   const tile = map.tileIndex(x, y);
   if (map.trackBits[tile] === 0) return reject(RejectReason.NothingToDo);
-  if (!mayBuildOn(world, tile)) return reject(RejectReason.NotYours);
+  const permission = buildPermission(world, tile);
+  if (permission !== null) return reject(permission);
 
   const railType = map.railType[tile]! as RailType;
   for (let direction = 0; direction < 8; direction++) {
@@ -459,6 +495,8 @@ export function buildSignal(
   }
   if (map.structure[tile] !== Structure.None) return reject(RejectReason.SignalOnStructure);
   if (stationAt(world, tile) !== null) return reject(RejectReason.Occupied);
+  const permission = buildPermission(world, tile);
+  if (permission !== null) return reject(permission);
   if (signalKind(map.signal[tile]!) !== SignalKind.None) return reject(RejectReason.SignalExists);
   const chargeCt = world.costCt(SIGNAL_COST_CT);
   if (chargeCt > world.company.cashCt) return reject(RejectReason.InsufficientFunds);
@@ -536,6 +574,12 @@ function joinTarget(world: World, x: number, y: number): Station | null {
  */
 function attachModule(world: World, module: StationModule): Station {
   let station = joinTarget(world, module.x, module.y);
+  // A module takes its tile. A platform standing on a public town street is
+  // still the company's platform, and a competitor laying track through it
+  // would be building inside somebody else's station.
+  if (world.map.owner[module.tileIndex] === TILE_PUBLIC) {
+    world.map.owner[module.tileIndex] = world.company.id;
+  }
 
   if (station === null) {
     station = {
@@ -576,6 +620,8 @@ export function buildRoadStop(
   const tile = world.map.tileIndex(x, y);
   if (world.map.roadBits[tile] === 0) return reject(RejectReason.NeedsRoad);
   if (stationAt(world, tile) !== null) return reject(RejectReason.Occupied);
+  const permission = buildPermission(world, tile);
+  if (permission !== null) return reject(permission);
 
   const cost = kind === ModuleKind.RoadDepot ? ROAD_DEPOT_COST_CT : ROAD_STOP_COST_CT;
   const upkeep = kind === ModuleKind.RoadDepot ? ROAD_DEPOT_UPKEEP_CT : ROAD_STOP_UPKEEP_CT;
@@ -612,6 +658,8 @@ export function buildRailStop(
   const tile = world.map.tileIndex(x, y);
   if (world.map.trackBits[tile] === 0) return reject(RejectReason.NeedsTrack);
   if (stationAt(world, tile) !== null) return reject(RejectReason.Occupied);
+  const permission = buildPermission(world, tile);
+  if (permission !== null) return reject(permission);
 
   const cost = kind === ModuleKind.RailDepot ? RAIL_DEPOT_COST_CT : RAIL_PLATFORM_COST_CT;
   const upkeep = kind === ModuleKind.RailDepot ? RAIL_DEPOT_UPKEEP_CT : RAIL_PLATFORM_UPKEEP_CT;
@@ -651,6 +699,8 @@ export function buildWaterStop(
   const tile = map.tileIndex(x, y);
   if (map.terrain[tile] !== Terrain.Water) return reject(RejectReason.NeedsWater);
   if (stationAt(world, tile) !== null) return reject(RejectReason.Occupied);
+  const permission = buildPermission(world, tile);
+  if (permission !== null) return reject(permission);
   if (!touchesShore(map, x, y)) return reject(RejectReason.NeedsShore);
 
   const cost = kind === ModuleKind.ShipDepot ? SHIP_DEPOT_COST_CT : QUAY_COST_CT;
@@ -701,6 +751,8 @@ export function buildAirport(world: World, x: number, y: number, kind: ModuleKin
   const map = world.map;
   const tile = map.tileIndex(x, y);
   if (stationAt(world, tile) !== null) return reject(RejectReason.Occupied);
+  const permission = buildPermission(world, tile);
+  if (permission !== null) return reject(permission);
   if (
     map.terrain[tile] === Terrain.Water ||
     map.roadBits[tile] !== 0 ||
@@ -828,6 +880,8 @@ export function buildStationModule(
   const map = world.map;
   const tile = map.tileIndex(x, y);
   if (stationAt(world, tile) !== null) return reject(RejectReason.Occupied);
+  const permission = buildPermission(world, tile);
+  if (permission !== null) return reject(permission);
   if (
     map.terrain[tile] === Terrain.Water ||
     map.roadBits[tile] !== 0 ||
@@ -1022,6 +1076,34 @@ function refitCostCt(world: World, vehicleId: number): number {
       ? aggregateConsist(units).priceCt
       : vehicleSpec(world.vehicles.specId[vehicleId]!).priceCt;
   return priceCt * REFIT_COST_SHARE;
+}
+
+/**
+ * Clear a town building (section 13.3).
+ *
+ * The one build in the game that costs a company standing rather than only
+ * money. It exists so that a house is an obstacle a player can pay to remove
+ * rather than a permanent wall, and so that "buildings demolished" is a real
+ * input to the council rating instead of one that is structurally always zero.
+ */
+export function demolishBuilding(world: World, x: number, y: number): CommandOutcome {
+  if (!world.map.contains(x, y)) return reject(RejectReason.OutsideMap);
+  const map = world.map;
+  const tile = map.tileIndex(x, y);
+
+  if (map.buildingKind[tile] === 0) return reject(RejectReason.NoBuilding);
+  const refusal = councilRefusal(world, tile);
+  if (refusal !== null) return reject(refusal);
+
+  const chargeCt = world.costCt(BUILDING_DEMOLITION_COST_CT);
+  if (chargeCt > world.company.cashCt) return reject(RejectReason.InsufficientFunds);
+
+  map.buildingKind[tile] = 0;
+  map.buildingLevel[tile] = 0;
+  bookExpense(world.company, chargeCt);
+  bookDemolition(world, tile);
+  map.revision++;
+  return ACCEPTED;
 }
 
 export function sellVehicle(world: World, vehicleId: number): CommandOutcome {

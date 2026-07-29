@@ -1,7 +1,11 @@
 import type { ReactElement } from 'react';
 import { formatMoney, t } from '../i18n';
 import type { IndustryMarker, StationMarker, TownMarker } from '../shared/protocol';
-import { INDUSTRY_CLOSURE_MONTHS, INDUSTRY_WARNING_MONTHS } from '../sim/constants';
+import {
+  COUNCIL_REFUSAL_RATING,
+  INDUSTRY_CLOSURE_MONTHS,
+  INDUSTRY_WARNING_MONTHS,
+} from '../sim/constants';
 import { INDUSTRY_SPECS } from '../sim/industry/types';
 import { vehicleSpec } from '../sim/vehicles/catalog';
 import { VehicleState, VEHICLE_STATE_KEYS } from '../sim/vehicles/VehicleStore';
@@ -79,6 +83,14 @@ export function TownList(): ReactElement {
       sortBy: (town) => town.population,
     },
     {
+      key: 'council',
+      labelKey: 'ui.council.rating',
+      render: (town) => `${town.councilRating}`,
+      sortBy: (town) => town.councilRating,
+      className: (town) =>
+        town.councilRating < COUNCIL_REFUSAL_RATING ? 'row__meta value--danger' : 'row__meta',
+    },
+    {
       key: 'where',
       labelKey: 'ui.tile.position',
       render: (town) => `${town.x}, ${town.y}`,
@@ -88,6 +100,13 @@ export function TownList(): ReactElement {
   return (
     <ListPanel
       titleKey="ui.list.towns"
+      filters={[
+        {
+          key: 'refusing',
+          labelKey: 'ui.list.refusing',
+          matches: (town) => town.councilRating < COUNCIL_REFUSAL_RATING,
+        },
+      ]}
       rows={towns}
       columns={columns}
       idOf={(town) => town.id}

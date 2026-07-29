@@ -48,6 +48,7 @@ import {
   produceIndustryCargo,
   reviewIndustries,
 } from './industry/production';
+import { reviewCouncils } from './town/council';
 import { growTowns, produceTownCargo } from './town/update';
 import {
   ageVehicles,
@@ -335,6 +336,8 @@ export class World {
       // monthly counters are reset by whoever read them.
       reviewIndustries(this);
       produceIndustryCargo(this);
+      // Before growTowns, which clears the traffic counters the rating reads.
+      reviewCouncils(this);
       growTowns(this);
       for (let index = 0; index < this.companies.length; index++) {
         closeMonth(this.companies[index]!);
@@ -596,6 +599,15 @@ function hashDynamicState(h: Fnv1a64, world: World): void {
     h.f64(town.producedThisMonth).f64(town.transportedThisMonth);
     h.f64(town.goodsDeliveredThisMonth).f64(town.foodDeliveredThisMonth);
     h.u32(town.name.length).str(town.name);
+    h.int(town.exclusiveCompanyId).u32(town.exclusiveUntilTick);
+    h.u32(town.transportedByCompany.length);
+    for (const amount of town.transportedByCompany) h.f64(amount);
+    h.u32(town.councilRating.length);
+    for (const rating of town.councilRating) h.int(rating);
+    h.u32(town.councilGoodwill.length);
+    for (const goodwill of town.councilGoodwill) h.f64(goodwill);
+    h.u32(town.measureReadyTick.length);
+    for (const tick of town.measureReadyTick) h.u32(tick);
   }
 
   h.u32(world.industries.length);

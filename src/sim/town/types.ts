@@ -49,4 +49,27 @@ export interface Town {
   /** Goods and food delivered into the town this month. [units] */
   goodsDeliveredThisMonth: number;
   foodDeliveredThisMonth: number;
+
+  /**
+   * Of the passengers and mail carried away this month, how much each company
+   * took. Indexed by company id (section 13.3).
+   *
+   * Separate from `transportedThisMonth` rather than replacing it: growth asks
+   * what left the town at all, the council asks who took it, and those are two
+   * different questions that happen to be counted in the same place.
+   */
+  transportedByCompany: number[];
+  /** What the council thinks of each company, 0..100. Recomputed monthly. */
+  councilRating: number[];
+  /**
+   * The part of the rating each company earned or lost by ACTING - campaigns,
+   * trees, streets funded, buildings knocked down. Decays every month.
+   */
+  councilGoodwill: number[];
+  /** Company holding exclusive building rights here, or -1 for none. */
+  exclusiveCompanyId: number;
+  /** Tick those rights lapse. Meaningless while exclusiveCompanyId is -1. */
+  exclusiveUntilTick: number;
+  /** Earliest tick each company may buy each measure again. Company-major. */
+  measureReadyTick: number[];
 }

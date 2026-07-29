@@ -704,6 +704,96 @@ export const TOWN_PRODUCTION_SLICES_PER_MONTH = 30;
  * of the weights.
  */
 export const TOWN_GROWTH_BASE_RATE = 0.0015;
+
+// ------------------------------------------------------------- town council
+
+/**
+ * The town council of section 13.3, rating each company 0..100.
+ *
+ * A company the council has never heard of sits at the neutral value: it has
+ * done nothing for the town and nothing to it. Everything else moves from
+ * there, which is what makes the refusal threshold a punishment for behaviour
+ * rather than the state every new company starts in.
+ */
+export const COUNCIL_RATING_NEUTRAL = 50;
+
+/** Stations inside the town that earn the full service mark. [stations] */
+export const COUNCIL_STATION_TARGET = 3;
+
+/** Rating points for serving the town at all. */
+export const COUNCIL_STATION_WEIGHT = 20;
+
+/** Rating points for the share of the town's passengers actually carried. */
+export const COUNCIL_TRANSPORT_WEIGHT = 30;
+
+/** Rating points lost per track tile the company laid inside the town. */
+export const COUNCIL_NOISE_PER_TILE = 0.6;
+
+/** However much track is laid, noise alone cannot cost more than this. */
+export const COUNCIL_NOISE_MAX = 25;
+
+/** Goodwill lost for each town building knocked down. */
+export const COUNCIL_DEMOLITION_PENALTY = 12;
+
+/**
+ * How much of the earned goodwill survives a month.
+ *
+ * A campaign that never wore off would mean buying the council once and owning
+ * the town for the rest of the century; a grudge that never faded would mean
+ * one demolished house costing a company the town for ever.
+ */
+export const COUNCIL_GOODWILL_DECAY_PER_MONTH = 0.9;
+
+/** From this rating up, exclusive building rights can be bought. */
+export const COUNCIL_EXCLUSIVE_MIN_RATING = 75;
+
+/** Below this rating the council refuses building permits in the town. */
+export const COUNCIL_REFUSAL_RATING = 25;
+
+/** How long bought exclusive rights last. [months] */
+export const COUNCIL_EXCLUSIVE_MONTHS = 12;
+
+/** Price of exclusive rights, per inhabitant. [cent] */
+export const COUNCIL_EXCLUSIVE_COST_CT_PER_HEAD = 400;
+
+/**
+ * The measures of section 13.3: plant trees, fund streets, and three sizes of
+ * advertising campaign. Indexed by TownMeasure.
+ */
+export const TOWN_MEASURE_COST_CT: readonly number[] = [
+  20_000_00, 80_000_00, 50_000_00, 140_000_00, 320_000_00,
+];
+
+/** Goodwill each measure buys, in rating points. */
+export const TOWN_MEASURE_GOODWILL: readonly number[] = [6, 14, 10, 22, 40];
+
+/** How long before the same measure can be bought again. [ticks] */
+export const TOWN_MEASURE_COOLDOWN_TICKS: readonly number[] = [
+  TICKS_PER_MONTH * 2,
+  TICKS_PER_MONTH * 6,
+  TICKS_PER_MONTH * 3,
+  TICKS_PER_MONTH * 6,
+  TICKS_PER_MONTH * 12,
+];
+
+/** Tiles of forest one planting turns over, at most. [tiles] */
+export const TOWN_MEASURE_TREE_TILES = 12;
+
+/** Tiles of new public street one funding round lays, at most. [tiles] */
+export const TOWN_MEASURE_ROAD_TILES = 8;
+
+/**
+ * How far past the built-up area funded streets may reach. [tiles]
+ *
+ * A town that has filled its radius has no bare ground left between the houses,
+ * and a measure that could only build where there was already room would do
+ * nothing in exactly the towns worth courting. New streets go at the EDGE,
+ * which is also where a town would put them.
+ */
+export const TOWN_MEASURE_ROAD_REACH = 2;
+
+/** What it costs to clear a town building out of the way. [cent] */
+export const BUILDING_DEMOLITION_COST_CT = 12_000_00;
 export const TOWN_GROWTH_PASSENGER_WEIGHT = 0.55;
 export const TOWN_GROWTH_GOODS_WEIGHT = 0.35;
 export const TOWN_GROWTH_FOOD_WEIGHT = 0.35;

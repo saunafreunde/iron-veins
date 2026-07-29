@@ -11,6 +11,7 @@ import {
   buildStationModule,
   buildAirport,
   buildWaterStop,
+  demolishBuilding,
   buyAircraft,
   buyShip,
   buildSignal,
@@ -28,6 +29,8 @@ import {
 import { releaseAll } from '../vehicles/reservations';
 import { startVehicle } from '../vehicles/update';
 import { applyTerraform, estimateTerraform, levelTile, TerraformDirection } from '../map/terraform';
+import { applyTownMeasure, buyExclusiveRights } from '../town/measures';
+import type { TownMeasure } from '../town/council';
 import type { World } from '../World';
 import { ACCEPTED, CommandKind, RejectReason, type Command, type CommandOutcome } from './types';
 
@@ -108,6 +111,15 @@ export function executeCommand(world: World, command: Command): CommandOutcome {
 
     case CommandKind.BuildRailStop:
       return buildRailStop(world, command.x, command.y, command.moduleKind as ModuleKind);
+
+    case CommandKind.BuyExclusiveRights:
+      return buyExclusiveRights(world, command.townId);
+
+    case CommandKind.ApplyTownMeasure:
+      return applyTownMeasure(world, command.townId, command.measure as TownMeasure);
+
+    case CommandKind.DemolishBuilding:
+      return demolishBuilding(world, command.x, command.y);
 
     case CommandKind.BuildAirport:
       return buildAirport(world, command.x, command.y, command.moduleKind as ModuleKind);

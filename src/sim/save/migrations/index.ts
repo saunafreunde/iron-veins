@@ -477,6 +477,36 @@ const v17_to_v18: SaveMigration = (payload) => {
 };
 
 /**
+ * M8 gave every town a council (section 13.3).
+ *
+ * A version 18 town had no opinion of anybody. It starts with none here too:
+ * the rating is recomputed from the map and the traffic at the end of the next
+ * month anyway, and inventing a history of campaigns and demolitions that never
+ * happened would be worse than a town that has not made its mind up yet.
+ */
+const v18_to_v19: SaveMigration = (payload) => {
+  const inner = state(payload);
+  const towns = inner['towns'];
+  if (!Array.isArray(towns)) throw new SaveFormatError('save.state.towns: expected an array');
+
+  return {
+    ...payload,
+    state: {
+      ...inner,
+      towns: towns.map((town) => ({
+        ...(town as Record<string, unknown>),
+        transportedByCompany: [],
+        councilRating: [],
+        councilGoodwill: [],
+        exclusiveCompanyId: -1,
+        exclusiveUntilTick: 0,
+        measureReadyTick: [],
+      })),
+    },
+  };
+};
+
+/**
  * Registry keyed by the version a migration reads (section 19.1).
  *
  * There is deliberately no entry for 1 -> 2: a version 1 world had no map at
@@ -500,6 +530,7 @@ export const SAVE_MIGRATIONS: ReadonlyMap<number, SaveMigration> = new Map<numbe
   [15, v15_to_v16],
   [16, v16_to_v17],
   [17, v17_to_v18],
+  [18, v18_to_v19],
 ]);
 
 /**

@@ -132,6 +132,7 @@ export function growTowns(world: World): void {
 
     town.population = Math.round(town.population * (1 + rate));
     town.producedThisMonth = 0;
+    town.transportedByCompany.length = 0;
     town.transportedThisMonth = 0;
     town.goodsDeliveredThisMonth = 0;
     town.foodDeliveredThisMonth = 0;

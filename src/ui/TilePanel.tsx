@@ -24,6 +24,8 @@ import { INDUSTRY_SPECS } from '../sim/industry/types';
 import { TERRAIN_NAME_KEYS } from '../sim/map/terrain';
 import { platformLength, type ModuleKind, type Station } from '../sim/station/types';
 import { RAIL_TYPE_COST_CT, RailType } from '../sim/map/track';
+import { CouncilPanel } from './CouncilPanel';
+import type { SimClient } from './SimClient';
 import { useSimStore, type Tool } from './store';
 
 /** Tools of M1 and M2. Rail, water and air join the list with their milestones. */
@@ -129,7 +131,7 @@ export function stationAtTile(
   return stations.find((station) => station.modules.some((m) => m.x === x && m.y === y));
 }
 
-export function TilePanel(): ReactElement {
+export function TilePanel({ client }: { readonly client: SimClient }): ReactElement {
   useSimStore((s) => s.locale);
   const hovered = useSimStore((s) => s.hoveredTile);
   const selected = useSimStore((s) => s.selectedTile);
@@ -260,6 +262,8 @@ export function TilePanel(): ReactElement {
           </div>
         </dl>
       )}
+
+      {town !== undefined && <CouncilPanel town={town} client={client} />}
 
       {station !== undefined && (
         <>

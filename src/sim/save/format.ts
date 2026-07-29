@@ -44,9 +44,9 @@ export const SAVE_MAGIC = 'IRVN';
  * setting of section 14.2 and the auto-renewal switch of 11.3, 16 the runway
  * occupancy of section 8.4, 17 the news log of section 17.1, 18 the several
  * companies of section 15 with the tile ownership and the command authorship
- * that come with them.
+ * that come with them, 19 the town councils of section 13.3.
  */
-export const SAVE_VERSION = 18;
+export const SAVE_VERSION = 19;
 
 /** File extension used for manual and automatic saves. */
 export const SAVE_EXTENSION = '.ironsave';
@@ -138,6 +138,11 @@ function parseRngState(value: unknown, path: string): RngState {
     asUint32(words[2], `${path}[2]`),
     asUint32(words[3], `${path}[3]`),
   ];
+}
+
+/** A list of finite numbers of any length - the per-company council rows. */
+function parseNumbers(value: unknown, path: string): number[] {
+  return asArray(value, path).map((entry, i) => asFinite(entry, `${path}[${i}]`));
 }
 
 /** A row of accounts of exactly the expected length, all whole cents. */
@@ -308,6 +313,15 @@ function parseTowns(value: unknown, path: string): Town[] {
         raw['foodDeliveredThisMonth'],
         `${path}[${i}].foodDeliveredThisMonth`,
       ),
+      transportedByCompany: parseNumbers(
+        raw['transportedByCompany'],
+        `${path}[${i}].transportedByCompany`,
+      ),
+      councilRating: parseNumbers(raw['councilRating'], `${path}[${i}].councilRating`),
+      councilGoodwill: parseNumbers(raw['councilGoodwill'], `${path}[${i}].councilGoodwill`),
+      exclusiveCompanyId: asInt(raw['exclusiveCompanyId'], `${path}[${i}].exclusiveCompanyId`),
+      exclusiveUntilTick: asInt(raw['exclusiveUntilTick'], `${path}[${i}].exclusiveUntilTick`),
+      measureReadyTick: parseNumbers(raw['measureReadyTick'], `${path}[${i}].measureReadyTick`),
     });
   }
   return towns;
@@ -446,6 +460,26 @@ function parseCommand(value: unknown, path: string): Command {
           asInt(id, `${path}.specIds[${i}]`),
         ),
       };
+    case CommandKind.BuyExclusiveRights:
+      return {
+        kind: CommandKind.BuyExclusiveRights,
+        townId: asInt(raw['townId'], `${path}.townId`),
+      };
+
+    case CommandKind.ApplyTownMeasure:
+      return {
+        kind: CommandKind.ApplyTownMeasure,
+        townId: asInt(raw['townId'], `${path}.townId`),
+        measure: asInt(raw['measure'], `${path}.measure`),
+      };
+
+    case CommandKind.DemolishBuilding:
+      return {
+        kind: CommandKind.DemolishBuilding,
+        x: asInt(raw['x'], `${path}.x`),
+        y: asInt(raw['y'], `${path}.y`),
+      };
+
     case CommandKind.BuildAirport:
       return {
         kind: CommandKind.BuildAirport,

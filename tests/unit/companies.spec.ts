@@ -119,24 +119,38 @@ describe('what a company owns', () => {
   });
 
   it('does not join a competitor’s station', () => {
+    // Both stops go on the town's own public streets, which is the only ground
+    // two companies can both build on.
     const scenario = twoCompanies();
     const world = scenario.world;
-    apply(scenario, { kind: CommandKind.BuildRoad, x1: 5, y1: ROW, x2: 15, y2: ROW }, 1);
     apply(
       scenario,
-      { kind: CommandKind.BuildRoadStop, x: 6, y: ROW, moduleKind: ModuleKind.BusStop },
+      { kind: CommandKind.BuildRoadStop, x: 28, y: 40, moduleKind: ModuleKind.BusStop },
       1,
     );
-    // Two tiles away is well inside the join distance - but not for a rival.
+    // Three tiles away is well inside the join distance - but not for a rival.
     apply(
       scenario,
-      { kind: CommandKind.BuildRoadStop, x: 8, y: ROW, moduleKind: ModuleKind.BusStop },
+      { kind: CommandKind.BuildRoadStop, x: 31, y: 40, moduleKind: ModuleKind.BusStop },
       0,
     );
 
     expect(world.stations.length).toBe(2);
     expect(world.stations[0]!.ownerId).toBe(1);
     expect(world.stations[1]!.ownerId).toBe(0);
+  });
+
+  it('cannot put a stop on a competitor’s road', () => {
+    const scenario = twoCompanies();
+    apply(scenario, { kind: CommandKind.BuildRoad, x1: 5, y1: ROW, x2: 15, y2: ROW }, 1);
+
+    expect(
+      tryApply(
+        scenario,
+        { kind: CommandKind.BuildRoadStop, x: 8, y: ROW, moduleKind: ModuleKind.BusStop },
+        0,
+      ),
+    ).toBe('cmd.reject.notYours');
   });
 });
 

@@ -25,6 +25,26 @@ export interface TownMarker {
   readonly sizeClass: number;
   /** Inhabitants - the one column a town list is actually for. */
   readonly population: number;
+  /** What the council thinks of the PLAYER, 0..100 (section 13.3). */
+  readonly councilRating: number;
+  /** Company holding exclusive building rights here, or -1. */
+  readonly exclusiveCompanyId: number;
+  /** Months of those rights still to run; 0 when nobody holds any. */
+  readonly exclusiveMonthsLeft: number;
+  /** Price of buying them, at this year's prices. [cent] */
+  readonly exclusiveCostCt: number;
+  /** Per measure, whether the player may buy it right now. */
+  readonly measureReady: readonly boolean[];
+}
+
+/** A company as the interface names it. */
+export interface CompanyMarker {
+  readonly id: number;
+  readonly name: string;
+  readonly colorIndex: number;
+  /** Net worth, so the list can be ranked (section 14.1). [cent] */
+  readonly valueCt: number;
+  readonly bankrupt: boolean;
 }
 
 /**
@@ -163,6 +183,8 @@ export type WorkerToMainMessage =
   | { readonly type: 'industriesChanged'; readonly industries: readonly IndustryMarker[] }
   /** Town populations; they change monthly, so they travel with the finances. */
   | { readonly type: 'townsChanged'; readonly towns: readonly TownMarker[] }
+  /** Every company in the game, the player first. */
+  | { readonly type: 'companiesChanged'; readonly companies: readonly CompanyMarker[] }
   /** The books, sent when the game month rolls over. */
   | { readonly type: 'financesChanged'; readonly report: FinanceReport }
   /** The news log, sent whenever something was posted to it. */

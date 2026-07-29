@@ -24,6 +24,15 @@ const GROUND_HEIGHT = 5;
 function placeTown(map: TileMap, town: Town): void {
   const half = town.radius;
 
+  // The whole built-up area belongs to the town, exactly as the map generator
+  // claims it - the council of section 13.3 asks a TILE which town it is in.
+  for (let dy = -half; dy <= half; dy++) {
+    for (let dx = -half; dx <= half; dx++) {
+      if (!map.contains(town.x + dx, town.y + dy)) continue;
+      map.townId[map.tileIndex(town.x + dx, town.y + dy)] = town.id;
+    }
+  }
+
   for (let offset = -half; offset <= half; offset++) {
     for (const [x, y] of [
       [town.x + offset, town.y],
@@ -137,6 +146,12 @@ export function makeTown(id: number, x: number, y: number, population: number, n
     transportedThisMonth: 0,
     goodsDeliveredThisMonth: 0,
     foodDeliveredThisMonth: 0,
+    transportedByCompany: [],
+    councilRating: [],
+    councilGoodwill: [],
+    exclusiveCompanyId: -1,
+    exclusiveUntilTick: 0,
+    measureReadyTick: [],
   };
 }
 

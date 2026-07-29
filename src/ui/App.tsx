@@ -131,7 +131,7 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
             {openList === 'stations' && <StationList />}
             {openList === 'towns' && <TownList />}
             {openList === 'industries' && <IndustryList />}
-            <TilePanel />
+            <TilePanel client={client} />
             <FleetPanel client={client} />
             <CompanyPanel client={client} />
             <FinancePanel client={client} />

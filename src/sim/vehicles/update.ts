@@ -484,7 +484,12 @@ function serveStation(world: World, id: number, station: Station): number {
       units += moved;
       if (station.townId >= 0 && (cargo === Cargo.Passengers || cargo === Cargo.Mail)) {
         const town = world.towns[station.townId];
-        if (town !== undefined) town.transportedThisMonth += moved;
+        if (town !== undefined) {
+          town.transportedThisMonth += moved;
+          // Growth asks what left the town; the council asks who took it.
+          const owner = vehicles.ownerId[id]!;
+          town.transportedByCompany[owner] = (town.transportedByCompany[owner] ?? 0) + moved;
+        }
       }
     }
   }

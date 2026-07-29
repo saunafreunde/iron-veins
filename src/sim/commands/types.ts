@@ -33,6 +33,9 @@ export const CommandKind = {
   BuyShip: 25,
   BuildAirport: 26,
   BuyAircraft: 27,
+  BuyExclusiveRights: 28,
+  ApplyTownMeasure: 29,
+  DemolishBuilding: 30,
 } as const;
 export type CommandKind = (typeof CommandKind)[keyof typeof CommandKind];
 
@@ -184,6 +187,33 @@ export interface BuyTrainCommand {
   readonly specIds: readonly number[];
 }
 
+/** Buy twelve months of exclusive building rights in a town (section 13.3). */
+export interface BuyExclusiveRightsCommand {
+  readonly kind: typeof CommandKind.BuyExclusiveRights;
+  readonly townId: number;
+}
+
+/** Pay for one of the council measures of section 13.3. */
+export interface ApplyTownMeasureCommand {
+  readonly kind: typeof CommandKind.ApplyTownMeasure;
+  readonly townId: number;
+  /** A value of TownMeasure. */
+  readonly measure: number;
+}
+
+/**
+ * Clear a town building out of the way.
+ *
+ * The one thing in the game that costs a company standing with a council
+ * rather than only money - which is what makes "abgerissene Gebaeude" in
+ * section 13.3 a real term rather than one that is always zero.
+ */
+export interface DemolishBuildingCommand {
+  readonly kind: typeof CommandKind.DemolishBuilding;
+  readonly x: number;
+  readonly y: number;
+}
+
 /** Build an airport, in one of the three sizes of section 10. */
 export interface BuildAirportCommand {
   readonly kind: typeof CommandKind.BuildAirport;
@@ -271,6 +301,9 @@ export interface RefitVehicleCommand {
 }
 
 export type Command =
+  | BuyExclusiveRightsCommand
+  | ApplyTownMeasureCommand
+  | DemolishBuildingCommand
   | BuildAirportCommand
   | BuyAircraftCommand
   | BuildWaterStopCommand
@@ -365,5 +398,13 @@ export const RejectReason = {
   NotEmpty: 'cmd.reject.notEmpty',
   CannotCarry: 'cmd.reject.cannotCarry',
   NotYours: 'cmd.reject.notYours',
+  NoSuchTown: 'cmd.reject.noSuchTown',
+  UnknownMeasure: 'cmd.reject.unknownMeasure',
+  MeasureNotReady: 'cmd.reject.measureNotReady',
+  RatingTooLow: 'cmd.reject.ratingTooLow',
+  RightsTaken: 'cmd.reject.rightsTaken',
+  CouncilRefuses: 'cmd.reject.councilRefuses',
+  ExclusiveRights: 'cmd.reject.exclusiveRights',
+  NoBuilding: 'cmd.reject.noBuilding',
 } as const;
 export type RejectReason = (typeof RejectReason)[keyof typeof RejectReason];

@@ -1471,3 +1471,52 @@ Version 17 saves have no owner layer and cannot be given one honestly - the file
 does not say who laid which piece of track - so every tile in them becomes
 PUBLIC. That is the reading that changes nothing about what the player may do
 with the map they saved.
+
+### D-102 The council rating is recomputed; only what a company DID is remembered
+
+Section 13.3 names four inputs: stations serving the town, the share of its
+traffic carried, noise from track in the streets, and buildings demolished.
+Three of those are facts about the world right now and are measured from it
+every month. Only the fourth is history, and it is kept as a single `goodwill`
+number that also carries what campaigns, trees and streets bought.
+
+Goodwill DECAYS, at ninety per cent a month. A campaign that never wore off
+would mean buying a town once and owning it for the century; a grudge that never
+faded would mean one cleared house costing a company the town for ever. Neither
+is a game, and both are what a stored rating does if nothing pulls it back.
+
+A company the council has never heard of sits at the neutral 50 rather than at
+zero. The refusal threshold is then a punishment for behaviour instead of the
+state every company starts in - a new company that could not build in any town
+would have no way to earn its way out of it.
+
+### D-103 Clearing a town building is a command, so that "demolished" is real
+
+Nothing in the game could remove a town building before this. Every build
+refuses a tile with a house on it, so "buildings demolished" as a council input
+would have been a term that is structurally always zero - present in the code,
+never anything but zero, and impossible to tell apart from a bug.
+
+`DemolishBuilding` costs money and costs standing with the council, and it is
+the only command in the game that costs the second. It also removes the worst
+frustration the build rules have: a house in the way was permanent.
+
+### D-104 Streets a company funds stay the town's; track it lays does not
+
+Both come out of the one-byte owner layer of D-101 and they pull opposite ways.
+
+Road: a company that could own a town's street network by paving one tile of it
+could lock every competitor out of the town without ever going near the council.
+So a tile only becomes a company's when that company laid the FIRST road on it,
+and streets bought with the "fund streets" measure stay public even though a
+company paid for them.
+
+Track: a town never lays track, so track across a public street takes the tile.
+Without that rule the level crossing belongs to nobody, which means nobody can
+pull it up and - worse - it does not count as that company's noise, so running a
+main line straight down the high street would cost no standing at all.
+
+Funded streets reach two tiles PAST the built-up area. A town that has filled
+its radius has no bare ground left between the houses, and a measure that could
+only build where there was already room would do nothing in exactly the towns
+worth courting.

@@ -1,4 +1,5 @@
 import type {
+  CompanyMarker,
   IndustryMarker,
   MainToWorkerMessage,
   TownMarker,
@@ -31,6 +32,7 @@ import {
 import { loanLimitCt } from './economy/company';
 import { bookValueCt, companyValueCt, monthsInOrder } from './economy/ledger';
 import { stationRating } from './station/types';
+import { councilRating, exclusiveRightsCostCt, TOWN_MEASURE_COUNT } from './town/council';
 import { calendarFromTick, hashWorldLive, World } from './World';
 
 /**
@@ -137,13 +139,41 @@ function industryMarkers(current: World): IndustryMarker[] {
 
 /** Town markers, which carry a population that changes every month. */
 function townMarkers(current: World): TownMarker[] {
-  return current.towns.map((town) => ({
-    id: town.id,
-    name: town.name,
-    x: town.x,
-    y: town.y,
-    sizeClass: town.sizeClass,
-    population: town.population,
+  const player = current.playerCompanyId;
+
+  return current.towns.map((town) => {
+    const held = town.exclusiveCompanyId >= 0 && current.tick < town.exclusiveUntilTick;
+    const ready: boolean[] = [];
+    for (let measure = 0; measure < TOWN_MEASURE_COUNT; measure++) {
+      const slot = player * TOWN_MEASURE_COUNT + measure;
+      ready.push(current.tick >= (town.measureReadyTick[slot] ?? 0));
+    }
+    return {
+      id: town.id,
+      name: town.name,
+      x: town.x,
+      y: town.y,
+      sizeClass: town.sizeClass,
+      population: town.population,
+      councilRating: councilRating(town, player),
+      exclusiveCompanyId: held ? town.exclusiveCompanyId : -1,
+      exclusiveMonthsLeft: held
+        ? Math.ceil((town.exclusiveUntilTick - current.tick) / TICKS_PER_MONTH)
+        : 0,
+      exclusiveCostCt: exclusiveRightsCostCt(current, town),
+      measureReady: ready,
+    };
+  });
+}
+
+/** Every company, for the council panel and the competitor list. */
+function companyMarkers(current: World): CompanyMarker[] {
+  return current.companies.map((company) => ({
+    id: company.id,
+    name: company.name,
+    colorIndex: company.colorIndex,
+    valueCt: companyValueCt(company),
+    bankrupt: company.bankrupt,
   }));
 }
 
@@ -171,6 +201,7 @@ function postMonthly(current: World): void {
     },
   });
   scope.postMessage({ type: 'townsChanged', towns: townMarkers(current) });
+  scope.postMessage({ type: 'companiesChanged', companies: companyMarkers(current) });
 }
 
 /**

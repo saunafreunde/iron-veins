@@ -242,6 +242,12 @@ export function generateTowns(map: TileMap, rng: Rng): Town[] {
       radius: TOWN_START_RADIUS[sizeClass],
       producedThisMonth: 0,
       transportedThisMonth: 0,
+      transportedByCompany: [],
+      councilRating: [],
+      councilGoodwill: [],
+      exclusiveCompanyId: -1,
+      exclusiveUntilTick: 0,
+      measureReadyTick: [],
       goodsDeliveredThisMonth: 0,
       foodDeliveredThisMonth: 0,
     };

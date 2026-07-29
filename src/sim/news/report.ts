@@ -1,5 +1,6 @@
 import {
   BANKRUPTCY_MONTHS,
+  COUNCIL_REFUSAL_RATING,
   DEADLOCK_WARN_TICKS,
   INDUSTRY_CLOSURE_MONTHS,
   INDUSTRY_WARNING_MONTHS,
@@ -7,6 +8,8 @@ import {
 import { isInTrouble } from '../economy/company';
 import { industrySpec, type Industry } from '../industry/types';
 import { isObsolete } from '../vehicles/lifecycle';
+import { councilRating } from '../town/council';
+import type { Town } from '../town/types';
 import type { World } from '../World';
 import { NewsCategory, NewsSeverity } from './log';
 
@@ -130,6 +133,36 @@ function reportSolvency(world: World): void {
       left: BANKRUPTCY_MONTHS - company.monthsInDebt,
     },
     tileIndex: -1,
+  });
+}
+
+/**
+ * A town whose council has locked us out, and one where somebody bought the
+ * building rights (13.3). Called from the monthly council review.
+ */
+export function reportCouncil(world: World, town: Town): void {
+  const tile = world.map.tileIndex(town.x, town.y);
+
+  if (town.exclusiveCompanyId >= 0 && town.exclusiveCompanyId !== world.playerCompanyId) {
+    world.news.postOnce({
+      tick: world.tick,
+      category: NewsCategory.Town,
+      severity: NewsSeverity.Warning,
+      messageKey: 'news.exclusiveRights',
+      params: { company: world.companyOf(town.exclusiveCompanyId).name, town: town.name },
+      tileIndex: tile,
+    });
+    return;
+  }
+  if (councilRating(town, world.playerCompanyId) >= COUNCIL_REFUSAL_RATING) return;
+
+  world.news.postOnce({
+    tick: world.tick,
+    category: NewsCategory.Town,
+    severity: NewsSeverity.Alarm,
+    messageKey: 'news.councilRefuses',
+    params: { town: town.name },
+    tileIndex: tile,
   });
 }
 
