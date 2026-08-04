@@ -1794,3 +1794,91 @@ two cases, not in the evaluation that chose the line.
 
 Until that is fixed the AI cannot reach the band, because two of its five
 personalities cannot run a line at all.
+
+### D-117 Seventeen industries get seventeen silhouettes, not seventeen tints
+
+Every industry in the game was one white box with a colour multiplied over it.
+That is unreadable for a reason that is not about taste: a tint MULTIPLIES, so
+a coal heap, a chimney and a shed under one tint all come out as the same shade
+of that tint, and the only information left is the hue - at which point the
+player is reading a colour key rather than a map.
+
+They are drawn in their own colours now, and the tint is gone. What separates
+them is the OUTLINE: a headframe over a coal shaft, a derrick on an oil pad,
+cooling towers and a banded stack at the power station, a north-light hall at
+the sawmill, distillation columns at the refinery, a rotary kiln at the cement
+works. Shape survives being sixteen pixels tall; colour does not.
+
+The same argument applies to a town. Three zones were three colours of one box;
+they are three shapes now - a house with a pitched roof, a glazed office block
+and a works shed - and they grow with the expansion stage rather than switching
+between two heights.
+
+Two latent defects fell out of doing this. The atlas cell had ONE height step
+of headroom, so everything taller than a crate was being silently cut off at
+the top; it has three now. And where the ground sits inside a cell was an
+unwritten agreement between `TerrainAtlas` and `MapView` - the renderer read
+`HEIGHT_PX` and assumed they matched. It reads `anchorY` now, which is what the
+field was always for, and the two files can no longer drift apart.
+
+### D-118 Nobody accepted electronics
+
+`tests/unit/deliveries.spec.ts` walks the whole chain table and asks, of every
+cargo any works produces, whether ANYTHING accepts it. Electronics failed: the
+electronics factory turns steel and plastics into a cargo that no industry
+takes as an input and no town consumed.
+
+That is not a display problem. A cargo nothing accepts cannot be delivered, so
+the line carrying it is never paid, and the works making it closes after
+twenty-four months whatever the player does - a whole branch of the production
+tree that could be built and could never work.
+
+Towns take electronics now, credited to the same GOODS demand as furniture: a
+town wants manufactured articles, and whether they arrive as a wardrobe or as a
+radio is not a distinction the growth formula of section 13.2 makes. That
+avoids a third demand counter, a third constant and a third growth term for a
+difference nothing would read.
+
+The list of what a town accepts is now EXPORTED from the simulation and read by
+the interface rather than copied into it. The copy was the real hazard: the
+moment the two disagreed, the panel would send a player to a town that would
+not take the load.
+
+### D-119 The connect tool is the only build that asks before it charges
+
+Every other build in the game bills on the click. That is right for a tile of
+road and wrong for a railway between two stations, which can cost more than a
+company has - so this one plans, prices, shows the length, the gradient, the
+tightest curve, the resulting speed, the bridges and tunnels and the total, and
+then waits.
+
+It plans with the very same `planTrack` the command runs, with the same
+arguments, so the number on screen and the number on the bill cannot disagree -
+which is the whole of section 17.3.
+
+The platforms go one tile IN from each end and two tiles long, which is the
+layout balancing scenario 5 spent a game year proving: a platform on the LAST
+tile of the track leaves a train longer than one tile nowhere to finish
+arriving, and a one-tile platform works only the share of the train that fits,
+minus forty percent.
+
+The anchor at each end is a MODULE tile, never the station centre. The centre is
+a recomputed average and on a mixed station it can sit on ground no track can
+reach. An end that already has a rail platform is anchored on it and gets no new
+one.
+
+### D-120 The tick projection is printed, not asserted
+
+`tests/perf/tick.perf.spec.ts` measures the p99 of a tick with three hundred
+working vehicles on a 1024 map and holds it to section 21's eight milliseconds.
+It also extrapolates linearly to the fifteen hundred vehicles the section names.
+
+That extrapolation was asserted, at three times the budget, and it went red on a
+run where the measured p99 was comfortably inside it - because the projection is
+taken while forty other spec files run on the same machine, and a p99 is exactly
+the statistic that picks up somebody else's garbage collection.
+
+It is printed now and not asserted. A test that fails because the box was busy
+teaches nobody anything and trains people to ignore the suite; the number is
+still in the log, which is where a real regression - one that moves it by a
+multiple - will be seen.

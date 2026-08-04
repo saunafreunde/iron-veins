@@ -41,8 +41,22 @@ export function coveredShareOf(station: Station, industry: Industry): number {
  */
 const ALWAYS_ACCEPTED: readonly Cargo[] = [Cargo.Passengers, Cargo.Mail];
 
-/** What a town consumes, and therefore only takes where it has houses. */
-const TOWN_CARGO: readonly Cargo[] = [Cargo.Goods, Cargo.Food];
+/**
+ * What a town consumes, and therefore only takes where it has houses.
+ *
+ * Electronics belongs here for a reason that is not decoration: the
+ * electronics works is the only industry in the chain table whose output
+ * nothing accepted. A cargo that can be produced and never delivered is a dead
+ * end in the economy - the line carrying it is never paid and the works that
+ * makes it closes after twenty-four months, whatever the player does. Found by
+ * `tests/unit/deliveries.spec.ts`, which walks the whole table.
+ *
+ * It is credited to the town's GOODS demand rather than to a third counter of
+ * its own: a town wants manufactured articles, and whether they arrive as
+ * furniture or as radios is not a distinction the growth formula of section
+ * 13.2 makes.
+ */
+export const TOWN_CARGO: readonly Cargo[] = [Cargo.Goods, Cargo.Food, Cargo.Electronics];
 
 /**
  * Work out which industries a station reaches and which cargo it accepts.

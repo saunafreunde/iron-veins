@@ -11,6 +11,8 @@ import { AUTO_SIGNAL_SPACING_TILES, DEADLOCK_WARN_TICKS } from '../sim/constants
 import { ModuleKind } from '../sim/station/types';
 import type { SimClient } from './SimClient';
 import { audioEngine } from './audioBridge';
+import { planConnection } from './connect';
+import { stationAtTile } from './TilePanel';
 import { useSimStore, type Tool } from './store';
 
 /**
@@ -165,6 +167,7 @@ function commandForClick(tool: Tool, tile: TileInfo): Command | null {
       return { kind: CommandKind.DemolishRoad, x: tile.x, y: tile.y };
     case 'road':
     case 'track':
+    case 'connect':
     case 'none':
       // Two-click tools; the click handler drives them directly.
       return null;
@@ -246,6 +249,41 @@ export function MapCanvas({ client }: { readonly client: SimClient }): ReactElem
       const state = useSimStore.getState();
       state.setSelectedTile(tile);
       if (tile === null) return;
+
+      /*
+       * Connect: two clicks on two STATIONS, then a priced confirmation.
+       *
+       * This is the only build in the game that does not charge on the second
+       * click. A line between two stations can cost more than a company has,
+       * and the answer to "what will this cost me" has to arrive before the
+       * money leaves - which is what the panel is for.
+       */
+      if (state.tool === 'connect') {
+        const station = stationAtTile(state.stations, tile.x, tile.y);
+        if (station === undefined) {
+          state.setConnectPlan(null, 'ui.connect.notAStation');
+          return;
+        }
+        if (state.connectAnchor === null) {
+          state.setConnectAnchor(station.id);
+          return;
+        }
+        const from = state.stations.find((entry) => entry.id === state.connectAnchor);
+        const currentMap = mapRef.current;
+        if (from === undefined || currentMap === null) {
+          state.clearConnect();
+          return;
+        }
+        const result = planConnection(currentMap, from, station, state.year);
+        if (result.ok) {
+          state.setConnectPlan(result.plan, null);
+          view.setPreviewRoute(result.plan.tiles);
+        } else {
+          state.setConnectPlan(null, result.reasonKey);
+          view.setPreviewRoute(null);
+        }
+        return;
+      }
 
       if (state.tool === 'track') {
         const anchor = state.roadAnchor;

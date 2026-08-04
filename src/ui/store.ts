@@ -14,6 +14,7 @@ import type {
 import type { SaveEntry } from '../platform/Storage';
 import { DEFAULT_SETTINGS, type AppSettings } from '../shared/settings';
 import type { MapGenPhase } from '../sim/mapgen';
+import type { ConnectPlan } from './connect';
 
 /**
  * The full-screen panels of M9. One at a time, because each of them wants the
@@ -50,7 +51,9 @@ export type Tool =
   | 'shipdepot'
   | 'freightterminal'
   | 'canopy'
-  | 'coldstore';
+  | 'coldstore'
+  /** Two clicks on two stations, then a priced confirmation. */
+  | 'connect';
 
 /**
  * What the build preview shows before the player commits (section 17.3).
@@ -132,6 +135,12 @@ export interface SimUiState extends SnapshotValues {
   /** First corner of a road drag; the second click completes it. */
   roadAnchor: { readonly x: number; readonly y: number } | null;
   trackPreview: TrackPreview | null;
+  /** Station the connect tool started from, or null. */
+  connectAnchor: number | null;
+  /** The planned and priced railway, waiting for a yes. */
+  connectPlan: ConnectPlan | null;
+  /** Why the last connection could not be planned, as a translation key. */
+  connectError: string | null;
   /** Units the player has put together in the rail depot, not yet bought. */
   trainDraft: readonly number[];
   companyName: string;
@@ -179,6 +188,9 @@ export interface SimUiState extends SnapshotValues {
   setSelectedVehicle: (id: number | null) => void;
   setRoadAnchor: (anchor: { readonly x: number; readonly y: number } | null) => void;
   setTrackPreview: (preview: TrackPreview | null) => void;
+  setConnectAnchor: (stationId: number | null) => void;
+  setConnectPlan: (plan: ConnectPlan | null, reasonKey: string | null) => void;
+  clearConnect: () => void;
   addTrainUnit: (specId: number) => void;
   removeTrainUnit: (index: number) => void;
   clearTrainDraft: () => void;
@@ -243,6 +255,9 @@ export const useSimStore = create<SimUiState>((set) => ({
   selectedVehicleId: null,
   roadAnchor: null,
   trackPreview: null,
+  connectAnchor: null,
+  connectPlan: null,
+  connectError: null,
   trainDraft: [],
   companyName: '',
   companyColorIndex: 0,
@@ -271,7 +286,15 @@ export const useSimStore = create<SimUiState>((set) => ({
     }),
   setHoveredTile: (tile) => set({ hoveredTile: tile }),
   setSelectedTile: (tile) => set({ selectedTile: tile }),
-  setTool: (tool) => set({ tool, roadAnchor: null, trackPreview: null }),
+  setTool: (tool) =>
+    set({
+      tool,
+      roadAnchor: null,
+      trackPreview: null,
+      connectAnchor: null,
+      connectPlan: null,
+      connectError: null,
+    }),
   setAutoSignal: (autoSignal) => set({ autoSignal }),
   setIndustries: (industries) => set({ industries }),
   setTowns: (towns) => set({ towns }),
@@ -287,6 +310,9 @@ export const useSimStore = create<SimUiState>((set) => ({
   centreOnTile: () => undefined,
   setCentreOnTile: (centreOnTile) => set({ centreOnTile }),
   setTrackPreview: (preview) => set({ trackPreview: preview }),
+  setConnectAnchor: (connectAnchor) => set({ connectAnchor, connectPlan: null, connectError: null }),
+  setConnectPlan: (connectPlan, connectError) => set({ connectPlan, connectError }),
+  clearConnect: () => set({ connectAnchor: null, connectPlan: null, connectError: null }),
   setStations: (stations) => set({ stations }),
   setFleet: (vehicles) => set({ fleet: vehicles }),
   setSelectedVehicle: (id) => set({ selectedVehicleId: id }),

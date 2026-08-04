@@ -536,7 +536,9 @@ function deliverCargo(world: World, station: Station, cargo: Cargo, amount: numb
   if (left <= 0 || station.townId < 0) return;
   const town = world.towns[station.townId];
   if (town === undefined) return;
-  if (cargo === Cargo.Goods) town.goodsDeliveredThisMonth += left;
+  // Electronics count as goods: a town wants manufactured articles, and the
+  // growth formula of section 13.2 does not distinguish furniture from radios.
+  if (cargo === Cargo.Goods || cargo === Cargo.Electronics) town.goodsDeliveredThisMonth += left;
   else if (cargo === Cargo.Food) town.foodDeliveredThisMonth += left;
 }
 

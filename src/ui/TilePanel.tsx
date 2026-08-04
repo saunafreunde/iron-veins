@@ -24,7 +24,9 @@ import { INDUSTRY_SPECS } from '../sim/industry/types';
 import { TERRAIN_NAME_KEYS } from '../sim/map/terrain';
 import { platformLength, type ModuleKind, type Station } from '../sim/station/types';
 import { RAIL_TYPE_COST_CT, RailType } from '../sim/map/track';
+import { ConnectPanel } from './ConnectPanel';
 import { CouncilPanel } from './CouncilPanel';
+import { DeliveryPanel } from './DeliveryPanel';
 import type { SimClient } from './SimClient';
 import { useSimStore, type Tool } from './store';
 
@@ -33,6 +35,7 @@ const TOOLS: ReadonlyArray<{ readonly id: Tool; readonly labelKey: string }> = [
   { id: 'none', labelKey: 'ui.tool.select' },
   { id: 'road', labelKey: 'ui.tool.road' },
   { id: 'track', labelKey: 'ui.tool.track' },
+  { id: 'connect', labelKey: 'ui.tool.connect' },
   { id: 'stop', labelKey: 'ui.tool.stop' },
   { id: 'depot', labelKey: 'ui.tool.depot' },
   { id: 'platform', labelKey: 'ui.tool.platform' },
@@ -105,6 +108,8 @@ function priceHint(tool: Tool, year: number): string {
       return t('ui.tool.priceTerraform', { amount: formatMoney(at(TERRAFORM_COST_PER_STEP_CT)) });
     case 'demolish':
       return t('ui.tool.priceDemolish');
+    case 'connect':
+      return t('ui.tool.hintConnect');
     case 'none':
       return t('ui.tool.hintSelect');
   }
@@ -263,6 +268,8 @@ export function TilePanel({ client }: { readonly client: SimClient }): ReactElem
         </dl>
       )}
 
+      <ConnectPanel client={client} />
+
       {town !== undefined && <CouncilPanel town={town} client={client} />}
 
       {station !== undefined && (
@@ -330,6 +337,7 @@ export function TilePanel({ client }: { readonly client: SimClient }): ReactElem
               })}
             </p>
           )}
+          <DeliveryPanel industry={industry} />
         </>
       )}
     </section>
