@@ -5,12 +5,22 @@ import {
   AI_MIN_DISTANCE,
   AI_CHAIN_BONUS,
   AI_PRODUCING_SINK_PENALTY,
+  AI_LORRY_PRICE_CT,
+  AI_PLATFORM_TILES,
   AI_RIVAL_PENALTY,
+  AI_TILES_PER_MONTH,
+  AI_TOWN_OUTPUT_SHARE,
+  AI_TRAIN_PRICE_CT,
+  RAIL_DEPOT_COST_CT,
+  RAIL_PLATFORM_COST_CT,
+  ROAD_DEPOT_COST_CT,
+  ROAD_STOP_COST_CT,
   ROAD_COST_PER_TILE_CT,
   STATION_CATCHMENT_SCAN_RADIUS,
 } from '../constants';
 import { pickRoadVehicle, pickTrain } from './build';
-import { industrySpec, type Industry } from '../industry/types';
+import { industryBaseOutput, industrySpec, type Industry } from '../industry/types';
+import type { Town } from '../town/types';
 import { RAIL_TYPE_COST_CT, RailType } from '../map/track';
 import { Personality } from './types';
 import type { World } from '../World';
@@ -60,6 +70,27 @@ function servedByAnyone(world: World, x: number, y: number): boolean {
     }
   }
   return false;
+}
+
+/**
+ * What this works makes in a month at its current level.
+ *
+ * The cap on what any line out of it can carry, however many vehicles are put
+ * on it - and the number the estimate was missing.
+ */
+function expectedOutput(world: World, industry: Industry): number {
+  return (industryBaseOutput(industry, world.tick) * industry.productionLevel) / 100;
+}
+
+/**
+ * Passengers a town offers in a month.
+ *
+ * Deliberately generous: a town is the one source in the game that cannot shut
+ * down or run dry, and what actually limits a passenger line is the station
+ * rating rather than the town.
+ */
+function townOutput(town: Town): number {
+  return town.population * AI_TOWN_OUTPUT_SHARE;
 }
 
 /** The output an industry makes that somebody else wants. */
@@ -169,9 +200,19 @@ function collectIndustryPairs(
       // otherwise the competitor is choosing a line that is going to die.
       if (!terminal && !onwardLegExists(world, sink)) continue;
       into.push(
-        rate(world, source.x, source.y, sink.x, sink.y, cargo, distance, rail, terminal, {
-          chain: weSupply(world, source, companyId),
-        }),
+        rate(
+          world,
+          source.x,
+          source.y,
+          sink.x,
+          sink.y,
+          cargo,
+          distance,
+          rail,
+          terminal,
+          expectedOutput(world, source),
+          { chain: weSupply(world, source, companyId) },
+        ),
       );
     }
   }
@@ -184,7 +225,21 @@ function collectTownPairs(world: World, into: Opportunity[], rail: boolean): voi
       const to = world.towns[b]!;
       const distance = tileDistance(from.x, from.y, to.x, to.y);
       if (distance < AI_MIN_DISTANCE || distance > AI_MAX_DISTANCE) continue;
-      into.push(rate(world, from.x, from.y, to.x, to.y, Cargo.Passengers, distance, rail, true));
+      // A town's passengers are its own production, and it never runs dry.
+      into.push(
+        rate(
+          world,
+          from.x,
+          from.y,
+          to.x,
+          to.y,
+          Cargo.Passengers,
+          distance,
+          rail,
+          true,
+          townOutput(from),
+        ),
+      );
     }
   }
 }
@@ -236,9 +291,19 @@ function collectTownDeliveries(
       const distance = tileDistance(source.x, source.y, town.x, town.y);
       if (distance < AI_MIN_DISTANCE || distance > AI_MAX_DISTANCE) continue;
       into.push(
-        rate(world, source.x, source.y, town.x, town.y, cargo, distance, rail, true, {
-          chain: weSupply(world, source, companyId),
-        }),
+        rate(
+          world,
+          source.x,
+          source.y,
+          town.x,
+          town.y,
+          cargo,
+          distance,
+          rail,
+          true,
+          expectedOutput(world, source),
+          { chain: weSupply(world, source, companyId) },
+        ),
       );
     }
   }
@@ -270,29 +335,93 @@ function rate(
   distance: number,
   rail: boolean,
   terminalSink: boolean,
+  monthlyOutput: number,
   flags: { readonly chain: boolean } = { chain: false },
 ): Opportunity {
   const load = rail ? AI_RAIL_LOAD_UNITS : AI_ROAD_LOAD_UNITS;
-  const perTrip = deliveryRevenueCt({
+  /*
+   * Round trips a month, and this is where a competitor's judgement lives.
+   *
+   * FRACTIONAL, deliberately. It used to be floored at one, which said that a
+   * line of any length manages at least a trip a month - so an eighty tile
+   * line and a twenty tile line were credited with the same cadence and the
+   * long one won on revenue per trip every time. Measured: one train on an
+   * eighty-two tile line made two deliveries in six months and the line was
+   * closed as unprofitable, having been chosen for exactly that reason.
+   *
+   * With the floor gone, throughput falls as 1/distance while the revenue of a
+   * single trip grows only sub-linearly with it - which is the real economics
+   * of the thing, and it makes a competitor build lines its one train can
+   * actually work.
+   */
+  const tripsPerMonth = AI_TILES_PER_MONTH / (distance * 2);
+
+  /*
+   * What the line would actually MOVE in a month, which is the smaller of two
+   * things: what the vehicles can lift, and what the source makes.
+   *
+   * Leaving the second one out is what made a short line look like free money.
+   * The estimate assumed every trip left full, so a line that turns round three
+   * times a month was credited with three full trains - from a mine that makes
+   * one train's worth. With the cap, a line long enough to be throughput-bound
+   * and one short enough to be production-bound are both valued honestly, and
+   * the best line is the one in between.
+   */
+  const carriedPerMonth = Math.min(load * tripsPerMonth, monthlyOutput);
+  const revenueCtPerMonth = deliveryRevenueCt({
     cargo: cargo as Cargo,
-    amount: load,
+    amount: carriedPerMonth,
     distanceTiles: distance,
+    /*
+     * Fresh, and this is a deliberate optimism rather than an oversight.
+     *
+     * Charging the estimate for the decay a long haul really suffers was tried
+     * and MEASURED: every line then rated so poorly that the road company built
+     * nothing for twenty-five years and finished on 422 000 instead of 973 000.
+     * The estimate is a RANKING, and the decay term does not change the order
+     * of two candidates nearly as much as it depresses all of them below the
+     * threshold at which anything gets built at all.
+     */
     ticksInTransit: 0,
     hasCooling: false,
     year: world.date.year,
   });
-  // Trips a month, from a round trip at roughly fifty km/h - one tile is fifty
-  // metres, a day is two hundred ticks, and the rest is arithmetic.
-  const tripsPerMonth = Math.max(1, Math.round(AI_TILES_PER_MONTH / (distance * 2)));
-  const revenueCtPerMonth = perTrip * tripsPerMonth;
 
+  /*
+   * The whole bill, not just the rails.
+   *
+   * Track cost is the only part that scales with distance; the stops, the shed
+   * and the vehicles are the same money whether the line is fifteen tiles or
+   * sixty. Counting only the track made a short line look nearly free and sent
+   * a competitor to build the shortest thing on the map - measured, and it cost
+   * the road company two thirds of its twenty-five year value.
+   */
   const perTile = rail ? RAIL_TYPE_COST_CT[RailType.Plain]! : ROAD_COST_PER_TILE_CT;
   const buildCostCt = world.costCt(distance * perTile);
+
+  /*
+   * What the line costs ALTOGETHER, for the score only.
+   *
+   * Deliberately not folded into `buildCostCt`, which is the WAY and nothing
+   * else: the builder adds the stops, the shed and the vehicles to it when it
+   * asks whether the company can afford the project, and a figure that already
+   * contained them would be counted twice - measured, and it put every rail
+   * line permanently out of reach.
+   *
+   * The score needs the full figure all the same. Track is the only part that
+   * scales with distance; everything else is the same money on a fifteen tile
+   * line as on a sixty tile one, and scoring against the rails alone made the
+   * shortest line on the map look like the best one.
+   */
+  const fixedCt = rail
+    ? RAIL_PLATFORM_COST_CT * AI_PLATFORM_TILES * 2 + RAIL_DEPOT_COST_CT + AI_TRAIN_PRICE_CT
+    : ROAD_STOP_COST_CT * 2 + ROAD_DEPOT_COST_CT + AI_LORRY_PRICE_CT;
+  const wholeCostCt = buildCostCt + world.costCt(fixedCt);
 
   // A pair somebody already serves is worth less, not nothing: section 15 asks
   // for existing service to be taken into account, and a competitor's stop at
   // one end of a good chain does not make the chain bad.
-  let score = revenueCtPerMonth / Math.max(1, buildCostCt);
+  let score = revenueCtPerMonth / Math.max(1, wholeCostCt);
   if (servedByAnyone(world, fromX, fromY)) score *= AI_RIVAL_PENALTY;
   if (servedByAnyone(world, toX, toY)) score *= AI_RIVAL_PENALTY;
   if (!terminalSink) score *= AI_PRODUCING_SINK_PENALTY;
@@ -308,5 +437,3 @@ function rate(
 const AI_RAIL_LOAD_UNITS = 120;
 const AI_ROAD_LOAD_UNITS = 20;
 
-/** Tiles a vehicle covers in a game month at a typical line speed. */
-const AI_TILES_PER_MONTH = 1_200;

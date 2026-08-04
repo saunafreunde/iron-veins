@@ -444,11 +444,14 @@ runner: adding one would pull PixiJS into the simulation's own test runs.
 
 ## Still outstanding
 
-- **Two of the five AI personalities cannot run a line.** The rail and
-  town-network competitors build their infrastructure and never crew it - the
-  rail one ends twenty-five years with ninety-five tiles of railway, two
-  stations and no train. The road-freight one, which differs only in what it
-  builds, works and compounds. D-116 says exactly where the defect is.
+- **The rail and town-network competitors still finish a twenty-five year run
+  insolvent.** D-116 blamed the crewing stage; traced month by month that is
+  wrong, and D-121 says what actually happens - the rail company builds, crews
+  and runs its line, and loses it at the six-month review because one train on
+  an eighty-three tile line makes two deliveries. Three arithmetic errors in the
+  opportunity estimate are fixed (D-121, D-122) and the road competitor went
+  from 583 000 to 973 000 over the same run; the other two need the fleet SIZED
+  to the line, which `AI_VEHICLES_PER_LINE = 1` does not do.
 - **Balancing scenario 5** of section 19.4 therefore cannot be met: the AI
   finishes a 512-map quarter century worth about 580 000 against a band of five
   to twenty-five million. The test is NOT in the suite - see D-116 for why a

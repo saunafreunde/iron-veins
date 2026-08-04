@@ -397,6 +397,57 @@ export const AI_MAX_LINES = 20;
  * and that is the reinforcement rule doing its job.
  */
 export const AI_VEHICLES_PER_LINE = 1;
+
+/**
+ * Share of a town's inhabitants a competitor assumes it could carry in a month.
+ *
+ * Generous on purpose: a town is the one source that never runs dry, and what
+ * really limits a passenger line is the station rating.
+ */
+export const AI_TOWN_OUTPUT_SHARE = 0.5;
+
+/**
+ * What a competitor assumes its train and its lorry cost, for the ESTIMATE.
+ *
+ * Rough figures rather than a catalogue lookup: the estimate ranks pairs and
+ * does not have to be right, it has to be right about which is better. What it
+ * cannot do is leave them out - the vehicles and the stops are the same money
+ * on a fifteen tile line as on a sixty tile one, and pretending a line costs
+ * only its rails sent a competitor to build the shortest thing on the map.
+ * [cent]
+ */
+export const AI_TRAIN_PRICE_CT = 220_000 * CENTS_PER_EURO;
+export const AI_LORRY_PRICE_CT = 30_000 * CENTS_PER_EURO;
+
+/** Line speed a competitor assumes when it estimates a line's throughput. [m/s] */
+export const AI_NOMINAL_SPEED_MS = 14;
+
+/**
+ * Tiles a vehicle covers in a game MONTH, derived rather than guessed.
+ *
+ * This is the two-clocks trap of section 5.2 walking straight into the AI's own
+ * arithmetic. Vehicles move on the TICK clock: a month is 6000 ticks, a tick is
+ * fifty milliseconds, so a month is three hundred seconds of driving - and at
+ * fourteen metres a second that is 4200 metres, or eighty-four tiles.
+ *
+ * It was 1200, a figure that can only come from reckoning the month in CALENDAR
+ * hours. Fourteen times too high, and it was the whole reason a competitor
+ * preferred lines eighty tiles long: the estimate credited them with seven
+ * round trips a month where one train manages one every other month.
+ */
+export const AI_TILES_PER_MONTH =
+  (AI_NOMINAL_SPEED_MS * TICKS_PER_MONTH * TICK_MS) / 1000 / TILE_SIZE_M;
+
+/**
+ * Ticks a vehicle needs per tile at the nominal speed.
+ *
+ * The other half of being honest about time. A parcel on a long line is not
+ * fresh when it arrives: it waited at the station and then rode for weeks, and
+ * section 7.5 pays it accordingly. An estimate that quotes every load at the
+ * full fresh rate values a line across the map far above what it will ever
+ * earn - which is exactly what it did.
+ */
+export const AI_TICKS_PER_TILE = TILE_SIZE_M / AI_NOMINAL_SPEED_MS / (TICK_MS / 1000);
 export const AI_MAX_VEHICLES_PER_LINE = 6;
 
 /** Cargo waiting at a line's first stop before it is reinforced. [units] */

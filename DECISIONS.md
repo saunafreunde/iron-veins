@@ -1882,3 +1882,61 @@ It is printed now and not asserted. A test that fails because the box was busy
 teaches nobody anything and trains people to ignore the suite; the number is
 still in the log, which is where a real regression - one that moves it by a
 multiple - will be seen.
+
+
+### D-121 D-116 was wrong about WHY, and the real reason was arithmetic
+
+D-116 said the rail and town-network competitors "build their infrastructure and
+never crew it". Traced month by month, that is not what happens. The rail
+company builds its line, buys its train and runs it for six months - and the
+line is then closed by its own review, because it earned 4 029 against half a
+year of upkeep.
+
+The line it chose was eighty-three tiles long. One train on eighty-three tiles
+makes two deliveries in six months. It was chosen because the estimate said it
+would make SEVEN A MONTH, and that number came from `AI_TILES_PER_MONTH = 1200`.
+
+That constant is the two-clocks trap of section 5.2 walking into the AI's own
+arithmetic. Vehicles move on the TICK clock: a game month is 6000 ticks, a tick
+is fifty milliseconds, so a month is three hundred seconds of driving - eighty
+four tiles at fourteen metres a second, not twelve hundred. Twelve hundred can
+only come from reckoning the month in calendar hours. Fourteen times too high,
+and it is why a competitor preferred lines across the map.
+
+The trip count was also floored at one, so a fifteen tile line and an eighty
+tile line were credited with the same cadence and the long one won on revenue
+per trip every time. It is fractional now.
+
+### D-122 An estimate has to know what it cannot carry, and what it cannot avoid paying
+
+Two more terms were missing from the same estimate, and each of them bit in the
+opposite direction.
+
+**What the source makes.** The estimate assumed every trip left full, so a line
+that turns round three times a month was credited with three full trains from a
+mine that makes one train's worth. Revenue is capped by the works' monthly
+output now. Without the cap, fixing the trip count above simply moved the
+preference from the longest line on the map to the shortest.
+
+**What the line costs besides rails.** Scoring counted only track, which scales
+with distance - while the stops, the shed and the vehicles are the same money on
+a fifteen tile line as on a sixty tile one. Measured: with honest trip counts
+and track-only costs, the road company built the shortest thing it could find
+and finished on a third of what it makes now.
+
+The full figure is used for the SCORE and deliberately not folded into
+`Opportunity.buildCostCt`, which is the way and nothing else: the builder adds
+the stops and the vehicles to that when it asks whether the company can afford
+the project, and a figure that already contained them was counted twice - which
+put every rail line permanently out of reach until it was spotted.
+
+Measured over the twenty-five year acceptance run, the road-freight competitor
+goes from 583 000 to 973 000.
+
+**One term was tried and REVERTED.** Charging the estimate for the decay a long
+haul really suffers (`ticksInTransit` instead of zero) is defensible and made
+things worse: every line then rated so poorly that the road company built
+nothing at all and finished on 422 000. The estimate is a RANKING, and that term
+depressed every candidate below the threshold at which anything is built rather
+than reordering them. It is written down in the code so nobody adds it again on
+first principles.
