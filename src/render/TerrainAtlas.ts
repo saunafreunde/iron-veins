@@ -1,5 +1,8 @@
 import { TERRAIN_COLORS } from '../shared/palette';
+import { INDUSTRY_TYPE_COUNT } from '../sim/industry/types';
 import { SlopeBit, SLOPE_COUNT, Terrain, TERRAIN_COUNT } from '../sim/map/terrain';
+import { drawIndustry } from './industryArt';
+import { box, gableRoof, sawtoothRoof, shade, windows, type IsoView } from './shapes';
 
 /**
  * Procedurally generated tile artwork.
@@ -23,12 +26,18 @@ const TILE_W = 64 * ATLAS_SCALE;
 const TILE_H = 32 * ATLAS_SCALE;
 const STEP = 16 * ATLAS_SCALE;
 
-/** One cell holds the diamond plus headroom for a raised corner and a skirt. */
+/**
+ * One cell holds the diamond, the skirt below it, and headroom above.
+ *
+ * The headroom is what a cooling tower, a derrick or an office block stands
+ * in. It used to be one height step, which was enough for a crate and cut the
+ * top off everything taller - so it is now three, and `anchorY` tells the
+ * renderer where the ground actually is inside the cell. That coupling used to
+ * be an unwritten agreement between two files.
+ */
 const CELL_W = TILE_W;
-const CELL_H = TILE_H + STEP * 2;
-
-/** Vertical offset of the base diamond inside its cell. */
-const CELL_TOP = STEP;
+const CELL_TOP = STEP * 3;
+const CELL_H = TILE_H + CELL_TOP + STEP;
 
 /** Speckle colour per terrain, used for a little surface texture. */
 const TERRAIN_SPECKLE: readonly string[] = [
@@ -52,21 +61,31 @@ const BUILDING_ROW = TERRAIN_COUNT + 1;
  * tile. Eight cells instead of the 256 a full bit-combination atlas would need.
  */
 const TRACK_ROW = TERRAIN_COUNT + 2;
+/** One cell per industry type, so seventeen works do not share one crate. */
+const INDUSTRY_ROW = TERRAIN_COUNT + 3;
 
 /** Three zones times two expansion stages, plus one generic industry block. */
 const BUILDING_VARIANTS = 6;
-const INDUSTRY_COLUMN = BUILDING_VARIANTS;
-const STATION_COLUMN = BUILDING_VARIANTS + 1;
-const DEPOT_COLUMN = BUILDING_VARIANTS + 2;
-const VEHICLE_COLUMN = BUILDING_VARIANTS + 3;
-const PLATFORM_COLUMN = BUILDING_VARIANTS + 4;
-const RAIL_DEPOT_COLUMN = BUILDING_VARIANTS + 5;
-const TRAIN_COLUMN = BUILDING_VARIANTS + 6;
-const BRIDGE_COLUMN = BUILDING_VARIANTS + 7;
-const SIGNAL_COLUMN = BUILDING_VARIANTS + 8;
+const STATION_COLUMN = BUILDING_VARIANTS;
+const DEPOT_COLUMN = BUILDING_VARIANTS + 1;
+const VEHICLE_COLUMN = BUILDING_VARIANTS + 2;
+const PLATFORM_COLUMN = BUILDING_VARIANTS + 3;
+const RAIL_DEPOT_COLUMN = BUILDING_VARIANTS + 4;
+const TRAIN_COLUMN = BUILDING_VARIANTS + 5;
+const BRIDGE_COLUMN = BUILDING_VARIANTS + 6;
+const SIGNAL_COLUMN = BUILDING_VARIANTS + 7;
 
-const ATLAS_COLUMNS = Math.max(SLOPE_COUNT, SIGNAL_COLUMN + 1);
-const ATLAS_ROWS = TERRAIN_COUNT + 3;
+const ATLAS_COLUMNS = Math.max(SLOPE_COUNT, SIGNAL_COLUMN + 1, INDUSTRY_TYPE_COUNT);
+const ATLAS_ROWS = TERRAIN_COUNT + 4;
+
+/**
+ * Largest texture the weakest GPU this game targets is guaranteed to accept.
+ *
+ * The atlas grows whenever a row or a column is added and nothing used to
+ * notice; a texture over the limit does not fail loudly, it fails as a blank
+ * map on somebody else's machine.
+ */
+const MAX_ATLAS_PX = 4096;
 
 export interface AtlasFrame {
   readonly x: number;
@@ -84,7 +103,8 @@ export interface TerrainAtlas {
   terrainFrame(terrain: number, slope: number): AtlasFrame;
   roadFrame(roadBits: number): AtlasFrame;
   buildingFrame(kind: number, level: number): AtlasFrame;
-  industryFrame(): AtlasFrame;
+  /** One frame per IndustryType; the shape is the industry, not a tint. */
+  industryFrame(type: number): AtlasFrame;
   /** Platform canopy of a road stop; tinted with the company colour. */
   stationFrame(): AtlasFrame;
   depotFrame(): AtlasFrame;
@@ -113,15 +133,6 @@ const CORNERS: ReadonlyArray<readonly [number, number]> = [
 ];
 
 const CORNER_BITS = [SlopeBit.North, SlopeBit.East, SlopeBit.South, SlopeBit.West];
-
-/** Multiply a hex colour by a factor, clamped. */
-function shade(hex: string, factor: number): string {
-  const value = Number.parseInt(hex.slice(1), 16);
-  const r = Math.min(255, Math.round(((value >> 16) & 0xff) * factor));
-  const g = Math.min(255, Math.round(((value >> 8) & 0xff) * factor));
-  const b = Math.min(255, Math.round((value & 0xff) * factor));
-  return `rgb(${r},${g},${b})`;
-}
 
 /**
  * Simple deterministic hash, used for the speckle pattern so the texture is
@@ -193,7 +204,15 @@ function drawTerrainCell(
   }
 }
 
-/** Road ribbons: a dark band from the tile centre towards each connection. */
+/**
+ * A road: a kerbed carriageway with a centre line, not a grey stripe.
+ *
+ * Three passes, and the order is the whole trick. The pale verge goes down
+ * widest, the asphalt narrower on top of it, and the markings narrowest of
+ * all - so every junction shape comes out with a continuous kerb and no gap,
+ * whatever combination of the four directions is set, without one sprite per
+ * combination.
+ */
 function drawRoadCell(
   ctx: CanvasRenderingContext2D,
   originX: number,
@@ -204,10 +223,6 @@ function drawRoadCell(
   const cy = originY + CELL_TOP + TILE_H / 2;
   const half = TILE_W / 2;
 
-  ctx.strokeStyle = '#4a4a4d';
-  ctx.lineWidth = 7 * ATLAS_SCALE;
-  ctx.lineCap = 'round';
-
   // Bit order matches RoadBit: west, east, north, south in tile space, which
   // in screen space are the four diagonal directions of the diamond.
   const directions: ReadonlyArray<readonly [number, number]> = [
@@ -217,25 +232,123 @@ function drawRoadCell(
     [half, TILE_H / 2],
   ];
 
-  let drewAny = false;
+  const arms: Array<readonly [number, number]> = [];
   for (let bit = 0; bit < 4; bit++) {
-    if ((roadBits & (1 << bit)) === 0) continue;
-    const [dx, dy] = directions[bit]!;
-    ctx.beginPath();
-    ctx.moveTo(cx, cy);
-    ctx.lineTo(cx + dx, cy + dy);
-    ctx.stroke();
-    drewAny = true;
+    if ((roadBits & (1 << bit)) !== 0) arms.push(directions[bit]!);
   }
-  if (!drewAny) {
-    ctx.fillStyle = '#4a4a4d';
-    ctx.beginPath();
-    ctx.arc(cx, cy, 5 * ATLAS_SCALE, 0, Math.PI * 2);
-    ctx.fill();
+
+  const stroke = (width: number, colour: string, dash: readonly number[] | null): void => {
+    ctx.strokeStyle = colour;
+    ctx.lineWidth = width;
+    ctx.lineCap = 'round';
+    ctx.setLineDash(dash === null ? [] : [...dash]);
+    if (arms.length === 0) {
+      // An isolated tile still gets a patch of surface, or a one-tile stop
+      // would stand on grass.
+      ctx.beginPath();
+      ctx.arc(cx, cy, width / 2, 0, Math.PI * 2);
+      ctx.fillStyle = colour;
+      ctx.fill();
+      return;
+    }
+    for (const [dx, dy] of arms) {
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(cx + dx, cy + dy);
+      ctx.stroke();
+    }
+  };
+
+  stroke(11 * ATLAS_SCALE, '#b7b1a4', null); // kerb and verge
+  stroke(8.4 * ATLAS_SCALE, '#4c4a48', null); // asphalt
+  // A centre line only where the road runs through rather than ending, so a
+  // junction does not get a white blot in the middle of it.
+  if (arms.length === 2) {
+    ctx.lineCap = 'butt';
+    stroke(0.9 * ATLAS_SCALE, '#d8d2c4', [3 * ATLAS_SCALE, 4 * ATLAS_SCALE]);
   }
+  ctx.setLineDash([]);
 }
 
-/** A simple isometric box, used for houses and industry blocks. */
+/**
+ * A town building: a house, a shop or a works, by zone and expansion stage.
+ *
+ * The three zones get three different SHAPES rather than three colours of the
+ * same box - a pitched roof, a flat glazed block and a shed - because at the
+ * zoom the game is played at, shape survives and colour does not.
+ */
+function drawTownBuilding(
+  ctx: CanvasRenderingContext2D,
+  originX: number,
+  originY: number,
+  kind: number,
+  level: number,
+): void {
+  const view: IsoView = {
+    cx: originX + TILE_W / 2,
+    cy: originY + CELL_TOP + TILE_H / 2,
+    halfW: TILE_W / 2,
+    halfH: TILE_H / 2,
+  };
+  const px = ATLAS_SCALE;
+  const grow = level;
+
+  if (kind === 0) {
+    // Residential: a house, taller and with more windows as the town grows.
+    const height = (9 + grow * 7) * px;
+    const w = 0.5 + grow * 0.06;
+    box(ctx, view, { u: w, v: w * 0.78, height, colour: '#c9b79c' });
+    windows(ctx, view, {
+      u: w,
+      v: w * 0.78,
+      height,
+      rows: 1 + grow,
+      columns: 2,
+      colour: '#5d7f92',
+    });
+    gableRoof(ctx, view, {
+      u: w,
+      v: w * 0.78,
+      base: height,
+      rise: (6 + grow) * px,
+      colour: '#8d4b3c',
+    });
+    return;
+  }
+
+  if (kind === 1) {
+    // Commercial: a flat block, all glass, and the tallest thing in a town.
+    const height = (15 + grow * 12) * px;
+    const w = 0.54 + grow * 0.05;
+    box(ctx, view, { u: w, v: w * 0.86, height, colour: '#cfd4d8' });
+    windows(ctx, view, {
+      u: w,
+      v: w * 0.86,
+      height,
+      rows: 3 + grow,
+      columns: 3,
+      colour: '#3f6f88',
+    });
+    box(ctx, view, { u: w * 0.4, v: w * 0.34, height: 3 * px, colour: '#9aa1a8', base: height });
+    return;
+  }
+
+  // Industrial: a low shed with a north-light roof.
+  const height = (8 + grow * 4) * px;
+  const w = 0.62 + grow * 0.06;
+  box(ctx, view, { u: w, v: w * 0.7, height, colour: '#9b968c' });
+  sawtoothRoof(ctx, view, {
+    u: w,
+    v: w * 0.7,
+    base: height,
+    rise: 3 * px,
+    teeth: 2,
+    colour: '#5c6068',
+    glass: '#82aebf',
+  });
+}
+
+/** A simple isometric box, used for the tinted station and vehicle sprites. */
 function drawBox(
   ctx: CanvasRenderingContext2D,
   originX: number,
@@ -280,8 +393,6 @@ function drawBox(
   ctx.closePath();
   ctx.fill();
 }
-
-const BUILDING_COLORS = ['#a8896b', '#7d8b99', '#8a7f6d'];
 
 /** Tile-space offsets of the eight track directions, clockwise from east. */
 const TRACK_DELTA: ReadonlyArray<readonly [number, number]> = [
@@ -358,6 +469,15 @@ export function buildTerrainAtlas(): TerrainAtlas {
   canvas.width = ATLAS_COLUMNS * CELL_W;
   canvas.height = ATLAS_ROWS * CELL_H;
 
+  // A texture over the limit does not fail loudly - it fails as a blank map on
+  // somebody else's machine, months later.
+  if (canvas.width > MAX_ATLAS_PX || canvas.height > MAX_ATLAS_PX) {
+    throw new Error(
+      `Tile atlas is ${canvas.width}x${canvas.height}, over the ${MAX_ATLAS_PX} px ` +
+        'a low-end GPU is guaranteed to accept. Split a row or lower ATLAS_SCALE.',
+    );
+  }
+
   const ctx = canvas.getContext('2d');
   if (ctx === null) throw new Error('2D canvas context unavailable - cannot build the tile atlas.');
   ctx.imageSmoothingEnabled = false;
@@ -375,18 +495,27 @@ export function buildTerrainAtlas(): TerrainAtlas {
   for (let variant = 0; variant < BUILDING_VARIANTS; variant++) {
     const kind = variant % 3;
     const level = (variant / 3) | 0;
-    drawBox(
+    drawTownBuilding(ctx, variant * CELL_W, BUILDING_ROW * CELL_H, kind, level);
+  }
+
+  // One cell per industry type. These are NOT tinted - they are drawn in their
+  // own colours, because a tint multiplies and would flatten a coal heap and a
+  // chimney to the same shade.
+  for (let type = 0; type < INDUSTRY_TYPE_COUNT; type++) {
+    drawIndustry(
       ctx,
-      variant * CELL_W,
-      BUILDING_ROW * CELL_H,
-      0.62,
-      (12 + level * 10) * ATLAS_SCALE,
-      BUILDING_COLORS[kind]!,
+      {
+        cx: type * CELL_W + TILE_W / 2,
+        cy: INDUSTRY_ROW * CELL_H + CELL_TOP + TILE_H / 2,
+        halfW: TILE_W / 2,
+        halfH: TILE_H / 2,
+      },
+      type,
+      { px: ATLAS_SCALE },
     );
   }
   // Generic blocks; the concrete colour is applied as a sprite tint, which is
   // why they are drawn white.
-  drawBox(ctx, INDUSTRY_COLUMN * CELL_W, BUILDING_ROW * CELL_H, 0.95, 22 * ATLAS_SCALE, '#ffffff');
   drawBox(ctx, STATION_COLUMN * CELL_W, BUILDING_ROW * CELL_H, 0.8, 9 * ATLAS_SCALE, '#ffffff');
   drawBox(ctx, DEPOT_COLUMN * CELL_W, BUILDING_ROW * CELL_H, 0.8, 16 * ATLAS_SCALE, '#ffffff');
   drawBox(ctx, VEHICLE_COLUMN * CELL_W, BUILDING_ROW * CELL_H, 0.3, 7 * ATLAS_SCALE, '#ffffff');
@@ -418,7 +547,8 @@ export function buildTerrainAtlas(): TerrainAtlas {
     roadFrame: (roadBits) => frame(roadBits & 0x0f, ROAD_ROW),
     buildingFrame: (kind, level) =>
       frame(Math.min(2, Math.max(0, kind - 1)) + (level >= 2 ? 3 : 0), BUILDING_ROW),
-    industryFrame: () => frame(INDUSTRY_COLUMN, BUILDING_ROW),
+    industryFrame: (type) =>
+      frame(type >= 0 && type < INDUSTRY_TYPE_COUNT ? type : 0, INDUSTRY_ROW),
     stationFrame: () => frame(STATION_COLUMN, BUILDING_ROW),
     depotFrame: () => frame(DEPOT_COLUMN, BUILDING_ROW),
     platformFrame: () => frame(PLATFORM_COLUMN, BUILDING_ROW),

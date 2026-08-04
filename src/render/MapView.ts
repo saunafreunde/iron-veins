@@ -72,12 +72,6 @@ const TRAIN_KIND = 0;
 /** Structure.Bridge. A tunnel is drawn by drawing nothing. */
 const BRIDGE_STRUCTURE = 1;
 
-/** Accent colour per industry type, applied to the generic block as a tint. */
-const INDUSTRY_TINTS = [
-  0x2b2b2b, 0x8a5a3b, 0x1a1a1a, 0x3f6b3a, 0xdcc06a, 0x9a9a9a, 0xe0b040, 0x7d8b99, 0xc19a6b,
-  0x4f7fd9, 0x7d8b99, 0x4fd9d0, 0xd94f4f, 0x8fd94f, 0xd94fd0, 0xc8c4bc, 0xe07b39,
-];
-
 /** Texture cache key per module kind; the index is the ModuleKind value. */
 const MODULE_SPRITE_KEYS: readonly string[] = [
   'station',
@@ -111,6 +105,8 @@ export class MapView {
   private readonly pool: Sprite[] = [];
 
   private atlas: TerrainAtlas | null = null;
+  /** Ground line inside an atlas cell, in world pixels. */
+  private atlasAnchorPx = HEIGHT_PX;
   private atlasTexture: Texture | null = null;
   private readonly frameCache = new Map<string, Texture>();
 
@@ -201,6 +197,9 @@ export class MapView {
     container.appendChild(this.app.canvas);
 
     this.atlas = buildTerrainAtlas();
+    // The atlas is drawn at ATLAS_SCALE; its anchor is in atlas pixels and
+    // every sprite is scaled down by the same factor.
+    this.atlasAnchorPx = this.atlas.anchorY / ATLAS_SCALE;
     this.atlasTexture = Texture.from(this.atlas.canvas);
     this.atlasTexture.source.scaleMode = 'nearest';
 
@@ -497,9 +496,11 @@ export class MapView {
   private place(sprite: Sprite, texture: Texture, worldX: number, worldY: number): void {
     sprite.texture = texture;
     sprite.tint = 0xffffff;
-    // The atlas cell holds the diamond's north corner half a tile in and one
-    // height step down, so the sprite is offset by exactly that.
-    sprite.position.set(worldX - TILE_W / 2, worldY - HEIGHT_PX);
+    // Where the ground sits inside the cell is the ATLAS's business, and it
+    // says so through `anchorY`. Assuming one height step here was an unwritten
+    // agreement between two files, and it broke the moment the atlas grew
+    // headroom for a chimney.
+    sprite.position.set(worldX - TILE_W / 2, worldY - this.atlasAnchorPx);
   }
 
   private rebuild(
@@ -623,8 +624,15 @@ export class MapView {
         }
         const world = tileToWorld(industry.x, industry.y, map.baseHeight(industry.x, industry.y));
         const sprite = this.take(used++);
-        this.place(sprite, this.frameTexture('industry', atlas.industryFrame()), world.x, world.y);
-        sprite.tint = INDUSTRY_TINTS[industry.type] ?? 0xffffff;
+        // No tint. The industry is drawn in its own colours now - a tint
+        // multiplies, and it flattened a coal heap and a chimney to the same
+        // shade of whatever the tint was.
+        this.place(
+          sprite,
+          this.frameTexture(`i${industry.type}`, atlas.industryFrame(industry.type)),
+          world.x,
+          world.y,
+        );
       }
     }
 
