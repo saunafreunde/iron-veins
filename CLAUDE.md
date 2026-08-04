@@ -457,7 +457,28 @@ runner: adding one would pull PixiJS into the simulation's own test runs.
   milestone assigned them; the AI keeps its own list internally, which is not
   the same thing.
 - **Undo and redo** (section 17.2). See D-114.
-- **The installer has never been built here** - this environment has no DNS, so
-  `npm run tauri build` cannot fetch the toolchain. The configuration is
-  complete and reviewed; producing and installing the MSI is the one acceptance
-  step that has to happen on a real machine.
+- The installer BUILDS: `npm run build:desktop` produced both bundles in about
+  eight minutes, and Tauri fetched WiX and NSIS itself. Neither is signed, so
+  Windows shows a SmartScreen warning on a machine that has not seen the binary
+  before. Installing and playing it through is the acceptance step that is the
+  user's to run.
+
+## Drawing the world (after M9)
+
+- **Shape, not tint** (D-117). Seventeen industries used to share one white box
+  with a colour multiplied over it, which leaves only the hue as information.
+  They are drawn in their own colours now, and what tells them apart is the
+  outline: a headframe, a derrick, cooling towers, a north-light hall. The same
+  argument gave the three town zones three shapes rather than three colours.
+- The atlas cell has THREE height steps of headroom. It had one, and everything
+  taller than a crate was silently cut off at the top.
+- **`MapView` reads `anchorY`.** Where the ground sits inside an atlas cell used
+  to be an unwritten agreement between two files, and it broke the moment the
+  atlas grew.
+- **A cargo nothing accepts is a dead end** (D-118). `tests/unit/deliveries.spec.ts`
+  walks the whole chain table and asks who takes each output; it found that
+  nobody took electronics. What a town accepts is EXPORTED from the simulation
+  now, not copied into the interface.
+- **The connect tool asks before it charges** (D-119) - the only build in the
+  game that does. It plans with the same `planTrack` the command runs, so the
+  price on screen and the price on the bill cannot disagree.
