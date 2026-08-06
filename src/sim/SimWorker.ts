@@ -34,6 +34,7 @@ import { loanLimitCt } from './economy/company';
 import type { NewGameOptions, SaveSlotKind } from '../shared/protocol';
 import { bookValueCt, companyValueCt, monthsInOrder } from './economy/ledger';
 import { contractProgress, isOpen } from './economy/contracts';
+import { SaveCorruptionError, SaveFormatError } from './save/format';
 import { decodeSave, encodeSave } from './save/serialize';
 import { stationRating } from './station/types';
 import { councilRating, exclusiveRightsCostCt, TOWN_MEASURE_COUNT } from './town/council';
@@ -563,17 +564,22 @@ function writeSave(slot: SaveSlotKind, label: string): void {
  *
  * A bad file is a message, not a crash: the format layer already names the
  * exact field it choked on, and that string is worth far more in a bug report
- * than "could not load".
+ * than "could not load". Corruption - bytes that do not decode, or a state
+ * that disagrees with its own digest - keeps its own translation key and a
+ * flag, because that is the case where the main thread has a `.bak` to offer.
  */
 function loadSave(bytes: Uint8Array): void {
   let loaded;
   try {
     loaded = decodeSave(bytes);
   } catch (error) {
+    const corrupt = error instanceof SaveCorruptionError;
     scope.postMessage({
       type: 'loadFailed',
-      reasonKey: 'ui.save.loadFailed',
+      reasonKey: corrupt ? 'ui.save.corrupt' : 'ui.save.loadFailed',
       detail: error instanceof Error ? error.message : String(error),
+      path: error instanceof SaveFormatError ? error.path : '',
+      corrupt,
     });
     return;
   }

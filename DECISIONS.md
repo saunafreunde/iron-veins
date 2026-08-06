@@ -2213,3 +2213,90 @@ signal penalties of the same table, where a two-route fixture can prove that
 200 lorries on a bottleneck actually divert - the term, its persistence and
 its effect measured together instead of a constant smuggled in ahead of its
 test.
+
+### D-130 The save carries its own digest in the container, and the write that stores it cannot lose the predecessor
+
+Save format 23, the one bump M10 is allowed (Z5), and all of it is armour:
+none of it changes what a world MEANS.
+
+**The digest lives in the container, never in the hashed state.** `encodeSave`
+takes `hashWorld` of the world it is wrapping and writes it beside the state;
+`decodeSave` rebuilds the world and compares. A digest inside the state would
+have to contribute to itself, and Fehlerkatalog 2 names the wider trap: the
+moment the v23 migration touched anything the hash covers, every pre-M10 save
+would silently become a different world. So `v22_to_v23` spreads the container
+and passes the state through by reference, and two tests hold the line - the
+migration test proves a v22 payload and a v23 payload around the same played
+game hash identically, and the corpus keeps one real fixture of each for good.
+
+**A missing digest is a recorded fact, not a defect.** A v22 save never
+carried one and the migration only ever sees the raw payload, so it cannot
+compute what the encoder knew. It writes the empty string, and the decoder
+skips verification for exactly that value. Inventing a digest during migration
+would make every verification of an old save a tautology.
+
+**Corruption and invalidity keep two names.** Bytes that do not decode, or a
+state that disagrees with its own digest, are `SaveCorruptionError` - the file
+is damaged. A payload that decodes but fails validation stays
+`SaveFormatError`, which now carries the failing field as a `path` property
+rather than only inside the message, so the load screen can say which section
+died instead of refusing the file with a shrug. The distinction matters
+because the two failures have different remedies: a corrupt file has a healthy
+predecessor, an invalid one usually reproduces a codec bug worth reporting.
+
+**The predecessor exists because the write cannot destroy it.** `writeSave`
+writes to `name.tmp`, renames the current save to `name.bak`, and only then
+gives the temp file the real name - all inside one directory, which is what
+keeps the rename atomic wherever the desktop shell lands. A crash at any point
+leaves the old save or the new one under the trusted name, never half a file.
+The browser backend keeps the same one-deep backup in its in-memory shelf, so
+the policy is testable headless. All of it lives on the main thread: the
+worker encodes bytes and holds no opinion about where they go or what they
+replace (D-111). When a load comes back "corrupt", the save screen offers that
+`.bak` - one write older than what the player asked for, but a world instead
+of an error message.
+
+**The corpus is real saves, not synthetic payloads.** `tests/corpus` holds a
+fixture per save version from 22 on, written by the sim itself on a 128 map,
+and a manifest recording what each must decode to after migration. The suite
+is self-priming - a missing fixture is generated and then verified in the same
+run - so regeneration is deleting a file, and CI, where everything is
+committed, only ever reads. A future SAVE_VERSION without a corpus fixture is
+a red test, which turns the ledger's "echte Fixtures je Version" from a
+sentence into a gate.
+
+### D-131 A replay is valid only against the version that recorded it; cross-version verification is refused, never guessed
+
+E-11 hardens `cornerIsFree` unconditionally, and that creates a class of
+command log this build must be honest about: a log recorded before M10 may
+contain a terraform the old build accepted and the new build rejects.
+Replaying it here produces a different world than the one its author watched -
+not because either build is wrong, but because "valid" changed meaning between
+them. The same applies to every constant the balancing tests own: a tariff
+table moved by a milestone replays the same log into different money.
+
+So the rule, stated once and inherited by everything later: **a replay is
+evidence about exactly one pair `{appVersion, SAVE_VERSION}` and the constants
+that build shipped with. Cross-version verification is REFUSED with a message
+naming both versions - it is never attempted, approximated, or reported as a
+desync.** A refused verification tells the truth ("this build cannot judge
+that recording"); an attempted one would file false desync reports against
+code that works, which is worse than no verification at all - a desync
+detector that cries wolf is a desync detector nobody reads (Fehlerkatalog 38).
+
+What already enforces it: the `.ironsave` container is the only replay carrier
+there is, and it pins both halves of the pair - `gameVersion` and
+`saveVersion` - since v1 of the format. A save from a newer format is refused
+by the migration layer with both numbers in the message, never guessed at. A
+save from an OLDER format is migrated and its world plays on, which is
+LOADING, not verification: the log travels along as history, and nothing
+re-runs it against the new validation. The in-repo determinism fixtures are
+version-locked trivially - recorded and replayed by the same working tree.
+
+What inherits it: the `.ironreplay` format and the checkpoint ring of M16
+carry the version pair in their header and refuse a mismatch before reading a
+single command; the per-tick cheap digest of E-16 compares only within one
+session of one build. Migrating a REPLAY across versions is deliberately not
+offered - a migration maps states, not judgements, and there is no honest
+mapping from "commands as the old rules accepted them" to "what the new rules
+would have said".

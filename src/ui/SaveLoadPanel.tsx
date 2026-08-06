@@ -1,7 +1,16 @@
 import { useEffect, useState, type ReactElement } from 'react';
 import { formatGameDate, formatMoney, t } from '../i18n';
+import { hasBackup } from '../platform/Storage';
 import { SaveSlotKind } from '../shared/protocol';
-import { exportNamed, importAndLoad, loadNamed, refreshSaves, removeNamed } from './saves';
+import {
+  exportNamed,
+  importAndLoad,
+  lastLoadName,
+  loadBackupNamed,
+  loadNamed,
+  refreshSaves,
+  removeNamed,
+} from './saves';
 import type { SimClient } from './SimClient';
 import { useSimStore } from './store';
 
@@ -28,10 +37,29 @@ export function SaveLoadPanel({
   const loadError = useSimStore((s) => s.loadError);
   const ready = useSimStore((s) => s.ready);
   const [label, setLabel] = useState('');
+  /** The save whose `.bak` the failed load can fall back to, or null. */
+  const [backupFor, setBackupFor] = useState<string | null>(null);
 
   useEffect(() => {
     void refreshSaves();
   }, []);
+
+  // When a load fails, look for the backup the last write of that save kept.
+  // Only a shelf entry has one - an imported file leaves lastLoadName null.
+  useEffect(() => {
+    const name = loadError === null ? null : lastLoadName();
+    if (name === null) {
+      setBackupFor(null);
+      return;
+    }
+    let cancelled = false;
+    void hasBackup(name).then((present) => {
+      if (!cancelled) setBackupFor(present ? name : null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [loadError]);
 
   return (
     <section className="panel panel--wide">
@@ -69,9 +97,27 @@ export function SaveLoadPanel({
       </div>
 
       {loadError !== null && (
-        <p className="panel__hint value--danger">
-          {t(loadError.reasonKey)} {loadError.detail}
-        </p>
+        <div className="panel__hint value--danger">
+          <p>
+            {t(loadError.reasonKey)} {loadError.detail}
+          </p>
+          {backupFor !== null && (
+            <div className="button-row">
+              <span>{t('ui.save.backupOffer')}</span>
+              <button
+                type="button"
+                className="button button--active"
+                onClick={() => {
+                  void loadBackupNamed(client, backupFor).then((ok) => {
+                    if (ok) onClose();
+                  });
+                }}
+              >
+                {t('ui.save.loadBackup')}
+              </button>
+            </div>
+          )}
+        </div>
       )}
 
       {saves.length === 0 ? (

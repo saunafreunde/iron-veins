@@ -258,8 +258,21 @@ export type WorkerToMainMessage =
       readonly month: number;
       readonly companyValueCt: number;
     }
-  /** A load that did not work out, named by a translation key. */
-  | { readonly type: 'loadFailed'; readonly reasonKey: string; readonly detail: string }
+  /**
+   * A load that did not work out, named by a translation key.
+   *
+   * `path` is the save field or section the codec choked on (`save.state.rng`),
+   * or '' when the bytes never decoded that far. `corrupt` is true when the
+   * FILE is damaged - undecodable bytes or a digest mismatch - which is the
+   * case where the interface should offer the `.bak` the last write kept.
+   */
+  | {
+      readonly type: 'loadFailed';
+      readonly reasonKey: string;
+      readonly detail: string;
+      readonly path: string;
+      readonly corrupt: boolean;
+    }
   /**
    * One command ran. The tutorial of section 17.5 watches these to know when a
    * lesson's goal is met, and the audio of section 18 turns them into clicks.

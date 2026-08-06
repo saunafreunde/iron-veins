@@ -48,9 +48,11 @@ export const SAVE_MAGIC = 'IRVN';
  * companies of section 15 with the tile ownership and the command authorship
  * that come with them, 19 the town councils of section 13.3, 20 the carbon
  * account of section 14.3, 21 the tenders of section 14.4, 22 the AI
- * competitors of section 15.
+ * competitors of section 15, 23 the world digest of M10 - a container-only
+ * change: the hashed state itself is untouched, which the migration test
+ * proves by hash identity.
  */
-export const SAVE_VERSION = 22;
+export const SAVE_VERSION = 23;
 
 /** File extension used for manual and automatic saves. */
 export const SAVE_EXTENSION = '.ironsave';
@@ -62,6 +64,14 @@ export interface SaveFile {
   readonly gameVersion: string;
   readonly seed: number;
   readonly tick: number;
+  /**
+   * `hashWorld` of the state, taken at encode time and verified at decode
+   * time. Lives in the CONTAINER, never in the hashed state itself - a digest
+   * that contributed to the digest could not exist. The empty string means
+   * "written before version 23"; the migration cannot invent a digest, so it
+   * does not pretend to.
+   */
+  readonly worldDigest: string;
   readonly state: WorldStateData;
   /** Full command log since the start of the game; drives replays. */
   readonly commandLog: readonly CommandEnvelope[];
@@ -69,10 +79,34 @@ export interface SaveFile {
   readonly commandsExecuted: number;
 }
 
+/**
+ * A save that cannot be loaded, with the failing field spelled out.
+ *
+ * `path` is the machine-readable half of the message: `save.state.rng` rather
+ * than a sentence, so the interface can say which SECTION died instead of
+ * refusing the whole file with a shrug. Empty when the failure happened before
+ * any field existed (undecodable bytes).
+ */
 export class SaveFormatError extends Error {
-  constructor(message: string) {
+  readonly path: string;
+
+  constructor(message: string, path = '') {
     super(message);
     this.name = 'SaveFormatError';
+    this.path = path;
+  }
+}
+
+/**
+ * The bytes are not the bytes that were written: the container does not
+ * decode, or the embedded world digest disagrees with the state. This is the
+ * error that makes the loader offer the `.bak`, because a corrupt file has a
+ * healthy predecessor and a merely-invalid one usually does not.
+ */
+export class SaveCorruptionError extends SaveFormatError {
+  constructor(message: string, path = '') {
+    super(message, path);
+    this.name = 'SaveCorruptionError';
   }
 }
 
@@ -80,23 +114,23 @@ export class SaveFormatError extends Error {
 
 function asRecord(value: unknown, path: string): Record<string, unknown> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    throw new SaveFormatError(`${path}: expected an object`);
+    throw new SaveFormatError(`${path}: expected an object`, path);
   }
   return value as Record<string, unknown>;
 }
 
 function asArray(value: unknown, path: string): unknown[] {
-  if (!Array.isArray(value)) throw new SaveFormatError(`${path}: expected an array`);
+  if (!Array.isArray(value)) throw new SaveFormatError(`${path}: expected an array`, path);
   return value;
 }
 
 function asString(value: unknown, path: string): string {
-  if (typeof value !== 'string') throw new SaveFormatError(`${path}: expected a string`);
+  if (typeof value !== 'string') throw new SaveFormatError(`${path}: expected a string`, path);
   return value;
 }
 
 function asBoolean(value: unknown, path: string): boolean {
-  if (typeof value !== 'boolean') throw new SaveFormatError(`${path}: expected a boolean`);
+  if (typeof value !== 'boolean') throw new SaveFormatError(`${path}: expected a boolean`, path);
   return value;
 }
 
@@ -109,14 +143,14 @@ function asBoolean(value: unknown, path: string): boolean {
  */
 function asFinite(value: unknown, path: string): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
-    throw new SaveFormatError(`${path}: expected a finite number`);
+    throw new SaveFormatError(`${path}: expected a finite number`, path);
   }
   return value;
 }
 
 function asInt(value: unknown, path: string): number {
   if (typeof value !== 'number' || !Number.isInteger(value)) {
-    throw new SaveFormatError(`${path}: expected an integer`);
+    throw new SaveFormatError(`${path}: expected an integer`, path);
   }
   return value;
 }
@@ -124,9 +158,24 @@ function asInt(value: unknown, path: string): number {
 function asUint32(value: unknown, path: string): number {
   const int = asInt(value, path);
   if (int < 0 || int > 0xffffffff) {
-    throw new SaveFormatError(`${path}: ${int} is outside the unsigned 32 bit range`);
+    throw new SaveFormatError(`${path}: ${int} is outside the unsigned 32 bit range`, path);
   }
   return int;
+}
+
+/**
+ * A 64 bit world digest as `Fnv1a64.digest` prints it, or the empty string.
+ *
+ * Empty is legitimate: a save written before version 23 carried no digest, and
+ * the migration cannot compute one from a raw payload - so the empty string is
+ * the recorded fact "nothing to verify", never a validation failure.
+ */
+function asDigest(value: unknown, path: string): string {
+  const text = asString(value, path);
+  if (text !== '' && !/^[0-9a-f]{16}$/.test(text)) {
+    throw new SaveFormatError(`${path}: "${text}" is not a 64 bit hex digest`, path);
+  }
+  return text;
 }
 
 // -------------------------------------------------------------- sub-sections
@@ -134,7 +183,7 @@ function asUint32(value: unknown, path: string): number {
 function parseRngState(value: unknown, path: string): RngState {
   const words = asArray(value, path);
   if (words.length !== 4) {
-    throw new SaveFormatError(`${path}: expected 4 state words, got ${words.length}`);
+    throw new SaveFormatError(`${path}: expected 4 state words, got ${words.length}`, path);
   }
   return [
     asUint32(words[0], `${path}[0]`),
@@ -227,7 +276,7 @@ function parseNumbers(value: unknown, path: string): number[] {
 function parseAccounts(value: unknown, path: string, length: number): number[] {
   const entries = asArray(value, path);
   if (entries.length !== length) {
-    throw new SaveFormatError(`${path}: expected ${length} entries, got ${entries.length}`);
+    throw new SaveFormatError(`${path}: expected ${length} entries, got ${entries.length}`, path);
   }
   return entries.map((entry, i) => asInt(entry, `${path}[${i}]`));
 }
@@ -243,12 +292,15 @@ function parseAccounts(value: unknown, path: string, length: number): number[] {
 function parseCompanies(value: unknown, path: string): CompanyState[] {
   const entries = asArray(value, path);
   if (entries.length < 1 || entries.length > MAX_COMPANIES) {
-    throw new SaveFormatError(`${path}: expected 1 to ${MAX_COMPANIES} companies`);
+    throw new SaveFormatError(`${path}: expected 1 to ${MAX_COMPANIES} companies`, path);
   }
   return entries.map((entry, index) => {
     const company = parseCompany(entry, `${path}[${index}]`);
     if (company.id !== index) {
-      throw new SaveFormatError(`${path}[${index}].id: expected ${index}, got ${company.id}`);
+      throw new SaveFormatError(
+        `${path}[${index}].id: expected ${index}, got ${company.id}`,
+        `${path}[${index}].id`,
+      );
     }
     return company;
   });
@@ -258,7 +310,10 @@ function parseCompany(value: unknown, path: string): CompanyState {
   const raw = asRecord(value, path);
   const colorIndex = asInt(raw['colorIndex'], `${path}.colorIndex`);
   if (colorIndex < 0 || colorIndex >= COMPANY_COLOR_COUNT) {
-    throw new SaveFormatError(`${path}.colorIndex: ${colorIndex} is not a known company colour`);
+    throw new SaveFormatError(
+      `${path}.colorIndex: ${colorIndex} is not a known company colour`,
+      `${path}.colorIndex`,
+    );
   }
   return {
     id: asInt(raw['id'], `${path}.id`),
@@ -307,7 +362,7 @@ function parseCompany(value: unknown, path: string): CompanyState {
 function parseDifficulty(value: unknown, path: string): Difficulty {
   const int = asInt(value, path);
   if (int !== Difficulty.Easy && int !== Difficulty.Normal && int !== Difficulty.Hard) {
-    throw new SaveFormatError(`${path}: ${int} is not a known difficulty`);
+    throw new SaveFormatError(`${path}: ${int} is not a known difficulty`, path);
   }
   return int;
 }
@@ -320,18 +375,19 @@ function parseClimate(value: unknown, path: string): MapClimate {
     int !== MapClimate.Tropical &&
     int !== MapClimate.Desert
   ) {
-    throw new SaveFormatError(`${path}: ${int} is not a known climate`);
+    throw new SaveFormatError(`${path}: ${int} is not a known climate`, path);
   }
   return int;
 }
 
 function asBytes(value: unknown, path: string, expectedLength: number): Uint8Array {
   if (!(value instanceof Uint8Array)) {
-    throw new SaveFormatError(`${path}: expected a byte array`);
+    throw new SaveFormatError(`${path}: expected a byte array`, path);
   }
   if (value.length !== expectedLength) {
     throw new SaveFormatError(
       `${path}: expected ${expectedLength} bytes for this map size, got ${value.length}`,
+      path,
     );
   }
   return value;
@@ -370,7 +426,10 @@ function parseTowns(value: unknown, path: string): Town[] {
       sizeClass !== TownSize.Town &&
       sizeClass !== TownSize.Village
     ) {
-      throw new SaveFormatError(`${path}[${i}].sizeClass: ${sizeClass} is not a known town size`);
+      throw new SaveFormatError(
+        `${path}[${i}].sizeClass: ${sizeClass} is not a known town size`,
+        `${path}[${i}].sizeClass`,
+      );
     }
     towns.push({
       id: asInt(raw['id'], `${path}[${i}].id`),
@@ -414,7 +473,10 @@ function parseIndustries(value: unknown, path: string): Industry[] {
     const raw = asRecord(entries[i], `${path}[${i}]`);
     const type = asInt(raw['type'], `${path}[${i}].type`);
     if (type < 0 || type >= INDUSTRY_TYPE_COUNT) {
-      throw new SaveFormatError(`${path}[${i}].type: ${type} is not a known industry`);
+      throw new SaveFormatError(
+        `${path}[${i}].type: ${type} is not a known industry`,
+        `${path}[${i}].type`,
+      );
     }
     industries.push({
       id: asInt(raw['id'], `${path}[${i}].id`),
@@ -658,7 +720,7 @@ function parseCommand(value: unknown, path: string): Command {
         running: asBoolean(raw['running'], `${path}.running`),
       };
     default:
-      throw new SaveFormatError(`${path}.kind: ${kind} is not a known command`);
+      throw new SaveFormatError(`${path}.kind: ${kind} is not a known command`, `${path}.kind`);
   }
 }
 
@@ -669,7 +731,10 @@ function parseCommandLog(value: unknown, path: string): CommandEnvelope[] {
     const raw = asRecord(entries[i], `${path}[${i}]`);
     const companyId = asInt(raw['companyId'], `${path}[${i}].companyId`);
     if (companyId < 0 || companyId >= MAX_COMPANIES) {
-      throw new SaveFormatError(`${path}[${i}].companyId: ${companyId} is not a company`);
+      throw new SaveFormatError(
+        `${path}[${i}].companyId: ${companyId} is not a company`,
+        `${path}[${i}].companyId`,
+      );
     }
     log.push({
       tick: asInt(raw['tick'], `${path}[${i}].tick`),
@@ -691,7 +756,7 @@ export function readSaveHeader(value: unknown): { magic: string; saveVersion: nu
   const raw = asRecord(value, 'save');
   const magic = asString(raw['magic'], 'save.magic');
   if (magic !== SAVE_MAGIC) {
-    throw new SaveFormatError(`save.magic: expected "${SAVE_MAGIC}", got "${magic}"`);
+    throw new SaveFormatError(`save.magic: expected "${SAVE_MAGIC}", got "${magic}"`, 'save.magic');
   }
   return { magic, saveVersion: asInt(raw['saveVersion'], 'save.saveVersion') };
 }
@@ -705,6 +770,7 @@ function parseCargoLinks(value: unknown, path: string): CargoLinkSave[] {
     if (samples.length > LINK_SAMPLE_COUNT) {
       throw new SaveFormatError(
         `${path}[${i}].samples: ${samples.length} is more than the ${LINK_SAMPLE_COUNT} kept`,
+        `${path}[${i}].samples`,
       );
     }
     return {
@@ -723,7 +789,10 @@ function parseNews(value: unknown, path: string): NewsEntry[] {
     const raw = asRecord(entry, `${path}[${i}]`);
     const category = asInt(raw['category'], `${path}[${i}].category`);
     if (category < 0 || category >= NEWS_CATEGORY_COUNT) {
-      throw new SaveFormatError(`${path}[${i}].category: ${category} is not a known category`);
+      throw new SaveFormatError(
+        `${path}[${i}].category: ${category} is not a known category`,
+        `${path}[${i}].category`,
+      );
     }
     // Parameters are whatever the message needed; only numbers and strings can
     // have got in, and only those are let back out.
@@ -754,6 +823,7 @@ export function parseSaveFile(value: unknown): SaveFile {
   if (header.saveVersion !== SAVE_VERSION) {
     throw new SaveFormatError(
       `save.saveVersion: expected ${SAVE_VERSION} after migration, got ${header.saveVersion}`,
+      'save.saveVersion',
     );
   }
 
@@ -765,6 +835,7 @@ export function parseSaveFile(value: unknown): SaveFile {
   if (mapSize < 64 || mapSize > 2048 || (mapSize & (mapSize - 1)) !== 0) {
     throw new SaveFormatError(
       `save.state.mapSize: ${mapSize} is not a power of two between 64 and 2048`,
+      'save.state.mapSize',
     );
   }
 
@@ -793,10 +864,16 @@ export function parseSaveFile(value: unknown): SaveFile {
   const tick = asInt(raw['tick'], 'save.tick');
   const seed = asInt(raw['seed'], 'save.seed');
   if (tick !== state.tick) {
-    throw new SaveFormatError(`save.tick (${tick}) disagrees with save.state.tick (${state.tick})`);
+    throw new SaveFormatError(
+      `save.tick (${tick}) disagrees with save.state.tick (${state.tick})`,
+      'save.tick',
+    );
   }
   if (seed !== state.seed) {
-    throw new SaveFormatError(`save.seed (${seed}) disagrees with save.state.seed (${state.seed})`);
+    throw new SaveFormatError(
+      `save.seed (${seed}) disagrees with save.state.seed (${state.seed})`,
+      'save.seed',
+    );
   }
 
   const commandLog = parseCommandLog(raw['commandLog'], 'save.commandLog');
@@ -804,6 +881,7 @@ export function parseSaveFile(value: unknown): SaveFile {
   if (commandsExecuted < 0 || commandsExecuted > commandLog.length) {
     throw new SaveFormatError(
       `save.commandsExecuted: ${commandsExecuted} is outside 0..${commandLog.length}`,
+      'save.commandsExecuted',
     );
   }
 
@@ -813,6 +891,7 @@ export function parseSaveFile(value: unknown): SaveFile {
     gameVersion: asString(raw['gameVersion'], 'save.gameVersion'),
     seed,
     tick,
+    worldDigest: asDigest(raw['worldDigest'], 'save.worldDigest'),
     state,
     commandLog,
     commandsExecuted,

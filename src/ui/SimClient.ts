@@ -226,7 +226,12 @@ export class SimClient {
         this.onSaveWritten?.(message);
         return;
       case 'loadFailed':
-        store.setLoadError({ reasonKey: message.reasonKey, detail: message.detail });
+        store.setLoadError({
+          reasonKey: message.reasonKey,
+          detail: message.detail,
+          path: message.path,
+          corrupt: message.corrupt,
+        });
         return;
       case 'commandExecuted':
         this.onCommandExecuted?.(message.kind, message.accepted);

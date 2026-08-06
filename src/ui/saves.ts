@@ -3,6 +3,7 @@ import {
   exportSave,
   importSave,
   listSaves,
+  readBackup,
   readSave,
   writeSave,
   type SaveEntry,
@@ -88,9 +89,34 @@ export async function storeSave(
   await refreshSaves();
 }
 
+/**
+ * The save name of the last load attempt, or null when the bytes came from an
+ * imported file that has no shelf entry and therefore no backup. This is what
+ * lets the panel offer the right `.bak` when a load comes back "corrupt".
+ */
+let lastLoadedName: string | null = null;
+
+/** Which shelf entry the last load attempt was for, or null. */
+export function lastLoadName(): string | null {
+  return lastLoadedName;
+}
+
 /** Load one back into the running worker. */
 export async function loadNamed(client: SimClient, name: string): Promise<boolean> {
   const bytes = await readSave(name);
+  if (bytes === null) return false;
+  lastLoadedName = name;
+  client.load(bytes);
+  return true;
+}
+
+/**
+ * Load the backup the last write of this save kept - the answer to a save
+ * whose current file is corrupt. One write older than what the player asked
+ * for, but a world instead of an error message.
+ */
+export async function loadBackupNamed(client: SimClient, name: string): Promise<boolean> {
+  const bytes = await readBackup(name);
   if (bytes === null) return false;
   client.load(bytes);
   return true;
@@ -128,6 +154,9 @@ export async function quickLoad(client: SimClient): Promise<boolean> {
 export async function importAndLoad(client: SimClient): Promise<boolean> {
   const bytes = await importSave();
   if (bytes === null) return false;
+  // An imported file lives wherever the player keeps it; there is no shelf
+  // entry and no .bak to offer if it fails to load.
+  lastLoadedName = null;
   client.load(bytes);
   return true;
 }

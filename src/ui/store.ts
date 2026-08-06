@@ -133,9 +133,16 @@ export interface SimUiState extends SnapshotValues {
   /**
    * What the last load said when it failed, or null. A raw exception message
    * from the format layer is the wrong thing to show, so the key is the
-   * sentence and the detail is what a bug report needs.
+   * sentence and the detail is what a bug report needs. `path` names the save
+   * field the codec choked on ('' when it never got that far); `corrupt` means
+   * the file itself is damaged, which is when the panel offers the `.bak`.
    */
-  loadError: { readonly reasonKey: string; readonly detail: string } | null;
+  loadError: {
+    readonly reasonKey: string;
+    readonly detail: string;
+    readonly path: string;
+    readonly corrupt: boolean;
+  } | null;
   /** Which full-screen overlay is open, if any. */
   overlay: OverlayKind;
   /** Which entity list is open, or null. The V/T/I keys of section 17.2. */
@@ -190,7 +197,14 @@ export interface SimUiState extends SnapshotValues {
   setContracts: (contracts: readonly ContractMarker[]) => void;
   setSettings: (settings: AppSettings) => void;
   setSaves: (saves: readonly SaveEntry[]) => void;
-  setLoadError: (error: { readonly reasonKey: string; readonly detail: string } | null) => void;
+  setLoadError: (
+    error: {
+      readonly reasonKey: string;
+      readonly detail: string;
+      readonly path: string;
+      readonly corrupt: boolean;
+    } | null,
+  ) => void;
   setOverlay: (overlay: OverlayKind) => void;
   toggleList: (list: 'vehicles' | 'stations' | 'towns' | 'industries') => void;
   /** Wired to the map view so a list row can jump to what it names. */

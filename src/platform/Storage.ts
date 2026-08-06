@@ -94,6 +94,15 @@ interface SaveIndex {
 
 const INDEX_FILE = 'saves.json';
 
+/**
+ * Suffixes of the atomic-write dance. `.tmp` is the incomplete file being
+ * written; `.bak` is the previous save, kept until the write after next. Both
+ * live beside the save so a rename stays inside one directory - which is what
+ * makes it atomic on every filesystem the desktop shell can land on.
+ */
+const TMP_SUFFIX = '.tmp';
+const BAK_SUFFIX = '.bak';
+
 /** In-memory shelf for the browser, where there is nowhere else to put one. */
 const memorySaves = new Map<string, Uint8Array>();
 
@@ -140,13 +149,38 @@ export async function listSaves(): Promise<SaveEntry[]> {
  * The caller owns the naming, because the caller is the only side that knows
  * whether this is an autosave rotating through a ring or a file the player
  * asked for.
+ *
+ * The write is atomic, and the file it replaces survives one more round: the
+ * bytes go to `name.tmp` first, the previous save is renamed to `name.bak`,
+ * and only then does the temp file take the real name. A crash mid-write
+ * therefore leaves either the old save or the new one on disk - never half a
+ * file under the name the loader trusts - and a save that turns out corrupt
+ * on load still has yesterday's version sitting beside it. The worker only
+ * ever encodes the bytes; whether and how they are kept safe is decided here,
+ * on the main thread (D-111).
  */
 export async function writeSave(entry: SaveEntry, bytes: Uint8Array): Promise<void> {
   if (hasTauriRuntime()) {
-    const { mkdir, writeFile, BaseDirectory } = await import('@tauri-apps/plugin-fs');
-    await mkdir(SAVE_DIR, { baseDir: BaseDirectory.AppData, recursive: true });
-    await writeFile(`${SAVE_DIR}/${entry.name}`, bytes, { baseDir: BaseDirectory.AppData });
+    const { exists, mkdir, rename, writeFile, BaseDirectory } =
+      await import('@tauri-apps/plugin-fs');
+    const baseDir = BaseDirectory.AppData;
+    const path = `${SAVE_DIR}/${entry.name}`;
+
+    await mkdir(SAVE_DIR, { baseDir, recursive: true });
+    await writeFile(path + TMP_SUFFIX, bytes, { baseDir });
+    if (await exists(path, { baseDir })) {
+      // rename replaces an existing target, so the older backup goes with it.
+      await rename(path, path + BAK_SUFFIX, {
+        oldPathBaseDir: baseDir,
+        newPathBaseDir: baseDir,
+      });
+    }
+    await rename(path + TMP_SUFFIX, path, { oldPathBaseDir: baseDir, newPathBaseDir: baseDir });
   } else {
+    const previous = memorySaves.get(entry.name);
+    if (previous !== undefined) {
+      memorySaves.set(entry.name + BAK_SUFFIX, previous);
+    }
     memorySaves.set(entry.name, bytes);
   }
 
@@ -168,14 +202,44 @@ export async function readSave(name: string): Promise<Uint8Array | null> {
   }
 }
 
-/** Take one off the shelf. */
+/**
+ * The previous version of a save, kept by the last write, or null.
+ *
+ * This is what the load screen offers when the current file turns out corrupt:
+ * one write older than what the player asked for, but a world that loads.
+ */
+export async function readBackup(name: string): Promise<Uint8Array | null> {
+  return await readSave(name + BAK_SUFFIX);
+}
+
+/** Whether {@link readBackup} has something to offer for this save. */
+export async function hasBackup(name: string): Promise<boolean> {
+  try {
+    if (hasTauriRuntime()) {
+      const { exists, BaseDirectory } = await import('@tauri-apps/plugin-fs');
+      return await exists(`${SAVE_DIR}/${name}${BAK_SUFFIX}`, {
+        baseDir: BaseDirectory.AppData,
+      });
+    }
+    return memorySaves.has(name + BAK_SUFFIX);
+  } catch {
+    return false;
+  }
+}
+
+/** Take one off the shelf, its backup included - a deleted save stays deleted. */
 export async function deleteSave(name: string): Promise<void> {
   try {
     if (hasTauriRuntime()) {
-      const { remove, BaseDirectory } = await import('@tauri-apps/plugin-fs');
-      await remove(`${SAVE_DIR}/${name}`, { baseDir: BaseDirectory.AppData });
+      const { exists, remove, BaseDirectory } = await import('@tauri-apps/plugin-fs');
+      const baseDir = BaseDirectory.AppData;
+      await remove(`${SAVE_DIR}/${name}`, { baseDir });
+      if (await exists(`${SAVE_DIR}/${name}${BAK_SUFFIX}`, { baseDir })) {
+        await remove(`${SAVE_DIR}/${name}${BAK_SUFFIX}`, { baseDir });
+      }
     } else {
       memorySaves.delete(name);
+      memorySaves.delete(name + BAK_SUFFIX);
     }
   } catch {
     // Already gone is the outcome that was wanted.

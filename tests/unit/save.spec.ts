@@ -10,12 +10,19 @@ import {
   TICKS_PER_MONTH,
   TILE_PUBLIC,
 } from '../../src/sim/constants';
-import { SAVE_MAGIC, SAVE_VERSION, SaveFormatError } from '../../src/sim/save/format';
+import {
+  SAVE_MAGIC,
+  SAVE_VERSION,
+  SaveCorruptionError,
+  SaveFormatError,
+} from '../../src/sim/save/format';
 import {
   migrateSavePayload,
   SAVE_MIGRATIONS,
   type SaveMigration,
 } from '../../src/sim/save/migrations';
+import { decode } from '@msgpack/msgpack';
+import { unzlibSync } from 'fflate';
 import { decodeSave, encodeSave } from '../../src/sim/save/serialize';
 import { hashWorld, World } from '../../src/sim/World';
 
@@ -103,7 +110,7 @@ describe('save validation', () => {
     expect(() => decodeSave(new Uint8Array([1, 2, 3, 4]))).toThrow(SaveFormatError);
   });
 
-  it('names the field that is broken', () => {
+  it('names the field that is broken, in the message and structurally', () => {
     const { world, queue } = playedWorld();
     const loaded = decodeSave(encodeSave(world, queue, GAME_VERSION));
     const broken = {
@@ -112,11 +119,24 @@ describe('save validation', () => {
       gameVersion: GAME_VERSION,
       seed: loaded.world.seed,
       tick: loaded.world.tick,
+      worldDigest: '',
       state: { ...loaded.world.toData(), rng: [1, 2, 3] },
       commandLog: [],
       commandsExecuted: 0,
     };
-    expect(() => decodeSave(pack(broken))).toThrow(/save\.state\.rng/);
+    let thrown: unknown = null;
+    try {
+      decodeSave(pack(broken));
+    } catch (error) {
+      thrown = error;
+    }
+    // The codec's error is structured: the failing field is a property, not
+    // just a substring of the message, so the interface can say which SECTION
+    // of the save died instead of refusing the whole file with a shrug.
+    expect(thrown).toBeInstanceOf(SaveFormatError);
+    expect((thrown as SaveFormatError).message).toMatch(/save\.state\.rng/);
+    expect((thrown as SaveFormatError).path).toBe('save.state.rng');
+    expect(thrown).not.toBeInstanceOf(SaveCorruptionError);
   });
 
   it('refuses a save whose header and state disagree', () => {
@@ -128,11 +148,63 @@ describe('save validation', () => {
       gameVersion: GAME_VERSION,
       seed: loaded.world.seed,
       tick: loaded.world.tick + 1,
+      worldDigest: '',
       state: loaded.world.toData(),
       commandLog: [],
       commandsExecuted: 0,
     };
     expect(() => decodeSave(pack(broken))).toThrow(/disagrees/);
+  });
+});
+
+describe('the world digest (v23)', () => {
+  function unpack(bytes: Uint8Array): Record<string, unknown> {
+    return decode(unzlibSync(bytes)) as Record<string, unknown>;
+  }
+
+  it('is embedded in the container at encode time', () => {
+    const { world, queue } = playedWorld();
+    const expected = hashWorld(world);
+    const payload = unpack(encodeSave(world, queue, GAME_VERSION));
+
+    expect(payload['worldDigest']).toBe(expected);
+    // The digest sits in the CONTAINER, never inside the hashed state - a
+    // digest that contributed to itself could not exist (Fehlerkatalog 2).
+    expect(payload['state']).not.toHaveProperty('worldDigest');
+  });
+
+  it('reports a tampered state as corruption, not as a format error', () => {
+    const { world, queue } = playedWorld();
+    const payload = unpack(encodeSave(world, queue, GAME_VERSION));
+
+    // A tampered byte that stays type-correct sails through validation; the
+    // digest is the only thing that can catch it.
+    const state = payload['state'] as Record<string, unknown>;
+    const companies = state['companies'] as Array<Record<string, unknown>>;
+    companies[0]!['cashCt'] = (companies[0]!['cashCt'] as number) + 1;
+
+    let thrown: unknown = null;
+    try {
+      decodeSave(zlibSync(encode(payload)));
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(SaveCorruptionError);
+    expect((thrown as SaveCorruptionError).path).toBe('save.worldDigest');
+  });
+
+  it('reports a bit-flipped file as corruption', () => {
+    const { world, queue } = playedWorld();
+    const bytes = encodeSave(world, queue, GAME_VERSION);
+    bytes[bytes.length >> 1] = bytes[bytes.length >> 1]! ^ 0xff;
+
+    expect(() => decodeSave(bytes)).toThrow(SaveCorruptionError);
+  });
+
+  it('loads an intact save with its digest verified', () => {
+    const { world, queue } = playedWorld();
+    const loaded = decodeSave(encodeSave(world, queue, GAME_VERSION));
+    expect(hashWorld(loaded.world)).toBe(hashWorld(world));
   });
 });
 
@@ -169,7 +241,7 @@ describe('save migrations', () => {
   it('pins the current save version', () => {
     // Bumping SAVE_VERSION has to be a conscious act, because from the first
     // released build onwards it also requires a migration.
-    expect(SAVE_VERSION).toBe(22);
+    expect(SAVE_VERSION).toBe(23);
   });
 
   it('has a real migration for every step from version 2 on', () => {
@@ -213,7 +285,46 @@ describe('the registered migrations', () => {
     expect(companies[0]!['id']).toBe(0);
     expect(companies[0]!['bankrupt']).toBe(false);
     expect(map['owner']).toEqual(new Uint8Array(64 * 64).fill(TILE_PUBLIC));
+    // v23 added the container digest. A pre-v23 save carries none and the
+    // migration cannot invent one, so the honest value is the empty string.
+    expect(migrated['worldDigest']).toBe('');
     expect(migrated['saveVersion']).toBe(SAVE_VERSION);
+  });
+
+  it('migrates a v22 save to v23 without moving the world hash', () => {
+    // Fehlerkatalog 2: the digest goes into the CONTAINER; the hashed world
+    // state must not change meaning. A version 22 container around today's
+    // state is exactly what the v22 encoder wrote - same fields, same order,
+    // minus the digest - so decoding it exercises the real migration path,
+    // and hash identity proves the migration is container-shape only.
+    const { world, queue } = playedWorld();
+    const before = hashWorld(world);
+
+    const v22 = {
+      magic: SAVE_MAGIC,
+      saveVersion: 22,
+      gameVersion: GAME_VERSION,
+      seed: world.seed,
+      tick: world.tick,
+      state: world.toData(),
+      commandLog: queue.log,
+      commandsExecuted: queue.executedCount,
+    };
+    const loaded = decodeSave(zlibSync(encode(v22)));
+
+    expect(hashWorld(loaded.world)).toBe(before);
+  });
+
+  it('passes the state through the v22 to v23 step untouched', () => {
+    const state = { mapSize: 64 };
+    const payload: Record<string, unknown> = { magic: SAVE_MAGIC, saveVersion: 22, state };
+    const migrated = migrateSavePayload(payload, 22, 23);
+
+    // Same object, not a copy: the migration has no business even looking at
+    // the state it must not change.
+    expect(migrated['state']).toBe(state);
+    expect(migrated['worldDigest']).toBe('');
+    expect(migrated['saveVersion']).toBe(23);
   });
 
   it('gives every vehicle of a version 4 world an empty composition', () => {

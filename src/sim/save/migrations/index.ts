@@ -592,6 +592,21 @@ const v21_to_v22: SaveMigration = (payload) => {
 };
 
 /**
+ * M10 gave the save container a world digest (`hashWorld` at encode time,
+ * verified at decode time).
+ *
+ * A version 22 save carries none, and none can be invented here: the digest is
+ * computed from the LIVE world when a save is encoded, and a migration only
+ * ever sees the raw payload. The empty string is the recorded fact "written
+ * before the digest existed" and the decoder skips verification for it. This
+ * migration touches only the container - the state object is passed through
+ * untouched, so a migrated world hashes exactly as it did under version 22,
+ * which `tests/unit/save.spec.ts` proves by hash identity (Fehlerkatalog 2:
+ * the digest goes into the container, never into what is hashed).
+ */
+const v22_to_v23: SaveMigration = (payload) => ({ ...payload, worldDigest: '' });
+
+/**
  * Registry keyed by the version a migration reads (section 19.1).
  *
  * There is deliberately no entry for 1 -> 2: a version 1 world had no map at
@@ -619,6 +634,7 @@ export const SAVE_MIGRATIONS: ReadonlyMap<number, SaveMigration> = new Map<numbe
   [19, v19_to_v20],
   [20, v20_to_v21],
   [21, v21_to_v22],
+  [22, v22_to_v23],
 ]);
 
 /**
