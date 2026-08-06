@@ -309,6 +309,61 @@ export async function writeCrashBundle(name: string, bytes: Uint8Array): Promise
 }
 
 /**
+ * Names of the crash bundles kept in `$APPDATA/crashes`, newest first.
+ *
+ * Desktop only in substance, and the asymmetry is deliberate: the browser
+ * build hands a bundle over as a download at CRASH time (see
+ * {@link writeCrashBundle}) and stores nothing, so there is never anything to
+ * list and the offer-on-next-start flow (D-139) simply never triggers there.
+ *
+ * Newest first costs no second timestamp: `bugReportFileName` embeds the
+ * flattened ISO stamp behind a constant prefix, so reverse-lexicographic IS
+ * reverse-chronological.
+ */
+export async function listCrashBundles(): Promise<string[]> {
+  try {
+    if (hasTauriRuntime()) {
+      const { exists, readDir, BaseDirectory } = await import('@tauri-apps/plugin-fs');
+      if (!(await exists(CRASH_DIR, { baseDir: BaseDirectory.AppData }))) return [];
+      const entries = await readDir(CRASH_DIR, { baseDir: BaseDirectory.AppData });
+      return entries
+        .filter((entry) => entry.isFile)
+        .map((entry) => entry.name)
+        .sort((a, b) => (a < b ? 1 : a > b ? -1 : 0));
+    }
+    return [];
+  } catch {
+    return [];
+  }
+}
+
+/** Read one stored crash bundle back, or null when it is not there (any more). */
+export async function readCrashBundle(name: string): Promise<Uint8Array | null> {
+  try {
+    if (hasTauriRuntime()) {
+      const { readFile, BaseDirectory } = await import('@tauri-apps/plugin-fs');
+      return await readFile(`${CRASH_DIR}/${name}`, { baseDir: BaseDirectory.AppData });
+    }
+    // The browser never stored one - the bundle already left as a download.
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/** Retire a stored crash bundle. Already gone is the outcome that was wanted. */
+export async function deleteCrashBundle(name: string): Promise<void> {
+  try {
+    if (hasTauriRuntime()) {
+      const { remove, BaseDirectory } = await import('@tauri-apps/plugin-fs');
+      await remove(`${CRASH_DIR}/${name}`, { baseDir: BaseDirectory.AppData });
+    }
+  } catch {
+    return;
+  }
+}
+
+/**
  * Hand a bug report to the player as a file of their own - the export button,
  * as opposed to the automatic write above. On the desktop that is a save
  * dialog; in a browser it is the same download either way.

@@ -398,6 +398,33 @@ body {
   box-shadow: 0 6px 20px rgb(0 0 0 / 45%);
 }
 
+/*
+ * The boot-time crash-bundle offer (D-139): a corner card, never a blocker.
+ * Bottom right so it collides with neither the centred rejection toast nor
+ * the sidebar's panels.
+ */
+.notice {
+  position: fixed;
+  right: 16px;
+  bottom: 64px;
+  max-width: 24rem;
+  padding: 12px 16px;
+  background: var(--card);
+  border: 1px solid var(--warning);
+  border-radius: var(--radius);
+  box-shadow: 0 6px 20px rgb(0 0 0 / 45%);
+}
+
+.notice__title {
+  margin: 0 0 6px;
+  font-size: 1rem;
+}
+
+.notice__body {
+  margin: 0 0 10px;
+  color: var(--text-muted);
+}
+
 .fatal {
   max-width: 720px;
   margin: 80px auto;

@@ -16,6 +16,7 @@ import type { SaveEntry } from '../platform/Storage';
 import { DEFAULT_SETTINGS, type AppSettings } from '../shared/settings';
 import type { MapGenPhase } from '../sim/mapgen';
 import type { ConnectPlan } from './connect';
+import type { CrashBundleSummary } from './crashBundle';
 
 /**
  * The full-screen panels of M9. One at a time, because each of them wants the
@@ -183,6 +184,13 @@ export interface SimUiState extends SnapshotValues {
    * "where is my report" line from this.
    */
   crashBundleStored: boolean | null;
+  /**
+   * A crash bundle a PREVIOUS run left in the crashes directory, found by the
+   * boot-time scan, or null (D-139). The offer notice renders while this is
+   * set; both of its actions retire the stored file and clear it, so no crash
+   * is ever offered twice.
+   */
+  storedCrashOffer: { readonly name: string; readonly summary: CrashBundleSummary } | null;
 
   applySnapshot: (values: SnapshotValues) => void;
   setLocale: (locale: Locale) => void;
@@ -252,6 +260,9 @@ export interface SimUiState extends SnapshotValues {
     readonly tick: number;
   }) => void;
   setCrashBundleStored: (stored: boolean) => void;
+  setStoredCrashOffer: (
+    offer: { readonly name: string; readonly summary: CrashBundleSummary } | null,
+  ) => void;
   toggleDebug: () => void;
 }
 
@@ -316,6 +327,7 @@ export const useSimStore = create<SimUiState>((set) => ({
   fatalError: null,
   crash: null,
   crashBundleStored: null,
+  storedCrashOffer: null,
 
   applySnapshot: (values) => set(values),
   setLocale: (locale) => {
@@ -405,5 +417,6 @@ export const useSimStore = create<SimUiState>((set) => ({
   setFatalError: (message) => set({ fatalError: message }),
   setCrash: (crash) => set({ crash }),
   setCrashBundleStored: (crashBundleStored) => set({ crashBundleStored }),
+  setStoredCrashOffer: (storedCrashOffer) => set({ storedCrashOffer }),
   toggleDebug: () => set((state) => ({ showDebug: !state.showDebug })),
 }));

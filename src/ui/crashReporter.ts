@@ -1,5 +1,8 @@
 import {
+  deleteCrashBundle,
   exportCrashBundle,
+  listCrashBundles,
+  readCrashBundle,
   readSave,
   writeCrashBundle,
   type SaveEntry,
@@ -11,6 +14,8 @@ import {
   bugReportFileName,
   COMMAND_LOG_BYTE_BUDGET,
   CommandLogTail,
+  planCrashBundleScan,
+  summariseCrashBundle,
   type CrashErrorInput,
 } from './crashBundle';
 import { useSimStore } from './store';
@@ -118,4 +123,71 @@ export async function exportBugReport(): Promise<boolean> {
   }
   const bytes = await assembleBundle(null);
   return await exportCrashBundle(bugReportFileName(new Date().toISOString()), bytes);
+}
+
+/**
+ * The boot-time half of the M10 clause "a hard-terminated worker offers a
+ * loadable crash bundle on the NEXT start" (D-139). Called once at startup,
+ * after the settings load: scan the crashes directory, prune it to the newest
+ * MAX_STORED_CRASH_BUNDLES, and put the newest bundle that actually parses
+ * into the store for the offer notice. A bundle that does not parse is not
+ * loadable and is discarded rather than offered.
+ *
+ * In the browser this finds nothing by construction - the bundle already left
+ * as a download at crash time (see listCrashBundles) - so the notice simply
+ * never renders there.
+ */
+export async function scanStoredCrashBundles(): Promise<void> {
+  const plan = planCrashBundleScan(await listCrashBundles());
+  for (const name of plan.prune) {
+    await deleteCrashBundle(name);
+  }
+  for (const name of plan.keep) {
+    const bytes = await readCrashBundle(name);
+    const summary = bytes === null ? null : summariseCrashBundle(bytes);
+    if (summary === null) {
+      await deleteCrashBundle(name);
+      continue;
+    }
+    useSimStore.getState().setStoredCrashOffer({ name, summary });
+    return;
+  }
+}
+
+/**
+ * The offer notice's export action: the stored bundle goes out through the
+ * same door as every bug report, and a SUCCESSFUL export retires the stored
+ * copy - the player owns the report now, and a bundle that stayed behind
+ * would nag again on the next start. A cancelled save dialog keeps both the
+ * file and the offer.
+ */
+export async function exportStoredCrashBundle(): Promise<boolean> {
+  const store = useSimStore.getState();
+  const offer = store.storedCrashOffer;
+  if (offer === null) return false;
+  const bytes = await readCrashBundle(offer.name);
+  if (bytes === null) {
+    // The file vanished under us; there is nothing left to offer.
+    store.setStoredCrashOffer(null);
+    return false;
+  }
+  const exported = await exportCrashBundle(offer.name, bytes);
+  if (exported) {
+    await deleteCrashBundle(offer.name);
+    store.setStoredCrashOffer(null);
+  }
+  return exported;
+}
+
+/**
+ * The offer notice's discard action. Dismissal DELETES the stored file, which
+ * is what makes "never nags twice for the same crash" structural: the next
+ * scan cannot re-offer what no longer exists.
+ */
+export async function dismissStoredCrashBundle(): Promise<void> {
+  const store = useSimStore.getState();
+  const offer = store.storedCrashOffer;
+  if (offer === null) return;
+  await deleteCrashBundle(offer.name);
+  store.setStoredCrashOffer(null);
 }

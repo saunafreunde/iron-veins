@@ -42,7 +42,7 @@ no entry below. A number may appear under several topics.
 - **Performance & measurement:** D-002, D-120, D-135, D-136
 - **Platform, tooling & build:** D-012, D-014, D-015, D-016, D-017, D-029,
   D-030, D-031
-- **Crash safety:** D-132
+- **Crash safety:** D-132, D-139
 - **Testing method & fixtures:** D-010, D-038, D-072, D-074, D-084, D-133
 - **Process & specification:** D-070, D-123, D-129, D-133, D-138
 
@@ -2600,3 +2600,51 @@ keeps the command parser and the i18n files honest: a coupling test.
 build when an entry is missing from the register or the register cites a
 number with no entry - so the index can rot in neither direction without
 turning the suite red.
+
+### D-139 The crash shelf is scanned at boot, and both actions of the offer retire the bundle
+
+The M10 acceptance sentence asks for one thing D-132 had not yet delivered: a
+hard-terminated worker must offer a loadable crash bundle ON THE NEXT START.
+The bundle was written to `$APPDATA/crashes/` at crash time and the crash
+dialog showed it at crash time - but nothing ever looked at that directory
+again, so a player who clicked "restart" without exporting carried the
+evidence around invisibly forever.
+
+Now the boot sequence scans the crash shelf once, after the settings load
+(language first - the notice is user-visible text). The scan
+(`scanStoredCrashBundles` in `src/ui/crashReporter.ts`) is policy over pure
+parts in `src/ui/crashBundle.ts` a unit test can hold whole:
+
+- **Newest first comes from the file NAME.** `bugReportFileName` embeds the
+  flattened ISO stamp behind a constant prefix and `toISOString` is
+  fixed-width, so reverse-lexicographic IS reverse-chronological - no second
+  timestamp store to fall out of sync with the bundle's own `writtenAt`.
+- **The shelf is pruned to the five newest** (`MAX_STORED_CRASH_BUNDLES`) on
+  every scan. Every crash writes a bundle and nothing else deletes them; a
+  crash loop without a cap fills a disk with copies of the same autosave.
+  Files in the directory that are not crash bundles are neither offered nor
+  pruned - they are not ours to delete.
+- **A bundle that does not parse is discarded, not offered.** The clause
+  promises a LOADABLE bundle; an unparseable file at the head of the shelf
+  would otherwise nag on every start while offering nothing. The scan walks
+  on to the next-newest bundle that does parse.
+
+The offer itself is a corner card, never a blocker: the crash had its
+full-screen moment, and a player who just restarted wants their game back. It
+names the crash date and the bundle's version triple, and carries two
+actions - the existing export path (`exportCrashBundle`, the same door every
+bug report leaves through) and discard. **Both retire the stored file**, which
+is what makes "never nags twice for the same crash" structural rather than a
+flag to maintain: the next scan cannot re-offer what no longer exists. The
+one exception is a CANCELLED export dialog, which keeps both the file and the
+offer - cancelling is not answering. Dismissing the newest crash lets the
+next-newest surface on a later start: each crash gets exactly one offer,
+ever, drained newest first.
+
+The browser is asymmetric by construction and documented as such in
+`listCrashBundles`: `writeCrashBundle` hands the bundle over as a download at
+crash time because a browser profile has no directory a player could ever
+find again (D-132), so there is nothing stored, the scan finds nothing, and
+the notice never renders. The offer-on-next-start flow is a desktop feature
+not because anything gates it, but because only the desktop keeps anything to
+offer.

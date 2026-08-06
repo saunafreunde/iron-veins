@@ -16,6 +16,7 @@ import { Minimap } from './Minimap';
 import { NewGameDialog } from './NewGameDialog';
 import { OptionsPanel } from './OptionsPanel';
 import { SaveLoadPanel } from './SaveLoadPanel';
+import { StoredCrashNotice } from './StoredCrashNotice';
 import { TutorialPanel } from './TutorialPanel';
 import { TOOL_KEYS } from './keymap';
 import { quickLoad } from './saves';
@@ -230,6 +231,10 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
             <TutorialPanel client={client} onClose={() => setOverlay(null)} />
           )}
         </main>
+        {/* The boot-time crash-bundle offer (D-139) rides along with every
+            screen a healthy game shows - the menu included, because the menu
+            is where a freshly restarted player is standing. */}
+        <StoredCrashNotice />
       </div>
     );
   }
@@ -298,6 +303,8 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
           {t(rejectionKey)}
         </div>
       )}
+
+      <StoredCrashNotice />
     </div>
   );
 }

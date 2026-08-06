@@ -70,3 +70,15 @@ export function formatInteger(value: number): string {
 export function formatGameDate(year: number, month: number, day: number): string {
   return t('ui.date.format', { day: day + 1, month: monthName(month), year });
 }
+
+/**
+ * Format a wall-clock instant (ISO text or epoch milliseconds) in the active
+ * locale. Wall-clock, not game time: this is for things that happened to the
+ * PLAYER - a crash report's date - never for anything inside the world.
+ */
+export function formatWallClock(value: string | number): string {
+  return new Intl.DateTimeFormat(intlTag(), {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(new Date(value));
+}

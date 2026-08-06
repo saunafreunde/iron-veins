@@ -5,7 +5,7 @@ import { getPlatformInfo, reportStartupDiagnostics } from './platform/Platform';
 import { DEFAULT_MAP_SIZE, Difficulty, MapClimate } from './sim/constants';
 import { App } from './ui/App';
 import { startAudio } from './ui/audioBridge';
-import { recordSaveWritten } from './ui/crashReporter';
+import { recordSaveWritten, scanStoredCrashBundles } from './ui/crashReporter';
 import { captureThumbnail } from './ui/Minimap';
 import { refreshSaves, storeSave } from './ui/saves';
 import { loadSettings } from './ui/settings';
@@ -61,8 +61,12 @@ client.start({
 });
 
 // Settings first, so the language, the scale and the palette are right before
-// anything is drawn rather than a frame after it.
-void loadSettings().then(() => refreshSaves());
+// anything is drawn rather than a frame after it. Then the save shelf, and
+// then the crash shelf: a bundle a dead worker left behind is offered on the
+// start AFTER the crash (SPEC2 M10, D-139).
+void loadSettings()
+  .then(() => refreshSaves())
+  .then(() => scanStoredCrashBundles());
 
 /**
  * No browser starts an AudioContext before the player has touched something,

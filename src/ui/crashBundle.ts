@@ -206,3 +206,81 @@ export function assembleCrashBundle(input: CrashBundleInput): Uint8Array {
 export function bugReportFileName(writtenAt: string): string {
   return `bug-report-${writtenAt.replace(/[:.]/g, '-')}.json`;
 }
+
+/**
+ * How many crash bundles may sit in the crashes directory at once. [count]
+ * Every crash writes one and nothing else ever deletes them, so without a cap
+ * a crash loop fills the disk with copies of the same autosave. Five keeps a
+ * short history of distinct deaths; the boot scan prunes beyond it (D-139).
+ */
+export const MAX_STORED_CRASH_BUNDLES = 5;
+
+/** Whether a directory entry is one of ours. Foreign files are left alone. */
+export function isCrashBundleName(name: string): boolean {
+  return /^bug-report-.+\.json$/.test(name);
+}
+
+/**
+ * Newest first, as a total order.
+ *
+ * The name embeds the flattened ISO timestamp behind a constant prefix
+ * ({@link bugReportFileName}), and `toISOString` is fixed-width, so
+ * reverse-lexicographic IS reverse-chronological - no second timestamp store
+ * needed and nothing to fall out of sync with the file's own `writtenAt`.
+ */
+function newestFirst(a: string, b: string): number {
+  return a < b ? 1 : a > b ? -1 : 0;
+}
+
+/** What the boot-time scan decided about the crashes directory (D-139). */
+export interface CrashBundleScanPlan {
+  /** Bundles to keep, newest first; the head is the one to offer. */
+  readonly keep: readonly string[];
+  /** Bundles beyond the cap, oldest ones, to be deleted. */
+  readonly prune: readonly string[];
+}
+
+/**
+ * Plan the boot-time scan over the crash directory's entries.
+ *
+ * Pure policy over file names: which bundles stay (at most
+ * {@link MAX_STORED_CRASH_BUNDLES}, newest first), and which are pruned.
+ * Input order is not trusted - the plan sorts for itself. Names that are not
+ * crash bundles are neither kept nor pruned: they are not ours to delete.
+ */
+export function planCrashBundleScan(names: readonly string[]): CrashBundleScanPlan {
+  const bundles = names.filter(isCrashBundleName).sort(newestFirst);
+  return {
+    keep: bundles.slice(0, MAX_STORED_CRASH_BUNDLES),
+    prune: bundles.slice(MAX_STORED_CRASH_BUNDLES),
+  };
+}
+
+/** What the offer notice shows about a stored bundle: when, and the triple. */
+export interface CrashBundleSummary {
+  readonly writtenAt: string;
+  readonly appVersion: string;
+  readonly saveVersion: number;
+  readonly schemaVersion: number;
+}
+
+/**
+ * Read the header facts out of a stored bundle, or null when the bytes are
+ * not a bundle at all. Null is the caller's signal to discard the file: the
+ * M10 clause promises a LOADABLE bundle, and a file that does not parse would
+ * otherwise sit at the head of the shelf and nag forever.
+ */
+export function summariseCrashBundle(bytes: Uint8Array): CrashBundleSummary | null {
+  try {
+    const parsed: unknown = JSON.parse(new TextDecoder().decode(bytes));
+    if (typeof parsed !== 'object' || parsed === null) return null;
+    const record = parsed as Record<string, unknown>;
+    if (record['kind'] !== 'iron-veins-bug-report') return null;
+    const { writtenAt, appVersion, saveVersion, schemaVersion } = record;
+    if (typeof writtenAt !== 'string' || typeof appVersion !== 'string') return null;
+    if (typeof saveVersion !== 'number' || typeof schemaVersion !== 'number') return null;
+    return { writtenAt, appVersion, saveVersion, schemaVersion };
+  } catch {
+    return null;
+  }
+}

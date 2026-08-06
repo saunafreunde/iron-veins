@@ -1,9 +1,12 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
+  deleteCrashBundle,
   deleteSave,
   hasBackup,
+  listCrashBundles,
   listSaves,
   readBackup,
+  readCrashBundle,
   readSave,
   writeCrashBundle,
   writeSave,
@@ -121,6 +124,33 @@ describe('the save shelf keeps one backup per save', () => {
 
     expect(stored).toBe(true);
     expect(clickedName).toBe('bug-report-test.json');
+  });
+
+  it('stores no crash bundles in the browser, so the boot scan finds nothing', async () => {
+    // The deliberate asymmetry of D-139: the browser hands a bundle over as a
+    // download at CRASH time and keeps nothing, so the offer-on-next-start
+    // flow never triggers there. What is pinned is that the crash-shelf reads
+    // are honest about that - empty, null, and a no-op - rather than throwing.
+    let clickedName: string | null = null;
+    const anchor = {
+      href: '',
+      download: '',
+      click: (): void => {
+        clickedName = anchor.download;
+      },
+    };
+    vi.stubGlobal('document', { createElement: () => anchor });
+    vi.stubGlobal('URL', {
+      createObjectURL: () => 'blob:crash-bundle',
+      revokeObjectURL: () => undefined,
+    });
+
+    await writeCrashBundle('bug-report-browser.json', new Uint8Array([123, 125]));
+    expect(clickedName).toBe('bug-report-browser.json');
+
+    expect(await listCrashBundles()).toEqual([]);
+    expect(await readCrashBundle('bug-report-browser.json')).toBeNull();
+    await expect(deleteCrashBundle('bug-report-browser.json')).resolves.toBeUndefined();
   });
 
   it('deletes the backup together with the save', async () => {
