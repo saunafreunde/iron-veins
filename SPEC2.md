@@ -331,6 +331,29 @@ Skalierungs-Meilenstein (Kanten-Graph 8.3, Publish-Pass-Konsolidierung) VOR
 M14, und alle Zusagen werden gegen die Messung neu verhandelt — das ist der
 dokumentierte Eskalationspfad, kein Notfall.
 
+### 6.1.1 Abnahme-Protokoll (lebend)
+
+Die Zeile eines Meilensteins gilt erst als abgenommen, wenn sie hier mit
+Messwerten steht. Gemessen wird gegen das 1500-Fahrzeug-Fixture
+(`tests/perf/tick.perf.spec.ts` + `tests/perf/fixture1500.ts`, Z6); Methode,
+Referenzmaschine und Rohwerte stehen im jeweils zitierten
+`DECISIONS.md`-Eintrag. Jeder abgenommene Meilenstein trägt hier seine Zeile
+nach — eine Budget-Zeile in 6.1 ohne Zeile in dieser Tabelle ist nicht
+abgenommen.
+
+| MS | abgenommen | Tick p50 / p99 (1500 Fzg., 1024², 120 Städte, 300 Industrien) | Δ p99 gegen M10 | Beleg |
+|---|---|---|---|---|
+| M10 | 2026-08-07 | **1,45 ms / 3,26 ms** (max 39,4 ms über 6 500 Ticks inkl. Monatsgrenze) | Grundlinie | D-135 |
+
+Die M10-Grundlinie liegt UNTER der linearen Extrapolation (~3–4 ms) — der
+Eskalationspfad (Kanten-Graph vor M14) ist nicht ausgelöst. Referenzmaschine:
+Ryzen 5 7520U (4C/8T), 16 GB, Windows 11, Node 24 — schwächer als das
+SPEC-§21-Referenzsystem bewusst erlaubt. Render-Tripwire-Grundlinie (6.3):
+Sprite-Pool-Rebuild p99 4,3 ms bei 7 101 Sprites (64×64-Fenster), Draw-Prep
+p99 0,41 ms bei 1 500 Fahrzeugen (D-136). Cross-OS-Anker: kanonischer
+Welt-Hash `63ae5fd6b5d01190` (Seed 424242, Tick 10 000, v23), gepinnt in
+`tests/determinism/fixtures/canonical-hash.json` (D-137).
+
 ### 6.2 Atlas-Seiten-Plan
 
 | Seite | Inhalt | Budget |

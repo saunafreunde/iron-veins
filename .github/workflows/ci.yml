@@ -42,3 +42,26 @@ jobs:
 
       - name: Everything else
         run: npm test
+
+  # SPEC2 6.3, from M10: the determinism suite additionally runs on Linux.
+  # The cross-OS evidence is the pinned canonical hash in
+  # tests/determinism/fixtures/canonical-hash.json - both this job and the
+  # Windows job above assert the same world hash against the same pin, so a
+  # platform that computes differently fails here by name. Locally the same
+  # comparison is `npm run test:determinism:cross`.
+  determinism-linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - name: Determinism on Linux - same pin as Windows
+        run: npm run test:determinism

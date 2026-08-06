@@ -3,6 +3,49 @@
 Every decision that was not spelled out in the specification, with the reason it
 was made that way. Newest milestone last.
 
+## Register - topic to decisions (SPEC2 M10)
+
+Hand-maintained: every new entry adds its D-number to at least one topic line
+here, and `tests/unit/decisionsRegister.spec.ts` fails the build when a logged
+decision is missing from this register or the register cites a number that has
+no entry below. A number may appear under several topics.
+
+- **Determinism, RNG & hashing:** D-001, D-002, D-003, D-004, D-009, D-010,
+  D-024, D-093, D-106, D-128, D-137
+- **Commands, snapshot & worker boundary:** D-004, D-005, D-006, D-011, D-032,
+  D-100, D-111
+- **Map generation & terrain:** D-018, D-019, D-020, D-021, D-022, D-023,
+  D-025, D-027
+- **Terraforming & structures:** D-028, D-034, D-050, D-051, D-052, D-124
+- **Save format, migrations & replays:** D-007, D-025, D-026, D-027, D-048,
+  D-111, D-130, D-131, D-134
+- **Rail & track:** D-042, D-043, D-044, D-045, D-046, D-047, D-053
+- **Signals & reservations:** D-054, D-055, D-056, D-057, D-058, D-059, D-060,
+  D-061, D-073, D-080, D-081, D-082, D-083
+- **Stations & catchment:** D-049, D-080, D-095
+- **Cargo, payment & routing:** D-036, D-037, D-065, D-067, D-075, D-077,
+  D-078, D-118
+- **Industry & production:** D-022, D-062, D-063, D-064, D-069, D-071, D-079,
+  D-085, D-086
+- **Towns, council & ownership:** D-101, D-102, D-103, D-104
+- **Economy, finance & emissions:** D-008, D-090, D-091, D-092, D-105
+- **Balancing & scenarios:** D-038, D-039, D-040, D-041, D-066, D-087, D-088,
+  D-116
+- **Vehicles & fleet:** D-043, D-044, D-045, D-068, D-076, D-089, D-093, D-096
+- **Water & air:** D-094, D-095, D-096, D-097, D-098, D-099
+- **Competitors, AI & tenders:** D-107, D-108, D-109, D-115, D-116, D-121,
+  D-122
+- **Rendering & art:** D-013, D-014, D-033, D-035, D-112, D-117, D-125, D-127,
+  D-136
+- **UI & input:** D-011, D-013, D-015, D-035, D-110, D-113, D-114, D-119,
+  D-126
+- **Performance & measurement:** D-002, D-120, D-135, D-136
+- **Platform, tooling & build:** D-012, D-014, D-015, D-016, D-017, D-029,
+  D-030, D-031
+- **Crash safety:** D-132
+- **Testing method & fixtures:** D-010, D-038, D-072, D-074, D-084, D-133
+- **Process & specification:** D-070, D-123, D-129, D-133, D-138
+
 ---
 
 ## M0 - foundation (2026-07-27)
@@ -2428,3 +2471,132 @@ on the parser side (the values are hashed), `gameVersion` (container
 metadata, D-131), and the command log with its `commandsExecuted` cursor -
 history, not state; replay verification judges it, and a digest cannot cover
 the log without hashing the past instead of the world.
+
+### D-135 The 1,500-vehicle world is measured, and the ledger's baseline is a number
+
+Every tick-millisecond promise in SPEC2's shared-resource ledger is priced
+against "the M10 baseline", and until now that baseline was a linear
+projection printed by a 300-bus fixture (D-120). SPEC2's Z6 is explicit that a
+promise against an extrapolation is not a promise, so the world section 21
+actually names was built and timed: 1024^2 map, 120 towns, 300 industries,
+1,500 vehicles - 1,350 buses on 60 town-to-town lines and 150 coal trains (a
+locomotive and eight wagons, refitted) on 150 signalled mine-to-plant lines,
+in `tests/perf/fixture1500.ts`.
+
+Three things about the method are the decision:
+
+- **Everything is built through commands and every rejection throws** (D-072).
+  The map is hand-laid flat grassland in the balance suite's manner (D-038),
+  because no generated seed yields 210 working lines and the measurement is
+  about the simulation's cost, not the generator's mood.
+- **The fixture proves the fleet is WORKING before a single tick is timed**:
+  exactly 1,500 alive, zero parked, zero routeless, at most ten stragglers
+  still leaving a shed - the parked-fleet trap by assertion instead of by
+  comment. In the measured run all 1,500 were out (1,427 driving, 8 braking,
+  5 loading, 60 broken down mid-journey - the breakdown rolls are part of the
+  cost being measured).
+- **The sample window is 6,500 ticks, deliberately longer than a game month**,
+  so the daily collection gate fires thirty-two times and the monthly
+  production, town and finance hooks at least once inside the percentile.
+  2,000 ticks - the old window - can fall entirely between the expensive
+  ticks.
+
+Measured on a Ryzen 5 7520U (4 cores/8 threads, 16 GB, Windows 11, Node 24 -
+deliberately no stronger than section 21's reference system): **p50 1.452 ms,
+p99 3.262 ms, max 39.4 ms** against the 8 ms budget. The save of that world
+(0.16 MB compressed - flat terrain compresses absurdly well) writes in 506 ms
+and reads back in 596 ms against the 3,000 ms budget; a full game day runs in
+325 ms, about a 31x sustained speed multiple.
+
+Consequences: the baseline sits UNDER the ~3-4 ms linear extrapolation, so
+the Z6 escalation path (an edge-graph milestone before M14) is NOT triggered
+and the ledger's delta budgets stand as written - recorded in SPEC2 6.1.1,
+the living acceptance table. The p99 is now ASSERTED at 8 ms (what D-120
+refused was asserting the projection; the measurement is exactly what it said
+should be held instead). And the old "one day under 500 ms" check - a 20x
+promise only a 300-vehicle world could make - is reframed to what section 21
+implies at full load: 200 ticks inside the tick budget, with the sustained
+multiple in the log.
+
+Asserting the p99 immediately reproduced the D-120 failure mode: inside a
+fully parallel `vitest run` on the four-core reference box, the same world
+measured p99 8.56 ms - the twenty-five-year AI game and the determinism
+replays were running on the neighbouring threads, and a p99 is exactly the
+statistic that picks up their scheduling. The simulation was inside its
+budget; the MEASUREMENT was not. So `npm test` now runs the perf files after
+everything else, serialized (`--no-file-parallelism`), which is measurement
+isolation and not a relaxation: the budget stays at section 21's eight
+milliseconds, on the fixture, on every full run - it is just no longer asked
+to absorb the rest of the suite as noise.
+
+### D-136 The render tripwire is a CPU proxy with generous thresholds, not a frame-rate promise
+
+Section 21's two frame-rate budgets need a GPU and a compositor, and M9
+deliberately refused a browser test runner because it would pull PixiJS into
+the simulation's test runs. But M12 and M13 are about to spend heavily on the
+render path, and a CPU-side render regression - an accidental per-frame
+rebuild, a quadratic layer scan - would otherwise surface as "feels slow" on
+a machine with a compositor, months after the commit that caused it.
+
+`tests/perf/render.perf.spec.ts` therefore benchmarks the CPU HALF of a
+frame, stated openly as a proxy: it replays `MapView.rebuild`'s diagonal
+iteration, layer decisions, string frame-cache lookups and draw-order keys,
+and `MapView.drawVehicles`' stride reads, height lookups, interpolation and
+sort keys - writing into flat arrays where the real code touches Pixi
+sprites. What it cannot see (Pixi-internal sprite churn, GPU cost) it does
+not claim to guard.
+
+Baseline on the reference machine: a 64x64-tile viewport (roughly a 4K screen
+at zoom 1, 7,101 sprites) rebuilds at p99 4.3 ms; a full 1,500-vehicle
+snapshot block preps at p99 0.41 ms. The tripwires are set at 25 ms and 5 ms
+- six and twelve times the measurement - because a proxy that fails on a busy
+CI box teaches people to ignore it (the D-120 lesson), while a regression of
+multiples, which is the kind an architecture mistake produces, still trips
+them reliably.
+
+### D-137 Cross-OS determinism is a pinned hash, because two machines cannot compare in one process
+
+SPEC2 6.3 requires the determinism job to run on ubuntu as well as windows
+from M10 - the first hard evidence that law #4's float discipline is
+bit-exact across platforms, not just across runs. The in-process suite cannot
+provide that: it compares a run against another run on the SAME box.
+
+The comparison medium is a committed pin, `tests/determinism/fixtures/
+canonical-hash.json`: seed 424,242 replaying the recorded road-line fixture
+to tick 10,000, world hash `63ae5fd6b5d01190`, recorded under save version 23
+on win32/x64. CI runs `npm run test:determinism` on both OSes and both assert
+the same pin (`tests/determinism/crossPlatform.spec.ts`); locally,
+`npm run test:determinism:cross` is the same comparison on whatever OS it is
+invoked on.
+
+D-010 rejected frozen hashes because every milestone legitimately moves them,
+and that reasoning stands. This pin is not a golden signal of correctness -
+the run-versus-run suite remains that - but a transport medium, maintained
+under the corpus-manifest protocol (D-134's precedent): a legitimate sim
+change fails the test by name, and deleting the pin, re-running and
+committing is the conscious act that approves the new hash. The failure
+message distinguishes the two cases explicitly, because the wrong reflex -
+re-pinning on a hash that diverged BETWEEN platforms - would delete the one
+piece of evidence the job exists to produce.
+
+### D-138 The ledger is an acceptance protocol, and the decision log carries its own index
+
+SPEC2 orders two process artifacts in M10: the shared-resource ledger "led
+like the balance-band table", and an indexed register over this file.
+
+The ledger's budgets stay untouched in SPEC2 6.1 - they are commitments, and
+editing measurements into a commitment table blurs who promised what. What
+was appended is 6.1.1, the acceptance protocol: one row per ACCEPTED
+milestone with its measured numbers, date and DECISIONS citation, M10's
+baseline row first. The v1 precedent is the balance-band table, whose bands
+live in SPEC.md and whose measured column lives with the working notes; a
+milestone whose 6.1 row has no 6.1.1 row is not accepted.
+
+The register at the head of this file maps topics to D-numbers and is
+hand-maintained - after 138 entries, assigning a topic is judgment, not
+parsing. What keeps a hand-maintained index honest is the same device that
+keeps the command parser and the i18n files honest: a coupling test.
+`tests/unit/decisionsRegister.spec.ts` parses both directions and fails the
+build when an entry is missing from the register or the register cites a
+number with no entry - so the index can rot in neither direction without
+turning the suite red.

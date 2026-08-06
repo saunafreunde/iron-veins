@@ -432,15 +432,28 @@ written for somebody who has never seen the project.
 
 ### Performance, and what is measured by hand
 
-`npm run test:perf` holds three of section 21's budgets: the tick with a fleet
-that is actually RUNNING (a parked fleet is skipped by the update loop and
-measuring one says the simulation is thirty times faster than it is), the read
-of a large save, and map generation. Measured: 300 working vehicles on a 1024
-map, p99 about 1.5 ms against a budget of 8.
+`npm run test:perf` holds section 21's budgets against the world that section
+actually names: `tests/perf/fixture1500.ts` builds 1,500 WORKING vehicles -
+1,350 buses and 150 signalled coal trains, with live cargo routing - on a
+1024 map with 120 towns and 300 industries, and asserts the fleet is working
+before a tick is timed (a parked fleet is skipped by the update loop and
+measuring one says the simulation is thirty times faster than it is).
+Measured baseline, M10 (D-135): p50 1.45 ms, p99 3.26 ms against a budget of
+8 - the ledger row every SPEC2 tick promise is priced against, recorded in
+SPEC2 section 6.1.1. The same suite reads the big save back and holds a
+render CPU tripwire (D-136): the sprite-rebuild and draw-prep cost of
+`MapView`, measured without Pixi, with generous thresholds that catch
+regressions of multiples before the M12/M13 art milestones.
 
 The two frame-rate budgets need a GPU and a compositor. The procedure for
 measuring them by hand is in README.md. There is deliberately no browser test
 runner: adding one would pull PixiJS into the simulation's own test runs.
+
+Cross-OS determinism (D-137): a canonical world hash is pinned in
+`tests/determinism/fixtures/canonical-hash.json`; CI asserts it on windows
+AND ubuntu, and `npm run test:determinism:cross` is the same comparison
+locally. A legitimate sim change re-records the pin (corpus protocol); a
+divergence between platforms is a law-#3 break and is never re-pinned.
 
 ## Still outstanding
 
