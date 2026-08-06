@@ -1940,3 +1940,30 @@ nothing at all and finished on 422 000. The estimate is a RANKING, and that term
 depressed every candidate below the threshold at which anything is built rather
 than reordering them. It is written down in the code so nobody adds it again on
 first principles.
+
+### D-123 SPEC2.md is the master prompt of the expansion; SPEC.md stays the authority for v1
+
+The expansion ("the current state is 5% of the final game") needed its own
+specification, and writing it into SPEC.md would have destroyed the one
+property that made the v1 method work: SPEC.md is the original brief, verbatim,
+and every departure from it is measured against an unchanged text.
+
+`SPEC2.md` was therefore adopted (2026-08-06) as the master prompt for
+milestones M10-M25. It was not improvised: the evidence base is an
+eleven-agent code audit of the finished v1 (which verified ten live defects,
+among them terraforming unguarded under track and the SPEC 16.1 draw-order
+violation), five independent expansion proposals along different lenses
+(simulation depth, presentation, content, identity, platform), and three judge
+verdicts that scored, merged and vetoed them. Every contested architecture
+question the audit flagged - weather sim-side versus render-only, the stored
+versus derived congestion layer, one Line entity for player and AI, the hybrid
+renderer, the browser channel - is decided in SPEC2.md's section 5 with the
+reasoning attached, so the first PR on any of these topics does not choose the
+architecture by accident.
+
+The division of authority is: **SPEC.md remains authoritative for the v1 scope
+(M0-M9)** and is not edited; SPEC2.md references it instead of repeating it and
+is authoritative for M10 onward. CLAUDE.md digests continue to serve both. The
+rule that an undocumented departure is a defect, not a decision, now applies to
+both documents alike - which is why SPEC2.md's first milestone is a hardening
+pass over the audit's verified defects and nothing ships before it is green.
