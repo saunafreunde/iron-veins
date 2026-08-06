@@ -696,6 +696,7 @@ function hashDynamicState(h: Fnv1a64, world: World): void {
       .u32(c.bankrupt ? 1 : 0)
       .u32(c.autoRenew ? 1 : 0);
     h.int(c.vehicleUpkeepPerYearCt).int(c.infrastructureUpkeepPerYearCt);
+    h.int(c.revenueThisMonthCt).int(c.expensesThisMonthCt);
     h.int(c.accumulatedDepreciationCt).u32(c.historyCursor);
     h.f64(c.co2ThisYearKg).f64(c.co2LastYearKg);
     // The whole ledger is hashed. It is state the simulation writes every
@@ -713,6 +714,10 @@ function hashDynamicState(h: Fnv1a64, world: World): void {
   h.u32(world.towns.length);
   for (let i = 0; i < world.towns.length; i++) {
     const town = world.towns[i]!;
+    // The id is hashed although it should always equal the index: everything
+    // on the map refers to a town by id, and a save whose third town calls
+    // itself number five must not fingerprint like a healthy one (M10 audit).
+    h.u32(town.id);
     h.u32(town.x).u32(town.y).u32(town.sizeClass).int(town.population).u32(town.radius);
     h.f64(town.producedThisMonth).f64(town.transportedThisMonth);
     h.f64(town.goodsDeliveredThisMonth).f64(town.foodDeliveredThisMonth);
@@ -773,6 +778,9 @@ function hashDynamicState(h: Fnv1a64, world: World): void {
   h.u32(world.industries.length);
   for (let i = 0; i < world.industries.length; i++) {
     const industry = world.industries[i]!;
+    // Hashed for the same reason a town's id is: it is what deliveries and the
+    // tile layer refer to, and it travels in the save.
+    h.u32(industry.id);
     h.u32(industry.type).u32(industry.x).u32(industry.y).u32(industry.landmassId);
     h.f64(industry.inputStock0).f64(industry.inputStock1);
     h.f64(industry.outputStock0).f64(industry.outputStock1);
@@ -786,10 +794,18 @@ function hashDynamicState(h: Fnv1a64, world: World): void {
   h.u32(world.stations.length);
   for (let i = 0; i < world.stations.length; i++) {
     const station = world.stations[i]!;
+    // The id is what every parcel's origin and destination point at, the owner
+    // is whose books a delivery credits, and the name is state the player
+    // reads, exactly like the news log. All three travel in the save, so all
+    // three are fingerprinted (M10 audit).
+    h.u32(station.id).u32(station.ownerId);
+    h.u32(station.name.length).str(station.name);
     h.u32(station.x).u32(station.y).u32(station.townId).u32(station.buildingsCovered);
     h.u32(station.servedReliability).f64(station.overflowUnits);
     h.u32(station.modules.length);
-    for (const module of station.modules) h.u32(module.kind).u32(module.tileIndex);
+    for (const module of station.modules) {
+      h.u32(module.kind).u32(module.tileIndex).u32(module.x).u32(module.y);
+    }
     h.u32(station.waiting.length);
     for (const stack of station.waiting) {
       h.u32(stack.cargo).f64(stack.amount).f64(stack.createdTick);
@@ -798,6 +814,9 @@ function hashDynamicState(h: Fnv1a64, world: World): void {
     }
     h.u32(station.visitTicks.length);
     for (const tick of station.visitTicks) h.u32(tick);
+    // Runway occupancy is dynamic state like any reservation the save keeps.
+    h.u32(station.runwayFreeTick.length);
+    for (const tick of station.runwayFreeTick) h.int(tick);
   }
 
   // The log is state the player reads and it is saved, so it is hashed like
@@ -807,6 +826,20 @@ function hashDynamicState(h: Fnv1a64, world: World): void {
     h.u32(entry.tick).u32(entry.category).u32(entry.severity);
     h.u32(entry.messageKey.length).str(entry.messageKey);
     h.int(entry.tileIndex);
+    // The parameters are part of the sentence the player reads, and they are
+    // saved - so they are hashed. Keys sorted with a total comparator, because
+    // object key order is the engine's, not the simulation's.
+    const keys = Object.keys(entry.params).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+    h.u32(keys.length);
+    for (const key of keys) {
+      h.u32(key.length).str(key);
+      const value = entry.params[key]!;
+      if (typeof value === 'number') {
+        h.u32(0).f64(value);
+      } else {
+        h.u32(1).u32(value.length).str(value);
+      }
+    }
   }
 
   const links = world.cargoLinks.links;
@@ -824,17 +857,33 @@ function hashDynamicState(h: Fnv1a64, world: World): void {
     h.u32(vehicles.alive[id]!);
     if (vehicles.alive[id] !== 1) continue;
     h.u32(vehicles.specId[id]!).u32(vehicles.state[id]!).u32(vehicles.tileIndex[id]!);
+    // Owner, age, refit and home depot travel in the save and steer money,
+    // renewal and servicing - so they are fingerprinted like everything else
+    // that does (M10 audit).
+    h.u32(vehicles.ownerId[id]!).int(vehicles.builtTick[id]!);
+    h.int(vehicles.refitCargo[id]!).int(vehicles.homeDepotTile[id]!);
     h.f64(vehicles.progressM[id]!).f64(vehicles.speedMs[id]!);
     h.f64(vehicles.routeRemainingM[id]!);
     h.int(vehicles.reservedFromIndex[id]!).int(vehicles.reservedToIndex[id]!);
     h.int(vehicles.reservedBlockTile[id]!).int(vehicles.waitingSinceTick[id]!);
     h.u32(vehicles.consist[id]!.length);
     for (const unit of vehicles.consist[id]!) h.u32(unit);
+    // The route itself, not only its length: the tiles are what the vehicle
+    // will drive, they are saved verbatim (see save/entities.ts), and a save
+    // whose path was bent must not fingerprint like the one that was written.
     h.u32(vehicles.pathIndex[id]!).u32(vehicles.pathLength[id]!);
+    for (let t = 0; t < vehicles.pathLength[id]!; t++) h.u32(vehicles.paths[id]![t]!);
     h.u32(vehicles.orderIndex[id]!).u32(vehicles.reliability[id]!);
     h.u32(vehicles.breakdownTicks[id]!).f64(vehicles.loadTicks[id]!);
     h.f64(vehicles.earnedCt[id]!).f64(vehicles.workJ[id]!);
     h.int(vehicles.lastStationId[id]!).int(vehicles.lastArrivalTick[id]!);
+    // The orders drive every decision the vehicle makes; leaving them out of
+    // the digest would let a corrupted order list masquerade as the recorded
+    // game until the divergence surfaced somewhere downstream.
+    h.u32(vehicles.orders[id]!.length);
+    for (const order of vehicles.orders[id]!) {
+      h.u32(order.target).int(order.targetId).u32(order.load).u32(order.unload);
+    }
     for (const stack of vehicles.cargo[id]!) {
       h.u32(stack.cargo).f64(stack.amount).f64(stack.createdTick);
       h.int(stack.originStationId).int(stack.destinationStationId);

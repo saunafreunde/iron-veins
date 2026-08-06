@@ -2344,3 +2344,87 @@ event on the main thread - can fire for one death. The worker handler calls
 `preventDefault()` so the richer report does not race the poorer one, and the
 main thread takes the first crash it sees and ignores the rest: two bundles
 of the same corpse help nobody.
+
+### D-133 The hand-rules are machines now: one command parser, recorded fixtures, and three coupling audits that provably fire
+
+SPEC2 M10 asks for the constitution to be mechanised, and this entry records
+the shape that took.
+
+**One command parser.** `parseCommand` in `src/sim/save/format.ts` is exported
+and the determinism runner uses it verbatim. The runner used to keep a
+hand-written switch that knew four command kinds - which meant every
+determinism fixture was silently limited to loans and cosmetics, and nobody
+was told. A fixture now carries anything the game can record, and a kind the
+parser does not know fails the suite by name.
+
+**Fixtures are recorded, not composed.** `npm run record:fixture` (in
+`tools/record-fixture.mjs`) decodes any `.ironsave` and dumps its command log
+as a determinism fixture - the fixture format IS the save's log, filtered to
+the player's commands, because AI competitors re-derive their own from the
+seed on replay and recording them would run each twice. The first recorded
+fixture, `road-line-commands.json`, builds a bus line - roads, two stops, a
+depot, a vehicle, orders - and the suite holds it to cross-run hash equality
+plus liveness guards (stations exist, the vehicle EARNED, links were
+measured), because cross-run equality alone stays green when every build
+command is rejected and two empty plains agree with each other.
+
+**Three coupling audits, each with a meta-test.** In the i18n.spec.ts style,
+the audits walk the real tables - `CommandKind`, the interface sources, an
+encoded payload - and each has a test that plants a violation and watches the
+audit catch it, because an audit that cannot fail is a comment:
+
+- CommandKind <-> UI issuer (`commandCoupling.spec.ts`): every kind must be
+  constructed somewhere under `src/ui`, or sit on a documented allowlist.
+  The allowlist is EMPTY, and the audit found two real defects on its first
+  run: the demolish tool sent `DemolishRoad` regardless of the tile, so
+  `DemolishTrack` and `DemolishBuilding` were unreachable by a player - track
+  laid could never be torn up from the map view. The tool now routes by what
+  stands on the tile (signal, then track, then building, then road).
+- CommandKind <-> parser (`commandCoupling.spec.ts`): a complete sample table,
+  typed `Record<keyof typeof CommandKind, Command>` so a new kind is a compile
+  error until its sample exists, and every sample must survive
+  JSON -> parseCommand -> deep equality.
+- Save field <-> hashWorld <-> parser (`saveFieldCoupling.spec.ts`): see
+  D-134.
+
+### D-134 The field audit is behavioural, and it forced the digest to cover what it had silently skipped
+
+The Z2 coupling test (save field <-> `hashWorld` <-> parser) does not compare
+lists of field names - a list would itself be a second hand-maintained table,
+falling behind like the runner's switch did. Instead the audit takes a REAL
+encoded payload from a played game, enumerates every leaf it actually
+contains, and probes behaviour: delete an object field and the parser must
+refuse the save; change any value and either the validator throws or the
+reloaded world must hash differently. A field that survives both probes is
+state the determinism suite cannot see, and the build goes red unless the
+field sits on an allowlist entry that names its reason. A stale entry fails
+the audit too. Sections the recorded game had not produced by the audit tick
+(a tender, an AI plan, cargo aboard) are given synthetic representatives,
+because a section with no representative is a section the audit does not see.
+
+Running it the first time found that `hashWorld` had quietly never covered a
+band of serialised state: a vehicle's OWNER, its ORDERS, the tiles of its
+PATH (only the length was hashed), its built tick, refit cargo and home
+depot; a station's id, name, owner and runway occupancy; a company's
+running month revenue and expenses; town and industry ids; module
+coordinates; news parameters. Orders alone decide everything a vehicle does -
+a save whose order list was corrupted hashed identically to the recorded
+game. All of it is hashed now.
+
+Extending the digest changes every world hash, which is a designed-for event
+with a written protocol (D-130): the corpus manifest was re-recorded, and the
+v23 corpus fixture re-encoded so its embedded digest matches - legitimate
+because the regeneration first proved the replayed corpus game bit-identical
+to the frozen v22 fixture, and because no released build has ever written a
+v23 save (v23 exists only inside this milestone; the shipped M9 installer
+writes v22, whose saves carry no digest and are exempt from verification).
+The same change on a RELEASED format would instead have been a
+`SAVE_VERSION` bump with the old version's digests recorded as unverifiable.
+
+What stays deliberately outside the digest, each with its reason in the
+audit's allowlists: the two derived station fields the decoder overwrites
+(`acceptedCargo`, `servedIndustries`), the news params RECORD's open key set
+on the parser side (the values are hashed), `gameVersion` (container
+metadata, D-131), and the command log with its `commandsExecuted` cursor -
+history, not state; replay verification judges it, and a digest cannot cover
+the log without hashing the past instead of the world.

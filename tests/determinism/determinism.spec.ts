@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { CommandQueue } from '../../src/sim/commands/queue';
+import { CommandKind } from '../../src/sim/commands/types';
 import { decodeSave, encodeSave } from '../../src/sim/save/serialize';
 import { hashWorld, World } from '../../src/sim/World';
 import fixture from './fixtures/m0-commands.json';
+import roadFixture from './fixtures/road-line-commands.json';
 import {
   advance,
   createScenario,
@@ -105,5 +107,76 @@ describe('determinism', () => {
     while (replayWorld.tick < TOTAL_TICKS) replayWorld.step(replayQueue, null);
 
     expect(hashWorld(replayWorld)).toBe(hashWorld(original.world));
+  });
+});
+
+/**
+ * The richer scenario of SPEC2 M10: a bus line built, crewed, ordered and run
+ * entirely from a recorded command log - roads, two stops, a depot, a vehicle
+ * and its orders. Recorded from a played save via tools/record-fixture.mjs,
+ * which is why every command in it went through `parseCommand` twice: once on
+ * the way into the save, once on the way out of the fixture.
+ */
+const ROAD_TOTAL_TICKS = 20_000;
+const ROAD_CHECKPOINTS = [2_000, 10_000, 20_000] as const;
+
+const roadScript = parseScenarioFixture(roadFixture);
+
+describe('determinism - recorded road line', () => {
+  it('reaches beyond the four kinds the runner used to know', () => {
+    // The point of reusing the save parser: a fixture can carry construction.
+    // If this shrinks, the fixture stopped exercising what it was recorded for.
+    const kinds = new Set(roadScript.map((entry) => entry.command.kind));
+    for (const kind of [
+      CommandKind.BuildRoad,
+      CommandKind.BuildRoadStop,
+      CommandKind.BuyRoadVehicle,
+      CommandKind.SetVehicleOrders,
+      CommandKind.SetVehicleRunning,
+      CommandKind.SetAutoRenew,
+    ]) {
+      expect(kinds, `fixture carries command kind ${kind}`).toContain(kind);
+    }
+  });
+
+  it('produces identical checkpoint hashes across two runs, with the line alive', () => {
+    const first = advance(createScenario(SEED, roadScript), ROAD_TOTAL_TICKS, ROAD_CHECKPOINTS);
+    const live = createScenario(SEED, roadScript);
+    const second = advance(live, ROAD_TOTAL_TICKS, ROAD_CHECKPOINTS);
+
+    expect(Object.keys(first)).toHaveLength(ROAD_CHECKPOINTS.length);
+    expect(second).toEqual(first);
+
+    // Guards against fixture rot: cross-run equality alone would stay green if
+    // every build command were suddenly rejected and the fixture replayed an
+    // empty plain. The world at the end must contain the line that was
+    // recorded - and a vehicle that has EARNED proves it actually drove.
+    expect(live.queue.executedCount).toBe(roadScript.length);
+    expect(live.queue.pendingCount).toBe(0);
+    expect(live.world.stations.length).toBeGreaterThanOrEqual(2);
+    expect(live.world.vehicles.alive[0]).toBe(1);
+    expect(live.world.vehicles.orders[0]!.length).toBe(2);
+    expect(live.world.vehicles.earnedCt[0]!).toBeGreaterThan(0);
+    expect(live.world.cargoLinks.links.length).toBeGreaterThan(0);
+  });
+
+  it('survives a save, load and continue in the middle of the run', () => {
+    const reference = advance(
+      createScenario(SEED, roadScript),
+      ROAD_TOTAL_TICKS,
+      ROAD_CHECKPOINTS,
+    );
+
+    const live = createScenario(SEED, roadScript);
+    const beforeSave = advance(live, ROAD_CHECKPOINTS[1], ROAD_CHECKPOINTS);
+    expect(beforeSave[ROAD_CHECKPOINTS[1]]).toBe(reference[ROAD_CHECKPOINTS[1]]);
+
+    const bytes = encodeSave(live.world, live.queue, GAME_VERSION);
+    const loaded = decodeSave(bytes);
+    expect(hashWorld(loaded.world)).toBe(reference[ROAD_CHECKPOINTS[1]]);
+
+    const resumed: Scenario = { world: loaded.world, queue: loaded.queue };
+    const afterLoad = advance(resumed, ROAD_TOTAL_TICKS, ROAD_CHECKPOINTS);
+    expect(afterLoad[ROAD_TOTAL_TICKS]).toBe(reference[ROAD_TOTAL_TICKS]);
   });
 });

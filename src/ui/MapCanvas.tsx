@@ -144,14 +144,14 @@ function commandForClick(tool: Tool, tile: TileInfo): Command | null {
       };
 
     case 'demolish':
-      return { kind: CommandKind.DemolishRoad, x: tile.x, y: tile.y };
     case 'road':
     case 'track':
     case 'connect':
     case 'signal':
     case 'pathsignal':
     case 'none':
-      // Two-click tools and the signal cycle; the click handler drives them.
+      // Two-click tools, the signal cycle and the demolish routing; the click
+      // handler drives them, because they need to read the map.
       return null;
   }
 }
@@ -324,6 +324,30 @@ export function MapCanvas({ client }: { readonly client: SimClient }): ReactElem
        * back to two-way. The simulation has no modify-signal command, so a
        * cycle step is a demolish and a rebuild, sent as a pair (D-126).
        */
+      /*
+       * Demolish: what the click removes is what stands on the tile. Track,
+       * signals and town buildings have commands of their own - the tool used
+       * to send DemolishRoad no matter what, which left DemolishTrack and
+       * DemolishBuilding unreachable from the interface. The coupling test in
+       * tests/unit/commandCoupling.spec.ts is what noticed, and what keeps it
+       * from happening to the next command kind.
+       */
+      if (state.tool === 'demolish') {
+        const map = mapRef.current;
+        if (map === null || !map.contains(tile.x, tile.y)) return;
+        const index = map.tileIndex(tile.x, tile.y);
+        if (signalKind(map.signal[index]!) !== SignalKind.None) {
+          client.send({ kind: CommandKind.DemolishSignal, x: tile.x, y: tile.y });
+        } else if (map.trackBits[index]! !== 0) {
+          client.send({ kind: CommandKind.DemolishTrack, x: tile.x, y: tile.y });
+        } else if (map.buildingKind[index]! !== 0) {
+          client.send({ kind: CommandKind.DemolishBuilding, x: tile.x, y: tile.y });
+        } else {
+          client.send({ kind: CommandKind.DemolishRoad, x: tile.x, y: tile.y });
+        }
+        return;
+      }
+
       if (state.tool === 'signal' || state.tool === 'pathsignal') {
         const map = mapRef.current;
         if (map === null || !map.contains(tile.x, tile.y)) return;

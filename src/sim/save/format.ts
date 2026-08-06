@@ -508,7 +508,17 @@ function parseIndustries(value: unknown, path: string): Industry[] {
   return industries;
 }
 
-function parseCommand(value: unknown, path: string): Command {
+/**
+ * The one command parser there is.
+ *
+ * The save log and the determinism fixtures go through this same function on
+ * purpose (SPEC2 M10): a second hand-written parser in the test runner is a
+ * parser that silently falls behind the command set, and the fixtures then
+ * exercise whatever subset it still knows. The coupling test in
+ * `tests/unit/commandCoupling.spec.ts` walks the real `CommandKind` table and
+ * proves every kind round-trips through here.
+ */
+export function parseCommand(value: unknown, path: string): Command {
   const raw = asRecord(value, path);
   const kind = asInt(raw['kind'], `${path}.kind`);
   switch (kind) {

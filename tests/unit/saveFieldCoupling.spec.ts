@@ -1,0 +1,392 @@
+import { beforeAll, describe, expect, it } from 'vitest';
+import { parseSaveFile, SAVE_MAGIC, SAVE_VERSION } from '../../src/sim/save/format';
+import { hashWorld, World } from '../../src/sim/World';
+import roadFixture from '../determinism/fixtures/road-line-commands.json';
+import { advance, createScenario, parseScenarioFixture } from '../determinism/runner';
+
+/**
+ * The third coupling test of SPEC2 M10, enforcing Z2: every field that is
+ * SERIALISED into a save must be COVERED - by the validator refusing a save
+ * without it, and by either `hashWorld` or the validator noticing when its
+ * value changes. The audit walks a REAL encoded payload rather than a written
+ * list of fields, so a field added to `toData()`/`encodeSave` anywhere joins
+ * the audit by existing - the failure mode this closes is the audit-flagged
+ * planning error "derived, no save change" combined with "world rule": state
+ * that travels in the file but that neither the digest nor the parser watches.
+ *
+ * Two passes over every leaf of the payload:
+ *
+ *  - DELETION (object fields only): remove the field, expect `parseSaveFile`
+ *    to refuse the save. A field the parser does not miss is a field the
+ *    parser does not cover. Array ELEMENTS are exempt - list lengths vary
+ *    between saves by design, so a shorter list is a different save, not a
+ *    parser hole.
+ *  - PERTURBATION (every leaf): change the value, then either the validator
+ *    throws or the reloaded world must hash differently. A change that loads
+ *    cleanly into the SAME hash is state the determinism suite cannot see.
+ *
+ * Exceptions live in the two allowlists below, each entry with its reason,
+ * and a stale entry - one that stops matching a real finding - fails the
+ * audit too, exactly like i18n.spec.ts fails an orphaned translation key.
+ */
+
+const SEED = 424_242;
+/** Two game months: monthly hooks fired, the bus mid-route, stations visited. */
+const AUDIT_TICKS = 12_000;
+
+/**
+ * Fields the PARSER knowingly ignores. Everything here must also be justified
+ * against the perturbation pass or be hashed.
+ */
+const PARSER_IGNORED: readonly { path: string; reason: string }[] = [
+  {
+    path: 'state.stations[].acceptedCargo',
+    reason: 'derived from the map on load (see save/entities.ts); written only so the shape matches',
+  },
+  {
+    path: 'state.stations[].servedIndustries',
+    reason: 'derived from the map on load, exactly like the land masses',
+  },
+  {
+    path: 'state.news[].params.*',
+    reason: 'message-specific substitution keys; the record itself is required, its keys vary',
+  },
+];
+
+/**
+ * Leaves whose value may change without the validator or `hashWorld`
+ * noticing. This list is the WHOLE budget of unwatched save content.
+ */
+const UNHASHED: readonly { path: string; reason: string }[] = [
+  {
+    path: 'state.stations[].acceptedCargo',
+    reason: 'derived on load; the decoder overwrites whatever the file says',
+  },
+  {
+    path: 'state.stations[].servedIndustries',
+    reason: 'derived on load; the decoder overwrites whatever the file says',
+  },
+  {
+    path: 'gameVersion',
+    reason: 'container metadata naming the build (D-131); not world state, never hashed',
+  },
+  {
+    path: 'commandLog[].*',
+    reason:
+      'the log is history, not state: replay verification, not the world digest, judges it (D-131)',
+  },
+  {
+    path: 'commandsExecuted',
+    reason:
+      'the replay cursor into that log - container bookkeeping of the same family; range-checked ' +
+      'against the log length, but its exact value is not world state and cannot be in the digest',
+  },
+];
+
+type PathSegment = string | number;
+
+interface Leaf {
+  readonly path: readonly PathSegment[];
+  readonly normalized: string;
+}
+
+const byText = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
+
+function collectLeaves(value: unknown, path: PathSegment[], normalized: string, out: Leaf[]): void {
+  if (value === null || value === undefined) {
+    throw new Error(`audit: ${normalized} is ${String(value)} - give the section a representative`);
+  }
+  if (
+    typeof value === 'number' ||
+    typeof value === 'string' ||
+    typeof value === 'boolean' ||
+    value instanceof Uint8Array
+  ) {
+    out.push({ path: [...path], normalized });
+    return;
+  }
+  if (Array.isArray(value)) {
+    if (value.length === 0) {
+      // An empty list is itself the leaf: perturbation gives it one element.
+      out.push({ path: [...path], normalized });
+      return;
+    }
+    // The first element stands for all of them - every element of a section
+    // shares one encoder and one decoder, so one representative is enough.
+    path.push(0);
+    collectLeaves(value[0], path, `${normalized}[]`, out);
+    path.pop();
+    return;
+  }
+  const record = value as Record<string, unknown>;
+  for (const key of Object.keys(record).sort(byText)) {
+    path.push(key);
+    collectLeaves(record[key], path, normalized === '' ? key : `${normalized}.${key}`, out);
+    path.pop();
+  }
+}
+
+function containerAt(root: unknown, path: readonly PathSegment[]): unknown {
+  let node: unknown = root;
+  for (let i = 0; i < path.length - 1; i++) {
+    const segment = path[i]!;
+    node =
+      typeof segment === 'number'
+        ? (node as unknown[])[segment]
+        : (node as Record<string, unknown>)[segment];
+  }
+  return node;
+}
+
+function valueAt(root: unknown, path: readonly PathSegment[]): unknown {
+  const container = containerAt(root, path);
+  const last = path[path.length - 1]!;
+  return typeof last === 'number'
+    ? (container as unknown[])[last]
+    : (container as Record<string, unknown>)[last];
+}
+
+function setAt(root: unknown, path: readonly PathSegment[], value: unknown): void {
+  const container = containerAt(root, path);
+  const last = path[path.length - 1]!;
+  if (typeof last === 'number') (container as unknown[])[last] = value;
+  else (container as Record<string, unknown>)[last] = value;
+}
+
+function perturbed(value: unknown, normalized: string): unknown {
+  if (typeof value === 'number') return value + 1;
+  if (typeof value === 'string') return `${value}X`;
+  if (typeof value === 'boolean') return !value;
+  if (value instanceof Uint8Array) {
+    const copy = new Uint8Array(value);
+    copy[0] = copy[0]! ^ 1;
+    return copy;
+  }
+  if (Array.isArray(value) && value.length === 0) return [0];
+  throw new Error(`audit: no perturbation for ${normalized}`);
+}
+
+function matches(normalized: string, entry: string): boolean {
+  if (entry.endsWith('*')) return normalized.startsWith(entry.slice(0, -1));
+  return normalized === entry;
+}
+
+/** Object fields the parser accepts a save WITHOUT - raw, before allowlists. */
+function deletionFindings(payload: unknown, leaves: readonly Leaf[]): string[] {
+  const findings: string[] = [];
+  for (const leaf of leaves) {
+    const last = leaf.path[leaf.path.length - 1]!;
+    if (typeof last !== 'string') continue;
+    const clone = structuredClone(payload);
+    Reflect.deleteProperty(containerAt(clone, leaf.path) as object, last);
+    try {
+      parseSaveFile(clone);
+      findings.push(leaf.normalized);
+    } catch {
+      // Covered: the parser refuses a save without the field.
+    }
+  }
+  return findings;
+}
+
+/** Leaves whose change survives load into an UNCHANGED hash - raw. */
+function perturbationFindings(
+  payload: unknown,
+  baseHash: string,
+  leaves: readonly Leaf[],
+): string[] {
+  const findings: string[] = [];
+  for (const leaf of leaves) {
+    const clone = structuredClone(payload);
+    setAt(clone, leaf.path, perturbed(valueAt(clone, leaf.path), leaf.normalized));
+    try {
+      const file = parseSaveFile(clone);
+      const world = World.fromData(file.state);
+      if (hashWorld(world) === baseHash) findings.push(leaf.normalized);
+    } catch {
+      // Covered: the validator (or the load itself) refuses the change.
+    }
+  }
+  return findings;
+}
+
+// ---------------------------------------------------------------- the payload
+
+let payload: Record<string, unknown>;
+let leaves: Leaf[];
+let baseHash: string;
+
+beforeAll(() => {
+  const scenario = createScenario(SEED, parseScenarioFixture(roadFixture));
+  advance(scenario, AUDIT_TICKS, []);
+  const world = scenario.world;
+  const state = world.toData();
+
+  // The played line guarantees most sections a representative; what the game
+  // has not produced by now is given a synthetic one, because a section with
+  // no representative is a section this audit does not see.
+  expect(state.companies.length).toBeGreaterThan(0);
+  expect(state.towns.length).toBeGreaterThan(0);
+  expect(state.industries.length).toBeGreaterThan(0);
+  expect(state.stations.length).toBeGreaterThanOrEqual(2);
+  expect(state.vehicles.length).toBeGreaterThan(0);
+  expect(state.stations[0]!.modules.length).toBeGreaterThan(0);
+  expect(state.stations[0]!.waiting.length).toBeGreaterThan(0);
+  expect(state.stations[0]!.visitTicks.length).toBeGreaterThan(0);
+  expect(state.vehicles[0]!.orders.length).toBeGreaterThan(0);
+  expect(state.cargoLinks.length).toBeGreaterThan(0);
+
+  if (state.stations[0]!.runwayFreeTick.length === 0) {
+    state.stations[0]!.runwayFreeTick.push(AUDIT_TICKS);
+  }
+  if (state.vehicles[0]!.cargo.length === 0) {
+    state.vehicles[0]!.cargo.push({
+      cargo: 0,
+      amount: 2.5,
+      createdTick: AUDIT_TICKS - 500,
+      originStationId: 0,
+      destinationStationId: 1,
+      paidFromX: 10.5,
+      paidFromY: 20.5,
+    });
+  }
+  if (state.news.length === 0) {
+    state.news.push({
+      tick: AUDIT_TICKS - 100,
+      category: 0,
+      severity: 1,
+      messageKey: 'news.audit.probe',
+      params: { name: 'Probe', amount: 7 },
+      tileIndex: -1,
+    });
+  }
+  if (state.contracts.length === 0) {
+    state.contracts.push({
+      id: state.nextContractId,
+      cargo: 1,
+      townId: 0,
+      amountUnits: 25.5,
+      offeredTick: 100,
+      deadlineTick: 90_000,
+      bonusCt: 250_000,
+      acceptedBy: [0],
+      progress: [3.5],
+      completedBy: -1,
+    });
+    state.nextContractId += 1;
+  }
+  if (state.ai.length === 0) {
+    state.ai.push({
+      companyId: 0,
+      personality: 1,
+      nextDecisionTick: AUDIT_TICKS + 100,
+      lastBuildTick: -1,
+      lines: [
+        {
+          fromStationId: 0,
+          toStationId: 1,
+          depotTile: 5,
+          rail: false,
+          specIds: [200],
+          cargo: 0,
+          builtTick: 100,
+          vehicleIds: [0],
+          reviewTick: AUDIT_TICKS + 5_000,
+          earnedAtReviewCt: 0,
+        },
+      ],
+      project: {
+        stage: 1,
+        fromX: 1,
+        fromY: 2,
+        toX: 3,
+        toY: 4,
+        depotX: 5,
+        depotY: 6,
+        rail: false,
+        cargo: 0,
+        specIds: [200],
+        startedTick: 50,
+        lineIndex: -1,
+      },
+    });
+  }
+
+  payload = {
+    magic: SAVE_MAGIC,
+    saveVersion: SAVE_VERSION,
+    gameVersion: 'audit',
+    seed: world.seed,
+    tick: world.tick,
+    // Rides along unverified: the audit compares recomputed hashes, never this
+    // string, so the synthetic sections above do not have to re-record it.
+    worldDigest: hashWorld(world),
+    state,
+    commandLog: scenario.queue.log.map((envelope) => ({
+      tick: envelope.tick,
+      seq: envelope.seq,
+      companyId: envelope.companyId,
+      command: JSON.parse(JSON.stringify(envelope.command)) as unknown,
+    })),
+    commandsExecuted: scenario.queue.executedCount,
+  };
+
+  leaves = [];
+  collectLeaves(payload, [], '', leaves);
+  baseHash = hashWorld(World.fromData(parseSaveFile(payload).state));
+});
+
+// ----------------------------------------------------------------- the audits
+
+describe('coupling: every serialised field is parsed and watched', () => {
+  it('enumerates a payload with every section represented', () => {
+    // ~40 leaves would mean the walk broke, not that the save shrank.
+    expect(leaves.length).toBeGreaterThan(100);
+    const normalized = leaves.map((leaf) => leaf.normalized);
+    expect(normalized).toContain('state.vehicles[].orders[].targetId');
+    expect(normalized).toContain('state.map.trackBits');
+    expect(normalized).toContain('state.ai[].project.stage');
+  });
+
+  it('the parser refuses a save missing any field it claims to cover', () => {
+    const raw = deletionFindings(payload, leaves);
+    const open = raw.filter(
+      (finding) => !PARSER_IGNORED.some((entry) => matches(finding, entry.path)),
+    );
+    expect(open).toEqual([]);
+
+    // A stale allowlist entry is a finding too (i18n.spec.ts precedent).
+    for (const entry of PARSER_IGNORED) {
+      expect(
+        raw.some((finding) => matches(finding, entry.path)),
+        `PARSER_IGNORED entry "${entry.path}" no longer matches anything`,
+      ).toBe(true);
+    }
+  });
+
+  it('every field change is seen by the validator or by hashWorld', () => {
+    const raw = perturbationFindings(payload, baseHash, leaves);
+    const open = raw.filter((finding) => !UNHASHED.some((entry) => matches(finding, entry.path)));
+    expect(open).toEqual([]);
+
+    for (const entry of UNHASHED) {
+      expect(
+        raw.some((finding) => matches(finding, entry.path)),
+        `UNHASHED entry "${entry.path}" no longer matches anything`,
+      ).toBe(true);
+    }
+  });
+
+  it('meta: detects a planted field that nobody parses or hashes', () => {
+    const plantedPayload = structuredClone(payload);
+    (plantedPayload['state'] as Record<string, unknown>)['planted'] = 1;
+    const plantedLeaf: Leaf = { path: ['state', 'planted'], normalized: 'state.planted' };
+
+    // The parser does not miss it when it is gone...
+    expect(deletionFindings(plantedPayload, [plantedLeaf])).toEqual(['state.planted']);
+    // ...and neither validator nor digest notices when it changes.
+    expect(perturbationFindings(plantedPayload, baseHash, [plantedLeaf])).toEqual([
+      'state.planted',
+    ]);
+  });
+});

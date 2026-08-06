@@ -1,6 +1,7 @@
 import { CommandQueue } from '../../src/sim/commands/queue';
-import { CommandKind, type Command } from '../../src/sim/commands/types';
+import type { Command } from '../../src/sim/commands/types';
 import { Difficulty, MapClimate } from '../../src/sim/constants';
+import { parseCommand } from '../../src/sim/save/format';
 import { hashWorld, World } from '../../src/sim/World';
 
 /** One entry of a recorded scenario: a command and the tick it runs on. */
@@ -18,9 +19,14 @@ export interface Scenario {
 export type CheckpointHashes = Record<number, string>;
 
 /**
- * Turn the JSON fixture into typed commands. Written by hand rather than cast
- * so a malformed fixture fails the test instead of quietly running a different
- * scenario than the one that was recorded.
+ * Turn the JSON fixture into typed commands.
+ *
+ * The commands go through `parseCommand` from `src/sim/save/format.ts` - the
+ * SAME parser that validates a save's command log. The runner used to keep a
+ * hand-written switch that knew four kinds, which meant every fixture was
+ * silently limited to those four; one parser means a fixture can carry
+ * anything the game can record, and a malformed fixture fails the test instead
+ * of quietly running a different scenario than the one that was recorded.
  */
 export function parseScenarioFixture(raw: unknown): ScheduledCommand[] {
   if (!Array.isArray(raw)) throw new Error('fixture: expected an array of scheduled commands');
@@ -34,44 +40,8 @@ export function parseScenarioFixture(raw: unknown): ScheduledCommand[] {
     if (typeof tick !== 'number' || !Number.isInteger(tick)) {
       throw new Error(`fixture[${index}].tick: expected an integer`);
     }
-    return { tick, command: parseCommand(record['command'], index) };
+    return { tick, command: parseCommand(record['command'], `fixture[${index}].command`) };
   });
-}
-
-function parseCommand(raw: unknown, index: number): Command {
-  if (typeof raw !== 'object' || raw === null) {
-    throw new Error(`fixture[${index}].command: expected an object`);
-  }
-  const record = raw as Record<string, unknown>;
-  const kind = record['kind'];
-
-  switch (kind) {
-    case CommandKind.SetCompanyName: {
-      const name = record['name'];
-      if (typeof name !== 'string')
-        throw new Error(`fixture[${index}].command.name: expected a string`);
-      return { kind: CommandKind.SetCompanyName, name };
-    }
-    case CommandKind.SetCompanyColor: {
-      const colorIndex = record['colorIndex'];
-      if (typeof colorIndex !== 'number') {
-        throw new Error(`fixture[${index}].command.colorIndex: expected a number`);
-      }
-      return { kind: CommandKind.SetCompanyColor, colorIndex };
-    }
-    case CommandKind.TakeLoan:
-    case CommandKind.RepayLoan: {
-      const amountCt = record['amountCt'];
-      if (typeof amountCt !== 'number' || !Number.isInteger(amountCt)) {
-        throw new Error(`fixture[${index}].command.amountCt: expected an integer`);
-      }
-      return kind === CommandKind.TakeLoan
-        ? { kind: CommandKind.TakeLoan, amountCt }
-        : { kind: CommandKind.RepayLoan, amountCt };
-    }
-    default:
-      throw new Error(`fixture[${index}].command.kind: unknown command ${String(kind)}`);
-  }
 }
 
 /**
