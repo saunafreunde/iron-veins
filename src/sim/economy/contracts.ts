@@ -15,7 +15,7 @@ import {
 import { Cargo } from '../cargo/types';
 import { deliveryRevenueCt } from '../cargo/payment';
 import { NewsCategory, NewsSeverity } from '../news/log';
-import { Rng } from '../rng';
+import type { Rng } from '../rng';
 import { addGoodwill } from '../town/council';
 import type { World } from '../World';
 
@@ -176,13 +176,16 @@ export function reviewContracts(world: World): void {
   }
   if (world.towns.length === 0) return;
 
-  // A stream of its own, reseeded from the world seed and the tick, rather than
+  // A stream of its own, derived from the world seed and the tick, rather than
   // draws from the gameplay RNG (DECISIONS.md D-106). Drawing from the shared
   // stream would move every breakdown and every industry roll in the game by
   // however many tenders happened to be offered that month - and it did: adding
   // this feature shifted balancing scenario 3 far enough to close an industry.
   // It needs no saved state, because the seed and the tick are both saved.
-  const rng = Rng.fromSeed((world.seed + world.tick) | 0);
+  // `streamFor` with a numeric salt folds the tick in exactly as this line
+  // originally did by hand (D-128), so the draw sequence is bit-identical to
+  // every save and replay recorded before the API existed.
+  const rng = world.streamFor(world.tick);
 
   const wanted = CONTRACT_MIN_OPEN + rng.nextInt(CONTRACT_MAX_OPEN - CONTRACT_MIN_OPEN + 1);
   while (open < wanted) {

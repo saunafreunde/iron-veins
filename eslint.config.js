@@ -57,6 +57,56 @@ const NON_DETERMINISTIC_GLOBALS = [
   'console',
 ];
 
+/**
+ * Syntax restrictions shared by every file of the simulation core. Kept in
+ * one list because flat config replaces a rule wholesale: the RNG stream
+ * discipline block below has to restate these to add its own selector on top.
+ */
+const SIM_CORE_SYNTAX = [
+  {
+    selector: 'ForInStatement',
+    message:
+      'Architecture law #3: for...in enumeration order is not part of the deterministic contract.',
+  },
+  {
+    selector: "NewExpression[callee.name='Date']",
+    message: 'Architecture law #3: wall-clock time must not enter the simulation.',
+  },
+  {
+    selector: "CallExpression[callee.property.name='sort'][arguments.length=0]",
+    message:
+      'sort() without a total comparator is engine dependent. Always compare by a unique tie breaker (id) last.',
+  },
+];
+
+/**
+ * Z3 (SPEC2): every stochastic system draws from `world.streamFor(salt)`. A
+ * new draw on the shared gameplay stream moves every later roll in the game -
+ * adding tenders that way turned balancing scenario 3 red (DECISIONS.md
+ * D-106). Like the law #1 import ban this is a tripwire, not a proof: an
+ * alias would slip past it, and review catches that.
+ */
+const RAW_GAMEPLAY_RNG = {
+  selector: "MemberExpression[object.name='world'][property.name='rng']",
+  message:
+    'Z3 / D-106: draw from world.streamFor(salt), never from the shared gameplay stream - a new draw here moves every later roll in the game. The pre-existing draw sites are allowlisted in eslint.config.js.',
+};
+
+/**
+ * The draw sites that predate `streamFor` and must keep the shared stream:
+ * moving them onto a derived stream would itself send every existing seed
+ * down a different future (the exact accident Z3 exists to prevent).
+ */
+const RAW_GAMEPLAY_RNG_ALLOWLIST = [
+  // Save, load and hashWorld capture and restore the stream's state.
+  'src/sim/World.ts',
+  // Breakdown rolls - gameplay draws since M6; modulation only ever happens
+  // by threshold shift at an identical draw count (Z3).
+  'src/sim/vehicles/lifecycle.ts',
+  // Industry spawn rolls - gameplay draws since M5.
+  'src/sim/industry/lifecycle.ts',
+];
+
 /** Modules the simulation must never reach for (architecture law #1). */
 const RENDER_SIDE_MODULES = [
   'pixi.js',
@@ -203,23 +253,19 @@ export default tseslint.config(
           message: `Architecture law #4: Math.${property} is not bit-exact across engines. Use src/sim/math.ts.`,
         })),
       ],
-      'no-restricted-syntax': [
-        'error',
-        {
-          selector: 'ForInStatement',
-          message:
-            'Architecture law #3: for...in enumeration order is not part of the deterministic contract.',
-        },
-        {
-          selector: "NewExpression[callee.name='Date']",
-          message: 'Architecture law #3: wall-clock time must not enter the simulation.',
-        },
-        {
-          selector: "CallExpression[callee.property.name='sort'][arguments.length=0]",
-          message:
-            'sort() without a total comparator is engine dependent. Always compare by a unique tie breaker (id) last.',
-        },
-      ],
+      'no-restricted-syntax': ['error', ...SIM_CORE_SYNTAX],
+    },
+  },
+
+  // -------------------------- Z3: RNG stream discipline (SPEC2 M10, D-106)
+  // Replaces the block above's no-restricted-syntax for every sim file NOT on
+  // the allowlist, adding the raw-draw tripwire on top of the core selectors;
+  // the allowlisted files keep the core selectors from the block above.
+  {
+    files: ['src/sim/**/*.ts'],
+    ignores: ['src/sim/SimWorker.ts', ...RAW_GAMEPLAY_RNG_ALLOWLIST],
+    rules: {
+      'no-restricted-syntax': ['error', ...SIM_CORE_SYNTAX, RAW_GAMEPLAY_RNG],
     },
   },
 

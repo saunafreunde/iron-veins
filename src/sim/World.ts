@@ -70,7 +70,7 @@ import type { Industry } from './industry/types';
 import { TileMap } from './map/TileMap';
 import { computeLandmasses, markOcean } from './mapgen/hydrology';
 import { generateMap, type GeneratedWorld, type MapGenProgress } from './mapgen';
-import { Rng } from './rng';
+import { Rng, streamSalt } from './rng';
 import type { Town } from './town/types';
 import type { CompanyState, GameDate, NewGameParams, RngState } from './types';
 
@@ -254,6 +254,33 @@ export class World {
   /** One company by id, falling back to the player for an unknown id. */
   companyOf(id: number): CompanyState {
     return this.companies[id] ?? this.companies[0]!;
+  }
+
+  /**
+   * An independent RNG stream derived from the world seed and `salt`
+   * (DECISIONS.md D-106, formalised as an API per SPEC2 Z3 / D-128).
+   *
+   * Every stochastic system OUTSIDE the pre-existing gameplay draws takes its
+   * randomness from here. A derived stream needs no saved state - the seed is
+   * saved and the salt is the caller's to reproduce - and however many numbers
+   * it draws, the shared gameplay stream `world.rng` sees exactly the sequence
+   * it saw before the system existed. That is the whole point: sharing one
+   * stream makes every balancing figure a hostage to the next feature.
+   *
+   * A periodic hook passes something that varies per invocation - the tender
+   * review passes the tick; a system seeded once passes its name. A NUMERIC
+   * salt is folded in exactly as D-106 folded the tick, which keeps the
+   * contract stream's draw sequences bit-identical to every save and replay
+   * recorded before this method existed. A STRING salt goes through
+   * `streamSalt` first.
+   *
+   * Allocates a generator, so it is for hooks and commands, never for the
+   * per-tick hot path (law #7). Takt and renewal arithmetic draw NO
+   * randomness at all, not even a named stream (D-093 precedent).
+   */
+  streamFor(salt: number | string): Rng {
+    const folded = typeof salt === 'number' ? salt | 0 : streamSalt(salt);
+    return Rng.fromSeed((this.seed + folded) | 0);
   }
 
   private constructor(params: NewGameParams, generated: GeneratedWorld) {

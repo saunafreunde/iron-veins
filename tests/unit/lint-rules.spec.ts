@@ -103,6 +103,49 @@ describe('laws #3 and #4: the simulation core stays deterministic', () => {
   });
 });
 
+describe('Z3: RNG stream discipline (D-106 as an API)', () => {
+  const worldParam = "import type { World } from '../World';\n";
+
+  it('flags a new raw draw on the shared gameplay stream inside src/sim', async () => {
+    const rules = await ruleIdsFor(
+      'src/sim/economy/__probe__.ts',
+      `${worldParam}export function f(world: World): number { return world.rng.nextFloat(); }\n`,
+    );
+    expect(rules).toContain('no-restricted-syntax');
+  });
+
+  it('does not flag a stream derived through world.streamFor', async () => {
+    const rules = await ruleIdsFor(
+      'src/sim/economy/__probe__.ts',
+      `${worldParam}export function f(world: World): number { return world.streamFor('probe').nextFloat(); }\n`,
+    );
+    expect(rules).not.toContain('no-restricted-syntax');
+  });
+
+  it('leaves the pre-existing draw sites alone', async () => {
+    // Breakdown and industry rolls keep the shared stream deliberately -
+    // migrating them would send every existing seed down a different future.
+    for (const site of ['src/sim/vehicles/lifecycle.ts', 'src/sim/industry/lifecycle.ts']) {
+      const rules = await ruleIdsFor(
+        site,
+        `${worldParam}export function f(world: World): number { return world.rng.nextFloat(); }\n`,
+      );
+      expect(rules).not.toContain('no-restricted-syntax');
+    }
+  });
+
+  it('keeps the core determinism selectors in the allowlisted files', async () => {
+    // The allowlist lifts ONLY the raw-draw tripwire; flat config replaces a
+    // rule wholesale, so this asserts the restated block did not drop the
+    // law #3 selectors on the way.
+    const rules = await ruleIdsFor(
+      'src/sim/vehicles/lifecycle.ts',
+      'export const v = new Date();\n',
+    );
+    expect(rules).toContain('no-restricted-syntax');
+  });
+});
+
 describe('repository hygiene (section 24)', () => {
   it('rejects leftover markers in any source file', async () => {
     for (const marker of ['// TODO: later', '// FIXME broken', '// not implemented yet']) {

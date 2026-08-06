@@ -28,6 +28,24 @@ function splitmix32(state: number): number {
   return (z ^ (z >>> 15)) | 0;
 }
 
+/**
+ * Fold a stream name into a 32 bit salt for `World.streamFor`.
+ *
+ * FNV-1a (32 bit) over the string's UTF-16 code units. Everything here is
+ * integer arithmetic ECMA-262 defines exactly - `charCodeAt`, xor, `imul` -
+ * so the same name yields the same salt on every engine, which is the
+ * property every derived stream inherits its determinism from. The constants
+ * are the FNV-1a offset basis and prime, algorithm-defining bit patterns in
+ * the same sense as the splitmix32 multipliers above.
+ */
+export function streamSalt(name: string): number {
+  let hash = 0x811c9dc5 | 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = Math.imul(hash ^ name.charCodeAt(i), 0x01000193);
+  }
+  return hash | 0;
+}
+
 export class Rng {
   private s0: number;
   private s1: number;

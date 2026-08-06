@@ -2144,3 +2144,72 @@ Whether any of it happens is a SETTING per D-110 - `dayNight` in
 because two worlds with the same seed and commands are identical whatever it
 says, which is the definition of a setting and the reason it must never
 become a world rule.
+
+### D-128 The stream discipline of D-106 is an API now, and a numeric salt is the old construction verbatim
+
+D-106 stated the rule - a new stochastic system gets its own RNG stream,
+because sharing one makes every balancing figure a hostage to the next
+feature - but it existed only as a comment in `contracts.ts` and a paragraph
+in this log. SPEC2 Z3 makes it law and M10 makes it callable:
+`world.streamFor(salt)` derives an independent generator from the world seed
+and a salt, and every stochastic system from here on draws from it. A derived
+stream needs no saved state - the seed is saved and the salt is the caller's
+to reproduce - and however many numbers it draws, the shared gameplay stream
+sees exactly the sequence it always saw. A periodic hook passes something
+that varies per invocation (the tender review passes the tick); a system
+seeded once passes its name.
+
+Two choices carry the compatibility:
+
+**A numeric salt folds in exactly as D-106 folded the tick.** The tender
+review seeded its private stream by hand as `Rng.fromSeed((seed + tick) | 0)`;
+`streamFor(tick)` computes the same expression bit for bit, so migrating
+`contracts.ts` onto the API changed no draw sequence - `streamFor.spec.ts`
+proves the identity against the original construction, and no save, replay or
+balancing figure moved. A string salt goes through `streamSalt` first
+(FNV-1a 32 over the UTF-16 code units, exact integer operations only), which
+gives the named streams SPEC2 already speaks of - `weather`, `economy` - a
+spelling that cannot collide by an accident of call order. Both derivations
+are frozen with golden digests in the spirit of `rng.spec.ts`, because a
+changed derivation is a changed future for every stream a save relies on.
+`streamFor` allocates a generator, so it is for hooks and commands, never for
+the per-tick hot path (law #7).
+
+**The lint flag is a tripwire, not a proof - the law #1 import ban precedent.**
+`no-restricted-syntax` now flags any `world.rng` member access under
+`src/sim` outside three allowlisted files: `World.ts` (save, load and
+`hashWorld` capture the stream's state), `vehicles/lifecycle.ts` (the
+breakdown rolls) and `industry/lifecycle.ts` (the spawn rolls). Those sites
+KEEP the shared stream deliberately: moving them onto derived streams would
+itself send every existing seed down a different future, which is the exact
+accident Z3 exists to prevent. Per Z3 their modulation only ever happens by
+threshold shift at an identical draw count, and takt and renewal arithmetic
+draw no randomness at all, not even a named stream (D-093). An alias like
+`const w = world` would slip past the selector; review catches that, exactly
+as it does for a re-exported render import.
+
+### D-129 The 8.4 road congestion term is deferred to M15, not forgotten
+
+SPEC.md 8.4 prices road pathfinding with a congestion term - vehicles per
+tile over the last 200 ticks - and the `RoadPathfinder` has never carried it:
+its cost is distance plus a slope penalty, nothing else. Until now that was
+an undocumented omission, which the audit flagged, and the rule of this file
+is that an undocumented departure is a defect. This entry is the placeholder
+M10 owes; the M15 implementation entry replaces it.
+
+The deferral is deliberate, and the shape of the eventual fix is already
+decided (SPEC2 E-02): the term is HISTORICAL by definition, so under Z4 it
+must be a saved and hashed layer, never derived - a Uint8 layer in map size,
+incremented on tile entry, decayed by a deterministic lazy-epoch exponential
+per tile with a dirty list rather than a million-tile scan. Two of the five
+expansion drafts wrote "derived, no save change" for exactly this layer and
+two judges vetoed it by name: a layer rebuilt empty on load gives different
+A* costs after loading than before saving, which is different routes from the
+same state - law #3 broken silently. That is also why the term cannot ship in
+M10: a saved layer is new save surface, M10's bump (v23) is the digest and
+metadata block, and Z5 allows exactly one bump per state-touching milestone.
+The layer lands in M15's scheduled v26 alongside the block occupancy and
+signal penalties of the same table, where a two-route fixture can prove that
+200 lorries on a bottleneck actually divert - the term, its persistence and
+its effect measured together instead of a constant smuggled in ahead of its
+test.
