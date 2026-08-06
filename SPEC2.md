@@ -256,16 +256,46 @@ Single-Thread-Fallback (würde Gesetz 10 forken). Der Audit hat verifiziert:
 Nicht-Entscheiden wäre stilles Entscheiden gegen den Kanal
 (`SimClient.ts:57` hard-throw). Landet in M25.
 
-**E-14 · Prozedural-Kunst-Gesetz bestätigt und verschärft.** Alle neuen
-Atlas-Seiten werden zur **Laufzeit** generiert (TerrainAtlas-Muster;
-`DECISIONS.md`-Eintrag dokumentiert die Abweichung von 16.2s Build-Zeit-Bake) —
-nur so ist die Saison-/Ären-Regeneration überhaupt möglich. Musik und alle
-Sounds sind WebAudio-Synthese auf dem injizierten AudioContext (headless
-testbar, M9-Muster); Kartentext über eine beim Start aus Systemschriften
-gerasterte BitmapFont. Ein Glob-Test weist jedes Binär-Bild-/Audio-/Font-Asset
-im Repo als roten Build aus. Die fal.ai-Pipeline des Owners ist für das
-Kernspiel ausdrücklich ausgeschlossen — auch als „Build-Time-Pack mit
-eingecheckten Prompts".
+**E-14 · Kunst-Quelle: Kenney-CC0-Kits gebacken, Prozedural als Terrain-Gesetz
+und Lückenfüller** *(revidiert 06.08.2026 auf Owner-Direktive: „nutzt kenney.nl
+für die 3d grafiken" — die Direktive schlägt die frühere Nur-Prozedural-
+Fassung; die Historie steht in `DECISIONS.md`)*.
+
+* **Objekte kommen aus Kenney-3D-Kits** (CC0, keine Attribution nötig, Credits
+  trotzdem in README + Abspann): Train Kit (Züge/Trams/Gleisdekor), Car Kit,
+  Watercraft Kit (+ Pirate Kit für frühe Schiffe), City Kits
+  (Roads/Commercial/Suburban/Industrial), Factory Kit, Building Kit, Modular
+  Buildings, Nature Kit. Der Weg ist ein **Build-Zeit-Bake** — exakt die
+  Pipeline, die SPEC.md 16.2 immer vorsah, mit Kenney-Geometrie statt
+  Beschreibungstext als Quelle: `npm run assets:fetch` lädt die Kits gegen ein
+  eingechecktes **Manifest (URLs + SHA-256 + Modell→Katalog-Zuordnung, reiner
+  Text)** in einen gitignorierten Cache; `npm run assets:bake` rastert die
+  GLB-Modelle mit einem kleinen eigenen Software-Rasterizer (flat-shaded,
+  orthographisch, EXAKT die dimetrische 64×32-Kamera aus SPEC.md 16.1) in
+  PNG-Atlanten + JSON-Manifeste pro Zoomstufe — **8 Facings pro Fahrzeug**,
+  Firmenfarbe über materialbenannte Recolor-Zonen (Zwei-Pass-Tint),
+  Anker-Metadaten (Schornsteine, Fenster/Emissive) aus dem Manifest. Ausgabe
+  ist Build-Artefakt, niemals Commit.
+* **Kein Binärasset im GIT** — die Regel bleibt und der Glob-Test bleibt ihr
+  Wächter (er prüft eingecheckte Dateien; Cache und Bake-Ausgabe sind
+  gitignored). Das Spiel bleibt vollständig offline: `assets:fetch` ist ein
+  Entwickler-/Build-Schritt, nie Spiel-Laufzeit. Determinismus unberührt —
+  Render-Assets erreichen die Sim nie.
+* **Terrain, Gleise, Straßen, Wasser bleiben Laufzeit-prozedural**
+  (TerrainAtlas-Muster): sie brauchen die Saison-/Ären-REGENERATION (M18/M23)
+  und die 16-Steigungs-Eckengeometrie, die kein Kit abbildet. Gebackene
+  Objekt-Sprites erhalten Saison-/Nacht-Varianten als **Bake-Zeit-Zeilen**
+  (Emissive-/Winter-Pass beim Baken), nicht zur Laufzeit.
+* **Prozedural (`shapes.ts`) bleibt Pflicht-Fallback und Lückenfüller:**
+  Flugzeuge (kein Kenney-3D-Kit existiert), Industrie-Sonderbauten
+  (Förderturm, Bohrturm) soweit Kits sie nicht hergeben, frühe Ären 1850–1920
+  soweit die City Kits nicht reichen, und jeder Dev-Build ohne gefüllten
+  Asset-Cache (das Spiel startet IMMER, notfalls mit prozeduraler Optik).
+* Musik und alle Sounds bleiben WebAudio-Synthese auf dem injizierten
+  AudioContext (headless testbar, M9-Muster); Kartentext über eine beim Start
+  aus Systemschriften gerasterte BitmapFont. Die fal.ai-Pipeline des Owners
+  ist für das Kernspiel weiterhin ausdrücklich ausgeschlossen — auch als
+  „Build-Time-Pack mit eingecheckten Prompts".
 
 **E-15 · Ären-Spanne: 1850 bis endlos.** `startYear` (Presets
 1850/1880/1920/1950) und `endless` sind Weltregeln; der MAX_TICK-Stopp
@@ -603,6 +633,13 @@ Sim-Kontakt, null Save-Bumps.
 
 **MUSS:**
 
+* **Stufe 0 — Kenney-Asset-Bake-Pipeline (E-14):** `tools/assets-manifest.json`
+  (Pack-URLs + SHA-256 + Modell→Katalog-Zuordnung + Anker), `npm run
+  assets:fetch` (Checksum-verifiziert, Cache gitignored), `npm run assets:bake`
+  (eigener Software-Rasterizer: GLB → dimetrische PNG-Atlanten + JSON, 8
+  Facings, Recolor-Zonen, Zoomstufen). Reproduzierbar: zweimal Baken =
+  bit-identische Atlanten. Läuft ohne Cache durch (prozeduraler Fallback,
+  Warnung statt Abbruch).
 * 32×32-Tile-`RenderTexture`-Chunks mit Kamera-AABB-Culling, Rebake nur bei
   Map-Revision und nur berührte Chunks, AKTIV bei Zoom ≤ 0,5×; Detail-Zooms
   behalten den M10-drawOrder-Pfad. Chunk-Rebake gemessen ≤ 4 ms.
@@ -637,20 +674,30 @@ Sim-Wahrheit, Partikel mit Budget. Render-only; ein Snapshot-Layout-Bump.
 
 **MUSS:**
 
-* Deklarativer Kunstdatensatz pro Katalogeintrag (`{form, dims, colorZones,
-  details}`, ~12 Zeilen) für ALLE Traktionen, Wagen, Straßenfahrzeuge,
-  Schiffe, Flugzeuge — zur Laufzeit von `shapes.ts` auf Atlas-Seite 1
-  gerastert (E-14); 8 Facings aus dem (NextTile−Tile)-Delta; Firmenfarbe über
-  Zwei-Pass-Tint-Zonen; deterministische Varianz via `hash(vehicleId)`;
-  Kontaktschatten (NW-Licht) je Zelle + weiche Ellipse unter Fahrzeugen.
+* Fahrzeug-Sprites aus dem Kenney-Bake (E-14, Pipeline aus M12 Stufe 0):
+  jeder Katalogeintrag (Traktionen, Wagen, Straßenfahrzeuge, Schiffe) erhält
+  im Manifest seine Modell-Zuordnung `{modell, scale, colorZones, anker}`;
+  **Flugzeuge prozedural** über denselben deklarativen `shapes.ts`-Datensatz
+  (kein Kenney-3D-Flugzeug-Kit — Lücke ist in E-14 protokolliert); 8 Facings
+  aus dem (NextTile−Tile)-Delta; Firmenfarbe über Zwei-Pass-Tint-Zonen;
+  deterministische Varianz via `hash(vehicleId)`; Kontaktschatten (NW-Licht)
+  je Zelle + weiche Ellipse unter Fahrzeugen.
 * Konsist-Rendering: ein 10-Wagen-Kohlezug ist 10 sichtbare Wagen entlang der
   interpolierten Pfad-Historie; Kompositions-Digests über den Marker-Kanal,
   render-seitig gecacht (E-05).
+* Gebäude-, Stadt- und Industrie-Sprites aus dem Kenney-Bake (City Kits,
+  Factory Kit, Building Kit, Nature Kit — E-14): Stadtarchitektur nach
+  Zone+Level aus dem Manifest gemappt, Industrie-Silhouetten je Typ;
+  `shapes.ts`-Silhouetten (D-117) bleiben für Typen ohne Kit-Deckung
+  (Förderturm, Bohrturm) und als Cache-loser Fallback; Schornstein-/Emitter-
+  Anker kommen einheitlich aus dem Manifest bzw. `industryArt.ts`.
 * Tag/Nacht voll (SPEC.md 16.3): Dämmerungskurve als Konstanten; **emissive
-  Atlas-Seite 2** — jede Gebäude-/Industrie-/Stationszelle mit nur
-  Fenstern/Lampen regeneriert (`windows()` kennt die Positionen), additiv bei
-  Nacht; Straßenlampen; Fahrzeug-Scheinwerfer; Modulation luminanz-basiert,
-  gegen beide Paletten (auch farbenblind) getestet.
+  Atlas-Seite 2** — für gebackene Kenney-Zellen als Bake-Zeit-Emissive-Pass
+  (Fenster-/Lampen-Materialien aus den Anker-Metadaten des Manifests), für
+  prozedurale Zellen regeneriert mit nur Fenstern/Lampen (`windows()` kennt
+  die Positionen); additiv bei Nacht; Straßenlampen; Fahrzeug-Scheinwerfer;
+  Modulation luminanz-basiert, gegen beide Paletten (auch farbenblind)
+  getestet.
 * Signalaspekte rot/grün aus dem Reserved-Tile-Block + render-seitigem
   BlockIndex (F3-Wissen wird Weltkunst); vier Signaltypen per Mast-Silhouette
   unterscheidbar; Fahrleitungsmasten auf elektrifizierter Strecke (neue

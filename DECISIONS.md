@@ -36,7 +36,7 @@ no entry below. A number may appear under several topics.
 - **Competitors, AI & tenders:** D-107, D-108, D-109, D-115, D-116, D-121,
   D-122
 - **Rendering & art:** D-013, D-014, D-033, D-035, D-112, D-117, D-125, D-127,
-  D-136
+  D-136, D-140
 - **UI & input:** D-011, D-013, D-015, D-035, D-110, D-113, D-114, D-119,
   D-126
 - **Performance & measurement:** D-002, D-120, D-135, D-136
@@ -44,7 +44,7 @@ no entry below. A number may appear under several topics.
   D-030, D-031
 - **Crash safety:** D-132, D-139
 - **Testing method & fixtures:** D-010, D-038, D-072, D-074, D-084, D-133
-- **Process & specification:** D-070, D-123, D-129, D-133, D-138
+- **Process & specification:** D-070, D-123, D-129, D-133, D-138, D-140
 
 ---
 
@@ -2648,3 +2648,39 @@ find again (D-132), so there is nothing stored, the scan finds nothing, and
 the notice never renders. The offer-on-next-start flow is a desktop feature
 not because anything gates it, but because only the desktop keeps anything to
 offer.
+
+### D-140 The art source is Kenney's CC0 kits, baked at build time; procedural stays the terrain law and the fallback
+
+An owner directive (2026-08-06, "nutzt kenney.nl für die 3d grafiken")
+revises E-14, which until then confirmed pure procedural art. The directive
+outranks the document - that is exactly what this file is for - and the
+revised E-14 in SPEC2.md section 5 carries the full integration design. The
+short form:
+
+- **Source:** Kenney's CC0 3D kits (Train, Car, Watercraft, Pirate, the four
+  City kits, Factory, Building, Modular Buildings, Nature). CC0 needs no
+  attribution; credits go into README and the credits screen anyway.
+- **Mechanism:** the build-time bake SPEC.md 16.2 always described, fed with
+  Kenney geometry instead of declarative text. A checked-in TEXT manifest
+  (pack URLs, SHA-256, model-to-catalogue mapping, anchor metadata) drives
+  `assets:fetch` into a gitignored cache; `assets:bake` rasterises the GLB
+  models with a small software rasteriser through the exact dimetric 64x32
+  camera into atlas PNGs + JSON per zoom level, eight facings per vehicle,
+  company colour via material-named recolour zones. Output is a build
+  artifact, never a commit - the no-binary-art-in-git rule and its glob test
+  stand unchanged, and the game stays fully offline (fetch is a developer
+  step, never game runtime). Determinism is untouched: render assets never
+  reach the sim.
+- **What stays procedural, permanently:** terrain, track, roads and water
+  (they need the season/era REGENERATION of M18/M23 and the sixteen-slope
+  corner geometry no kit models), and as gap fillers: aircraft (no Kenney 3D
+  aircraft kit exists), industry specials the kits lack (headframe, derrick),
+  early-era architecture 1850-1920 where the City kits run out. Every dev
+  build without a filled cache starts with procedural art and a warning -
+  the game must never refuse to start over a missing download.
+- **Explicitly still excluded:** the owner's fal.ai pipeline for the core
+  game, in any form.
+
+Lands as stage 0 of M12 (the pipeline) and throughout M13 (vehicles,
+buildings, industries). SPEC2.md's M12/M13 sections were amended in the same
+commit as this entry.
