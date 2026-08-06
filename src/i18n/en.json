@@ -536,6 +536,8 @@
   "ui.options.language": "Language",
   "ui.options.uiScale": "Interface size",
   "ui.options.uiScaleHint": "Scales text, panels and spacing. The map is unaffected.",
+  "ui.options.dayNight": "Day/night cycle on the map",
+  "ui.options.dayNightHint": "A gentle colour shift following the game day. Purely visual — the simulation is unaffected.",
   "ui.options.audioEnabled": "Sound on",
   "ui.options.volumeEffects": "Effects",
   "ui.options.volumeAmbience": "Vehicles",

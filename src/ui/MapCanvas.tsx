@@ -175,6 +175,7 @@ export function MapCanvas({ client }: { readonly client: SimClient }): ReactElem
   const tool = useSimStore((s) => s.tool);
   const trackPreview = useSimStore((s) => s.trackPreview);
   const connectPlan = useSimStore((s) => s.connectPlan);
+  const dayNight = useSimStore((s) => s.settings.dayNight);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -356,6 +357,9 @@ export function MapCanvas({ client }: { readonly client: SimClient }): ReactElem
     useSimStore.getState().setCentreOnTile((x, y) => view.centreOnTile(x, y));
     view.setVehicleSource(() => client.readVehicles());
     view.setReservedSource(() => client.readReserved());
+    // The day/night curve reads the published tick, never the wall clock.
+    view.setTickSource(() => client.readTick());
+    view.setDayNight(useSimStore.getState().settings.dayNight);
     void view.attach(host);
 
     /**
@@ -415,6 +419,10 @@ export function MapCanvas({ client }: { readonly client: SimClient }): ReactElem
   useEffect(() => {
     viewRef.current?.setBlockOverlay(showDebug);
   }, [showDebug]);
+
+  useEffect(() => {
+    viewRef.current?.setDayNight(dayNight);
+  }, [dayNight]);
 
   useEffect(() => {
     // The deadlock markers of section 9.3. The clock lives per vehicle in the

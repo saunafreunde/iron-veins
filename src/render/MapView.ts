@@ -40,6 +40,7 @@ export interface VehicleAudioInput {
   distance: number;
 }
 import { ATLAS_SCALE, buildTerrainAtlas, type AtlasFrame, type TerrainAtlas } from './TerrainAtlas';
+import { DAY_TINT_NEUTRAL, dayNightTint } from './dayNight';
 
 /**
  * The isometric map view.
@@ -166,6 +167,12 @@ export class MapView {
   private stations: readonly StationMarker[] = [];
   /** Company colour, applied to stations and vehicles as a tint. */
   private companyTint = 0xf08020;
+  /** Day/night modulation (section 16.3), a SETTING per D-110/D-127. */
+  private dayNight = true;
+  /** Where the renderer reads the published tick for the day/night curve. */
+  private tickSource: (() => number) | null = null;
+  /** Last world tint applied, so an unchanged frame does not dirty the tree. */
+  private appliedTint = DAY_TINT_NEUTRAL;
   /** Where the renderer fetches the per-tick vehicle block from. */
   private vehicleSource: (() => { data: Int32Array; count: number }) | null = null;
   private previewRoute: readonly number[] | null = null;
@@ -266,6 +273,16 @@ export class MapView {
   /** Where the F3 overlay reads the claimed track from. */
   setReservedSource(source: () => { data: Int32Array; count: number }): void {
     this.reservedSource = source;
+  }
+
+  /** Where the day/night curve reads the published tick from. */
+  setTickSource(source: () => number): void {
+    this.tickSource = source;
+  }
+
+  /** Turn the day/night modulation on or off (options screen, D-110). */
+  setDayNight(on: boolean): void {
+    this.dayNight = on;
   }
 
   /** Turn the block overlay on or off (F3). */
@@ -417,6 +434,19 @@ export class MapView {
       this.app.screen.width / 2 - this.centreX * this.zoom,
       this.app.screen.height / 2 - this.centreY * this.zoom,
     );
+
+    // Day/night (section 16.3): ONE tint on the tile/vehicle container,
+    // computed once per frame from the snapshot tick and multiplied down the
+    // tree by the GPU - never per-sprite work. The overlay Graphics and the
+    // minimap are deliberately outside it: selection markers, previews and the
+    // F3 blocks are interface, and interface does not dim at night (D-127).
+    const tint = this.dayNight
+      ? dayNightTint(this.tickSource === null ? 0 : this.tickSource())
+      : DAY_TINT_NEUTRAL;
+    if (tint !== this.appliedTint) {
+      this.appliedTint = tint;
+      this.tiles.tint = tint;
+    }
 
     const bounds = this.visibleTileBounds(map.size);
     const changed =

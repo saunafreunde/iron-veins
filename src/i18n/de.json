@@ -536,6 +536,8 @@
   "ui.options.language": "Sprache",
   "ui.options.uiScale": "Oberflächengröße",
   "ui.options.uiScaleHint": "Skaliert Schrift, Panels und Abstände. Die Karte bleibt unverändert.",
+  "ui.options.dayNight": "Tag-Nacht-Wechsel auf der Karte",
+  "ui.options.dayNightHint": "Sanfte Farbmodulation im Rhythmus des Spieltags. Rein optisch — die Simulation rechnet unverändert.",
   "ui.options.audioEnabled": "Ton einschalten",
   "ui.options.volumeEffects": "Effekte",
   "ui.options.volumeAmbience": "Fahrzeuge",

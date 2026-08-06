@@ -77,6 +77,16 @@ export function OptionsPanel({ onClose }: { readonly onClose: () => void }): Rea
             ))}
           </div>
           <p className="panel__hint">{t('ui.options.uiScaleHint')}</p>
+
+          <label className="panel__hint">
+            <input
+              type="checkbox"
+              checked={settings.dayNight}
+              onChange={(event) => updateSettings({ dayNight: event.target.checked })}
+            />{' '}
+            {t('ui.options.dayNight')}
+          </label>
+          <p className="panel__hint">{t('ui.options.dayNightHint')}</p>
         </>
       )}
 

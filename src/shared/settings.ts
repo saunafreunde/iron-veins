@@ -41,6 +41,11 @@ export interface AppSettings {
    * the map overlays (section 17.4).
    */
   readonly colorBlind: boolean;
+  /**
+   * Day/night colour modulation over the map (section 16.3). Render-only:
+   * a pure function of the snapshot tick, so the simulation never sees it.
+   */
+  readonly dayNight: boolean;
   /** Volume per channel, 0..1, indexed by VolumeChannel. */
   readonly volumes: readonly number[];
   /** Master switch for the whole audio engine. */
@@ -62,6 +67,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   locale: 'de',
   uiScalePercent: 100,
   colorBlind: false,
+  dayNight: true,
   volumes: [0.6, 0.4, 0, 0.5],
   audioEnabled: true,
   autosave: true,
@@ -96,6 +102,8 @@ export function normaliseSettings(raw: unknown): AppSettings {
         ? scale
         : DEFAULT_SETTINGS.uiScalePercent,
     colorBlind: value['colorBlind'] === true,
+    // Absent in files written before M10; on unless explicitly turned off.
+    dayNight: value['dayNight'] !== false,
     volumes,
     audioEnabled: value['audioEnabled'] !== false,
     autosave: value['autosave'] !== false,

@@ -287,6 +287,14 @@ export class SnapshotReader {
     };
   }
 
+  /**
+   * Tick of the published generation, without advancing the read marker.
+   * The day/night modulation reads it every frame (section 16.3).
+   */
+  currentTick(): number {
+    return this.i32Slots[this.peekGeneration() & 1]![SnapshotI32.Tick]!;
+  }
+
   /** Claimed tiles of the published tick, for the F3 overlay. */
   currentReserved(): { readonly data: Int32Array; readonly count: number } {
     const generation = this.peekGeneration();

@@ -2102,3 +2102,45 @@ alternative was a new command kind - new save surface, new replay surface,
 new determinism-runner case - for an action whose cost is EUR 225 at 1950
 prices. If cycling ever becomes something players do constantly, the command
 is the fix, not a UI-side refund.
+
+### D-127 Day and night is one tint on the world container, anchored to a morning
+
+Section 16.3 asks for the time of day as a soft colour modulation over the
+whole canvas - never per sprite - with a cycle of one game day, switchable
+off. M10 delivers the minimal form; the emissive windows, lamps and headlights
+of the full treatment follow in M13.
+
+The shape it took: a pure function `dayNightTint(tick)` in
+`src/render/dayNight.ts` maps the snapshot tick to one 0xRRGGBB colour by
+linear interpolation over a handful of keyframes across the 200-tick day -
+daylight is the identity tint, night a gentle cool darkening, dawn and dusk a
+warm glow between them. `MapView` applies it ONCE per frame to the container
+that holds the tiles, structures and vehicles; Pixi multiplies a container
+tint down the tree on the GPU, so no sprite is ever touched individually, and
+the assignment is change-detected so a frame inside a plateau dirties
+nothing. The simulation is not involved at all: the curve reads the published
+tick out of the snapshot (a new `SnapshotReader.currentTick`, no layout
+change) and nothing else - the Z1 boundary, a pure function of snapshot
+fields.
+
+Two deliberate choices inside that:
+
+**The overlay and the minimap stay outside the modulation.** The SPEC says
+"over the whole canvas", and the tint deliberately covers less than that: the
+selection markers, the build preview, the F3 blocks and the minimap are
+interface, not world, and an interface that dims at night is an interface
+that is worse at night for no reason. The world container carries the tint;
+everything the player points WITH stays at full contrast.
+
+**Tick zero of a day is morning, not midnight.** The calendar has days, not
+hours, so the phase anchor was free to choose - and a new game starts at
+tick zero. Anchored at midnight, every fresh world would fade in dark and
+read as a rendering bug; anchored at morning, the first thing a player sees
+is the 16.3 palette in daylight, and dusk falls once the first day is half
+spent.
+
+Whether any of it happens is a SETTING per D-110 - `dayNight` in
+`AppSettings`, default on, a checkbox on the options screen's display tab -
+because two worlds with the same seed and commands are identical whatever it
+says, which is the definition of a setting and the reason it must never
+become a world rule.

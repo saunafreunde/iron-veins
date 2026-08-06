@@ -110,6 +110,11 @@ export class SimClient {
     return this.reader?.currentReserved() ?? { data: EMPTY_VEHICLES, count: 0 };
   }
 
+  /** Tick of the published snapshot, for the day/night curve. Render-only. */
+  readTick(): number {
+    return this.reader?.currentTick() ?? 0;
+  }
+
   /** Change the simulation speed. Control traffic - never affects the result. */
   setSpeed(speedIndex: number): void {
     this.post({ type: 'setSpeed', speedIndex });
@@ -150,9 +155,8 @@ export class SimClient {
   onCommandExecuted: ((kind: number, accepted: boolean) => void) | null = null;
 
   /** Called when the worker hands back an encoded save. */
-  onSaveWritten:
-    | ((message: Extract<WorkerToMainMessage, { type: 'saveWritten' }>) => void)
-    | null = null;
+  onSaveWritten: ((message: Extract<WorkerToMainMessage, { type: 'saveWritten' }>) => void) | null =
+    null;
 
   /** Stop the worker and the read loop. */
   dispose(): void {
