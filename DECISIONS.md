@@ -2013,3 +2013,92 @@ is the validity of old COMMAND LOGS - a recorded replay that terraformed under
 track now refuses where it once succeeded. That is the honest consequence
 E-11 names, and it is handled by the replay version-pinning decision, not by
 gating this guard.
+
+### D-125 Chunks were never built and the sprite path never sorted: the 16.1 history, settled as a hybrid
+
+Section 16.1 of SPEC.md prescribes two things the renderer of M1-M9 never
+delivered, and neither omission was ever written down - which makes both of
+them defects under this project's own first rule, not decisions. This entry is
+the missing record, and M10 closes the half that was a live bug.
+
+The first omission: 32x32-tile chunks baked to RenderTextures. M1 built a
+culled sprite pool instead because it was simpler and fast enough for the
+worlds of the early milestones, and every later milestone inherited that
+choice without re-examining it - a rebuilt chunk on every terraform looked
+dearer than drawing sprites, and nothing before the 2048 maps of the
+expansion forced the question. The second omission: vehicles sorted into the
+tile draw order. `projection.drawOrder()` was written in M1, documented,
+tested by nothing and CALLED by nothing; vehicles were drawn in a layer above
+the whole world, because before M3 there was neither rail nor any hill a
+vehicle could disappear behind, and once there was, nobody looked back. The
+visible symptom: a train drives THROUGH a mountain instead of behind it.
+
+The expansion audit settled the architecture as a hybrid (SPEC2 E-04), and
+the reasoning is worth keeping: full-map chunking was vetoed because a baked
+texture can never interleave moving vehicles into the (x + y) diagonal order -
+the two goals of 16.1 contradict each other unless the renderer is split by
+zoom. Dropping chunks entirely was vetoed too, because the 0.25x abstract
+mode and the editor brushes of the expansion would stand on a known
+performance hole. So: chunks ONLY at zoom <= 0.5, where 16.1 itself strips
+the detail sprites (M12 implements them); at 1x, 2x and 4x the sprite path
+draws, sorted by `projection.drawOrder()`.
+
+M10 wires the sorting. Every tile sprite carries its drawOrder key as zIndex,
+the vehicle sprites live in the SAME sorted container - a vehicle layer on
+top can never put a train behind a hill - and a vehicle takes the key of the
+tile it mostly covers, snapping at half progress. Pixi's zIndex setter is
+change-detected, so a frame in which no vehicle crosses a tile edge sorts
+nothing. Two refinements the flat key needed: an industry is keyed on the
+FRONT corner of its footprint, so its artwork is not overdrawn by its own
+footprint's ground, and a station module sits at a layer above the track it
+covers and below a vehicle standing on it - a train at a platform must be
+visible, hills in front of the station must still win.
+
+### D-126 The M10 UI defect list: every dead end in the interface, and how each became reachable
+
+Five verified interface defects, one entry, because the decisions interlock.
+
+**Manual build mode existed and was unreachable.** `planTrack` has carried an
+`assistant` flag since M3, and both call sites hardcoded `true` - the literal
+line of section 8.2 could not be laid. The flag is now UI state (`assistant`,
+default on), toggled by M exactly as the D-114 table and the option screen's
+description always claimed, and shown as a checkbox on the track and connect
+tools. The M key had meanwhile drifted to toggling auto-signalling - a
+feature that has its own checkbox and never had a key in the table. The
+connect flow carries the flag INSIDE the plan: the confirmation builds with
+the flag the plan was priced with, not with the live toggle, or flipping M
+between planning and confirming would change what the button charges (the
+D-119 promise).
+
+**Esc disarms before it menus.** An armed tool, a set road anchor, a
+half-planned connection - Esc clears those first and only opens the menu when
+nothing is armed. The preview line lives in the renderer, so the map canvas
+now follows the store: no track preview and no connect plan means no green
+route, which also cures the cancelled connect plan that kept its route on the
+map for ever.
+
+**N cycles the minimap.** The mode was component-local state, so no key could
+reach it; it moved into the store, where the N key and the mode buttons drive
+one value. Refit needed the same treatment in reverse: `RefitVehicle` had a
+validator, a tutorial lesson and no issuer. It is now a depot action in the
+fleet panel - one button per cargo the vehicle can convert to - and the panel
+predicts the validator rather than paraphrasing it: `standsInDepot` mirrors
+the D-076 rule (a freshly bought vehicle is Stopped on its depot tile, not
+InDepot, and must refit), `refitTargets` uses the same capacity lookup the
+command rejects CannotCarry with, and the sim was not touched.
+
+**A signal's direction is chosen by clicking, not hardcoded.** The tool sent
+`TrackDir.East` with every signal it ever placed, which the two-way kinds
+ignored - and the one-way kinds were simply unreachable by hand. The chosen
+UX: the first click places the two-way signal of the armed family, every
+further click on the same tile cycles it - one-way once per track direction
+(read from the TILE's track bits, plain line has exactly two), then back to
+two-way. No modifier, no direction panel; the tile panel shows the standing
+kind with a screen-oriented arrow. Because the simulation deliberately has no
+modify-signal command, a cycle step is a DemolishSignal plus a BuildSignal,
+sent as a pair; each step therefore costs the demolition haircut
+(75 % of the signal price is not refunded). That is accepted and stated: the
+alternative was a new command kind - new save surface, new replay surface,
+new determinism-runner case - for an action whose cost is EUR 225 at 1950
+prices. If cycling ever becomes something players do constantly, the command
+is the fix, not a UI-side refund.

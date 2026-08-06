@@ -61,8 +61,9 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
   const rejectionSeq = useSimStore((s) => s.rejectionSeq);
   const setRejection = useSimStore((s) => s.setRejection);
   const speedIndex = useSimStore((s) => s.speedIndex);
-  const autoSignal = useSimStore((s) => s.autoSignal);
-  const setAutoSignal = useSimStore((s) => s.setAutoSignal);
+  const assistant = useSimStore((s) => s.assistant);
+  const setAssistant = useSimStore((s) => s.setAssistant);
+  const cycleMinimapMode = useSimStore((s) => s.cycleMinimapMode);
   const overlay = useSimStore((s) => s.overlay);
   const setOverlay = useSimStore((s) => s.setOverlay);
   const setTool = useSimStore((s) => s.setTool);
@@ -94,10 +95,20 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
           event.preventDefault();
           client.setSpeed(speedIndex === 0 ? lastRunningSpeed.current : 0);
           return;
-        case 'Escape':
+        case 'Escape': {
           event.preventDefault();
+          // An armed tool goes first: Esc means "get me out of this", and it
+          // only means the menu once there is nothing left to disarm. setTool
+          // also clears the road anchor, the track preview and the connect
+          // flow - everything a half-finished build has lying around.
+          const armed = useSimStore.getState().tool !== 'none';
+          if (overlay === null && armed) {
+            setTool('none');
+            return;
+          }
           setOverlay(overlay === null ? 'menu' : null);
           return;
+        }
         case 'F1':
           event.preventDefault();
           setOverlay(overlay === 'handbook' ? null : 'handbook');
@@ -110,9 +121,15 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
           event.preventDefault();
           void quickLoad(client);
           return;
+        // The route assistant toggle of the D-114 table. Auto-signalling has
+        // its own checkbox on the track tool; it never had a key of its own.
         case 'm':
         case 'M':
-          setAutoSignal(!autoSignal);
+          setAssistant(!assistant);
+          return;
+        case 'n':
+        case 'N':
+          cycleMinimapMode();
           return;
         case '1':
         case '2':
@@ -148,7 +165,7 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [client, speedIndex, toggleDebug, toggleList, overlay, setOverlay, setTool, autoSignal, setAutoSignal]);
+  }, [client, speedIndex, toggleDebug, toggleList, overlay, setOverlay, setTool, assistant, setAssistant, cycleMinimapMode]);
 
   // ------------------------------------------------------------- autosave
   //

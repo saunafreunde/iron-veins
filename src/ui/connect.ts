@@ -38,6 +38,13 @@ export interface ConnectPlan {
   readonly platforms: ReadonlyArray<{ readonly x: number; readonly y: number }>;
   /** Every tile of the route, for the map overlay. */
   readonly tiles: readonly number[];
+  /**
+   * Whether the plan was made by the route assistant or as the literal line.
+   * Carried IN the plan so the confirmation builds with exactly the flag it
+   * was priced with - toggling the mode between planning and confirming must
+   * not change what the button charges (section 17.3, D-119).
+   */
+  readonly assistant: boolean;
 
   readonly lengthM: number;
   readonly maxGradePermille: number;
@@ -104,6 +111,7 @@ export function planConnection(
   from: StationMarker,
   to: StationMarker,
   year: number,
+  assistant: boolean,
 ): ConnectResult {
   if (from.id === to.id) return { ok: false, reasonKey: 'ui.connect.sameStation' };
 
@@ -111,7 +119,7 @@ export function planConnection(
   const b = anchorFor(to, from.x, from.y);
   if (a === null || b === null) return { ok: false, reasonKey: 'ui.connect.noAnchor' };
 
-  const planned = planTrack(map, a.x, a.y, b.x, b.y, RailType.Plain, true);
+  const planned = planTrack(map, a.x, a.y, b.x, b.y, RailType.Plain, assistant);
   if (!planned.ok) return { ok: false, reasonKey: planned.reasonKey };
 
   const route = planned.route;
@@ -154,6 +162,7 @@ export function planConnection(
       toY: b.y,
       platforms,
       tiles: route.tiles,
+      assistant,
       lengthM: route.geometry.lengthM,
       maxGradePermille: route.geometry.maxGradePermille,
       minRadiusM: route.geometry.minRadiusM,

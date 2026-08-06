@@ -56,7 +56,7 @@ describe('planning a railway between two stations', () => {
     const s = scenario();
     const [from, to] = twoRoadStations(s);
 
-    const result = planConnection(s.world.map, from, to, s.world.date.year);
+    const result = planConnection(s.world.map, from, to, s.world.date.year, true);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
 
@@ -75,7 +75,7 @@ describe('planning a railway between two stations', () => {
   it('keeps the platforms one tile in from each end', () => {
     const s = scenario();
     const [from, to] = twoRoadStations(s);
-    const result = planConnection(s.world.map, from, to, s.world.date.year);
+    const result = planConnection(s.world.map, from, to, s.world.date.year, true);
     if (!result.ok) throw new Error(result.reasonKey);
 
     const map = s.world.map;
@@ -96,7 +96,7 @@ describe('planning a railway between two stations', () => {
     const s = scenario();
     const [from] = twoRoadStations(s);
 
-    const result = planConnection(s.world.map, from, from, s.world.date.year);
+    const result = planConnection(s.world.map, from, from, s.world.date.year, true);
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.reasonKey).toBe('ui.connect.sameStation');
@@ -132,7 +132,7 @@ describe('planning a railway between two stations', () => {
 
     const railStation = markerFor(s, 0);
     const roadStation = markerFor(s, 1);
-    const result = planConnection(s.world.map, railStation, roadStation, s.world.date.year);
+    const result = planConnection(s.world.map, railStation, roadStation, s.world.date.year, true);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
 
@@ -144,8 +144,8 @@ describe('planning a railway between two stations', () => {
     const early = scenario();
     const [a, b] = twoRoadStations(early);
 
-    const cheap = planConnection(early.world.map, a, b, 1950);
-    const dear = planConnection(early.world.map, a, b, 2000);
+    const cheap = planConnection(early.world.map, a, b, 1950, true);
+    const dear = planConnection(early.world.map, a, b, 2000, true);
     expect(cheap.ok && dear.ok).toBe(true);
     if (!cheap.ok || !dear.ok) return;
 

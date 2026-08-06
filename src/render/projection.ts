@@ -77,6 +77,26 @@ export function pickTile(map: TileMap, x: number, y: number): TilePoint | null {
 }
 
 /**
+ * Layer slot of a sprite within its tile, bottom to top. {@link drawOrder}
+ * packs the layer into the low three bits, so the whole range must stay
+ * below 8.
+ *
+ * A vehicle sits above the track, the platform and the canopy of its OWN tile
+ * - a train standing at a station has to be visible - and below the ground of
+ * any nearer diagonal, which is what makes it vanish behind a hill.
+ */
+export const DrawLayer = {
+  Ground: 0,
+  Road: 1,
+  Track: 2,
+  Signal: 3,
+  Building: 4,
+  Station: 5,
+  Vehicle: 6,
+} as const;
+export type DrawLayer = (typeof DrawLayer)[keyof typeof DrawLayer];
+
+/**
  * Draw order key. Tiles are painted back to front by (x + y); within one
  * diagonal the lower one goes first so a hill never covers the slope in front
  * of it (failure #17). Vehicles are sorted into the same sequence rather than
@@ -84,6 +104,34 @@ export function pickTile(map: TileMap, x: number, y: number): TilePoint | null {
  */
 export function drawOrder(tileX: number, tileY: number, height: number, layer: number): number {
   return ((tileX + tileY) * (MAX_HEIGHT + 1) + height) * 8 + layer;
+}
+
+/**
+ * Progress at which a vehicle's draw order hands over from the tile it is
+ * leaving to the tile it is entering: half way, when the sprite crosses the
+ * shared edge. [fraction of a tile]
+ */
+const VEHICLE_HANDOVER_PROGRESS = 0.5;
+
+/**
+ * Draw order of a moving vehicle (section 16.1): the key of the tile it
+ * mostly covers, at the vehicle layer. A vehicle is between two tiles most of
+ * the time, and a key interpolated between the two would order it against
+ * nothing - the tile keys are discrete - so it snaps at the tile edge.
+ */
+export function vehicleDrawOrder(
+  fromX: number,
+  fromY: number,
+  fromHeight: number,
+  toX: number,
+  toY: number,
+  toHeight: number,
+  progress: number,
+): number {
+  if (progress < VEHICLE_HANDOVER_PROGRESS) {
+    return drawOrder(fromX, fromY, fromHeight, DrawLayer.Vehicle);
+  }
+  return drawOrder(toX, toY, toHeight, DrawLayer.Vehicle);
 }
 
 /** Bounding box in world pixels that a whole map occupies. */

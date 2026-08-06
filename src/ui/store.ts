@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { setLocale as applyLocale, type Locale } from '../i18n';
 import type { TileInfo } from '../render/MapView';
+import { MINIMAP_MODE_COUNT, MinimapMode } from '../render/Minimap';
 import type {
   FinanceReport,
   CompanyMarker,
@@ -110,6 +111,14 @@ export interface SimUiState extends SnapshotValues {
   tool: Tool;
   /** Section 9.4: signal a dragged route automatically while laying it. */
   autoSignal: boolean;
+  /**
+   * Section 8.2: plan track with the route assistant, or lay the literal
+   * line. The M key of the D-114 table toggles it; the track and connect
+   * tools read it.
+   */
+  assistant: boolean;
+  /** Which minimap view is showing; the N key cycles it (section 17.2). */
+  minimapMode: MinimapMode;
   stations: readonly StationMarker[];
   fleet: readonly VehicleMarker[];
   /** The books, as the finance panel shows them (section 14.1). */
@@ -169,6 +178,9 @@ export interface SimUiState extends SnapshotValues {
   setSelectedTile: (tile: TileInfo | null) => void;
   setTool: (tool: Tool) => void;
   setAutoSignal: (on: boolean) => void;
+  setAssistant: (on: boolean) => void;
+  setMinimapMode: (mode: MinimapMode) => void;
+  cycleMinimapMode: () => void;
   setStations: (stations: readonly StationMarker[]) => void;
   setIndustries: (industries: readonly IndustryMarker[]) => void;
   setTowns: (towns: readonly TownMarker[]) => void;
@@ -241,6 +253,8 @@ export const useSimStore = create<SimUiState>((set) => ({
   selectedTile: null,
   tool: 'none',
   autoSignal: false,
+  assistant: true,
+  minimapMode: MinimapMode.Terrain,
   stations: [],
   fleet: [],
   finances: null,
@@ -296,6 +310,12 @@ export const useSimStore = create<SimUiState>((set) => ({
       connectError: null,
     }),
   setAutoSignal: (autoSignal) => set({ autoSignal }),
+  setAssistant: (assistant) => set({ assistant }),
+  setMinimapMode: (minimapMode) => set({ minimapMode }),
+  cycleMinimapMode: () =>
+    set((state) => ({
+      minimapMode: ((state.minimapMode + 1) % MINIMAP_MODE_COUNT) as MinimapMode,
+    })),
   setIndustries: (industries) => set({ industries }),
   setTowns: (towns) => set({ towns }),
   setFinances: (finances) => set({ finances }),

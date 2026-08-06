@@ -115,7 +115,9 @@ export function ConnectPanel({ client }: { readonly client: SimClient }): ReactE
               x2: plan.toX,
               y2: plan.toY,
               railType: RailType.Plain,
-              assistant: true,
+              // The flag the plan was PRICED with, not the live toggle: the
+              // preview and the bill must not part company (D-119).
+              assistant: plan.assistant,
               signalSpacing: autoSignal ? AUTO_SIGNAL_SPACING_TILES : 0,
             });
             for (const platform of plan.platforms) {

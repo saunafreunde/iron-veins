@@ -21,7 +21,9 @@ import {
 } from '../sim/constants';
 import { inflatedCostCt } from '../sim/cargo/payment';
 import { INDUSTRY_SPECS } from '../sim/industry/types';
+import { isOneWay, SIGNAL_KIND_KEYS, signalDirection, signalKind, SignalKind } from '../sim/map/signals';
 import { TERRAIN_NAME_KEYS } from '../sim/map/terrain';
+import { SCREEN_ARROWS } from './signalCycle';
 import { platformLength, type ModuleKind, type Station } from '../sim/station/types';
 import { RAIL_TYPE_COST_CT, RailType } from '../sim/map/track';
 import { ConnectPanel } from './ConnectPanel';
@@ -145,6 +147,8 @@ export function TilePanel({ client }: { readonly client: SimClient }): ReactElem
   const setTool = useSimStore((s) => s.setTool);
   const autoSignal = useSimStore((s) => s.autoSignal);
   const setAutoSignal = useSimStore((s) => s.setAutoSignal);
+  const assistant = useSimStore((s) => s.assistant);
+  const setAssistant = useSimStore((s) => s.setAssistant);
   const towns = useSimStore((s) => s.towns);
   const stations = useSimStore((s) => s.stations);
   const industries = useSimStore((s) => s.industries);
@@ -194,6 +198,22 @@ export function TilePanel({ client }: { readonly client: SimClient }): ReactElem
           />{' '}
           {t('ui.tool.autoSignal', { spacing: AUTO_SIGNAL_SPACING_TILES })}
         </label>
+      )}
+      {(tool === 'track' || tool === 'connect') && (
+        <label className="panel__hint">
+          <input
+            type="checkbox"
+            checked={assistant}
+            onChange={(event) => setAssistant(event.target.checked)}
+          />{' '}
+          {t('ui.tool.assistant')}
+        </label>
+      )}
+      {(tool === 'track' || tool === 'connect') && !assistant && (
+        <p className="panel__hint">{t('ui.tool.manualHint')}</p>
+      )}
+      {(tool === 'signal' || tool === 'pathsignal') && (
+        <p className="panel__hint">{t('ui.tool.signalCycleHint')}</p>
       )}
       {(tool === 'road' || tool === 'track') && (
         <p className="panel__hint">
@@ -265,6 +285,17 @@ export function TilePanel({ client }: { readonly client: SimClient }): ReactElem
             <dt>{t('ui.tile.town')}</dt>
             <dd className="value">{town?.name ?? t('ui.tile.openCountry')}</dd>
           </div>
+          {signalKind(tile.signal) !== SignalKind.None && (
+            <div>
+              <dt>{t('ui.tile.signal')}</dt>
+              <dd className="value">
+                {t(SIGNAL_KIND_KEYS[signalKind(tile.signal)] ?? '')}
+                {isOneWay(signalKind(tile.signal))
+                  ? ` ${SCREEN_ARROWS[signalDirection(tile.signal)]}`
+                  : ''}
+              </dd>
+            </div>
+          )}
         </dl>
       )}
 

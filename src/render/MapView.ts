@@ -10,7 +10,17 @@ import { MAX_HEIGHT } from '../sim/constants';
 import type { TileMap } from '../sim/map/TileMap';
 import { Terrain } from '../sim/map/terrain';
 import { BlockIndex } from '../sim/signals/blocks';
-import { HEIGHT_PX, pickTile, TILE_H, TILE_W, tileToWorld } from './projection';
+import {
+  DrawLayer,
+  drawOrder,
+  HEIGHT_PX,
+  pickTile,
+  TILE_H,
+  TILE_W,
+  tileToWorld,
+  vehicleDrawOrder,
+} from './projection';
+import { INDUSTRY_SPECS } from '../sim/industry/types';
 import { COMPANY_COLORS } from '../shared/palette';
 
 /** The company palette as Pixi tints, parsed once. */
@@ -95,6 +105,8 @@ export interface TileInfo {
   readonly terrain: number;
   readonly townId: number;
   readonly industryId: number;
+  /** Packed signal byte of the tile (kind + direction), 0 when there is none. */
+  readonly signal: number;
 }
 
 export class MapView {
@@ -171,7 +183,6 @@ export class MapView {
   private readonly vehicleScreen: { x: number; y: number }[] = [];
   private drawnVehicles = 0;
   private selectedVehicleId: number | null = null;
-  private readonly vehicleLayer = new Container();
 
   /**
    * Create the WebGL context and start rendering.
@@ -203,8 +214,12 @@ export class MapView {
     this.atlasTexture = Texture.from(this.atlas.canvas);
     this.atlasTexture.source.scaleMode = 'nearest';
 
+    // One sorted container for tiles AND vehicles: correct occlusion needs the
+    // vehicle sprites interleaved into the tile sequence by their drawOrder
+    // key (section 16.1) - a vehicle layer on top can never put a train
+    // behind a hill. Pixi only re-sorts when a zIndex actually changed.
+    this.tiles.sortableChildren = true;
     this.world.addChild(this.tiles);
-    this.world.addChild(this.vehicleLayer);
     this.world.addChild(this.overlay);
     this.app.stage.addChild(this.world);
 
@@ -386,6 +401,7 @@ export class MapView {
       terrain: map.terrain[index]!,
       townId: map.townId[index]!,
       industryId: map.industryId[index]!,
+      signal: map.signal[index]!,
     };
   }
 
@@ -493,9 +509,20 @@ export class MapView {
     return sprite;
   }
 
-  private place(sprite: Sprite, texture: Texture, worldX: number, worldY: number): void {
+  private place(
+    sprite: Sprite,
+    texture: Texture,
+    worldX: number,
+    worldY: number,
+    zIndex: number,
+  ): void {
     sprite.texture = texture;
     sprite.tint = 0xffffff;
+    // The drawOrder key of section 16.1. Insertion already runs along the
+    // diagonals, but only the key orders heights within a diagonal and sorts
+    // the vehicles in - and Pixi's zIndex setter is change-detected, so a
+    // rebuild that keeps a sprite's key costs no sort.
+    sprite.zIndex = zIndex;
     // Where the ground sits inside the cell is the ATLAS's business, and it
     // says so through `anchorY`. Assuming one height step here was an unwritten
     // agreement between two files, and it broke the moment the atlas grew
@@ -530,6 +557,7 @@ export class MapView {
           this.frameTexture(`t${terrain}:${slope}`, atlas.terrainFrame(terrain, slope)),
           world.x,
           world.y,
+          drawOrder(x, y, height, DrawLayer.Ground),
         );
 
         // A bridge deck is drawn at ITS height, not the ground's - that is the
@@ -538,12 +566,17 @@ export class MapView {
         const structure = map.structure[index]!;
         if (structure !== 0) {
           if (detailed && structure === BRIDGE_STRUCTURE) {
-            const deck = tileToWorld(x, y, map.structureHeight[index]!);
+            const deckHeight = map.structureHeight[index]!;
+            const deck = tileToWorld(x, y, deckHeight);
             this.place(
               this.take(used++),
               this.frameTexture('bridge', atlas.bridgeFrame()),
               deck.x,
               deck.y,
+              // The deck is the ground of its own level, and its track sits on
+              // it - both keyed at the DECK height, so a train on the bridge
+              // (railHeight) draws above them and the valley below stays under.
+              drawOrder(x, y, deckHeight, DrawLayer.Ground),
             );
             const bits = map.trackBits[index]!;
             for (let direction = 0; direction < 8; direction++) {
@@ -553,6 +586,7 @@ export class MapView {
                 this.frameTexture(`k${direction}`, atlas.trackFrame(direction)),
                 deck.x,
                 deck.y,
+                drawOrder(x, y, deckHeight, DrawLayer.Track),
               );
             }
           }
@@ -568,6 +602,7 @@ export class MapView {
             this.frameTexture(`r${roadBits}`, atlas.roadFrame(roadBits)),
             world.x,
             world.y,
+            drawOrder(x, y, height, DrawLayer.Road),
           );
         }
 
@@ -581,6 +616,7 @@ export class MapView {
               this.frameTexture(`k${direction}`, atlas.trackFrame(direction)),
               world.x,
               world.y,
+              drawOrder(x, y, height, DrawLayer.Track),
             );
           }
         }
@@ -591,6 +627,7 @@ export class MapView {
             this.frameTexture('signal', atlas.signalFrame()),
             world.x,
             world.y,
+            drawOrder(x, y, height, DrawLayer.Signal),
           );
         }
 
@@ -605,13 +642,15 @@ export class MapView {
             ),
             world.x,
             world.y,
+            drawOrder(x, y, height, DrawLayer.Building),
           );
         }
       }
     }
 
-    // Industry blocks sit on their origin tile, drawn after the ground so they
-    // are never cut in half by a neighbouring diamond.
+    // Industry blocks sit on their origin tile. Their key is the FRONT corner
+    // of the footprint, so the artwork is never cut by its own footprint's
+    // ground - while a hill one diagonal nearer still covers it correctly.
     if (detailed) {
       for (const industry of this.industries) {
         if (
@@ -624,6 +663,7 @@ export class MapView {
         }
         const world = tileToWorld(industry.x, industry.y, map.baseHeight(industry.x, industry.y));
         const sprite = this.take(used++);
+        const footprint = INDUSTRY_SPECS[industry.type]?.footprint ?? 1;
         // No tint. The industry is drawn in its own colours now - a tint
         // multiplies, and it flattened a coal heap and a chimney to the same
         // shade of whatever the tint was.
@@ -632,12 +672,18 @@ export class MapView {
           this.frameTexture(`i${industry.type}`, atlas.industryFrame(industry.type)),
           world.x,
           world.y,
+          drawOrder(
+            industry.x + footprint - 1,
+            industry.y + footprint - 1,
+            map.baseHeight(industry.x, industry.y),
+            DrawLayer.Building,
+          ),
         );
       }
     }
 
-    // Station modules go on last so a canopy is never cut in half by the
-    // diamond of the tile behind it.
+    // Station modules, keyed on their own tile at the station layer: above the
+    // track a platform covers, below a vehicle standing on it.
     for (const station of this.stations) {
       for (const module of station.modules) {
         if (
@@ -656,6 +702,7 @@ export class MapView {
           this.frameTexture(key, moduleFrame(atlas, module.kind)),
           world.x,
           world.y,
+          drawOrder(module.x, module.y, map.baseHeight(module.x, module.y), DrawLayer.Station),
         );
         sprite.tint = this.companyTint;
       }
@@ -694,15 +741,19 @@ export class MapView {
       if (!map.contains(fromX, fromY) || !map.contains(toX, toY)) continue;
 
       // railHeight, so a train on a bridge rides the deck instead of the river.
-      const from = tileToWorld(fromX, fromY, map.railHeight(fromX, fromY));
-      const to = tileToWorld(toX, toY, map.railHeight(toX, toY));
+      const fromHeight = map.railHeight(fromX, fromY);
+      const toHeight = map.railHeight(toX, toY);
+      const from = tileToWorld(fromX, fromY, fromHeight);
+      const to = tileToWorld(toX, toY, toHeight);
 
       let sprite = this.vehicleSprites[i];
       if (sprite === undefined) {
         sprite = new Sprite(this.frameTexture('vehicle', atlas.vehicleFrame()));
         sprite.scale.set(1 / ATLAS_SCALE);
         this.vehicleSprites.push(sprite);
-        this.vehicleLayer.addChild(sprite);
+        // Into the SAME sorted container as the tiles: the drawOrder key is
+        // what lets a hill in front of a train draw over it (section 16.1).
+        this.tiles.addChild(sprite);
       }
 
       // A sprite is reused for whatever vehicle lands in its slot, so the
@@ -715,6 +766,8 @@ export class MapView {
       // Every company's own colour, so a competitor's train is recognisable as
       // one at a glance rather than only in a list.
       sprite.tint = owner === 0 ? this.companyTint : (COMPANY_TINTS[owner] ?? this.companyTint);
+
+      sprite.zIndex = vehicleDrawOrder(fromX, fromY, fromHeight, toX, toY, toHeight, progress);
 
       const worldX = from.x + (to.x - from.x) * progress;
       const worldY = from.y + (to.y - from.y) * progress;

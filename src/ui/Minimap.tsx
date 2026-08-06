@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
+import { useCallback, useEffect, useMemo, useRef, type ReactElement } from 'react';
 import { t } from '../i18n';
 import {
   MINIMAP_MODE_COUNT,
@@ -30,7 +30,10 @@ export function Minimap(): ReactElement | null {
   const stations = useSimStore((s) => s.stations);
   const industries = useSimStore((s) => s.industries);
   const centre = useSimStore((s) => s.centreOnTile);
-  const [mode, setMode] = useState<MinimapMode>(MinimapMode.Terrain);
+  // In the store rather than local state, so the N key of section 17.2 and
+  // the buttons here drive one and the same value.
+  const mode = useSimStore((s) => s.minimapMode);
+  const setMode = useSimStore((s) => s.setMinimapMode);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const pixelsRef = useRef<Uint8ClampedArray<ArrayBuffer> | null>(null);

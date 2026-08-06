@@ -3,8 +3,8 @@ import { MapView, type TileInfo, type VehicleAudioInput } from '../render/MapVie
 import { COMPANY_COLORS } from '../shared/palette';
 import { CommandKind, type Command } from '../sim/commands/types';
 import { TileMap } from '../sim/map/TileMap';
-import { SignalKind } from '../sim/map/signals';
-import { RailType, TrackDir } from '../sim/map/track';
+import { SignalKind, signalKind } from '../sim/map/signals';
+import { RailType } from '../sim/map/track';
 import { inflatedCostCt } from '../sim/cargo/payment';
 import { planTrack } from '../sim/net/trackBuilder';
 import { AUTO_SIGNAL_SPACING_TILES, DEADLOCK_WARN_TICKS } from '../sim/constants';
@@ -12,6 +12,7 @@ import { ModuleKind } from '../sim/station/types';
 import type { SimClient } from './SimClient';
 import { audioEngine } from './audioBridge';
 import { planConnection } from './connect';
+import { nextSignalStep } from './signalCycle';
 import { stationAtTile } from './TilePanel';
 import { useSimStore, type Tool } from './store';
 
@@ -42,11 +43,6 @@ const audioScratch: VehicleAudioInput[] = [];
  * the second builds the run - so it reports back whether it consumed the click
  * or is still waiting for the second one.
  */
-/** Which signal the two signal tools place. */
-function signalKindFor(tool: Tool): number {
-  return tool === 'pathsignal' ? SignalKind.Path : SignalKind.Block;
-}
-
 function commandForClick(tool: Tool, tile: TileInfo): Command | null {
   switch (tool) {
     case 'raise':
@@ -147,29 +143,15 @@ function commandForClick(tool: Tool, tile: TileInfo): Command | null {
         moduleKind: ModuleKind.ColdStore,
       };
 
-    case 'signal':
-      return {
-        kind: CommandKind.BuildSignal,
-        x: tile.x,
-        y: tile.y,
-        signalKind: signalKindFor(tool),
-        direction: TrackDir.East,
-      };
-    case 'pathsignal':
-      return {
-        kind: CommandKind.BuildSignal,
-        x: tile.x,
-        y: tile.y,
-        signalKind: signalKindFor(tool),
-        direction: TrackDir.East,
-      };
     case 'demolish':
       return { kind: CommandKind.DemolishRoad, x: tile.x, y: tile.y };
     case 'road':
     case 'track':
     case 'connect':
+    case 'signal':
+    case 'pathsignal':
     case 'none':
-      // Two-click tools; the click handler drives them directly.
+      // Two-click tools and the signal cycle; the click handler drives them.
       return null;
   }
 }
@@ -190,6 +172,9 @@ export function MapCanvas({ client }: { readonly client: SimClient }): ReactElem
   const selectedVehicleId = useSimStore((s) => s.selectedVehicleId);
   const stations = useSimStore((s) => s.stations);
   const companyColorIndex = useSimStore((s) => s.companyColorIndex);
+  const tool = useSimStore((s) => s.tool);
+  const trackPreview = useSimStore((s) => s.trackPreview);
+  const connectPlan = useSimStore((s) => s.connectPlan);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -215,7 +200,15 @@ export function MapCanvas({ client }: { readonly client: SimClient }): ReactElem
         return;
       }
 
-      const planned = planTrack(map, anchor.x, anchor.y, tile.x, tile.y, RailType.Plain, true);
+      const planned = planTrack(
+        map,
+        anchor.x,
+        anchor.y,
+        tile.x,
+        tile.y,
+        RailType.Plain,
+        state.assistant,
+      );
       if (!planned.ok) {
         state.setTrackPreview({
           tiles: [],
@@ -274,7 +267,7 @@ export function MapCanvas({ client }: { readonly client: SimClient }): ReactElem
           state.clearConnect();
           return;
         }
-        const result = planConnection(currentMap, from, station, state.year);
+        const result = planConnection(currentMap, from, station, state.year, state.assistant);
         if (result.ok) {
           state.setConnectPlan(result.plan, null);
           view.setPreviewRoute(result.plan.tiles);
@@ -298,7 +291,7 @@ export function MapCanvas({ client }: { readonly client: SimClient }): ReactElem
           x2: tile.x,
           y2: tile.y,
           railType: RailType.Plain,
-          assistant: true,
+          assistant: state.assistant,
           signalSpacing: state.autoSignal ? AUTO_SIGNAL_SPACING_TILES : 0,
         });
         state.setRoadAnchor(null);
@@ -321,6 +314,31 @@ export function MapCanvas({ client }: { readonly client: SimClient }): ReactElem
           y2: tile.y,
         });
         state.setRoadAnchor(null);
+        return;
+      }
+
+      /*
+       * Signals: the first click places the two-way kind, and every further
+       * click on the same tile cycles it - one-way per track direction, then
+       * back to two-way. The simulation has no modify-signal command, so a
+       * cycle step is a demolish and a rebuild, sent as a pair (D-126).
+       */
+      if (state.tool === 'signal' || state.tool === 'pathsignal') {
+        const map = mapRef.current;
+        if (map === null || !map.contains(tile.x, tile.y)) return;
+        const index = map.tileIndex(tile.x, tile.y);
+        const packed = map.signal[index]!;
+        const step = nextSignalStep(packed, map.trackBits[index]!, state.tool);
+        if (signalKind(packed) !== SignalKind.None) {
+          client.send({ kind: CommandKind.DemolishSignal, x: tile.x, y: tile.y });
+        }
+        client.send({
+          kind: CommandKind.BuildSignal,
+          x: tile.x,
+          y: tile.y,
+          signalKind: step.kind,
+          direction: step.direction,
+        });
         return;
       }
 
@@ -371,6 +389,15 @@ export function MapCanvas({ client }: { readonly client: SimClient }): ReactElem
   useEffect(() => {
     viewRef.current?.setMapRevision(mapRevision);
   }, [mapRevision]);
+
+  useEffect(() => {
+    // Esc, the cancel button and every tool change disarm through the store;
+    // the preview line lives in the view and has to follow, or a cancelled
+    // plan keeps its green route on the map for ever.
+    if (trackPreview === null && connectPlan === null) {
+      viewRef.current?.setPreviewRoute(null);
+    }
+  }, [tool, trackPreview, connectPlan]);
 
   useEffect(() => {
     viewRef.current?.setSelectedVehicle(selectedVehicleId);

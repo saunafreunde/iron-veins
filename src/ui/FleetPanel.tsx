@@ -1,7 +1,15 @@
 import type { ReactElement } from 'react';
 import { formatMoney, t } from '../i18n';
+import type { VehicleMarker } from '../shared/protocol';
+import { inflatedCostCt } from '../sim/cargo/payment';
+import { cargoSpec } from '../sim/cargo/types';
 import { CommandKind } from '../sim/commands/types';
-import { DEADLOCK_WARN_TICKS, TICK_SECONDS, MAX_TRAIN_LENGTH_M } from '../sim/constants';
+import {
+  DEADLOCK_WARN_TICKS,
+  REFIT_COST_SHARE,
+  TICK_SECONDS,
+  MAX_TRAIN_LENGTH_M,
+} from '../sim/constants';
 import { isAirModule, ModuleKind } from '../sim/station/types';
 import {
   availableRailVehicles,
@@ -12,6 +20,7 @@ import {
 } from '../sim/vehicles/catalog';
 import { aggregateConsist, validateConsist } from '../sim/vehicles/consist';
 import { VehicleState, VEHICLE_STATE_KEYS } from '../sim/vehicles/VehicleStore';
+import { refitTargets, standsInDepot } from './refit';
 import type { SimClient } from './SimClient';
 import { useSimStore } from './store';
 import { stationAtTile } from './TilePanel';
@@ -166,6 +175,7 @@ export function FleetPanel({ client }: { readonly client: SimClient }): ReactEle
   const selectedVehicleId = useSimStore((s) => s.selectedVehicleId);
   const setSelectedVehicle = useSimStore((s) => s.setSelectedVehicle);
   const year = useSimStore((s) => s.year);
+  const mapSize = useSimStore((s) => s.mapSize);
 
   const station =
     selectedTile === null ? undefined : stationAtTile(stations, selectedTile.x, selectedTile.y);
@@ -375,8 +385,67 @@ export function FleetPanel({ client }: { readonly client: SimClient }): ReactEle
               {t('ui.fleet.sell')}
             </button>
           </div>
+
+          <RefitRow client={client} vehicle={selected} mapSize={mapSize} year={year} />
         </>
       )}
     </section>
+  );
+}
+
+/**
+ * The refit choice of section 11: a depot action, one button per cargo the
+ * vehicle can be converted to. Shown exactly when the sim would accept the
+ * command - which, per D-076, includes a freshly bought vehicle that is
+ * Stopped on its depot tile and has never moved.
+ */
+function RefitRow({
+  client,
+  vehicle,
+  mapSize,
+  year,
+}: {
+  readonly client: SimClient;
+  readonly vehicle: VehicleMarker;
+  readonly mapSize: number;
+  readonly year: number;
+}): ReactElement | null {
+  const stations = useSimStore((s) => s.stations);
+  if (!standsInDepot(vehicle, stations, mapSize)) return null;
+
+  const targets = refitTargets(vehicle);
+  // One possible cargo means there is nothing to choose.
+  if (targets.length < 2) return null;
+
+  // The same arithmetic as the command: a share of the purchase price, at
+  // this year's price level (section 14.2).
+  const priceCt =
+    vehicle.consist.length > 0
+      ? aggregateConsist(vehicle.consist).priceCt
+      : vehicleSpec(vehicle.specId).priceCt;
+  const refitCt = inflatedCostCt(Math.round(priceCt * REFIT_COST_SHARE), year, true);
+
+  return (
+    <>
+      <span className="field__label field__label--spaced">
+        {t('ui.fleet.refit', { price: formatMoney(refitCt) })}
+      </span>
+      {vehicle.cargoUnits > 0 && <p className="panel__hint">{t('ui.fleet.refitNotEmpty')}</p>}
+      <div className="button-row">
+        {targets.map(({ cargo, capacity }) => (
+          <button
+            key={cargo}
+            type="button"
+            className="button"
+            disabled={vehicle.cargoUnits > 0}
+            onClick={() =>
+              client.send({ kind: CommandKind.RefitVehicle, vehicleId: vehicle.id, cargo })
+            }
+          >
+            {t(cargoSpec(cargo).nameKey)} ({capacity})
+          </button>
+        ))}
+      </div>
+    </>
   );
 }
