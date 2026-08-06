@@ -607,6 +607,65 @@ const v21_to_v22: SaveMigration = (payload) => {
 const v22_to_v23: SaveMigration = (payload) => ({ ...payload, worldDigest: '' });
 
 /**
+ * M11 brought the full order grammar of section 12.1 and the waypoint layer -
+ * the milestone's single bump (SPEC2 Z5); the later M11 stages extend THIS
+ * migration.
+ *
+ * A version 23 world had no waypoints, so the layer is zero-filled, and its
+ * orders knew only target/load/unload - the new fields get the values that
+ * mean "not used": no refit (-1), no minimum dwell (0), no condition
+ * (condKind -1, companions 0). Nothing here invents behaviour: a migrated
+ * schedule runs exactly as it did, which the hash-identity test of
+ * tests/unit/save.spec.ts holds. Fields that are already present are kept,
+ * so re-wrapping a current state in an old container (the corpus trick)
+ * cannot flatten real values back to defaults.
+ */
+const v23_to_v24: SaveMigration = (payload) => {
+  const tiles = tileCount(payload);
+  const inner = state(payload);
+  const map = inner['map'];
+  if (typeof map !== 'object' || map === null || Array.isArray(map)) {
+    throw new SaveFormatError('save.state.map: expected an object');
+  }
+  const vehicles = inner['vehicles'];
+  if (!Array.isArray(vehicles)) throw new SaveFormatError('save.state.vehicles: expected an array');
+
+  const layers = map as Record<string, unknown>;
+  const waypoint =
+    layers['waypoint'] instanceof Uint8Array ? layers['waypoint'] : new Uint8Array(tiles);
+
+  return {
+    ...payload,
+    state: {
+      ...inner,
+      map: { ...layers, waypoint },
+      vehicles: vehicles.map((vehicle) => {
+        const previous = vehicle as Record<string, unknown>;
+        const orders = previous['orders'];
+        if (!Array.isArray(orders)) {
+          throw new SaveFormatError('save.state.vehicles[].orders: expected an array');
+        }
+        return {
+          ...previous,
+          orders: orders.map((order) => {
+            const entry = order as Record<string, unknown>;
+            return {
+              ...entry,
+              refitTo: entry['refitTo'] ?? -1,
+              waitTicks: entry['waitTicks'] ?? 0,
+              condKind: entry['condKind'] ?? -1,
+              condComparator: entry['condComparator'] ?? 0,
+              condValue: entry['condValue'] ?? 0,
+              condJumpTo: entry['condJumpTo'] ?? 0,
+            };
+          }),
+        };
+      }),
+    },
+  };
+};
+
+/**
  * Registry keyed by the version a migration reads (section 19.1).
  *
  * There is deliberately no entry for 1 -> 2: a version 1 world had no map at
@@ -635,6 +694,7 @@ export const SAVE_MIGRATIONS: ReadonlyMap<number, SaveMigration> = new Map<numbe
   [20, v20_to_v21],
   [21, v21_to_v22],
   [22, v22_to_v23],
+  [23, v23_to_v24],
 ]);
 
 /**

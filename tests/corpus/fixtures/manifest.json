@@ -4,13 +4,20 @@
     "saveVersion": 22,
     "seed": 20260806,
     "tick": 6050,
-    "worldHash": "38745e09b808b268"
+    "worldHash": "e852110c401917a8"
   },
   {
     "file": "v23-played.ironsave",
     "saveVersion": 23,
     "seed": 20260806,
     "tick": 6050,
-    "worldHash": "38745e09b808b268"
+    "worldHash": "e852110c401917a8"
+  },
+  {
+    "file": "v24-played.ironsave",
+    "saveVersion": 24,
+    "seed": 20260806,
+    "tick": 6050,
+    "worldHash": "e852110c401917a8"
   }
 ]

@@ -107,6 +107,10 @@ function cornerObstruction(map: TileMap, x: number, y: number, actor: number): s
         map.structure[index] !== Structure.None ||
         map.buildingKind[index] !== 0 ||
         map.industryId[index] !== -1 ||
+        // A buoy stands on open water the owner layer alone would protect,
+        // but the layer check keeps the guard honest even for a marker whose
+        // tile somehow stayed public (M11).
+        map.waypoint[index] !== 0 ||
         owner !== TILE_PUBLIC;
       if (!built) continue;
       if (owner !== TILE_PUBLIC && owner !== actor) return TerraformReason.ForeignOwner;

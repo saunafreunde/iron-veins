@@ -143,6 +143,11 @@ function commandForClick(tool: Tool, tile: TileInfo): Command | null {
         moduleKind: ModuleKind.ColdStore,
       };
 
+    case 'waypoint':
+      // The sim decides what the marker becomes - a post on rail, a buoy on
+      // water, a sign on a road - from what the tile carries (section 12.1).
+      return { kind: CommandKind.BuildWaypoint, x: tile.x, y: tile.y };
+
     case 'demolish':
     case 'road':
     case 'track':
@@ -336,7 +341,9 @@ export function MapCanvas({ client }: { readonly client: SimClient }): ReactElem
         const map = mapRef.current;
         if (map === null || !map.contains(tile.x, tile.y)) return;
         const index = map.tileIndex(tile.x, tile.y);
-        if (signalKind(map.signal[index]!) !== SignalKind.None) {
+        if (map.waypoint[index]! !== 0) {
+          client.send({ kind: CommandKind.DemolishWaypoint, x: tile.x, y: tile.y });
+        } else if (signalKind(map.signal[index]!) !== SignalKind.None) {
           client.send({ kind: CommandKind.DemolishSignal, x: tile.x, y: tile.y });
         } else if (map.trackBits[index]! !== 0) {
           client.send({ kind: CommandKind.DemolishTrack, x: tile.x, y: tile.y });

@@ -352,6 +352,31 @@ body {
   padding: 6px 8px;
 }
 
+/* The order editor of section 12.1: one bordered block per stop. */
+.order-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.order-row select,
+.order-row__value {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  padding: 2px 4px;
+}
+
+.order-row__value {
+  width: 64px;
+}
+
 .swatches {
   display: flex;
   gap: 6px;

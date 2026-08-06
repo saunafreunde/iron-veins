@@ -18,10 +18,12 @@ import {
   ROAD_STOP_COST_CT,
   SIGNAL_COST_CT,
   TERRAFORM_COST_PER_STEP_CT,
+  WAYPOINT_COST_CT,
 } from '../sim/constants';
 import { inflatedCostCt } from '../sim/cargo/payment';
 import { INDUSTRY_SPECS } from '../sim/industry/types';
 import { isOneWay, SIGNAL_KIND_KEYS, signalDirection, signalKind, SignalKind } from '../sim/map/signals';
+import { WAYPOINT_KIND_KEYS } from '../sim/map/waypoints';
 import { TERRAIN_NAME_KEYS } from '../sim/map/terrain';
 import { SCREEN_ARROWS } from './signalCycle';
 import { platformLength, type ModuleKind, type Station } from '../sim/station/types';
@@ -52,6 +54,7 @@ const TOOLS: ReadonlyArray<{ readonly id: Tool; readonly labelKey: string }> = [
   { id: 'coldstore', labelKey: 'ui.tool.coldStore' },
   { id: 'signal', labelKey: 'ui.tool.signal' },
   { id: 'pathsignal', labelKey: 'ui.tool.pathSignal' },
+  { id: 'waypoint', labelKey: 'ui.tool.waypoint' },
   { id: 'demolish', labelKey: 'ui.tool.demolish' },
   { id: 'raise', labelKey: 'ui.tool.raise' },
   { id: 'lower', labelKey: 'ui.tool.lower' },
@@ -104,6 +107,8 @@ function priceHint(tool: Tool, year: number): string {
       return t('ui.tool.priceSignal', { amount: formatMoney(at(SIGNAL_COST_CT)) });
     case 'pathsignal':
       return t('ui.tool.pricePathSignal', { amount: formatMoney(at(SIGNAL_COST_CT)) });
+    case 'waypoint':
+      return t('ui.tool.priceWaypoint', { amount: formatMoney(at(WAYPOINT_COST_CT)) });
     case 'raise':
     case 'lower':
     case 'level':
@@ -294,6 +299,12 @@ export function TilePanel({ client }: { readonly client: SimClient }): ReactElem
                   ? ` ${SCREEN_ARROWS[signalDirection(tile.signal)]}`
                   : ''}
               </dd>
+            </div>
+          )}
+          {tile.waypoint !== 0 && (
+            <div>
+              <dt>{t('ui.tile.waypoint')}</dt>
+              <dd className="value">{t(WAYPOINT_KIND_KEYS[tile.waypoint] ?? '')}</dd>
             </div>
           )}
         </dl>

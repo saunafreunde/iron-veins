@@ -16,11 +16,12 @@ import {
 } from '../constants';
 import {
   DEMOLITION_REFUND,
+  WAYPOINT_COST_CT,
+  WAYPOINT_UPKEEP_CT_PER_YEAR,
   RAIL_DEPOT_COST_CT,
   RAIL_DEPOT_UPKEEP_CT,
   RAIL_PLATFORM_COST_CT,
   RAIL_PLATFORM_UPKEEP_CT,
-  REFIT_COST_SHARE,
   RESALE_SHARE,
   SIGNAL_COST_CT,
   SIGNAL_UPKEEP_CT_PER_YEAR,
@@ -45,6 +46,7 @@ import {
   SIGNAL_TRACK_DEGREE,
 } from '../map/signals';
 import type { TileMap } from '../map/TileMap';
+import { WaypointKind } from '../map/waypoints';
 import { Structure, structureUpkeepCt } from '../map/structures';
 import { slopeRise, Terrain } from '../map/terrain';
 import {
@@ -72,13 +74,9 @@ import {
 import { assignStationCatchment } from '../town/update';
 import { RoadBit } from '../town/types';
 import type { Cargo } from '../cargo/types';
-import { capacityFor, defaultCargo, vehicleSpec, VehicleKind } from '../vehicles/catalog';
-import {
-  aggregateConsist,
-  consistCapacityFor,
-  consistDefaultCargo,
-  validateConsist,
-} from '../vehicles/consist';
+import { defaultCargo, vehicleSpec, VehicleKind } from '../vehicles/catalog';
+import { aggregateConsist, consistDefaultCargo, validateConsist } from '../vehicles/consist';
+import { refitCapacity, refitPriceCt } from '../vehicles/refit';
 import { releaseAll } from '../vehicles/reservations';
 import { VehicleState } from '../vehicles/VehicleStore';
 import { electrificationGrantShare } from '../economy/emissions';
@@ -279,6 +277,8 @@ export function demolishRoad(world: World, x: number, y: number): CommandOutcome
     bits[neighbour] = bits[neighbour]! & ~oppositeBit;
   }
   bits[tile] = 0;
+  // A roadside sign cannot outlive its road.
+  if (world.map.waypoint[tile] === WaypointKind.Road) clearWaypoint(world, tile);
   releaseIfBare(world, tile);
 
   world.company.cashCt += Math.round(ROAD_COST_PER_TILE_CT * DEMOLITION_REFUND);
@@ -452,6 +452,8 @@ export function demolishTrack(world: World, x: number, y: number): CommandOutcom
   map.trackBits[tile] = 0;
   map.railType[tile] = 0;
   clearSignal(world, tile);
+  // A marker post cannot outlive the track it stands beside.
+  if (map.waypoint[tile] === WaypointKind.Rail) clearWaypoint(world, tile);
   releaseIfBare(world, tile);
 
   // Taking out one tile of a bridge takes out the bridge: half a viaduct is not
@@ -502,6 +504,7 @@ export function buildSignal(
   }
   if (map.structure[tile] !== Structure.None) return reject(RejectReason.SignalOnStructure);
   if (stationAt(world, tile) !== null) return reject(RejectReason.Occupied);
+  if (map.waypoint[tile] !== WaypointKind.None) return reject(RejectReason.WaypointInWay);
   const permission = buildPermission(world, tile);
   if (permission !== null) return reject(permission);
   if (signalKind(map.signal[tile]!) !== SignalKind.None) return reject(RejectReason.SignalExists);
@@ -535,6 +538,84 @@ function clearSignal(world: World, tile: number): void {
   world.company.cashCt += Math.round(SIGNAL_COST_CT * DEMOLITION_REFUND);
   world.company.infrastructureUpkeepPerYearCt -= SIGNAL_UPKEEP_CT_PER_YEAR;
   world.company.fixedAssetsCt -= SIGNAL_COST_CT;
+}
+
+/**
+ * Place a waypoint marker (section 12.1).
+ *
+ * What it becomes is what the tile carries - track wins over road, because a
+ * level crossing is the railway's tile (D-101): a marker post on rail, a buoy
+ * on water, a roadside sign on a road. The marker forces routes through its
+ * tile and decides nothing else, which is why it may stand in a junction where
+ * a signal may not (D-055 is about where a train STOPS; nothing stops here).
+ */
+export function buildWaypoint(world: World, x: number, y: number): CommandOutcome {
+  if (!world.map.contains(x, y)) return reject(RejectReason.OutsideMap);
+  const map = world.map;
+  const tile = map.tileIndex(x, y);
+
+  if (map.waypoint[tile] !== WaypointKind.None) return reject(RejectReason.WaypointExists);
+  if (stationAt(world, tile) !== null) return reject(RejectReason.Occupied);
+  if (signalKind(map.signal[tile]!) !== SignalKind.None) return reject(RejectReason.SignalExists);
+  // A marker on a bridge deck or in a bore would need its own drawing rules
+  // and its own terraform story; the tiles either side serve the same purpose.
+  if (map.structure[tile] !== Structure.None) return reject(RejectReason.SignalOnStructure);
+
+  const kind =
+    map.trackBits[tile] !== 0
+      ? WaypointKind.Rail
+      : map.terrain[tile] === Terrain.Water
+        ? WaypointKind.Buoy
+        : map.roadBits[tile] !== 0
+          ? WaypointKind.Road
+          : WaypointKind.None;
+  if (kind === WaypointKind.None) return reject(RejectReason.NeedsWaypointGround);
+
+  const permission = buildPermission(world, tile);
+  if (permission !== null) return reject(permission);
+
+  const chargeCt = world.costCt(WAYPOINT_COST_CT);
+  if (chargeCt > world.company.cashCt) return reject(RejectReason.InsufficientFunds);
+
+  // A buoy takes its open-water tile, exactly as a station module takes its
+  // ground - that claim is what the terraform guard and competing builders
+  // read. Track and road tiles already carry their builder's claim.
+  if (map.owner[tile] === TILE_PUBLIC) map.owner[tile] = world.company.id;
+  map.waypoint[tile] = kind;
+
+  bookExpense(world.company, chargeCt);
+  world.company.infrastructureUpkeepPerYearCt += WAYPOINT_UPKEEP_CT_PER_YEAR;
+  world.company.fixedAssetsCt += WAYPOINT_COST_CT;
+  map.revision++;
+  return ACCEPTED;
+}
+
+export function demolishWaypoint(world: World, x: number, y: number): CommandOutcome {
+  if (!world.map.contains(x, y)) return reject(RejectReason.OutsideMap);
+  const tile = world.map.tileIndex(x, y);
+  if (world.map.waypoint[tile] === WaypointKind.None) {
+    return reject(RejectReason.NoWaypointHere);
+  }
+  const permission = buildPermission(world, tile);
+  if (permission !== null) return reject(permission);
+
+  clearWaypoint(world, tile);
+  world.map.revision++;
+  return ACCEPTED;
+}
+
+/**
+ * Take a waypoint away and unwind what it cost - the demolish command, the
+ * track under a rail marker coming up, the road under a sign coming out.
+ */
+function clearWaypoint(world: World, tile: number): void {
+  const map = world.map;
+  if (map.waypoint[tile] === WaypointKind.None) return;
+  map.waypoint[tile] = WaypointKind.None;
+  releaseIfBare(world, tile);
+  world.company.cashCt += Math.round(WAYPOINT_COST_CT * DEMOLITION_REFUND);
+  world.company.infrastructureUpkeepPerYearCt -= WAYPOINT_UPKEEP_CT_PER_YEAR;
+  world.company.fixedAssetsCt -= WAYPOINT_COST_CT;
 }
 
 /** Station that owns a tile, or null. */
@@ -627,6 +708,7 @@ export function buildRoadStop(
   const tile = world.map.tileIndex(x, y);
   if (world.map.roadBits[tile] === 0) return reject(RejectReason.NeedsRoad);
   if (stationAt(world, tile) !== null) return reject(RejectReason.Occupied);
+  if (world.map.waypoint[tile] !== WaypointKind.None) return reject(RejectReason.WaypointInWay);
   const permission = buildPermission(world, tile);
   if (permission !== null) return reject(permission);
 
@@ -665,6 +747,7 @@ export function buildRailStop(
   const tile = world.map.tileIndex(x, y);
   if (world.map.trackBits[tile] === 0) return reject(RejectReason.NeedsTrack);
   if (stationAt(world, tile) !== null) return reject(RejectReason.Occupied);
+  if (world.map.waypoint[tile] !== WaypointKind.None) return reject(RejectReason.WaypointInWay);
   const permission = buildPermission(world, tile);
   if (permission !== null) return reject(permission);
 
@@ -706,6 +789,7 @@ export function buildWaterStop(
   const tile = map.tileIndex(x, y);
   if (map.terrain[tile] !== Terrain.Water) return reject(RejectReason.NeedsWater);
   if (stationAt(world, tile) !== null) return reject(RejectReason.Occupied);
+  if (map.waypoint[tile] !== WaypointKind.None) return reject(RejectReason.WaypointInWay);
   const permission = buildPermission(world, tile);
   if (permission !== null) return reject(permission);
   if (!touchesShore(map, x, y)) return reject(RejectReason.NeedsShore);
@@ -1058,31 +1142,17 @@ export function refitVehicle(world: World, vehicleId: number, cargo: Cargo): Com
   if (!standsInDepot(world, vehicleId)) return reject(RejectReason.NotInDepot);
   if (vehicles.cargo[vehicleId]!.length > 0) return reject(RejectReason.NotEmpty);
 
-  const units = vehicles.consist[vehicleId]!;
-  const capacity =
-    units.length > 0
-      ? consistCapacityFor(units, cargo)
-      : capacityFor(vehicleSpec(vehicles.specId[vehicleId]!), cargo);
-  if (capacity <= 0) return reject(RejectReason.CannotCarry);
+  // The same capacity and price the per-order refit of section 12.1 uses -
+  // one validator, two doors (vehicles/refit.ts).
+  if (refitCapacity(vehicles, vehicleId, cargo) <= 0) return reject(RejectReason.CannotCarry);
 
-  const cost = Math.round(refitCostCt(world, vehicleId));
-  const chargeCt = world.costCt(cost);
+  const chargeCt = world.costCt(refitPriceCt(vehicles, vehicleId));
   if (chargeCt > world.company.cashCt) return reject(RejectReason.InsufficientFunds);
 
   vehicles.refitCargo[vehicleId] = cargo;
   vehicles.refreshAggregate(vehicleId);
   bookExpense(world.company, chargeCt);
   return ACCEPTED;
-}
-
-/** A conversion costs a share of what the vehicle cost to buy. */
-function refitCostCt(world: World, vehicleId: number): number {
-  const units = world.vehicles.consist[vehicleId]!;
-  const priceCt =
-    units.length > 0
-      ? aggregateConsist(units).priceCt
-      : vehicleSpec(world.vehicles.specId[vehicleId]!).priceCt;
-  return priceCt * REFIT_COST_SHARE;
 }
 
 /**

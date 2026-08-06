@@ -108,7 +108,16 @@ export interface TileInfo {
   readonly industryId: number;
   /** Packed signal byte of the tile (kind + direction), 0 when there is none. */
   readonly signal: number;
+  /** Waypoint marker of the tile (a WaypointKind), 0 when there is none. */
+  readonly waypoint: number;
 }
+
+/**
+ * Tint per WaypointKind, over the same white post the signal uses - colour
+ * says which mode the marker serves, and reusing the signal cell keeps M11's
+ * atlas budget at the ledger's zero (SPEC2 6.2). Indexed by WaypointKind.
+ */
+const WAYPOINT_TINTS: readonly number[] = [0xffffff, 0x4d8fe0, 0xe0564d, 0xe0a34d];
 
 export class MapView {
   private readonly app = new Application();
@@ -419,6 +428,7 @@ export class MapView {
       townId: map.townId[index]!,
       industryId: map.industryId[index]!,
       signal: map.signal[index]!,
+      waypoint: map.waypoint[index]!,
     };
   }
 
@@ -621,6 +631,20 @@ export class MapView {
             }
           }
           continue;
+        }
+
+        // A waypoint marker: the signal post, tinted for the mode it serves.
+        // Drawn before the water gate below, because a buoy stands on water.
+        if (detailed && map.waypoint[index] !== 0) {
+          const marker = this.take(used++);
+          this.place(
+            marker,
+            this.frameTexture('signal', atlas.signalFrame()),
+            world.x,
+            world.y,
+            drawOrder(x, y, height, DrawLayer.Signal),
+          );
+          marker.tint = WAYPOINT_TINTS[map.waypoint[index]!] ?? 0xffffff;
         }
 
         if (!detailed || terrain === Terrain.Water) continue;

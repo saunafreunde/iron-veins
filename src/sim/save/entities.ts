@@ -290,24 +290,25 @@ export function decodeVehicles(value: unknown, path: string): VehicleSave[] {
       homeDepotTile: int(raw['homeDepotTile'], `${path}[${i}].homeDepotTile`),
       earnedCt: num(raw['earnedCt'], `${path}[${i}].earnedCt`),
       workJ: num(raw['workJ'], `${path}[${i}].workJ`),
-      orders: list(raw['orders'], `${path}[${i}].orders`).map((orderValue, o) => ({
-        target: int(
-          record(orderValue, `${path}[${i}].orders[${o}]`)['target'],
-          `${path}[${i}].orders[${o}].target`,
-        ) as OrderTarget,
-        targetId: int(
-          record(orderValue, `${path}[${i}].orders[${o}]`)['targetId'],
-          `${path}[${i}].orders[${o}].targetId`,
-        ),
-        load: int(
-          record(orderValue, `${path}[${i}].orders[${o}]`)['load'],
-          `${path}[${i}].orders[${o}].load`,
-        ) as OrderLoad,
-        unload: int(
-          record(orderValue, `${path}[${i}].orders[${o}]`)['unload'],
-          `${path}[${i}].orders[${o}].unload`,
-        ) as OrderUnload,
-      })),
+      orders: list(raw['orders'], `${path}[${i}].orders`).map((orderValue, o) => {
+        const where = `${path}[${i}].orders[${o}]`;
+        const order = record(orderValue, where);
+        // The full 12.1 grammar. Every field is required: the v24 migration
+        // gives old orders their defaults, so a current save missing one is
+        // damaged, not merely old.
+        return {
+          target: int(order['target'], `${where}.target`) as OrderTarget,
+          targetId: int(order['targetId'], `${where}.targetId`),
+          load: int(order['load'], `${where}.load`) as OrderLoad,
+          unload: int(order['unload'], `${where}.unload`) as OrderUnload,
+          refitTo: int(order['refitTo'], `${where}.refitTo`),
+          waitTicks: int(order['waitTicks'], `${where}.waitTicks`),
+          condKind: int(order['condKind'], `${where}.condKind`),
+          condComparator: int(order['condComparator'], `${where}.condComparator`),
+          condValue: num(order['condValue'], `${where}.condValue`),
+          condJumpTo: int(order['condJumpTo'], `${where}.condJumpTo`),
+        };
+      }),
       cargo: decodeStacks(raw['cargo'], `${path}[${i}].cargo`),
     };
   });

@@ -132,9 +132,33 @@ const SAMPLES: Record<keyof typeof CommandKind, Command> = {
   SetVehicleOrders: {
     kind: CommandKind.SetVehicleOrders,
     vehicleId: 5,
+    // Field order matches what parseCommand emits, because the round trip
+    // below compares JSON text. Every 12.1 field carries a non-default value.
     orders: [
-      { target: 0, targetId: 2, load: 1, unload: 0 },
-      { target: 1, targetId: 300, load: 2, unload: 1 },
+      {
+        target: 0,
+        targetId: 2,
+        load: 1,
+        unload: 3,
+        refitTo: 4,
+        waitTicks: 600,
+        condKind: 1,
+        condComparator: 5,
+        condValue: 80,
+        condJumpTo: 1,
+      },
+      {
+        target: 2,
+        targetId: 300,
+        load: 2,
+        unload: 1,
+        refitTo: -1,
+        waitTicks: 0,
+        condKind: -1,
+        condComparator: 0,
+        condValue: 0,
+        condJumpTo: 0,
+      },
     ],
   },
   SetVehicleRunning: { kind: CommandKind.SetVehicleRunning, vehicleId: 6, running: true },
@@ -164,6 +188,8 @@ const SAMPLES: Record<keyof typeof CommandKind, Command> = {
   ApplyTownMeasure: { kind: CommandKind.ApplyTownMeasure, townId: 4, measure: 1 },
   DemolishBuilding: { kind: CommandKind.DemolishBuilding, x: 35, y: 36 },
   AcceptContract: { kind: CommandKind.AcceptContract, contractId: 9 },
+  BuildWaypoint: { kind: CommandKind.BuildWaypoint, x: 37, y: 38 },
+  DemolishWaypoint: { kind: CommandKind.DemolishWaypoint, x: 39, y: 40 },
 };
 
 function auditParserRoundTrip(

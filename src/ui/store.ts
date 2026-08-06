@@ -46,6 +46,7 @@ export type Tool =
   | 'raildepot'
   | 'signal'
   | 'pathsignal'
+  | 'waypoint'
   | 'airstrip'
   | 'airport'
   | 'intlairport'

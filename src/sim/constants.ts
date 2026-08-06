@@ -1139,6 +1139,30 @@ export const LOAD_TICKS_PER_UNIT = 0.15;
 /** Minimum stop at a station, even with nothing to exchange. [ticks] */
 export const MIN_STATION_STOP_TICKS = 20;
 
+// ------------------------------------------------------- orders (section 12.1)
+
+/**
+ * Hard ceiling on the orders of one vehicle, sizing nothing but the sanity
+ * check: `orderIndex` is a Uint8Array, so anything below 256 is safe, and no
+ * hand-written schedule needs more than a few dozen entries.
+ */
+export const MAX_ORDERS_PER_VEHICLE = 64;
+
+/**
+ * Longest minimum dwell an order may demand (section 12.1 "Mindestaufenthalt").
+ * One game month: a vehicle parked longer than that is a parked vehicle, which
+ * is what the stop command is for. [ticks]
+ */
+export const MAX_ORDER_WAIT_TICKS = TICKS_PER_MONTH;
+
+/**
+ * How many conditional jumps are followed at one stop before the vehicle simply
+ * runs the order it landed on (section 12.1). A cycle of orders whose
+ * conditions are all true would otherwise spin for ever while the vehicle
+ * stands at a platform; eight is more guard-chain than any real schedule uses.
+ */
+export const MAX_ORDER_JUMPS_PER_STOP = 8;
+
 /** Reliability of a new vehicle, and its yearly decay. [0..10000] */
 export const RELIABILITY_MAX = 10_000;
 export const RELIABILITY_DECAY_PER_YEAR = 400;
@@ -1252,6 +1276,15 @@ export const STOPPED_SPEED_MS = 0.4;
  */
 export const SIGNAL_COST_CT = 300 * CENTS_PER_EURO;
 export const SIGNAL_UPKEEP_CT_PER_YEAR = 15 * CENTS_PER_EURO;
+
+/**
+ * A waypoint marker (section 12.1): a post beside the track, a buoy on the
+ * water, a sign at the roadside. Cheaper than a signal because it decides
+ * nothing - it only names a tile a route has to pass through. First-draft
+ * figures in the D-041 posture: nothing measures them yet. [cent]
+ */
+export const WAYPOINT_COST_CT = 200 * CENTS_PER_EURO;
+export const WAYPOINT_UPKEEP_CT_PER_YEAR = 10 * CENTS_PER_EURO;
 
 /**
  * How far short of a signal tile a held train's head comes to rest. [m]

@@ -37,6 +37,8 @@ export const CommandKind = {
   ApplyTownMeasure: 29,
   DemolishBuilding: 30,
   AcceptContract: 31,
+  BuildWaypoint: 32,
+  DemolishWaypoint: 33,
 } as const;
 export type CommandKind = (typeof CommandKind)[keyof typeof CommandKind];
 
@@ -117,15 +119,34 @@ export interface SellVehicleCommand {
   readonly vehicleId: number;
 }
 
-/** One entry of a vehicle's cyclic order list. */
+/**
+ * One entry of a vehicle's cyclic order list - the wire form of the full 12.1
+ * grammar. The fields beyond the M5 four are optional so that every recorded
+ * log and every existing issuer stays valid; the parser and the executor fill
+ * the documented defaults (-1 / 0 / no condition), and the sim-side `Order`
+ * record always carries all ten fields.
+ */
 export interface OrderSpec {
   /** A value of OrderTarget. */
   readonly target: number;
+  /** Station id, or the tile index of a depot or waypoint. */
   readonly targetId: number;
   /** A value of OrderLoad. */
   readonly load: number;
   /** A value of OrderUnload. */
   readonly unload: number;
+  /** Cargo to refit to at this stop; -1 or absent for none. */
+  readonly refitTo?: number;
+  /** Minimum dwell at this stop; 0 or absent for none. [ticks] */
+  readonly waitTicks?: number;
+  /** A value of OrderConditionKind; -1 or absent for no condition. */
+  readonly condKind?: number;
+  /** A value of OrderComparator; only read when condKind is set. */
+  readonly condComparator?: number;
+  /** Right-hand side of the comparison; only read when condKind is set. */
+  readonly condValue?: number;
+  /** Order index the jump lands on; only read when condKind is set. */
+  readonly condJumpTo?: number;
 }
 
 export interface SetVehicleOrdersCommand {
@@ -302,6 +323,22 @@ export interface DemolishSignalCommand {
 }
 
 /**
+ * Place a waypoint marker (section 12.1). What it becomes is what the tile
+ * carries: a marker post on track, a buoy on water, a roadside sign on a road.
+ */
+export interface BuildWaypointCommand {
+  readonly kind: typeof CommandKind.BuildWaypoint;
+  readonly x: number;
+  readonly y: number;
+}
+
+export interface DemolishWaypointCommand {
+  readonly kind: typeof CommandKind.DemolishWaypoint;
+  readonly x: number;
+  readonly y: number;
+}
+
+/**
  * Convert a vehicle to carry another cargo. Only in a depot, only to something
  * it can be converted to, and only while it is empty.
  */
@@ -314,6 +351,8 @@ export interface RefitVehicleCommand {
 
 export type Command =
   | AcceptContractCommand
+  | BuildWaypointCommand
+  | DemolishWaypointCommand
   | BuyExclusiveRightsCommand
   | ApplyTownMeasureCommand
   | DemolishBuildingCommand
@@ -422,5 +461,13 @@ export const RejectReason = {
   CouncilRefuses: 'cmd.reject.councilRefuses',
   ExclusiveRights: 'cmd.reject.exclusiveRights',
   NoBuilding: 'cmd.reject.noBuilding',
+  WaypointExists: 'cmd.reject.waypointExists',
+  WaypointInWay: 'cmd.reject.waypointInWay',
+  NeedsWaypointGround: 'cmd.reject.needsWaypointGround',
+  NoWaypointHere: 'cmd.reject.noWaypointHere',
+  NoSuchWaypoint: 'cmd.reject.noSuchWaypoint',
+  InvalidOrder: 'cmd.reject.invalidOrder',
+  TooManyOrders: 'cmd.reject.tooManyOrders',
+  BadJumpTarget: 'cmd.reject.badJumpTarget',
 } as const;
 export type RejectReason = (typeof RejectReason)[keyof typeof RejectReason];

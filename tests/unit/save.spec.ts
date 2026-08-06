@@ -206,6 +206,21 @@ describe('the world digest (v23)', () => {
     const loaded = decodeSave(encodeSave(world, queue, GAME_VERSION));
     expect(hashWorld(loaded.world)).toBe(hashWorld(world));
   });
+
+  it('does not judge a MIGRATED save by its old digest', () => {
+    // A digest fingerprints the state as the WRITING build hashed it. After a
+    // migration neither half survives - the state was rewritten and hashWorld
+    // may cover more than the old function did - so an old save's digest
+    // rides along unverified (D-131's version-pinning argument), instead of
+    // every hashed-state migration refusing every healthy old save.
+    const { world, queue } = playedWorld();
+    const payload = unpack(encodeSave(world, queue, GAME_VERSION));
+    payload['saveVersion'] = SAVE_VERSION - 1;
+    payload['worldDigest'] = 'ffffffffffffffff';
+
+    const loaded = decodeSave(zlibSync(encode(payload)));
+    expect(hashWorld(loaded.world)).toBe(hashWorld(world));
+  });
 });
 
 describe('save migrations', () => {
@@ -240,8 +255,10 @@ describe('save migrations', () => {
 
   it('pins the current save version', () => {
     // Bumping SAVE_VERSION has to be a conscious act, because from the first
-    // released build onwards it also requires a migration.
-    expect(SAVE_VERSION).toBe(23);
+    // released build onwards it also requires a migration. 24 is M11's single
+    // bump (SPEC2 Z5); the milestone's later stages extend the v24 migration
+    // rather than adding numbers.
+    expect(SAVE_VERSION).toBe(24);
   });
 
   it('has a real migration for every step from version 2 on', () => {
@@ -288,7 +305,66 @@ describe('the registered migrations', () => {
     // v23 added the container digest. A pre-v23 save carries none and the
     // migration cannot invent one, so the honest value is the empty string.
     expect(migrated['worldDigest']).toBe('');
+    // v24 added the waypoint layer of M11; a pre-M11 world had no markers.
+    expect(map['waypoint']).toEqual(new Uint8Array(64 * 64));
     expect(migrated['saveVersion']).toBe(SAVE_VERSION);
+  });
+
+  it('gives a v23 order the 12.1 defaults and keeps what is already set', () => {
+    const payload = {
+      magic: SAVE_MAGIC,
+      saveVersion: 23,
+      state: {
+        mapSize: 64,
+        map: { terrain: new Uint8Array(64 * 64) },
+        vehicles: [
+          {
+            id: 0,
+            specId: 200,
+            orders: [
+              // The M5 shape a real v23 save carries...
+              { target: 0, targetId: 1, load: 1, unload: 0 },
+              // ...and a full record, as the corpus writes when it wraps a
+              // CURRENT state in an old container: values must survive.
+              {
+                target: 2,
+                targetId: 99,
+                load: 3,
+                unload: 2,
+                refitTo: 4,
+                waitTicks: 600,
+                condKind: 1,
+                condComparator: 5,
+                condValue: 80,
+                condJumpTo: 0,
+              },
+            ],
+          },
+        ],
+      },
+    };
+    const migrated = migrateSavePayload(payload, 23, 24);
+    const state = migrated['state'] as Record<string, unknown>;
+    const vehicles = state['vehicles'] as Record<string, unknown>[];
+    const orders = vehicles[0]!['orders'] as Record<string, unknown>[];
+
+    expect(orders[0]).toEqual({
+      target: 0,
+      targetId: 1,
+      load: 1,
+      unload: 0,
+      refitTo: -1,
+      waitTicks: 0,
+      condKind: -1,
+      condComparator: 0,
+      condValue: 0,
+      condJumpTo: 0,
+    });
+    expect(orders[1]!['refitTo']).toBe(4);
+    expect(orders[1]!['waitTicks']).toBe(600);
+    expect(orders[1]!['condKind']).toBe(1);
+    const map = state['map'] as Record<string, unknown>;
+    expect(map['waypoint']).toEqual(new Uint8Array(64 * 64));
   });
 
   it('migrates a v22 save to v23 without moving the world hash', () => {

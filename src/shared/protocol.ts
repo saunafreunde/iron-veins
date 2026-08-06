@@ -139,6 +139,33 @@ export interface StationMarker {
   readonly modules: readonly StationModuleMarker[];
 }
 
+/**
+ * One order as the fleet panel edits it - the full 12.1 grammar, mirroring
+ * the sim's `Order` record field for field. Travels on the marker channel,
+ * never in the per-tick snapshot: a schedule changes when the player edits
+ * it, not twenty times a second (SPEC2 Fehler 37).
+ */
+export interface OrderMarker {
+  /** A value of OrderTarget. */
+  readonly target: number;
+  /** Station id, or the tile index of a depot or waypoint. */
+  readonly targetId: number;
+  /** A value of OrderLoad. */
+  readonly load: number;
+  /** A value of OrderUnload. */
+  readonly unload: number;
+  /** Cargo to refit to at this stop, or -1. */
+  readonly refitTo: number;
+  /** Minimum dwell at this stop. [ticks] */
+  readonly waitTicks: number;
+  /** A value of OrderConditionKind, -1 for none. */
+  readonly condKind: number;
+  /** A value of OrderComparator. */
+  readonly condComparator: number;
+  readonly condValue: number;
+  readonly condJumpTo: number;
+}
+
 /** A vehicle as the fleet list shows it. */
 export interface VehicleMarker {
   readonly id: number;
@@ -150,7 +177,8 @@ export interface VehicleMarker {
   readonly cargoUnits: number;
   readonly capacity: number;
   readonly earnedCt: number;
-  readonly orderStationIds: readonly number[];
+  /** The full order list, for the order editor of section 12.1. */
+  readonly orders: readonly OrderMarker[];
   /** Units the train is made of, empty for anything else. */
   readonly consist: readonly number[];
   /** Fastest the whole vehicle may run, curves aside. [m/s] */

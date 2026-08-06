@@ -24,7 +24,7 @@ function vehicle(overrides: Partial<VehicleMarker>): VehicleMarker {
     cargoUnits: 0,
     capacity: 28,
     earnedCt: 0,
-    orderStationIds: [],
+    orders: [],
     consist: [],
     maxSpeedMs: 15,
     lengthM: 8,

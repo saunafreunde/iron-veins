@@ -1,15 +1,17 @@
 import type { ReactElement } from 'react';
 import { formatMoney, t } from '../i18n';
-import type { VehicleMarker } from '../shared/protocol';
+import type { OrderMarker, StationMarker, VehicleMarker } from '../shared/protocol';
 import { inflatedCostCt } from '../sim/cargo/payment';
 import { cargoSpec } from '../sim/cargo/types';
-import { CommandKind } from '../sim/commands/types';
+import { CommandKind, type OrderSpec } from '../sim/commands/types';
 import {
   DEADLOCK_WARN_TICKS,
   REFIT_COST_SHARE,
   TICK_SECONDS,
+  TICKS_PER_DAY,
   MAX_TRAIN_LENGTH_M,
 } from '../sim/constants';
+import { WAYPOINT_KIND_KEYS, waypointServes } from '../sim/map/waypoints';
 import { isAirModule, ModuleKind } from '../sim/station/types';
 import {
   availableRailVehicles,
@@ -19,7 +21,14 @@ import {
   VehicleKind,
 } from '../sim/vehicles/catalog';
 import { aggregateConsist, validateConsist } from '../sim/vehicles/consist';
-import { VehicleState, VEHICLE_STATE_KEYS } from '../sim/vehicles/VehicleStore';
+import {
+  OrderConditionKind,
+  OrderLoad,
+  OrderTarget,
+  OrderUnload,
+  VehicleState,
+  VEHICLE_STATE_KEYS,
+} from '../sim/vehicles/VehicleStore';
 import { refitTargets, standsInDepot } from './refit';
 import type { SimClient } from './SimClient';
 import { useSimStore } from './store';
@@ -28,24 +37,60 @@ import { stationAtTile } from './TilePanel';
 /**
  * Buying vehicles and giving them their orders.
  *
- * Orders are built by pointing at a station on the map and appending it, which
- * is the smallest thing that is genuinely usable. The full order editor of
- * section 12 - conditional jumps, refits, timetables - belongs with the
- * milestones that need them.
+ * The order editor covers the full grammar of section 12.1: stop rows that can
+ * be reordered and removed, per-stop load/unload/refit/dwell, depot and
+ * waypoint targets, and a conditional-jump row per order. Every edit compiles
+ * the WHOLE list into ONE SetVehicleOrders command - the sim never sees a
+ * half-changed schedule.
  *
  * A train is assembled before it is bought: the panel shows what the
  * composition weighs, how long it is and how fast it will go, because those
  * three numbers are the whole decision (section 11.2).
  */
 
-/** OrderTarget.Station / OrderLoad.Partial / OrderUnload.All as plain values. */
-const ORDER_STATION = 0;
-const ORDER_LOAD_PARTIAL = 1;
-const ORDER_UNLOAD_ALL = 0;
-
 function kmh(speedMs: number): number {
   return Math.round(speedMs * 3.6);
 }
+
+/** Marker -> wire form, verbatim: the marker already carries the full grammar. */
+function toSpec(order: OrderMarker): OrderSpec {
+  return { ...order };
+}
+
+/** Translation keys per OrderLoad value. */
+const LOAD_KEYS: readonly string[] = [
+  'ui.order.load.full',
+  'ui.order.load.partial',
+  'ui.order.load.none',
+  'ui.order.load.fullAny',
+];
+
+/** Translation keys per OrderUnload value. */
+const UNLOAD_KEYS: readonly string[] = [
+  'ui.order.unload.all',
+  'ui.order.unload.none',
+  'ui.order.unload.transfer',
+  'ui.order.unload.forced',
+];
+
+/** Condition kinds in menu order; index 0 is "no condition" (-1). */
+const CONDITION_CHOICES: ReadonlyArray<{ readonly kind: number; readonly labelKey: string }> = [
+  { kind: OrderConditionKind.None, labelKey: 'ui.order.cond.none' },
+  { kind: OrderConditionKind.LoadPercent, labelKey: 'ui.order.cond.load' },
+  { kind: OrderConditionKind.Reliability, labelKey: 'ui.order.cond.reliability' },
+  { kind: OrderConditionKind.AgeYears, labelKey: 'ui.order.cond.age' },
+  { kind: OrderConditionKind.WaitingDays, labelKey: 'ui.order.cond.waiting' },
+  { kind: OrderConditionKind.DateYear, labelKey: 'ui.order.cond.date' },
+];
+
+/**
+ * The comparators, as mathematics rather than words - one symbol per
+ * OrderComparator value, language-neutral like the signal arrows.
+ */
+const COMPARATOR_SYMBOLS: readonly string[] = ['<', '≤', '=', '≠', '≥', '>'];
+
+/** Dwell choices offered by the editor, in game days. */
+const WAIT_DAY_CHOICES: readonly number[] = [0, 1, 2, 3, 5, 10, 15, 30];
 
 /** Assemble-and-buy panel, shown when the selected tile is a rail depot. */
 function TrainBuilder({
@@ -193,21 +238,6 @@ export function FleetPanel({ client }: { readonly client: SimClient }): ReactEle
   const buyableShips = availableVehicles(VehicleKind.Ship, year);
   const buyableAircraft = availableVehicles(VehicleKind.Aircraft, year);
 
-  const appendOrder = (): void => {
-    if (selected === undefined || station === undefined) return;
-    const stops = [...selected.orderStationIds, station.id];
-    client.send({
-      kind: CommandKind.SetVehicleOrders,
-      vehicleId: selected.id,
-      orders: stops.map((id) => ({
-        target: ORDER_STATION,
-        targetId: id,
-        load: ORDER_LOAD_PARTIAL,
-        unload: ORDER_UNLOAD_ALL,
-      })),
-    });
-  };
-
   return (
     <section className="panel">
       <h2 className="panel__title">{t('ui.fleet.title')}</h2>
@@ -334,20 +364,13 @@ export function FleetPanel({ client }: { readonly client: SimClient }): ReactEle
 
       {selected !== undefined && (
         <>
-          <span className="field__label field__label--spaced">
-            {t('ui.fleet.orders', { count: selected.orderStationIds.length })}
-          </span>
+          <OrderEditor
+            client={client}
+            vehicle={selected}
+            stations={stations}
+            mapSize={mapSize}
+          />
           <div className="button-row">
-            <button
-              type="button"
-              className="button"
-              disabled={station === undefined}
-              onClick={appendOrder}
-            >
-              {station === undefined
-                ? t('ui.fleet.pickStation')
-                : t('ui.fleet.addStop', { name: station.name })}
-            </button>
             <button
               type="button"
               className="button"
@@ -391,6 +414,372 @@ export function FleetPanel({ client }: { readonly client: SimClient }): ReactEle
       )}
     </section>
   );
+}
+
+/**
+ * The order editor of section 12.1.
+ *
+ * Every control mutates a COPY of the marker's order list and sends the whole
+ * of it as one SetVehicleOrders command; the panel re-renders when the worker
+ * echoes the change back. The sim stays the only authority - an edit it
+ * refuses simply never comes back, and the toast names the reason.
+ */
+function OrderEditor({
+  client,
+  vehicle,
+  stations,
+  mapSize,
+}: {
+  readonly client: SimClient;
+  readonly vehicle: VehicleMarker;
+  readonly stations: readonly StationMarker[];
+  readonly mapSize: number;
+}): ReactElement {
+  const selectedTile = useSimStore((s) => s.selectedTile);
+  const orders = vehicle.orders;
+
+  const send = (next: readonly OrderMarker[]): void => {
+    client.send({
+      kind: CommandKind.SetVehicleOrders,
+      vehicleId: vehicle.id,
+      orders: next.map(toSpec),
+    });
+  };
+
+  const patch = (index: number, changes: Partial<OrderMarker>): void => {
+    send(orders.map((order, i) => (i === index ? { ...order, ...changes } : order)));
+  };
+
+  const swap = (index: number, other: number): void => {
+    if (other < 0 || other >= orders.length) return;
+    const next = [...orders];
+    const held = next[index]!;
+    next[index] = next[other]!;
+    next[other] = held;
+    // Jump targets follow the orders they point at, so a reorder cannot
+    // silently bend a condition to another stop.
+    send(
+      next.map((order) => {
+        if (order.condKind === OrderConditionKind.None) return order;
+        const jump = order.condJumpTo === index ? other : order.condJumpTo === other ? index : order.condJumpTo;
+        return { ...order, condJumpTo: jump };
+      }),
+    );
+  };
+
+  const remove = (index: number): void => {
+    const next = orders.filter((_, i) => i !== index);
+    // A jump past the removed order moves up one; one AT it lands on whatever
+    // follows. Cleared entirely when the list shrinks past its target.
+    send(
+      next.map((order) => {
+        if (order.condKind === OrderConditionKind.None) return order;
+        let jump = order.condJumpTo;
+        if (jump > index) jump--;
+        if (jump >= next.length) {
+          return { ...order, condKind: OrderConditionKind.None, condComparator: 0, condValue: 0, condJumpTo: 0 };
+        }
+        return { ...order, condJumpTo: jump };
+      }),
+    );
+  };
+
+  const append = (order: OrderMarker): void => {
+    send([...orders, order]);
+  };
+
+  /** What a click on the map has selected, translated into an order target. */
+  const tileIndex = selectedTile === null ? -1 : selectedTile.y * mapSize + selectedTile.x;
+  const stationHere =
+    selectedTile === null ? undefined : stationAtTile(stations, selectedTile.x, selectedTile.y);
+  const depotKind =
+    vehicle.kind === VehicleKind.Train
+      ? ModuleKind.RailDepot
+      : vehicle.kind === VehicleKind.Ship
+        ? ModuleKind.ShipDepot
+        : ModuleKind.RoadDepot;
+  const depotHere =
+    stationHere !== undefined &&
+    selectedTile !== null &&
+    stationHere.modules.some(
+      (m) => m.x === selectedTile.x && m.y === selectedTile.y && m.kind === depotKind,
+    );
+  const waypointHere =
+    selectedTile !== null && waypointServes(selectedTile.waypoint, vehicle.kind);
+
+  const targetLabel = (order: OrderMarker): string => {
+    if (order.target === OrderTarget.Station) {
+      return stations.find((s) => s.id === order.targetId)?.name ?? t('ui.order.goneStation');
+    }
+    const x = order.targetId % mapSize;
+    const y = (order.targetId / mapSize) | 0;
+    if (order.target === OrderTarget.Depot) return t('ui.order.depotAt', { x, y });
+    return t('ui.order.waypointAt', { x, y });
+  };
+
+  return (
+    <>
+      <span className="field__label field__label--spaced">
+        {t('ui.fleet.orders', { count: orders.length })}
+      </span>
+
+      {orders.map((order, index) => (
+        <div className="order-row" key={index}>
+          <div className="button-row">
+            <span className="value">
+              {index + 1}. {targetLabel(order)}
+            </span>
+            <button
+              type="button"
+              className="button"
+              disabled={index === 0}
+              onClick={() => swap(index, index - 1)}
+            >
+              ▲
+            </button>
+            <button
+              type="button"
+              className="button"
+              disabled={index === orders.length - 1}
+              onClick={() => swap(index, index + 1)}
+            >
+              ▼
+            </button>
+            <button type="button" className="button" onClick={() => remove(index)}>
+              ✕
+            </button>
+          </div>
+
+          {order.target === OrderTarget.Station && (
+            <div className="button-row">
+              <button
+                type="button"
+                className="button"
+                onClick={() => patch(index, { load: (order.load + 1) % LOAD_KEYS.length })}
+              >
+                {t('ui.order.load')}: {t(LOAD_KEYS[order.load] ?? '')}
+              </button>
+              <button
+                type="button"
+                className="button"
+                onClick={() => patch(index, { unload: (order.unload + 1) % UNLOAD_KEYS.length })}
+              >
+                {t('ui.order.unload')}: {t(UNLOAD_KEYS[order.unload] ?? '')}
+              </button>
+              <RefitChoice vehicle={vehicle} order={order} index={index} patch={patch} />
+            </div>
+          )}
+
+          <div className="button-row">
+            <label className="panel__hint">
+              {t('ui.order.wait')}{' '}
+              <select
+                value={Math.round(order.waitTicks / TICKS_PER_DAY)}
+                onChange={(event) =>
+                  patch(index, { waitTicks: Number(event.target.value) * TICKS_PER_DAY })
+                }
+              >
+                {WAIT_DAY_CHOICES.map((days) => (
+                  <option key={days} value={days}>
+                    {t('ui.order.waitDays', { days })}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <ConditionRow order={order} index={index} count={orders.length} patch={patch} />
+          </div>
+        </div>
+      ))}
+
+      <div className="button-row">
+        <button
+          type="button"
+          className="button"
+          disabled={stationHere === undefined}
+          onClick={() =>
+            stationHere !== undefined &&
+            append({
+              target: OrderTarget.Station,
+              targetId: stationHere.id,
+              load: OrderLoad.Partial,
+              unload: OrderUnload.All,
+              refitTo: -1,
+              waitTicks: 0,
+              condKind: OrderConditionKind.None,
+              condComparator: 0,
+              condValue: 0,
+              condJumpTo: 0,
+            })
+          }
+        >
+          {stationHere === undefined
+            ? t('ui.fleet.pickStation')
+            : t('ui.fleet.addStop', { name: stationHere.name })}
+        </button>
+        {depotHere && (
+          <button
+            type="button"
+            className="button"
+            onClick={() =>
+              append({
+                target: OrderTarget.Depot,
+                targetId: tileIndex,
+                load: OrderLoad.None,
+                unload: OrderUnload.None,
+                refitTo: -1,
+                waitTicks: 0,
+                condKind: OrderConditionKind.None,
+                condComparator: 0,
+                condValue: 0,
+                condJumpTo: 0,
+              })
+            }
+          >
+            {t('ui.fleet.addDepot')}
+          </button>
+        )}
+        {waypointHere && selectedTile !== null && (
+          <button
+            type="button"
+            className="button"
+            onClick={() =>
+              append({
+                target: OrderTarget.Waypoint,
+                targetId: tileIndex,
+                load: OrderLoad.None,
+                unload: OrderUnload.None,
+                refitTo: -1,
+                waitTicks: 0,
+                condKind: OrderConditionKind.None,
+                condComparator: 0,
+                condValue: 0,
+                condJumpTo: 0,
+              })
+            }
+          >
+            {t('ui.fleet.addWaypoint', {
+              kind: t(WAYPOINT_KIND_KEYS[selectedTile.waypoint] ?? ''),
+            })}
+          </button>
+        )}
+      </div>
+    </>
+  );
+}
+
+/** The per-order refit choice: the cargos this vehicle can be converted to. */
+function RefitChoice({
+  vehicle,
+  order,
+  index,
+  patch,
+}: {
+  readonly vehicle: VehicleMarker;
+  readonly order: OrderMarker;
+  readonly index: number;
+  readonly patch: (index: number, changes: Partial<OrderMarker>) => void;
+}): ReactElement | null {
+  const targets = refitTargets(vehicle);
+  if (targets.length < 2) return null;
+
+  return (
+    <label className="panel__hint">
+      {t('ui.order.refit')}{' '}
+      <select
+        value={order.refitTo}
+        onChange={(event) => patch(index, { refitTo: Number(event.target.value) })}
+      >
+        <option value={-1}>{t('ui.order.refitNone')}</option>
+        {targets.map(({ cargo }) => (
+          <option key={cargo} value={cargo}>
+            {t(cargoSpec(cargo).nameKey)}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+/** The conditional jump of one order: kind, comparator, value, target. */
+function ConditionRow({
+  order,
+  index,
+  count,
+  patch,
+}: {
+  readonly order: OrderMarker;
+  readonly index: number;
+  readonly count: number;
+  readonly patch: (index: number, changes: Partial<OrderMarker>) => void;
+}): ReactElement {
+  const jumpChoices: number[] = [];
+  for (let i = 0; i < count; i++) jumpChoices.push(i);
+
+  return (
+    <label className="panel__hint">
+      {t('ui.order.condition')}{' '}
+      <select
+        value={order.condKind}
+        onChange={(event) => {
+          const kind = Number(event.target.value);
+          if (kind === OrderConditionKind.None) {
+            patch(index, { condKind: kind, condComparator: 0, condValue: 0, condJumpTo: 0 });
+          } else {
+            patch(index, { condKind: kind });
+          }
+        }}
+      >
+        {CONDITION_CHOICES.map((choice) => (
+          <option key={choice.kind} value={choice.kind}>
+            {t(choice.labelKey)}
+          </option>
+        ))}
+      </select>
+      {order.condKind !== OrderConditionKind.None && (
+        <>
+          {' '}
+          <select
+            value={order.condComparator}
+            onChange={(event) => patch(index, { condComparator: Number(event.target.value) })}
+          >
+            {COMPARATOR_SYMBOLS.map((symbol, value) => (
+              <option key={symbol} value={value}>
+                {symbol}
+              </option>
+            ))}
+          </select>{' '}
+          <input
+            type="number"
+            className="order-row__value"
+            defaultValue={order.condValue}
+            key={`${conditionKeyOf(order)}:${order.condValue}`}
+            onBlur={(event) => {
+              const value = Number(event.target.value);
+              if (Number.isFinite(value) && value !== order.condValue) {
+                patch(index, { condValue: value });
+              }
+            }}
+          />{' '}
+          {t('ui.order.jumpTo')}{' '}
+          <select
+            value={order.condJumpTo}
+            onChange={(event) => patch(index, { condJumpTo: Number(event.target.value) })}
+          >
+            {jumpChoices.map((target) => (
+              <option key={target} value={target}>
+                {target + 1}
+              </option>
+            ))}
+          </select>
+        </>
+      )}
+    </label>
+  );
+}
+
+/** A stable-enough key for the uncontrolled value input of one condition. */
+function conditionKeyOf(order: OrderMarker): string {
+  return `${order.target}:${order.targetId}:${order.condKind}`;
 }
 
 /**

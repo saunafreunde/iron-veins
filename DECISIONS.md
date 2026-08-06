@@ -11,27 +11,29 @@ decision is missing from this register or the register cites a number that has
 no entry below. A number may appear under several topics.
 
 - **Determinism, RNG & hashing:** D-001, D-002, D-003, D-004, D-009, D-010,
-  D-024, D-093, D-106, D-128, D-137
+  D-024, D-093, D-106, D-128, D-137, D-142
 - **Commands, snapshot & worker boundary:** D-004, D-005, D-006, D-011, D-032,
   D-100, D-111
 - **Map generation & terrain:** D-018, D-019, D-020, D-021, D-022, D-023,
   D-025, D-027
-- **Terraforming & structures:** D-028, D-034, D-050, D-051, D-052, D-124
+- **Terraforming & structures:** D-028, D-034, D-050, D-051, D-052, D-124,
+  D-141
 - **Save format, migrations & replays:** D-007, D-025, D-026, D-027, D-048,
-  D-111, D-130, D-131, D-134
-- **Rail & track:** D-042, D-043, D-044, D-045, D-046, D-047, D-053
+  D-111, D-130, D-131, D-134, D-142, D-144
+- **Rail & track:** D-042, D-043, D-044, D-045, D-046, D-047, D-053, D-141
 - **Signals & reservations:** D-054, D-055, D-056, D-057, D-058, D-059, D-060,
   D-061, D-073, D-080, D-081, D-082, D-083
 - **Stations & catchment:** D-049, D-080, D-095
 - **Cargo, payment & routing:** D-036, D-037, D-065, D-067, D-075, D-077,
-  D-078, D-118
+  D-078, D-118, D-142
 - **Industry & production:** D-022, D-062, D-063, D-064, D-069, D-071, D-079,
   D-085, D-086
 - **Towns, council & ownership:** D-101, D-102, D-103, D-104
 - **Economy, finance & emissions:** D-008, D-090, D-091, D-092, D-105
 - **Balancing & scenarios:** D-038, D-039, D-040, D-041, D-066, D-087, D-088,
   D-116
-- **Vehicles & fleet:** D-043, D-044, D-045, D-068, D-076, D-089, D-093, D-096
+- **Vehicles & fleet:** D-043, D-044, D-045, D-068, D-076, D-089, D-093,
+  D-096, D-142, D-143
 - **Water & air:** D-094, D-095, D-096, D-097, D-098, D-099
 - **Competitors, AI & tenders:** D-107, D-108, D-109, D-115, D-116, D-121,
   D-122
@@ -2684,3 +2686,127 @@ short form:
 Lands as stage 0 of M12 (the pipeline) and throughout M13 (vehicles,
 buildings, industries). SPEC2.md's M12/M13 sections were amended in the same
 commit as this entry.
+
+## M11 - the line backbone, stage A: the order grammar (2026-08-07)
+
+### D-141 A waypoint is a tile layer, not an entity - and it wears a signal post
+
+Section 12.1 gives an order target `{kind:'waypoint', id}`. The id is a TILE
+INDEX and the waypoint itself is one byte in a new map layer
+(`TileMap.waypoint`, saved and hashed), for three reasons that pull the same
+way. Depot orders have addressed their shed by tile index since M2, so the
+grammar stays one integer either way and no id counter joins the save. Every
+guard that protects built things - the E-11 terraform guard, the demolish
+tools, the build validators - already reads the map layers, so a layer is
+protected by adding one clause where an entity list would need each guard
+taught to scan it. And the interface can enumerate markers from the shared
+map buffer it already reads, so no new marker channel is needed.
+
+What a marker becomes is what its tile carries - track wins over road,
+because a level crossing is the railway's tile (D-101): a marker post on
+rail, a buoy on water, a roadside sign on a road. A buoy CLAIMS its
+open-water tile exactly as a station module claims ground; that claim is
+what the terraform guard and competing builders read, and demolition hands
+the tile back. A marker may stand in a junction where a signal may not:
+D-055 is about where a train STOPS, and nothing stops at a marker. A signal
+and a marker refuse each other's tile, and the marker falls - with its
+refund - when the way under it is pulled up.
+
+One thing a waypoint does NOT do: interrupt the leg measurement. The
+arrival-to-arrival clock of D-077 runs across it, so a line detoured through
+a marker measures honestly slower, which is the point of forcing the route.
+A vehicle DOES brake to a stand at its marker - passing through at speed
+would need route legs concatenated across orders, and a two-second pause is
+not worth a second routing model. Drawn as the existing signal post under a
+per-mode tint, because M11's atlas budget in the SPEC2 6.2 ledger is zero
+cells and a tint costs none.
+
+### D-142 The order grammar: conditions guard the order they sit on, at stops only
+
+Section 12.1 says "wenn <X> <Vergleich> <Wert> dann springe zu Auftrag N"
+and no more. The reading implemented: a condition is evaluated when its
+order is about to BECOME current, at a stop - never per tick (hot-path law).
+An order whose condition holds is not run; the vehicle jumps to the target
+instead, asks the landed-on order the same question, and a chain of true
+conditions is cut at `MAX_ORDER_JUMPS_PER_STOP`, after which the vehicle
+simply runs the order it stands on. This makes both of the section's own
+examples one order each: a depot with "reliability > 60 jump past me" is a
+round trip that self-schedules, and a stop with "load < 50 jump to the
+short loop" is a peak-hour diversion. Jump targets are range-checked when
+the orders are SET (`BadJumpTarget`), so the runtime modulo is belt and
+braces, not policy.
+
+The five measures and their units, spelled once: load as a share of
+capacity (0..100), reliability in percent (0..100), age in whole game
+years, waiting time in whole game days since arrival at the current stop,
+and the calendar year. Whole units for the calendar-ish three because an
+equality comparator against fractional years could never fire.
+
+The rest of the grammar, and the rules under it:
+
+* **`waitTicks`** stretches a stop, never shortens it: the dwell is
+  `max(minimum stop, loading time, waitTicks)`, and it holds at waypoints
+  and depots too.
+* **`refitTo`** runs between unloading and loading, only when the vehicle is
+  genuinely empty, through the same capacity-and-price arithmetic as the
+  depot command - `vehicles/refit.ts` is that arithmetic said once, and the
+  order validator refuses at SET time a cargo the vehicle can never carry.
+  A refit the owner cannot afford is skipped silently and the schedule runs
+  on: a stranded vehicle would be a worse answer than an old cargo, the
+  D-093 posture. Booked to the OWNER, not the acting company - this runs in
+  the tick, outside any command (the D-100 trap, avoided).
+* **`nur_transfer`** puts EVERYTHING down as a transfer, a parcel at its own
+  destination included - the feeder mode. **`erzwungen`** delivers what
+  belongs here and dumps the rest. Both override the D-078 disposition, and
+  neither can be ridden for money: the LOADING rule is untouched, so
+  nothing gets aboard that is not being carried closer, and a forced
+  set-down pays only the leg genuinely ridden.
+* **`voll_beliebig`** waits exactly as `voll` does, stated openly: a vehicle
+  in this game carries one cargo at a time, so "full of anything" and
+  "full" are the same condition until multi-cargo consists exist. The mode
+  is real in the grammar, the save and the editor, so the player's intent
+  survives; only the waiting rule collapses.
+
+Every new field is hashed, which moved every world hash: the canonical
+cross-OS pin was re-recorded under the D-137 protocol (v24, seed 424,242,
+tick 10,000: `822b75d3abbd41d0`), and the corpus manifest under the D-130
+protocol - where the regeneration itself proved the v22, v23 and v24
+fixtures decode to ONE identical hash, which is the migration shown to be
+defaults-only. Determinism fixtures exercise every option:
+`order-grammar-commands.json` runs both waypoint commands, all four load
+and unload modes, a per-order refit, a dwell and one jump of every
+condition kind through the shared parser.
+
+### D-143 A depot order is a service call, not a terminus
+
+Until M11 a vehicle reaching a depot order went `InDepot` and stayed there
+until the player restarted it - the state was terminal, and the depot round
+trips section 12.1 builds its conditional jumps for could not exist. Now a
+vehicle in a shed dwells and runs on to its next order; the service of
+section 11.3 happens on arrival exactly as before. Two deliberate edges:
+a vehicle whose ONLY order is the depot still parks, because there is
+nowhere to run on to and "park in the shed" is a thing players do on
+purpose; and stopping a vehicle by command still parks it wherever it is.
+This changes what an old save's schedule does - a vehicle standing InDepot
+with more orders leaves on load - and that is the feature, not a casualty:
+the order list was always a cycle, and a cycle with a permanent stop in it
+was the defect.
+
+### D-144 A migrated save's digest is recorded, never judged
+
+Found by the corpus the moment v24 existed: the v23 fixture carries a
+digest computed by the v23 build's `hashWorld` over the v23 state, and
+decodeSave verified it against TODAY'S hash of the MIGRATED world - so the
+first migration that touched hashed state (M11's) would have refused every
+healthy digest-carrying old save as corrupt, for ever, on every future
+milestone. The fix is D-131's version-pinning argument applied to the
+digest: a fingerprint is evidence about the exact bytes the writing build
+hashed, under that build's hash function, and a migrated save has neither
+any more. Verification therefore runs only when the save's format version
+IS the current one; an older save's digest rides along unverified - exactly
+the standing of the v22 empty string - and the next write records a fresh
+one. Re-hashing at migration time was rejected in D-130 already: a digest
+the migration invented would make every later verification a tautology.
+What is genuinely given up is bit-rot detection on old-format files; what
+is kept is every corruption check on the format the game actually writes,
+which is the case the `.bak` machinery exists for.

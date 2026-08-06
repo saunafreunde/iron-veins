@@ -50,9 +50,12 @@ export const SAVE_MAGIC = 'IRVN';
  * account of section 14.3, 21 the tenders of section 14.4, 22 the AI
  * competitors of section 15, 23 the world digest of M10 - a container-only
  * change: the hashed state itself is untouched, which the migration test
- * proves by hash identity.
+ * proves by hash identity - and 24 the M11 line backbone: the full order
+ * grammar of section 12.1 (waypoints, refit, dwell, conditional jumps) and
+ * the waypoint tile layer. M11's ONE bump (SPEC2 Z5): the later stages of
+ * the milestone extend the same v24 migration rather than adding numbers.
  */
-export const SAVE_VERSION = 23;
+export const SAVE_VERSION = 24;
 
 /** File extension used for manual and automatic saves. */
 export const SAVE_EXTENSION = '.ironsave';
@@ -412,6 +415,7 @@ function parseTileMap(value: unknown, path: string, mapSize: number): TileMapDat
     buildingKind: asBytes(raw['buildingKind'], `${path}.buildingKind`, tiles),
     buildingLevel: asBytes(raw['buildingLevel'], `${path}.buildingLevel`, tiles),
     owner: asBytes(raw['owner'], `${path}.owner`, tiles),
+    waypoint: asBytes(raw['waypoint'], `${path}.waypoint`, tiles),
   };
 }
 
@@ -698,6 +702,18 @@ export function parseCommand(value: unknown, path: string): Command {
         x: asInt(raw['x'], `${path}.x`),
         y: asInt(raw['y'], `${path}.y`),
       };
+    case CommandKind.BuildWaypoint:
+      return {
+        kind: CommandKind.BuildWaypoint,
+        x: asInt(raw['x'], `${path}.x`),
+        y: asInt(raw['y'], `${path}.y`),
+      };
+    case CommandKind.DemolishWaypoint:
+      return {
+        kind: CommandKind.DemolishWaypoint,
+        x: asInt(raw['x'], `${path}.x`),
+        y: asInt(raw['y'], `${path}.y`),
+      };
     case CommandKind.RefitVehicle:
       return {
         kind: CommandKind.RefitVehicle,
@@ -715,11 +731,38 @@ export function parseCommand(value: unknown, path: string): Command {
         vehicleId: asInt(raw['vehicleId'], `${path}.vehicleId`),
         orders: asArray(raw['orders'], `${path}.orders`).map((order, i) => {
           const entry = asRecord(order, `${path}.orders[${i}]`);
+          // The 12.1 fields beyond the M5 four are optional on the wire, so
+          // every log recorded before M11 parses unchanged; absent means the
+          // documented default, and the parser emits the canonical full form.
           return {
             target: asInt(entry['target'], `${path}.orders[${i}].target`),
             targetId: asInt(entry['targetId'], `${path}.orders[${i}].targetId`),
             load: asInt(entry['load'], `${path}.orders[${i}].load`),
             unload: asInt(entry['unload'], `${path}.orders[${i}].unload`),
+            refitTo:
+              entry['refitTo'] === undefined
+                ? -1
+                : asInt(entry['refitTo'], `${path}.orders[${i}].refitTo`),
+            waitTicks:
+              entry['waitTicks'] === undefined
+                ? 0
+                : asInt(entry['waitTicks'], `${path}.orders[${i}].waitTicks`),
+            condKind:
+              entry['condKind'] === undefined
+                ? -1
+                : asInt(entry['condKind'], `${path}.orders[${i}].condKind`),
+            condComparator:
+              entry['condComparator'] === undefined
+                ? 0
+                : asInt(entry['condComparator'], `${path}.orders[${i}].condComparator`),
+            condValue:
+              entry['condValue'] === undefined
+                ? 0
+                : asFinite(entry['condValue'], `${path}.orders[${i}].condValue`),
+            condJumpTo:
+              entry['condJumpTo'] === undefined
+                ? 0
+                : asInt(entry['condJumpTo'], `${path}.orders[${i}].condJumpTo`),
           };
         }),
       };

@@ -63,27 +63,119 @@ export const OrderLoad = {
   Partial: 1,
   /** Do not load at all. */
   None: 2,
+  /**
+   * "Voll (beliebig)" of section 12.1: wait until full of ANY cargo aboard.
+   * A vehicle in this game carries exactly one cargo at a time, so the waiting
+   * rule is the same as Full today; the mode exists so the grammar is complete
+   * and saves carry the player's intent (DECISIONS.md, M11).
+   */
+  FullAny: 3,
 } as const;
 export type OrderLoad = (typeof OrderLoad)[keyof typeof OrderLoad];
 
 export const OrderUnload = {
+  /** Unload what belongs here: deliveries and route-change transfers. */
   All: 0,
   None: 1,
+  /**
+   * "Nur Transfer" (section 12.1): EVERYTHING is set down as a transfer, even
+   * a parcel whose destination this is - the feeder mode. The parcel keeps or
+   * re-finds its destination from here.
+   */
+  TransferOnly: 2,
+  /**
+   * "Erzwungen" (section 12.1): everything comes off. Parcels for here are
+   * delivered; everything else is dumped as a transfer whether or not the
+   * routing rules would have kept it aboard.
+   */
+  Forced: 3,
 } as const;
 export type OrderUnload = (typeof OrderUnload)[keyof typeof OrderUnload];
 
 export const OrderTarget = {
   Station: 0,
   Depot: 1,
+  /** A waypoint marker; the route is forced through its tile (section 12.1). */
+  Waypoint: 2,
 } as const;
 export type OrderTarget = (typeof OrderTarget)[keyof typeof OrderTarget];
 
+/**
+ * What a conditional jump measures (section 12.1). `None` marks an order with
+ * no condition; the three companion fields are then zero, so every order stays
+ * the same fixed-size record (law #7).
+ */
+export const OrderConditionKind = {
+  None: -1,
+  /** Load aboard as a share of capacity, 0..100. [%] */
+  LoadPercent: 0,
+  /** Reliability, 0..100. [%] */
+  Reliability: 1,
+  /** Whole game years since the vehicle was built. [years] */
+  AgeYears: 2,
+  /** Whole game days since arrival at the current stop. [days] */
+  WaitingDays: 3,
+  /** The calendar year. [year] */
+  DateYear: 4,
+} as const;
+export type OrderConditionKind = (typeof OrderConditionKind)[keyof typeof OrderConditionKind];
+
+/** Comparators of the condition grammar, in the order the editor cycles them. */
+export const OrderComparator = {
+  Less: 0,
+  LessOrEqual: 1,
+  Equal: 2,
+  NotEqual: 3,
+  GreaterOrEqual: 4,
+  Greater: 5,
+} as const;
+export type OrderComparator = (typeof OrderComparator)[keyof typeof OrderComparator];
+
+/**
+ * One entry of a vehicle's cyclic order list - the full grammar of section
+ * 12.1. Every field is always present (fixed-size record, law #7): "no
+ * condition" is `condKind === OrderConditionKind.None` with zeroed companions,
+ * "no refit" is `refitTo === -1`, "no minimum dwell" is `waitTicks === 0`.
+ */
 export interface Order {
   readonly target: OrderTarget;
-  /** Station id, or the tile index of a depot. */
+  /** Station id, or the tile index of a depot or waypoint. */
   readonly targetId: number;
   readonly load: OrderLoad;
   readonly unload: OrderUnload;
+  /** Cargo to refit to at this stop, or -1 for none. */
+  readonly refitTo: number;
+  /** Minimum dwell at this stop. [ticks] */
+  readonly waitTicks: number;
+  /** A value of OrderConditionKind; None when the order is unconditional. */
+  readonly condKind: number;
+  /** A value of OrderComparator; 0 when there is no condition. */
+  readonly condComparator: number;
+  /** Right-hand side of the comparison; 0 when there is no condition. */
+  readonly condValue: number;
+  /** Order index the jump lands on; 0 when there is no condition. */
+  readonly condJumpTo: number;
+}
+
+/** An order with everything beyond the M5 grammar at its neutral default. */
+export function plainOrder(
+  target: OrderTarget,
+  targetId: number,
+  load: OrderLoad,
+  unload: OrderUnload,
+): Order {
+  return {
+    target,
+    targetId,
+    load,
+    unload,
+    refitTo: -1,
+    waitTicks: 0,
+    condKind: OrderConditionKind.None,
+    condComparator: 0,
+    condValue: 0,
+    condJumpTo: 0,
+  };
 }
 
 /** Longest route a road vehicle may hold. */
@@ -93,6 +185,14 @@ export class VehicleStore {
   readonly capacity: number;
   /** Highest slot ever used; iteration runs to here and skips dead slots. */
   count = 0;
+
+  /**
+   * Bumped whenever any vehicle's order list is replaced. Like
+   * `TileMap.revision` this is a change signal for the interface - never
+   * saved, never hashed - so the fleet panel sees an edited schedule at once
+   * instead of on the next periodic refresh.
+   */
+  ordersRevision = 0;
 
   readonly alive: Uint8Array;
   readonly specId: Int32Array;

@@ -72,7 +72,17 @@ export function decodeSave(bytes: Uint8Array): LoadedGame {
 
   // An empty digest is a save from before version 23: there is nothing to
   // verify and pretending otherwise would refuse every legitimate old save.
-  if (file.worldDigest !== '') {
+  //
+  // A digest is only VERIFIABLE for a save of the current format version.
+  // It fingerprints the state as the WRITING build hashed it, and a migrated
+  // save has neither of those things any more: the state was just rewritten,
+  // and hashWorld may cover fields the old function never saw - so comparing
+  // would refuse every healthy old save the moment either moved (M11 was the
+  // first migration to hit this). That is D-131's version-pinning argument
+  // applied to the digest: evidence about one version is not judged by
+  // another. An old save's digest rides along unverified, exactly like the
+  // v22 empty string, and the next write records a fresh one.
+  if (file.worldDigest !== '' && header.saveVersion === SAVE_VERSION) {
     const actual = hashWorld(world);
     if (actual !== file.worldDigest) {
       throw new SaveCorruptionError(

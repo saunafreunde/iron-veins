@@ -121,6 +121,8 @@ export interface TileMapData {
   buildingLevel: Uint8Array;
   /** Which company built what stands on each tile, or TILE_PUBLIC. */
   owner: Uint8Array;
+  /** Waypoint marker per tile, see map/waypoints.ts (M11, section 12.1). */
+  waypoint: Uint8Array;
 }
 
 /**
@@ -536,6 +538,7 @@ export class World {
         buildingKind: this.map.buildingKind,
         buildingLevel: this.map.buildingLevel,
         owner: this.map.owner,
+        waypoint: this.map.waypoint,
       },
       towns: this.towns.map((town) => ({ ...town })),
       industries: this.industries.map((industry) => ({ ...industry })),
@@ -571,6 +574,7 @@ export class World {
     map.buildingKind.set(data.map.buildingKind);
     map.buildingLevel.set(data.map.buildingLevel);
     map.owner.set(data.map.owner);
+    map.waypoint.set(data.map.waypoint);
     map.townId.set(new Int16Array(data.map.townId.slice().buffer));
     map.industryId.set(new Int16Array(data.map.industryId.slice().buffer));
 
@@ -879,10 +883,15 @@ function hashDynamicState(h: Fnv1a64, world: World): void {
     h.int(vehicles.lastStationId[id]!).int(vehicles.lastArrivalTick[id]!);
     // The orders drive every decision the vehicle makes; leaving them out of
     // the digest would let a corrupted order list masquerade as the recorded
-    // game until the divergence surfaced somewhere downstream.
+    // game until the divergence surfaced somewhere downstream. The whole 12.1
+    // grammar is fingerprinted - a bent jump target or refit is a different
+    // future (D-134's field audit holds every one of these).
     h.u32(vehicles.orders[id]!.length);
     for (const order of vehicles.orders[id]!) {
       h.u32(order.target).int(order.targetId).u32(order.load).u32(order.unload);
+      h.int(order.refitTo).u32(order.waitTicks);
+      h.int(order.condKind).u32(order.condComparator);
+      h.f64(order.condValue).u32(order.condJumpTo);
     }
     for (const stack of vehicles.cargo[id]!) {
       h.u32(stack.cargo).f64(stack.amount).f64(stack.createdTick);
@@ -917,6 +926,7 @@ export function hashWorld(world: World): string {
   h.intArray(map.buildingKind);
   h.intArray(map.buildingLevel);
   h.intArray(map.owner);
+  h.intArray(map.waypoint);
 
   return h.digest();
 }

@@ -75,6 +75,16 @@ export class TileMap {
   readonly owner: Uint8Array;
 
   /**
+   * Waypoint marker on this tile, see {@link WaypointKind} in waypoints.ts.
+   *
+   * A layer rather than an entity list: orders address a waypoint by TILE
+   * index, exactly as depot orders address their shed, and every guard that
+   * protects built things - terraforming, the demolish tools - already reads
+   * the map layers (M11, section 12.1).
+   */
+  readonly waypoint: Uint8Array;
+
+  /**
    * Connected land component per tile, -1 for water. Derived - recomputed on
    * load rather than serialised.
    */
@@ -135,6 +145,8 @@ export class TileMap {
     offset += tiles;
     this.owner = new Uint8Array(this.buffer, offset, tiles);
     offset += tiles;
+    this.waypoint = new Uint8Array(this.buffer, offset, tiles);
+    offset += tiles;
     this.oceanMask = new Uint8Array(this.buffer, offset, tiles);
 
     if (fresh) {
@@ -153,10 +165,11 @@ export class TileMap {
   static bufferBytes(size: number): number {
     const tiles = size * size;
     const corners = (size + 1) * (size + 1);
-    // 4-byte landmass, two 2-byte id layers, the corner heights, and eleven
+    // 4-byte landmass, two 2-byte id layers, the corner heights, and twelve
     // single-byte layers: terrain, road, track, rail type, signal, structure,
-    // structure height, building kind, building level, owner, ocean mask.
-    return tiles * 8 + corners + tiles * 11;
+    // structure height, building kind, building level, owner, waypoint,
+    // ocean mask.
+    return tiles * 8 + corners + tiles * 12;
   }
 
   /** Read-side view on a map the worker owns. */

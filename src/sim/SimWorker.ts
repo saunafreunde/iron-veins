@@ -138,7 +138,7 @@ function structureSignature(current: World): string {
   }
   return (
     `${current.stations.length}:${modules}:${current.vehicles.livingCount}:` +
-    `${current.industries.length}:${levels}:${closed}`
+    `${current.industries.length}:${levels}:${closed}:${current.vehicles.ordersRevision}`
   );
 }
 
@@ -312,7 +312,8 @@ function postFleet(current: World): void {
       cargoUnits: Math.round(units),
       capacity: vehicles.capacityUnits[id]!,
       earnedCt: vehicles.earnedCt[id]!,
-      orderStationIds: vehicles.orders[id]!.map((order) => order.targetId),
+      // The whole grammar, so the order editor can show what it will send.
+      orders: vehicles.orders[id]!.map((order) => ({ ...order })),
       consist: [...vehicles.consist[id]!],
       maxSpeedMs: vehicles.maxSpeedMs[id]!,
       lengthM: vehicles.lengthM[id]!,

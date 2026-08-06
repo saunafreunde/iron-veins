@@ -1,9 +1,23 @@
-import type { Cargo } from '../cargo/types';
-import { COMPANY_COLOR_COUNT, MAX_COMPANY_NAME_LENGTH } from '../constants';
+import { CARGO_COUNT, type Cargo } from '../cargo/types';
+import {
+  COMPANY_COLOR_COUNT,
+  MAX_COMPANY_NAME_LENGTH,
+  MAX_ORDERS_PER_VEHICLE,
+  MAX_ORDER_WAIT_TICKS,
+} from '../constants';
 import { bookExpense, repayLoan, takeLoan } from '../economy/company';
 import type { ModuleKind } from '../station/types';
-import type { OrderLoad, OrderUnload } from '../vehicles/VehicleStore';
-import { OrderTarget, VehicleState, type Order } from '../vehicles/VehicleStore';
+import { waypointServes } from '../map/waypoints';
+import { refitCapacity } from '../vehicles/refit';
+import {
+  OrderComparator,
+  OrderConditionKind,
+  OrderLoad,
+  OrderTarget,
+  OrderUnload,
+  VehicleState,
+  type Order,
+} from '../vehicles/VehicleStore';
 import type { SignalKind } from '../map/signals';
 import type { RailType, TrackDir } from '../map/track';
 import {
@@ -11,6 +25,8 @@ import {
   buildStationModule,
   buildAirport,
   buildWaterStop,
+  buildWaypoint,
+  demolishWaypoint,
   demolishBuilding,
   buyAircraft,
   buyShip,
@@ -33,7 +49,14 @@ import { acceptContract, isOpen } from '../economy/contracts';
 import { applyTownMeasure, buyExclusiveRights } from '../town/measures';
 import type { TownMeasure } from '../town/council';
 import type { World } from '../World';
-import { ACCEPTED, CommandKind, RejectReason, type Command, type CommandOutcome } from './types';
+import {
+  ACCEPTED,
+  CommandKind,
+  RejectReason,
+  type Command,
+  type CommandOutcome,
+  type OrderSpec,
+} from './types';
 
 /**
  * Apply one command to the world. Pure with respect to everything outside
@@ -176,6 +199,12 @@ export function executeCommand(world: World, command: Command): CommandOutcome {
     case CommandKind.DemolishSignal:
       return demolishSignal(world, command.x, command.y);
 
+    case CommandKind.BuildWaypoint:
+      return buildWaypoint(world, command.x, command.y);
+
+    case CommandKind.DemolishWaypoint:
+      return demolishWaypoint(world, command.x, command.y);
+
     case CommandKind.RefitVehicle:
       return refitVehicle(world, command.vehicleId, command.cargo as Cargo);
 
@@ -186,20 +215,17 @@ export function executeCommand(world: World, command: Command): CommandOutcome {
       if (!world.vehicles.isAlive(command.vehicleId)) {
         return { ok: false, reasonKey: RejectReason.NoSuchVehicle };
       }
+      if (command.orders.length > MAX_ORDERS_PER_VEHICLE) {
+        return { ok: false, reasonKey: RejectReason.TooManyOrders };
+      }
       const orders: Order[] = [];
       for (const spec of command.orders) {
-        if (spec.target === OrderTarget.Station && world.stations[spec.targetId] === undefined) {
-          return { ok: false, reasonKey: RejectReason.NoSuchStation };
-        }
-        orders.push({
-          target: spec.target as OrderTarget,
-          targetId: spec.targetId,
-          load: spec.load as OrderLoad,
-          unload: spec.unload as OrderUnload,
-        });
+        const outcome = validateOrder(world, command.vehicleId, spec, command.orders.length, orders);
+        if (outcome !== null) return { ok: false, reasonKey: outcome };
       }
       world.vehicles.orders[command.vehicleId] = orders;
       world.vehicles.orderIndex[command.vehicleId] = 0;
+      world.vehicles.ordersRevision++;
       // A route computed for the old orders is meaningless now - and so is any
       // track claimed along it, which would otherwise hold a section for ever.
       releaseAll(world, command.vehicleId);
@@ -232,6 +258,108 @@ export function executeCommand(world: World, command: Command): CommandOutcome {
       return ACCEPTED;
     }
   }
+}
+
+/**
+ * Validate one order of the 12.1 grammar and append its canonical record.
+ *
+ * Returns the rejection key, or null when the order is sound. `listLength` is
+ * the length the WHOLE list will have, because a jump may point forward at an
+ * order that has not been validated yet. Every refusal names the concrete
+ * problem (section 17.3).
+ */
+function validateOrder(
+  world: World,
+  vehicleId: number,
+  spec: OrderSpec,
+  listLength: number,
+  out: Order[],
+): string | null {
+  const isInt = (value: number): boolean => Number.isInteger(value);
+
+  if (!isInt(spec.target) || spec.target < OrderTarget.Station || spec.target > OrderTarget.Waypoint) {
+    return RejectReason.InvalidOrder;
+  }
+  if (!isInt(spec.targetId)) return RejectReason.InvalidOrder;
+  if (spec.target === OrderTarget.Station && world.stations[spec.targetId] === undefined) {
+    return RejectReason.NoSuchStation;
+  }
+  if (spec.target === OrderTarget.Depot || spec.target === OrderTarget.Waypoint) {
+    if (spec.targetId < 0 || spec.targetId >= world.map.tileCount) {
+      return RejectReason.InvalidOrder;
+    }
+  }
+  if (spec.target === OrderTarget.Waypoint) {
+    const kind = world.map.waypoint[spec.targetId]!;
+    if (!waypointServes(kind, world.vehicles.kind[vehicleId]!)) {
+      return RejectReason.NoSuchWaypoint;
+    }
+  }
+
+  if (!isInt(spec.load) || spec.load < OrderLoad.Full || spec.load > OrderLoad.FullAny) {
+    return RejectReason.InvalidOrder;
+  }
+  if (!isInt(spec.unload) || spec.unload < OrderUnload.All || spec.unload > OrderUnload.Forced) {
+    return RejectReason.InvalidOrder;
+  }
+
+  const refitTo = spec.refitTo ?? -1;
+  if (!isInt(refitTo) || refitTo < -1 || refitTo >= CARGO_COUNT) {
+    return RejectReason.InvalidOrder;
+  }
+  // The RefitVehicle validator's own capacity rule, asked at set time: an
+  // order that can never be carried out is refused here, not discovered at a
+  // platform months later.
+  if (refitTo >= 0 && refitCapacity(world.vehicles, vehicleId, refitTo as Cargo) <= 0) {
+    return RejectReason.CannotCarry;
+  }
+
+  const waitTicks = spec.waitTicks ?? 0;
+  if (!isInt(waitTicks) || waitTicks < 0 || waitTicks > MAX_ORDER_WAIT_TICKS) {
+    return RejectReason.InvalidOrder;
+  }
+
+  const condKind = spec.condKind ?? OrderConditionKind.None;
+  if (
+    !isInt(condKind) ||
+    condKind < OrderConditionKind.None ||
+    condKind > OrderConditionKind.DateYear
+  ) {
+    return RejectReason.InvalidOrder;
+  }
+  let condComparator = 0;
+  let condValue = 0;
+  let condJumpTo = 0;
+  if (condKind !== OrderConditionKind.None) {
+    condComparator = spec.condComparator ?? 0;
+    condValue = spec.condValue ?? 0;
+    condJumpTo = spec.condJumpTo ?? 0;
+    if (
+      !isInt(condComparator) ||
+      condComparator < OrderComparator.Less ||
+      condComparator > OrderComparator.Greater
+    ) {
+      return RejectReason.InvalidOrder;
+    }
+    if (!Number.isFinite(condValue)) return RejectReason.InvalidOrder;
+    if (!isInt(condJumpTo) || condJumpTo < 0 || condJumpTo >= listLength) {
+      return RejectReason.BadJumpTarget;
+    }
+  }
+
+  out.push({
+    target: spec.target as OrderTarget,
+    targetId: spec.targetId,
+    load: spec.load as OrderLoad,
+    unload: spec.unload as OrderUnload,
+    refitTo,
+    waitTicks,
+    condKind,
+    condComparator,
+    condValue,
+    condJumpTo,
+  });
+  return null;
 }
 
 /**

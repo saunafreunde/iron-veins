@@ -21,6 +21,7 @@ import {
   GRAVITY,
   HEIGHT_STEP_M,
   LOAD_TICKS_PER_UNIT,
+  MAX_ORDER_JUMPS_PER_STOP,
   MAX_VEHICLES,
   MIN_STATION_STOP_TICKS,
   ROLLING_RESISTANCE_RAIL,
@@ -30,6 +31,8 @@ import {
   SIGNAL_STOP_OFFSET_M,
   STOPPED_SPEED_MS,
   TICK_SECONDS,
+  TICKS_PER_DAY,
+  TICKS_PER_YEAR,
   TILE_DIAGONAL_M,
   TILE_SIZE_M,
 } from '../constants';
@@ -42,7 +45,8 @@ import {
   turnSteps,
   type RailType,
 } from '../map/track';
-import { bookRevenue } from '../economy/company';
+import { bookExpense, bookRevenue } from '../economy/company';
+import { refitCapacity, refitPriceCt } from './refit';
 import { serviceVehicle } from './lifecycle';
 import { deliverToIndustry } from '../industry/production';
 import { isOneWay, signalDirection, signalKind, SignalKind } from '../map/signals';
@@ -60,7 +64,15 @@ import type { World } from '../World';
 import { holdBody, releaseAll, releaseBehind, tryClaim } from './reservations';
 import { pathDirection, pathStepM, routeLengthM } from './route';
 import { VehicleKind } from './spec';
-import { OrderLoad, OrderTarget, OrderUnload, VehicleState } from './VehicleStore';
+import {
+  OrderComparator,
+  OrderConditionKind,
+  OrderLoad,
+  OrderTarget,
+  OrderUnload,
+  VehicleState,
+  type Order,
+} from './VehicleStore';
 
 /**
  * Vehicle simulation: longitudinal dynamics, the state machine and the cargo
@@ -364,10 +376,88 @@ function orderTargetTile(world: World, id: number): number {
   if (orders.length === 0) return -1;
 
   const order = orders[vehicles.orderIndex[id]! % orders.length]!;
-  if (order.target === OrderTarget.Depot) return order.targetId;
+  // A depot or waypoint order names its tile directly. Deliberately lenient
+  // about a marker demolished since the order was set: if the way itself is
+  // still there the vehicle simply drives via the tile, and if it is not, the
+  // pathfinder says NoRoute - the same treatment a vanished shed gets.
+  if (order.target === OrderTarget.Depot || order.target === OrderTarget.Waypoint) {
+    return order.targetId;
+  }
 
   const station = world.stations[order.targetId];
   return station === undefined ? -1 : platformFor(world, id, station);
+}
+
+/**
+ * The measured quantity of one order condition (section 12.1), at a stop.
+ *
+ * Pure arithmetic over store fields - no allocation, and never called from the
+ * per-tick path: conditions are evaluated only when a vehicle picks its next
+ * order at a stop (hot-path law #7).
+ */
+function conditionMeasure(world: World, id: number, kind: number): number {
+  const vehicles = world.vehicles;
+  switch (kind) {
+    case OrderConditionKind.LoadPercent: {
+      const capacity = vehicles.capacityUnits[id]!;
+      if (capacity <= 0) return 0;
+      return (amountOf(vehicles.cargo[id]!, vehicles.refitCargo[id]! as Cargo) / capacity) * 100;
+    }
+    case OrderConditionKind.Reliability:
+      return vehicles.reliability[id]! / 100;
+    case OrderConditionKind.AgeYears:
+      return Math.floor((world.tick - vehicles.builtTick[id]!) / TICKS_PER_YEAR);
+    case OrderConditionKind.WaitingDays: {
+      const arrived = vehicles.lastArrivalTick[id]!;
+      return arrived < 0 ? 0 : Math.floor((world.tick - arrived) / TICKS_PER_DAY);
+    }
+    case OrderConditionKind.DateYear:
+      return world.date.year;
+    default:
+      return 0;
+  }
+}
+
+/** Does this order's jump condition hold right now? */
+function conditionHolds(world: World, id: number, order: Order): boolean {
+  const measure = conditionMeasure(world, id, order.condKind);
+  const value = order.condValue;
+  switch (order.condComparator) {
+    case OrderComparator.Less:
+      return measure < value;
+    case OrderComparator.LessOrEqual:
+      return measure <= value;
+    case OrderComparator.Equal:
+      return measure === value;
+    case OrderComparator.NotEqual:
+      return measure !== value;
+    case OrderComparator.GreaterOrEqual:
+      return measure >= value;
+    default:
+      return measure > value;
+  }
+}
+
+/**
+ * Which order actually runs next, starting the scan at `start`.
+ *
+ * An order carrying a condition that HOLDS is not run - the vehicle jumps to
+ * the condition's target instead, and the order it lands on is asked the same
+ * question. The chain is capped: a schedule whose conditions form a cycle of
+ * truths would otherwise spin for ever, and past the cap the vehicle simply
+ * runs the order it stands on, conditions ignored (section 12.1; the jump
+ * targets were range-checked when the orders were set).
+ */
+function resolveOrderIndex(world: World, id: number, start: number): number {
+  const orders = world.vehicles.orders[id]!;
+  let index = start;
+  for (let jumps = 0; jumps < MAX_ORDER_JUMPS_PER_STOP; jumps++) {
+    const order = orders[index]!;
+    if (order.condKind === OrderConditionKind.None) return index;
+    if (!conditionHolds(world, id, order)) return index;
+    index = order.condJumpTo % orders.length;
+  }
+  return index;
 }
 
 /**
@@ -378,12 +468,18 @@ function orderTargetTile(world: World, id: number): number {
  * wonders what is wrong.
  */
 export function startVehicle(world: World, id: number): boolean {
+  const vehicles = world.vehicles;
+  const orders = vehicles.orders[id]!;
+  if (orders.length > 0) {
+    // Starting from a stand is a stop event, so the conditions speak here too.
+    vehicles.orderIndex[id] = resolveOrderIndex(world, id, vehicles.orderIndex[id]! % orders.length);
+  }
   const target = orderTargetTile(world, id);
   if (target === -1 || !routeTo(world, id, target)) {
-    world.vehicles.state[id] = VehicleState.NoRoute;
+    vehicles.state[id] = VehicleState.NoRoute;
     return false;
   }
-  world.vehicles.state[id] = VehicleState.Driving;
+  vehicles.state[id] = VehicleState.Driving;
   return true;
 }
 
@@ -396,7 +492,11 @@ function advanceOrder(world: World, id: number): void {
     return;
   }
 
-  vehicles.orderIndex[id] = (vehicles.orderIndex[id]! + 1) % orders.length;
+  vehicles.orderIndex[id] = resolveOrderIndex(
+    world,
+    id,
+    (vehicles.orderIndex[id]! + 1) % orders.length,
+  );
   // An aircraft waits on the ground rather than joining a full holding stack.
   if (!mayDepart(world, id)) {
     vehicles.state[id] = VehicleState.Loading;
@@ -436,10 +536,22 @@ function serveStation(world: World, id: number, station: Station): number {
   vehicles.lastStationId[id] = station.id;
   vehicles.lastArrivalTick[id] = world.tick;
 
-  if (order.unload === OrderUnload.All) {
+  if (order.unload !== OrderUnload.None) {
     for (let i = carried.length - 1; i >= 0; i--) {
       const stack = carried[i]!;
-      const disposition = dispositionOf(world, id, station, stack);
+      let disposition = dispositionOf(world, id, station, stack);
+      // The two forced modes of section 12.1 override the routing's answer,
+      // never the payment: a parcel set down earlier than the rules wanted is
+      // paid for exactly the leg it rode, and the loading rule (D-078) still
+      // decides what got aboard - so neither mode can be ridden for a detour.
+      if (order.unload === OrderUnload.TransferOnly) {
+        // The feeder mode: EVERYTHING is put down as a transfer, even a parcel
+        // whose destination this is. transferToStation re-opens its search.
+        disposition = CargoDisposition.Transfer;
+      } else if (order.unload === OrderUnload.Forced && disposition === CargoDisposition.Stay) {
+        // Forced unload: deliveries stay deliveries, but nothing rides on.
+        disposition = CargoDisposition.Transfer;
+      }
       if (disposition === CargoDisposition.Stay) continue;
 
       // A parcel that cannot be set down - the station is full - stays aboard
@@ -482,6 +594,23 @@ function serveStation(world: World, id: number, station: Station): number {
       units += paidFor;
       stack.amount -= paidFor;
       if (stack.amount <= 0) carried.splice(i, 1);
+    }
+  }
+
+  // The per-order refit of section 12.1, between unloading and loading: the
+  // same capacity rule and the same price as the depot command
+  // (vehicles/refit.ts), applied only when the vehicle is genuinely empty.
+  // A refit the owner cannot afford is skipped, not queued - the vehicle
+  // keeps its old cargo and the schedule stays live.
+  if (order.refitTo >= 0 && order.refitTo !== vehicles.refitCargo[id] && carried.length === 0) {
+    const owner = world.companyOf(vehicles.ownerId[id]!);
+    const chargeCt = world.costCt(refitPriceCt(vehicles, id));
+    if (refitCapacity(vehicles, id, order.refitTo as Cargo) > 0 && chargeCt <= owner.cashCt) {
+      vehicles.refitCargo[id] = order.refitTo;
+      // Before the loading below reads capacityUnits, or the first load after
+      // a refit would still be measured against the OLD cargo's capacity.
+      vehicles.refreshAggregate(id);
+      bookExpense(owner, chargeCt);
     }
   }
 
@@ -793,8 +922,20 @@ function stepVehicle(world: World, id: number): void {
   const vehicles = world.vehicles;
   switch (vehicles.state[id]) {
     case VehicleState.Stopped:
-    case VehicleState.InDepot:
       return;
+
+    case VehicleState.InDepot: {
+      // A depot ORDER is a service call, not a terminus (section 12.1's
+      // depot round trips): the vehicle dwells and then runs on. A vehicle
+      // whose only order is the depot stays parked - there is nowhere to run
+      // on to - and parking on purpose is what the stop command is for.
+      const orders = vehicles.orders[id]!;
+      if (orders.length <= 1) return;
+      vehicles.loadTicks[id] = vehicles.loadTicks[id]! - 1;
+      if (vehicles.loadTicks[id]! > 0) return;
+      advanceOrder(world, id);
+      return;
+    }
 
     case VehicleState.NoRoute: {
       // Retry occasionally rather than every tick: a stranded vehicle must
@@ -819,7 +960,17 @@ function stepVehicle(world: World, id: number): void {
 
       const orders = vehicles.orders[id]!;
       const order = orders[vehicles.orderIndex[id]! % orders.length];
-      if (order !== undefined && order.load === OrderLoad.Full && !isFull(world, id)) {
+      // FullAny waits exactly as Full does: a vehicle here carries one cargo
+      // at a time, so "full of anything" and "full" are the same condition
+      // (see OrderLoad.FullAny). Only a STATION can fill a vehicle - a
+      // waypoint dwell must never turn into waiting for cargo that cannot
+      // come.
+      if (
+        order !== undefined &&
+        order.target === OrderTarget.Station &&
+        (order.load === OrderLoad.Full || order.load === OrderLoad.FullAny) &&
+        !isFull(world, id)
+      ) {
         vehicles.state[id] = VehicleState.WaitingForCargo;
         return;
       }
@@ -857,7 +1008,11 @@ function stepVehicle(world: World, id: number): void {
       if (!claimRunway(world, station)) return;
 
       const units = serveStation(world, id, station);
-      vehicles.loadTicks[id] = Math.max(MIN_STATION_STOP_TICKS, units * LOAD_TICKS_PER_UNIT);
+      vehicles.loadTicks[id] = Math.max(
+        MIN_STATION_STOP_TICKS,
+        units * LOAD_TICKS_PER_UNIT,
+        order?.waitTicks ?? 0,
+      );
       vehicles.state[id] = VehicleState.Loading;
       return;
     }
@@ -972,6 +1127,20 @@ function stepVehicle(world: World, id: number): void {
         // one, and RELIABILITY_SERVICE_GAIN was a constant nothing read.
         serviceVehicle(world, id);
         vehicles.state[id] = VehicleState.InDepot;
+        // The dwell the InDepot case counts down before the schedule runs on.
+        vehicles.loadTicks[id] = Math.max(MIN_STATION_STOP_TICKS, order.waitTicks);
+        return;
+      }
+      if (order.target === OrderTarget.Waypoint) {
+        // A waypoint is passed, not served: no cargo, no revenue, no leg
+        // measurement - the arrival-to-arrival clock of D-077 keeps running
+        // across it. Only a demanded minimum dwell holds the vehicle here.
+        if (order.waitTicks > 0) {
+          vehicles.state[id] = VehicleState.Loading;
+          vehicles.loadTicks[id] = order.waitTicks;
+          return;
+        }
+        advanceOrder(world, id);
         return;
       }
 
@@ -989,7 +1158,13 @@ function stepVehicle(world: World, id: number): void {
       const perUnit = hasModule(station, ModuleKind.FreightTerminal)
         ? LOAD_TICKS_PER_UNIT * FREIGHT_TERMINAL_LOAD_FACTOR
         : LOAD_TICKS_PER_UNIT;
-      vehicles.loadTicks[id] = Math.max(MIN_STATION_STOP_TICKS, units * perUnit);
+      // The minimum dwell of section 12.1 stretches the stop, never shortens
+      // the loading it has to cover anyway.
+      vehicles.loadTicks[id] = Math.max(
+        MIN_STATION_STOP_TICKS,
+        units * perUnit,
+        order.waitTicks,
+      );
       vehicles.state[id] = VehicleState.Loading;
       return;
     }
