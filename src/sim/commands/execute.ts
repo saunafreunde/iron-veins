@@ -80,7 +80,13 @@ export function executeCommand(world: World, command: Command): CommandOutcome {
       return terraform(world, command.x, command.y, TerraformDirection.Lower);
 
     case CommandKind.LevelLand: {
-      const result = levelTile(world.map, command.x, command.y, world.company.cashCt);
+      const result = levelTile(
+        world.map,
+        command.x,
+        command.y,
+        world.company.cashCt,
+        world.company.id,
+      );
       if (!result.ok) return { ok: false, reasonKey: result.reasonKey ?? '' };
       chargeCompany(world, result.costCt);
       return ACCEPTED;
@@ -241,20 +247,27 @@ function forgetTrip(world: World, id: number): void {
   world.vehicles.lastArrivalTick[id] = -1;
 }
 
-/** Shared body of the raise and lower commands. */
+/**
+ * Shared body of the raise and lower commands.
+ *
+ * The acting company travels into the guard: ground under ANY infrastructure
+ * is refused, and ground under another company's infrastructure is refused
+ * with its own reason (SPEC2 E-11, D-104). Every refusal reaches the player
+ * as a concrete sentence (section 17.3).
+ */
 function terraform(
   world: World,
   x: number,
   y: number,
   direction: TerraformDirection,
 ): CommandOutcome {
-  const estimate = estimateTerraform(world.map, x, y, direction);
+  const estimate = estimateTerraform(world.map, x, y, direction, world.company.id);
   if (!estimate.ok) return { ok: false, reasonKey: estimate.reasonKey ?? '' };
   if (world.costCt(estimate.costCt) > world.company.cashCt) {
     return { ok: false, reasonKey: RejectReason.InsufficientFunds };
   }
 
-  const result = applyTerraform(world.map, x, y, direction);
+  const result = applyTerraform(world.map, x, y, direction, world.company.id);
   if (!result.ok) return { ok: false, reasonKey: result.reasonKey ?? '' };
   chargeCompany(world, world.costCt(result.costCt));
   return ACCEPTED;

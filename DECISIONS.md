@@ -1967,3 +1967,49 @@ is authoritative for M10 onward. CLAUDE.md digests continue to serve both. The
 rule that an undocumented departure is a defect, not a decision, now applies to
 both documents alike - which is why SPEC2.md's first milestone is a hardening
 pass over the audit's verified defects and nothing ships before it is green.
+
+### D-124 Terraforming is guarded under everything built, and ownership refines the answer, not the outcome
+
+The audit's first verified defect (SPEC2 E-11): `cornerIsFree` checked roads,
+buildings and industries and nothing else. Raising a corner under a live
+railway bent the track profile silently - the train kept its cached route and
+its solver read heights the ground no longer had. Under every system the
+expansion adds (town growth extending streets, the AI building) that hole
+would have become a standing source of corruption, so it is closed
+unconditionally: a bugfix, not a versioned world rule, exactly as the juror
+veto demanded.
+
+The guard now blocks a corner when any of the four tiles around it carries
+road bits, track bits, a signal, a bridge or tunnel, a building, an industry -
+or an OWNER. The owner clause is not redundancy: an airport, a quay or a
+canopy lives in entity state and leaves no mark in the map layers at all; the
+one trace `attachModule` leaves is the owner byte, and without reading it the
+guard would flatten a runway it cannot see. A bare tile is always
+`TILE_PUBLIC` (`releaseIfBare` returns it on demolition), so "owned" reliably
+means "something stands here".
+
+Ownership changes the REASON, never the outcome (D-104 semantics). Everything
+built refuses the terraform - the company's own track included, because moving
+ground under rails is wrong whoever owns them; the owner's remedy is to pull
+the track up first, which releases the tile back to public and frees the
+ground. But a refusal must name its cause (section 17.3), and "occupied" would
+send a player at a competitor's line to a demolish tool that refuses too
+(D-101). Foreign infrastructure therefore answers with its own key,
+`terraform.reject.foreignOwner`. A town's public street stays plain
+"occupied": it is nobody's, and nobody may dig it up either way.
+
+The cascade is guarded at the same depth as the first corner. `collectAffected`
+walks every corner the slope invariant would drag along and asks the same
+obstruction question for each; the first guarded corner refuses the WHOLE
+operation before anything is written, so a refusal is atomic by construction.
+`levelTile` keeps its documented stop-where-it-stands behaviour - it is a
+sequence of single-corner operations and already stops mid-way when the money
+runs out - but a levelling that could not move anything at all now reports the
+concrete reason instead of a bare no.
+
+No save shape changed and no migration is needed; old saves whose ground was
+corrupted while the hole was open stay as they are. What the fix does change
+is the validity of old COMMAND LOGS - a recorded replay that terraformed under
+track now refuses where it once succeeded. That is the honest consequence
+E-11 names, and it is handled by the replay version-pinning decision, not by
+gating this guard.
