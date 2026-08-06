@@ -1,0 +1,2 @@
+# Save fixtures are compressed binary; a CRLF conversion would corrupt them.
+*.ironsave binary
