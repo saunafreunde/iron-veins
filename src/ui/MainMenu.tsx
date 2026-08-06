@@ -1,5 +1,6 @@
 import type { ReactElement } from 'react';
 import { t } from '../i18n';
+import { exportBugReport } from './crashReporter';
 import { useSimStore, type OverlayKind } from './store';
 
 /**
@@ -44,6 +45,11 @@ export function MainMenu({
         </button>
         <button type="button" className="button" onClick={() => onSelect('handbook')}>
           {t('ui.menu.handbook')}
+        </button>
+        {/* The same bundle the crash dialog writes, from a HEALTHY game -
+            for "something is wrong but nothing crashed" reports (D-132). */}
+        <button type="button" className="button" onClick={() => void exportBugReport()}>
+          {t('ui.menu.bugReport')}
         </button>
       </div>
 

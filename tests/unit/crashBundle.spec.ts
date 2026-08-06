@@ -1,0 +1,205 @@
+import { describe, expect, it } from 'vitest';
+import {
+  assembleCrashBundle,
+  bugReportFileName,
+  bytesToBase64,
+  COMMAND_LOG_BYTE_BUDGET,
+  CommandLogTail,
+  CRASH_BUNDLE_SCHEMA_VERSION,
+  type CrashBundleInput,
+} from '../../src/ui/crashBundle';
+
+/**
+ * The pure half of crash safety (SPEC2 M10, D-132): the rolling command-log
+ * tail and the bundle assembly. Everything here is main-thread data with no
+ * worker, no DOM and no disk, which is exactly why it can be pinned by a unit
+ * test - the platform write behind it goes through src/platform/Storage and
+ * is a different test's problem.
+ */
+
+describe('CommandLogTail', () => {
+  it('keeps everything while under budget, in order', () => {
+    const tail = new CommandLogTail(1000);
+    tail.push('one');
+    tail.push('two');
+    tail.push('three');
+
+    expect(tail.lines()).toEqual(['one', 'two', 'three']);
+    expect(tail.byteSize).toBe('onetwothree'.length);
+  });
+
+  it('evicts oldest-first when the budget is exceeded', () => {
+    // Budget for two 10-byte lines plus a little, never three.
+    const tail = new CommandLogTail(25);
+    tail.push('aaaaaaaaaa');
+    tail.push('bbbbbbbbbb');
+    tail.push('cccccccccc');
+
+    expect(tail.lines()).toEqual(['bbbbbbbbbb', 'cccccccccc']);
+    expect(tail.byteSize).toBe(20);
+  });
+
+  it('always keeps the newest line, truncated if it alone exceeds the budget', () => {
+    const tail = new CommandLogTail(8);
+    tail.push('short');
+    tail.push('0123456789abcdef');
+
+    const lines = tail.lines();
+    expect(lines).toEqual(['01234567']);
+    expect(tail.byteSize).toBe(8);
+  });
+
+  it('counts UTF-8 bytes, not UTF-16 units', () => {
+    // Each 'ä' is one UTF-16 unit but two UTF-8 bytes, so ten of them must
+    // burst a 16-byte budget even though .length says 10.
+    const umlauts = 'ä'.repeat(10);
+    const tail = new CommandLogTail(16);
+    tail.push(umlauts);
+
+    expect(tail.byteSize).toBeLessThanOrEqual(16);
+    expect(tail.lines()[0]).toBe('ä'.repeat(8));
+  });
+
+  it('never splits an astral code point when truncating', () => {
+    // Each '𝄞' is four UTF-8 bytes; a 10-byte budget fits two of them and
+    // must not keep half of the third as a lone surrogate.
+    const clefs = '𝄞𝄞𝄞';
+    const tail = new CommandLogTail(10);
+    tail.push(clefs);
+
+    expect(tail.lines()[0]).toBe('𝄞𝄞');
+    expect(tail.byteSize).toBe(8);
+  });
+
+  it('survives sustained pushing far beyond the budget without growing', () => {
+    const tail = new CommandLogTail(1024);
+    for (let index = 0; index < 5000; index++) {
+      tail.push(`{"atTick":${index},"command":{"kind":3,"amountCt":100000}}`);
+    }
+
+    expect(tail.byteSize).toBeLessThanOrEqual(1024);
+    const lines = tail.lines();
+    // The newest line is always the last push, the window is contiguous.
+    expect(lines[lines.length - 1]).toContain('"atTick":4999');
+    expect(lines.length).toBeGreaterThan(10);
+  });
+
+  it('clears to empty', () => {
+    const tail = new CommandLogTail(100);
+    tail.push('line');
+    tail.clear();
+
+    expect(tail.lines()).toEqual([]);
+    expect(tail.byteSize).toBe(0);
+  });
+
+  it('has the ~1 MB budget SPEC2 M10 names', () => {
+    expect(COMMAND_LOG_BYTE_BUDGET).toBe(1_048_576);
+  });
+});
+
+describe('bytesToBase64', () => {
+  it('matches the reference encoder for every padding case', () => {
+    const cases = [
+      new Uint8Array([]),
+      new Uint8Array([0]),
+      new Uint8Array([255, 254]),
+      new Uint8Array([1, 2, 3]),
+      new Uint8Array([1, 2, 3, 4]),
+      new Uint8Array(Array.from({ length: 256 }, (_, index) => index)),
+    ];
+    for (const bytes of cases) {
+      expect(bytesToBase64(bytes)).toBe(Buffer.from(bytes).toString('base64'));
+    }
+  });
+});
+
+function inputWith(overrides: Partial<CrashBundleInput>): CrashBundleInput {
+  return {
+    appVersion: '0.1.0',
+    saveVersion: 23,
+    writtenAt: '2026-08-06T12:00:00.000Z',
+    error: { message: 'boom', stack: 'Error: boom\n    at tick', tick: 4321 },
+    context: {
+      seed: 7,
+      mapSize: 256,
+      tick: 4300,
+      stateHash: 'deadbeefdeadbeef',
+      isDesktop: true,
+    },
+    commandLog: ['{"atTick":1}', '{"atTick":2}'],
+    autosave: { name: 'autosave-1.ironsave', bytes: new Uint8Array([73, 82, 86, 78, 0, 255]) },
+    ...overrides,
+  };
+}
+
+interface DecodedBundle {
+  kind: string;
+  schemaVersion: number;
+  appVersion: string;
+  saveVersion: number;
+  writtenAt: string;
+  error: { message: string; stack: string; tick: number } | null;
+  context: { seed: number; mapSize: number; tick: number; stateHash: string; isDesktop: boolean };
+  commandLog: string[];
+  autosave: { name: string; base64: string } | null;
+}
+
+function decode(bytes: Uint8Array): DecodedBundle {
+  return JSON.parse(new TextDecoder().decode(bytes)) as DecodedBundle;
+}
+
+describe('assembleCrashBundle', () => {
+  it('carries the version triple: app, save format, bundle schema', () => {
+    const bundle = decode(assembleCrashBundle(inputWith({})));
+
+    expect(bundle.kind).toBe('iron-veins-bug-report');
+    expect(bundle.appVersion).toBe('0.1.0');
+    expect(bundle.saveVersion).toBe(23);
+    expect(bundle.schemaVersion).toBe(CRASH_BUNDLE_SCHEMA_VERSION);
+  });
+
+  it('round-trips the autosave bytes through base64', () => {
+    const bytes = new Uint8Array(Array.from({ length: 300 }, (_, index) => (index * 7) % 256));
+    const bundle = decode(
+      assembleCrashBundle(inputWith({ autosave: { name: 'quicksave.ironsave', bytes } })),
+    );
+
+    expect(bundle.autosave?.name).toBe('quicksave.ironsave');
+    expect(new Uint8Array(Buffer.from(bundle.autosave?.base64 ?? '', 'base64'))).toEqual(bytes);
+  });
+
+  it('is honest about a missing autosave instead of inventing one', () => {
+    const bundle = decode(assembleCrashBundle(inputWith({ autosave: null })));
+    expect(bundle.autosave).toBeNull();
+  });
+
+  it('keeps the command log verbatim and in order', () => {
+    const log = ['{"marker":"newGame"}', '{"atTick":5}', '{"atTick":9}'];
+    const bundle = decode(assembleCrashBundle(inputWith({ commandLog: log })));
+    expect(bundle.commandLog).toEqual(log);
+  });
+
+  it('carries error null for a report exported from a healthy game', () => {
+    const bundle = decode(assembleCrashBundle(inputWith({ error: null })));
+    expect(bundle.error).toBeNull();
+  });
+
+  it('carries the error text and tick when there was a crash', () => {
+    const bundle = decode(assembleCrashBundle(inputWith({})));
+    expect(bundle.error).toEqual({ message: 'boom', stack: 'Error: boom\n    at tick', tick: 4321 });
+    expect(bundle.context.stateHash).toBe('deadbeefdeadbeef');
+  });
+});
+
+describe('bugReportFileName', () => {
+  it('derives a Windows-safe name from the ISO stamp', () => {
+    const name = bugReportFileName('2026-08-06T12:34:56.789Z');
+    expect(name).toBe('bug-report-2026-08-06T12-34-56-789Z.json');
+  });
+
+  it('contains no characters a filesystem refuses', () => {
+    const name = bugReportFileName(new Date(0).toISOString());
+    expect(/[:<>"/\\|?*]/.test(name)).toBe(false);
+  });
+});

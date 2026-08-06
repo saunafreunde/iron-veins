@@ -26,6 +26,7 @@ const SETTINGS_FILE = 'settings.json';
 const SETTINGS_KEY = 'ironveins.settings';
 const SAVE_DIR = 'saves';
 const SAVE_INDEX_KEY = 'ironveins.saves';
+const CRASH_DIR = 'crashes';
 
 function hasTauriRuntime(): boolean {
   return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
@@ -267,12 +268,65 @@ export async function exportSave(name: string, bytes: Uint8Array): Promise<boole
     return true;
   }
 
+  downloadBytes(name, bytes);
+  return true;
+}
+
+/** The browser's only way out: hand the bytes over as a download. */
+function downloadBytes(name: string, bytes: Uint8Array): void {
   const url = URL.createObjectURL(new Blob([bytes as BlobPart]));
   const anchor = document.createElement('a');
   anchor.href = url;
   anchor.download = name;
   anchor.click();
   URL.revokeObjectURL(url);
+}
+
+// ------------------------------------------------------------- crash bundles
+
+/**
+ * Keep a crash bundle where bug reports live, without asking anybody.
+ *
+ * The desktop writes it into `$APPDATA/crashes/` so a report survives the
+ * restart the player is about to click; a browser profile has no directory a
+ * player could ever find again, so there the bundle goes straight out as a
+ * download. Returns false instead of throwing - a failed crash write must
+ * never crash the crash handler, and the dialog says so instead.
+ */
+export async function writeCrashBundle(name: string, bytes: Uint8Array): Promise<boolean> {
+  try {
+    if (hasTauriRuntime()) {
+      const { mkdir, writeFile, BaseDirectory } = await import('@tauri-apps/plugin-fs');
+      await mkdir(CRASH_DIR, { baseDir: BaseDirectory.AppData, recursive: true });
+      await writeFile(`${CRASH_DIR}/${name}`, bytes, { baseDir: BaseDirectory.AppData });
+      return true;
+    }
+    downloadBytes(name, bytes);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Hand a bug report to the player as a file of their own - the export button,
+ * as opposed to the automatic write above. On the desktop that is a save
+ * dialog; in a browser it is the same download either way.
+ */
+export async function exportCrashBundle(name: string, bytes: Uint8Array): Promise<boolean> {
+  if (hasTauriRuntime()) {
+    const { save } = await import('@tauri-apps/plugin-dialog');
+    const path = await save({
+      defaultPath: name,
+      filters: [{ name: 'Iron Veins Bug Report', extensions: ['json'] }],
+    });
+    if (path === null) return false;
+    const { writeFile } = await import('@tauri-apps/plugin-fs');
+    await writeFile(path, bytes);
+    return true;
+  }
+
+  downloadBytes(name, bytes);
   return true;
 }
 

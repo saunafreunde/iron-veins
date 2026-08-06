@@ -4,6 +4,7 @@ import { SaveSlotKind } from '../shared/protocol';
 import { AUTOSAVE_EVERY_MONTHS } from './saves';
 import { MAPGEN_PHASE_COUNT } from '../sim/mapgen';
 import { CompanyPanel } from './CompanyPanel';
+import { CrashDialog } from './CrashDialog';
 import { IndustryList, StationList, TownList, VehicleList } from './EntityLists';
 import { FinancePanel } from './FinancePanel';
 import { FleetPanel } from './FleetPanel';
@@ -57,6 +58,7 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
   const openList = useSimStore((s) => s.openList);
   const ready = useSimStore((s) => s.ready);
   const fatalError = useSimStore((s) => s.fatalError);
+  const crashed = useSimStore((s) => s.crash !== null);
   const rejectionKey = useSimStore((s) => s.rejectionKey);
   const rejectionSeq = useSimStore((s) => s.rejectionSeq);
   const setRejection = useSimStore((s) => s.setRejection);
@@ -186,6 +188,12 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
     const timer = window.setTimeout(() => setRejection(null), TOAST_LIFETIME_MS);
     return () => window.clearTimeout(timer);
   }, [rejectionKey, rejectionSeq, setRejection]);
+
+  // A dead worker wins over every other screen: the map behind it would be a
+  // still image lying about a running game (SPEC2 M10, D-132).
+  if (crashed) {
+    return <CrashDialog />;
+  }
 
   if (fatalError !== null) {
     return (

@@ -55,6 +55,11 @@ interface WorkerScope {
     type: 'message',
     listener: (event: MessageEvent<MainToWorkerMessage>) => void,
   ): void;
+  addEventListener(type: 'error', listener: (event: ErrorEvent) => void): void;
+  addEventListener(
+    type: 'unhandledrejection',
+    listener: (event: PromiseRejectionEvent) => void,
+  ): void;
 }
 
 const scope = globalThis as unknown as WorkerScope;
@@ -709,4 +714,55 @@ scope.addEventListener('message', (event) => {
       message: error instanceof Error ? error.message : String(error),
     });
   }
+});
+
+// ------------------------------------------------------------- crash safety
+//
+// The worker's last words (SPEC2 M10). An uncaught throw in the tick loop
+// lands on the global error event, an uncaught rejection on its own; both end
+// with one `simCrashed` message and a stopped scheduler. Best effort only:
+// nothing on the other side RELIES on this message arriving - the main thread
+// keeps the autosave reference and the command-log tail on its own side
+// (D-132), because a worker that just crashed cannot be trusted to encode a
+// save (D-111). What this message adds when it does get out is the stack and
+// the exact tick, which no other side can know.
+
+let crashReported = false;
+
+function reportCrash(message: string, stack: string): void {
+  if (crashReported) return;
+  crashReported = true;
+  // The world may be half-mutated; ticking on would publish corrupt state
+  // every 50 ms and rethrow the same error with it.
+  if (timer !== null) {
+    clearInterval(timer);
+    timer = null;
+  }
+  scope.postMessage({
+    type: 'simCrashed',
+    message,
+    stack,
+    tick: world === null ? -1 : world.tick,
+  });
+}
+
+scope.addEventListener('error', (event) => {
+  const cause: unknown = event.error;
+  reportCrash(
+    event.message === '' && cause instanceof Error ? cause.message : event.message,
+    cause instanceof Error ? (cause.stack ?? '') : '',
+  );
+  // Marks the error as handled so it does not ALSO surface as the Worker
+  // object's error event on the main thread - the fallback there carries no
+  // stack and would race this richer report for the first-crash slot.
+  event.preventDefault();
+});
+
+scope.addEventListener('unhandledrejection', (event) => {
+  const reason: unknown = event.reason;
+  reportCrash(
+    reason instanceof Error ? reason.message : String(reason),
+    reason instanceof Error ? (reason.stack ?? '') : '',
+  );
+  event.preventDefault();
 });

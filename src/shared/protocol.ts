@@ -278,4 +278,17 @@ export type WorkerToMainMessage =
    * lesson's goal is met, and the audio of section 18 turns them into clicks.
    */
   | { readonly type: 'commandExecuted'; readonly kind: number; readonly accepted: boolean }
-  | { readonly type: 'error'; readonly message: string };
+  | { readonly type: 'error'; readonly message: string }
+  /**
+   * The worker's last words: an uncaught error or rejection killed the
+   * simulation. Deliberately WITHOUT a save attached - a crashed worker
+   * cannot be trusted to encode one (D-111/D-132), so everything the crash
+   * bundle needs already lives on the main thread and this message only
+   * carries what died and where. `tick` is -1 when no world existed yet.
+   */
+  | {
+      readonly type: 'simCrashed';
+      readonly message: string;
+      readonly stack: string;
+      readonly tick: number;
+    };

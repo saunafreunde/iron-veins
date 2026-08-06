@@ -8,6 +8,7 @@ import type {
 import { createSnapshotBuffer, SnapshotF64, SnapshotI32, SnapshotReader } from '../shared/snapshot';
 import type { Command } from '../sim/commands/types';
 import type { Difficulty, MapClimate } from '../sim/constants';
+import { handleWorkerCrash, recordCommand, recordWorldReplaced } from './crashReporter';
 import { useSimStore } from './store';
 
 /**
@@ -79,7 +80,15 @@ export class SimClient {
       this.handleWorkerMessage(event.data, options.seed);
     };
     worker.onerror = (event) => {
-      useSimStore.getState().setFatalError(event.message);
+      // Fallback for a worker that died before its own crash handlers could
+      // report - a script that failed to even load. The in-worker handler
+      // calls preventDefault() when it fires, so this and `simCrashed` do not
+      // race for the same death; whichever exists wins.
+      void handleWorkerCrash({
+        message: event.message === '' ? 'Worker failed before reporting' : event.message,
+        stack: '',
+        tick: -1,
+      });
     };
     this.worker = worker;
 
@@ -122,6 +131,10 @@ export class SimClient {
 
   /** Queue a state changing command (architecture law #6). */
   send(command: Command): void {
+    // Mirrored into the main thread's rolling crash log BEFORE it crosses the
+    // boundary: if this very command kills the worker, the copy over there
+    // dies with it (D-132).
+    recordCommand(command);
     this.post({ type: 'command', command });
   }
 
@@ -136,6 +149,7 @@ export class SimClient {
   /** Replace the running world with one out of a file. */
   load(bytes: Uint8Array): void {
     useSimStore.getState().setLoadError(null);
+    recordWorldReplaced('load');
     this.post({ type: 'loadSave', bytes });
   }
 
@@ -143,6 +157,7 @@ export class SimClient {
   newGame(options: NewGameOptions): void {
     const store = useSimStore.getState();
     store.resetWorld();
+    recordWorldReplaced('newGame');
     this.post({ type: 'newGame', options });
   }
 
@@ -238,6 +253,13 @@ export class SimClient {
         return;
       case 'error':
         store.setFatalError(message.message);
+        return;
+      case 'simCrashed':
+        void handleWorkerCrash({
+          message: message.message,
+          stack: message.stack,
+          tick: message.tick,
+        });
         return;
     }
   }

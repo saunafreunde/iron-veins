@@ -5,6 +5,7 @@ import { getPlatformInfo, reportStartupDiagnostics } from './platform/Platform';
 import { DEFAULT_MAP_SIZE, Difficulty, MapClimate } from './sim/constants';
 import { App } from './ui/App';
 import { startAudio } from './ui/audioBridge';
+import { recordSaveWritten } from './ui/crashReporter';
 import { captureThumbnail } from './ui/Minimap';
 import { refreshSaves, storeSave } from './ui/saves';
 import { loadSettings } from './ui/settings';
@@ -41,7 +42,11 @@ client.onSaveWritten = (message) => {
     message.companyValueCt,
     captureThumbnail(),
     Date.now(),
-  );
+  ).then((entry) => {
+    // The crash reporter keeps the freshest shelf entry on the main thread,
+    // so a crash bundle can copy it without asking a dead worker (D-132).
+    recordSaveWritten(entry);
+  });
 };
 
 client.start({

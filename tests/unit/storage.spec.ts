@@ -5,6 +5,7 @@ import {
   listSaves,
   readBackup,
   readSave,
+  writeCrashBundle,
   writeSave,
   type SaveEntry,
 } from '../../src/platform/Storage';
@@ -96,6 +97,30 @@ describe('the save shelf keeps one backup per save', () => {
     expect(names.filter((name) => name === 'once.ironsave')).toHaveLength(1);
     // The backup is a safety net, not a shelf entry.
     expect(names.some((name) => name.endsWith('.bak'))).toBe(false);
+  });
+
+  it('hands a crash bundle over as a download in the browser and reports success', async () => {
+    // The browser has no crash directory a player could find again, so the
+    // fallback is a download (SPEC2 M10, D-132). The DOM pieces are doubles;
+    // what is pinned is that the write goes through and says so.
+    let clickedName: string | null = null;
+    const anchor = {
+      href: '',
+      download: '',
+      click: (): void => {
+        clickedName = anchor.download;
+      },
+    };
+    vi.stubGlobal('document', { createElement: () => anchor });
+    vi.stubGlobal('URL', {
+      createObjectURL: () => 'blob:crash-bundle',
+      revokeObjectURL: () => undefined,
+    });
+
+    const stored = await writeCrashBundle('bug-report-test.json', new Uint8Array([123, 125]));
+
+    expect(stored).toBe(true);
+    expect(clickedName).toBe('bug-report-test.json');
   });
 
   it('deletes the backup together with the save', async () => {

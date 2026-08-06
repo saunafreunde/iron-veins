@@ -63,6 +63,9 @@ export async function refreshSaves(): Promise<void> {
  * The thumbnail comes from the minimap, which is already a picture of the
  * whole world and costs nothing extra to read - and a load screen of dated
  * filenames with no picture is a load screen nobody can find their game in.
+ *
+ * Returns the shelf entry it wrote, so the caller can tell the crash
+ * reporter which save is the freshest one to copy into a bundle (D-132).
  */
 export async function storeSave(
   bytes: Uint8Array,
@@ -73,7 +76,7 @@ export async function storeSave(
   companyValueCt: number,
   thumbnail: string,
   writtenAt: number,
-): Promise<void> {
+): Promise<SaveEntry> {
   const existing = (await listSaves()).filter((entry) => entry.slot === SaveSlotKind.Manual).length;
   const entry: SaveEntry = {
     name: nameFor(slot, year, month, existing),
@@ -87,6 +90,7 @@ export async function storeSave(
   };
   await writeSave(entry, bytes);
   await refreshSaves();
+  return entry;
 }
 
 /**

@@ -171,6 +171,18 @@ export interface SimUiState extends SnapshotValues {
   rejectionSeq: number;
   /** Set when the simulation could not be started at all. */
   fatalError: string | null;
+  /**
+   * Set once when the simulation worker died mid-game (SPEC2 M10, D-132).
+   * `tick` is the simulation tick at the moment of death, or -1 when the
+   * worker never got a world. Never cleared: the only way on is a restart.
+   */
+  crash: { readonly message: string; readonly stack: string; readonly tick: number } | null;
+  /**
+   * Whether the crash bundle was put away automatically - null while the
+   * write is still running, then the honest answer. The dialog phrases its
+   * "where is my report" line from this.
+   */
+  crashBundleStored: boolean | null;
 
   applySnapshot: (values: SnapshotValues) => void;
   setLocale: (locale: Locale) => void;
@@ -234,6 +246,12 @@ export interface SimUiState extends SnapshotValues {
   setSharedMemoryAvailable: (available: boolean) => void;
   setRejection: (reasonKey: string | null) => void;
   setFatalError: (message: string) => void;
+  setCrash: (crash: {
+    readonly message: string;
+    readonly stack: string;
+    readonly tick: number;
+  }) => void;
+  setCrashBundleStored: (stored: boolean) => void;
   toggleDebug: () => void;
 }
 
@@ -296,6 +314,8 @@ export const useSimStore = create<SimUiState>((set) => ({
   rejectionKey: null,
   rejectionSeq: 0,
   fatalError: null,
+  crash: null,
+  crashBundleStored: null,
 
   applySnapshot: (values) => set(values),
   setLocale: (locale) => {
@@ -383,5 +403,7 @@ export const useSimStore = create<SimUiState>((set) => ({
   setRejection: (reasonKey) =>
     set((state) => ({ rejectionKey: reasonKey, rejectionSeq: state.rejectionSeq + 1 })),
   setFatalError: (message) => set({ fatalError: message }),
+  setCrash: (crash) => set({ crash }),
+  setCrashBundleStored: (crashBundleStored) => set({ crashBundleStored }),
   toggleDebug: () => set((state) => ({ showDebug: !state.showDebug })),
 }));

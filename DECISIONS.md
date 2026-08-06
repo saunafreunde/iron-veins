@@ -2300,3 +2300,47 @@ session of one build. Migrating a REPLAY across versions is deliberately not
 offered - a migration maps states, not judgements, and there is no honest
 mapping from "commands as the old rules accepted them" to "what the new rules
 would have said".
+
+### D-132 Crash persistence lives on the main thread, because a dead worker proves nothing
+
+SPEC2 M10 asks for crash safety: a hard-terminated simulation must leave
+behind something a bug report can be built from. The design question is which
+side of the worker boundary owns that evidence, and the answer is forced the
+same way D-111 was: **everything a crash bundle needs is collected on the
+main thread, while the game is still healthy.** The worker's own
+`error`/`unhandledrejection` handlers post one final `simCrashed` message -
+the stack and the exact tick, which no other side can know - and stop the
+scheduler, but nothing RELIES on that message arriving. A worker that just
+threw is in an unknown state: its world may be half-mutated mid-tick, its
+encoder may be the very thing that crashed, and the most common death (out of
+memory) leaves no room to serialise anything. Asking it for a save at that
+moment is asking a witness who has just died to write the autopsy.
+
+So the main thread keeps, at all times: the shelf entry of the **last save
+written** (autosaves included - recorded when `storeSave` returns, read back
+through `src/platform/Storage` at bundle time), and a **rolling tail of the
+command log** - every command mirrored into a ring buffer as it is sent,
+capped at 1 MiB by UTF-8 byte count rather than entry count, oldest lines
+evicted first. Bytes, not entries, because commands differ by two orders of
+magnitude in size and the property the main thread needs is a memory bound,
+not a history length. Load and new-game are recorded as marker lines rather
+than clearing the tail: a crash shortly after a load is a crash the load
+probably caused, and the marker is what lets a reader see the boundary.
+
+The bundle itself is one JSON document - autosave copy in base64, command-log
+tail, error text, and the version triple app version / save format / bundle
+schema (the third so tooling can tell bundle shapes apart) - assembled by a
+pure function in `src/ui/crashBundle.ts` that a unit test can hold whole. The
+write goes through `src/platform/Storage`: the desktop puts it in
+`$APPDATA/crashes/` so it survives the restart the player is about to click;
+the browser hands it over as a download, because a browser profile has no
+directory a player could ever find again. The crash dialog offers the exact
+bundle that was written; the same export sits in the menu of a healthy game
+with `error: null`, which is the "something is wrong but nothing crashed"
+report - one bundle format for both, so no second code path rots.
+
+Both crash reporters - the in-worker handler and the Worker object's `error`
+event on the main thread - can fire for one death. The worker handler calls
+`preventDefault()` so the richer report does not race the poorer one, and the
+main thread takes the first crash it sees and ignores the rest: two bundles
+of the same corpse help nobody.
