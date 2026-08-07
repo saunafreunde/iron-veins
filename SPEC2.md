@@ -445,7 +445,7 @@ hash-relevanten Migration und wird dort re-recorded (M10-Erstwert war
 |---|---|---|
 | 0 | Terrain/Statik (Bestand 2176×2688) + 4 Wasser-Zeilen (M12 eingelöst: 3 Animations- + 1 Küstensaum-Zeile, D-164) — Stand 2176×3456 von 4096 | Restfläche; KEINE Fahrzeug-Zellen hier |
 | 0-detail | 4×-Zwilling von Seite 0 für die oberste Zoomstufe (prozedural, M12): kurze Zeilen für Terrain/Straße/Gleis, hohe für Gebäude/Industrie/Statik | gebucht 4096×3840 von 4096 (D-163); wächst nur mit neuer Buchung hier |
-| 1 | Fahrzeuge: ~56+ Typen × 8 Facings, Tint-Zonen-Liveries (nie Per-Firma-Zellen) | ~600 Zellen, eigene 4096²-Seite |
+| 1 | Fahrzeuge + gebackene Objekte (Kenney-Bake, Build-Artefakt, D-160/D-169): 95 Fahrzeuge × 8 Facings + 50 Statik-Zellen (Stadt/Industrie/Bäume), jede Zelle ein Basis+Masken-Paar | ~600 Zellen, eigene 4096²-Seite — **M13 B1 gemessen und ehrlich überbucht (Fehlerkatalog 40): 810 Zellen je Zoomstufe; z1 = 1 Seite 4092×1067, z2 = 1 Seite 4092×3609, z4 = 4 Seiten ≤ 4096². Zur Laufzeit sind nur die Seiten EINER Zoomstufe GPU-resident; der ~600er-Plan stammt aus der Vor-Kenney-Schätzung (D-169)** |
 | 2 | Emissive-Zwillinge (Fenster/Lampen/Signale) + Ären-/Klima-Varianten | ~150 + Emissive, eigene Seite |
 
 Saison-/Ären-Wechsel belegen KEINE zusätzlichen Zellen — Regeneration

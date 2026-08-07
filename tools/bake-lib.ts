@@ -499,6 +499,23 @@ export interface TintHueRange {
   readonly minSaturation: number;
 }
 
+/**
+ * A deterministic recolour of every NON-tint face, for manifest-driven
+ * generation variants of a reused model (M13, D-169): the kits carry fewer
+ * distinguishable bodies than the catalogue has entries, and where a reuse
+ * is honest (successive generations of one family) the recolour is what
+ * keeps the entries tellable apart. Company-colour zones are untouched -
+ * they render neutral grey in the base cell whatever the hull wears.
+ */
+export interface RecolorSpec {
+  /** Degrees added on the HSV hue wheel, wrapped into [0, 360). [deg] */
+  readonly hueShift?: number;
+  /** Multiplier on HSV saturation, clamped to [0, 1]. */
+  readonly saturation?: number;
+  /** Multiplier on HSV value (brightness), clamped to [0, 1]. */
+  readonly value?: number;
+}
+
 export interface ExtractOptions {
   /** External images by exact uri as referenced from the glTF, pre-decoded. */
   readonly images?: ReadonlyMap<string, DecodedImage>;
@@ -516,10 +533,60 @@ export interface ExtractOptions {
    * a band catches the whole livery where an exact list would fray.
    */
   readonly tintHues?: readonly TintHueRange[];
+  /** Deterministic recolour of the non-tint faces (generation variants). */
+  readonly recolor?: RecolorSpec;
 }
 
 function hexOf(r: number, g: number, b: number): string {
   return `#${((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1)}`;
+}
+
+/**
+ * Apply a RecolorSpec to one 8-bit colour: RGB -> HSV, shift/scale, -> RGB.
+ * Pure float maths on fixed inputs - the same bytes in give the same bytes
+ * out on every machine, which is all "bake twice, bit-identical" needs.
+ */
+export function applyRecolor(
+  r: number,
+  g: number,
+  b: number,
+  recolor: RecolorSpec,
+): [number, number, number] {
+  const rn = r / 255;
+  const gn = g / 255;
+  const bn = b / 255;
+  const max = Math.max(rn, gn, bn);
+  const min = Math.min(rn, gn, bn);
+  const delta = max - min;
+  let hue = 0;
+  if (delta > 0) {
+    if (max === rn) hue = 60 * (((gn - bn) / delta) % 6);
+    else if (max === gn) hue = 60 * ((bn - rn) / delta + 2);
+    else hue = 60 * ((rn - gn) / delta + 4);
+  }
+  if (hue < 0) hue += 360;
+  let saturation = max === 0 ? 0 : delta / max;
+  let value = max;
+  hue = (((hue + (recolor.hueShift ?? 0)) % 360) + 360) % 360;
+  saturation = Math.max(0, Math.min(1, saturation * (recolor.saturation ?? 1)));
+  value = Math.max(0, Math.min(1, value * (recolor.value ?? 1)));
+  const c = value * saturation;
+  const x = c * (1 - Math.abs(((hue / 60) % 2) - 1));
+  const m = value - c;
+  let rr = 0;
+  let gg = 0;
+  let bb = 0;
+  if (hue < 60) [rr, gg, bb] = [c, x, 0];
+  else if (hue < 120) [rr, gg, bb] = [x, c, 0];
+  else if (hue < 180) [rr, gg, bb] = [0, c, x];
+  else if (hue < 240) [rr, gg, bb] = [0, x, c];
+  else if (hue < 300) [rr, gg, bb] = [x, 0, c];
+  else [rr, gg, bb] = [c, 0, x];
+  return [
+    Math.max(0, Math.min(255, Math.round((rr + m) * 255))),
+    Math.max(0, Math.min(255, Math.round((gg + m) * 255))),
+    Math.max(0, Math.min(255, Math.round((bb + m) * 255))),
+  ];
 }
 
 /** Hue in degrees and HSL saturation of an 8-bit colour. */
@@ -678,13 +745,19 @@ export function extractTriangles(model: GlbModel, options: ExtractOptions = {}):
         out[v * 3 + 1] = y;
         out[v * 3 + 2] = z;
       }
-      const r8 = Math.max(0, Math.min(255, Math.round(r)));
-      const g8 = Math.max(0, Math.min(255, Math.round(g)));
-      const b8 = Math.max(0, Math.min(255, Math.round(b)));
+      let r8 = Math.max(0, Math.min(255, Math.round(r)));
+      let g8 = Math.max(0, Math.min(255, Math.round(g)));
+      let b8 = Math.max(0, Math.min(255, Math.round(b)));
+      // Tint classification reads the AUTHORED colour; the recolour applies
+      // only to the hull afterwards, so a hue variant of a reused model
+      // keeps exactly the company-colour zones of the original.
       const tint =
         materialTinted ||
         tintColors.has(hexOf(r8, g8, b8)) ||
         inHueRanges(r8, g8, b8, options.tintHues ?? []);
+      if (!tint && options.recolor) {
+        [r8, g8, b8] = applyRecolor(r8, g8, b8, options.recolor);
+      }
       triangles.push({ positions: out, r: r8, g: g8, b: b8, tint });
     }
   };
@@ -718,6 +791,14 @@ export interface RenderOptions {
   readonly zoom: number;
   /** Named model-space points to project along with the geometry (E-14 anchors). */
   readonly anchors?: Readonly<Record<string, readonly [number, number, number]>>;
+  /**
+   * Per-axis multipliers [x, y, z] in MODEL space, around the ground-centre
+   * pivot (M13, D-169). +z is the travel axis, so [1, 1, 1.8] lengthens a
+   * van into a bus body and [1, 1.7, 1.6] raises it into a double-decker -
+   * the manifest-driven silhouette variation for reused models. Anchors
+   * stretch with the geometry.
+   */
+  readonly stretch?: readonly [number, number, number];
 }
 
 /**
@@ -758,6 +839,12 @@ export function renderSprite(triangles: readonly BakeTriangle[], options: Render
   const pivotX = (minX + maxX) / 2;
   const pivotZ = (minZ + maxZ) / 2;
   const pivotY = minY;
+  // The stretch is linear around the pivot, so the pivot measured on the
+  // unstretched box IS the pivot of the stretched model and the ground line
+  // stays the ground line.
+  const stretchX = options.stretch?.[0] ?? 1;
+  const stretchY = options.stretch?.[1] ?? 1;
+  const stretchZ = options.stretch?.[2] ?? 1;
 
   const pxPerMeterX = ((BAKE_TILE_W / 2) * options.zoom) / BAKE_TILE_M;
   const pxPerMeterY = ((BAKE_TILE_H / 2) * options.zoom) / BAKE_TILE_M;
@@ -776,9 +863,9 @@ export function renderSprite(triangles: readonly BakeTriangle[], options: Render
     const screen = new Float64Array(9); // sx, sy, depth per vertex
     const ground = new Float64Array(9); // gx, gy, up per vertex
     for (let v = 0; v < 3; v++) {
-      const mx = (tri.positions[v * 3]! - pivotX) * options.scale;
-      const up = (tri.positions[v * 3 + 1]! - pivotY) * options.scale;
-      const mz = (tri.positions[v * 3 + 2]! - pivotZ) * options.scale;
+      const mx = (tri.positions[v * 3]! - pivotX) * options.scale * stretchX;
+      const up = (tri.positions[v * 3 + 1]! - pivotY) * options.scale * stretchY;
+      const mz = (tri.positions[v * 3 + 2]! - pivotZ) * options.scale * stretchZ;
       // Forward (+Z) points along the travel delta; +X is rotated with it.
       const gx = mz * fx - mx * fy;
       const gy = mz * fy + mx * fx;
@@ -892,9 +979,9 @@ export function renderSprite(triangles: readonly BakeTriangle[], options: Render
 
   const points: Record<string, readonly [number, number]> = {};
   for (const [name, point] of Object.entries(options.anchors ?? {})) {
-    const mx = (point[0] - pivotX) * options.scale;
-    const up = (point[1] - pivotY) * options.scale;
-    const mz = (point[2] - pivotZ) * options.scale;
+    const mx = (point[0] - pivotX) * options.scale * stretchX;
+    const up = (point[1] - pivotY) * options.scale * stretchY;
+    const mz = (point[2] - pivotZ) * options.scale * stretchZ;
     const gx = mz * fx - mx * fy;
     const gy = mz * fy + mx * fx;
     points[name] = [
@@ -969,6 +1056,8 @@ export interface BakeModelInput {
   readonly facings: number;
   /** Named model-space anchor points (chimneys, emitters), E-14 metadata. */
   readonly anchors?: Readonly<Record<string, readonly [number, number, number]>>;
+  /** Per-axis model-space multipliers for reused-model variants (D-169). */
+  readonly stretch?: readonly [number, number, number];
 }
 
 export interface BakedCell {
@@ -1033,27 +1122,28 @@ export function bakeAtlases(models: readonly BakeModelInput[], zooms = BAKE_ZOOM
             facing,
             zoom,
             anchors: model.anchors,
+            stretch: model.stretch,
           }),
         );
         owners.push({ target: model.target, facing });
       }
     }
-    // Base and mask interleave per sprite so both live on the same page.
-    const sizes: Array<{ width: number; height: number }> = [];
-    for (const render of renders) {
-      sizes.push({ width: render.width, height: render.height });
-      sizes.push({ width: render.width, height: render.height });
-    }
+    // A base cell and its mask cell are packed as ONE double-width rect and
+    // split afterwards - the full M13 catalogue spans several pages per
+    // zoom, and an atomic pair is what guarantees both halves always share
+    // a page (a straddling pair used to be a hard error here).
+    const sizes: Array<{ width: number; height: number }> = renders.map((render) => ({
+      width: render.width * 2,
+      height: render.height,
+    }));
     const { placements, pages } = layoutCells(sizes);
     const pixelPages = pages.map((page) => new Uint8Array(page.width * page.height * 4));
     const cellsPerPage: BakedCell[][] = pages.map(() => []);
     for (let i = 0; i < renders.length; i++) {
       const render = renders[i]!;
-      const basePlace = placements[i * 2]!;
-      const maskPlace = placements[i * 2 + 1]!;
-      if (maskPlace.page !== basePlace.page) {
-        throw new Error('bakeAtlases: base and mask cells split across pages');
-      }
+      const pairPlace = placements[i]!;
+      const basePlace = { page: pairPlace.page, x: pairPlace.x, y: pairPlace.y };
+      const maskPlace = { page: pairPlace.page, x: pairPlace.x + render.width, y: pairPlace.y };
       blit(pixelPages[basePlace.page]!, pages[basePlace.page]!.width, render.base, render, basePlace);
       blit(pixelPages[maskPlace.page]!, pages[maskPlace.page]!.width, render.mask, render, maskPlace);
       const cell: BakedCell = {

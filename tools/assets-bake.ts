@@ -23,6 +23,7 @@ import {
   parseGlb,
   type BakeModelInput,
   type DecodedImage,
+  type RecolorSpec,
   type TintHueRange,
 } from './bake-lib.ts';
 
@@ -37,6 +38,10 @@ interface ManifestModel {
     readonly colors?: readonly string[];
     readonly hues?: readonly TintHueRange[];
   };
+  /** Deterministic hull recolour for reused-model variants (D-169). */
+  readonly recolor?: RecolorSpec;
+  /** Per-axis model-space multipliers [x, y, z] for reused-model variants. */
+  readonly stretch?: readonly [number, number, number];
   readonly anchors?: Readonly<Record<string, readonly [number, number, number]>>;
 }
 
@@ -74,6 +79,7 @@ function loadModel(entry: ManifestModel): BakeModelInput | null {
     tintMaterials: entry.tint?.materials,
     tintColors: entry.tint?.colors,
     tintHues: entry.tint?.hues,
+    recolor: entry.recolor,
   });
   return {
     target: entry.target,
@@ -81,6 +87,7 @@ function loadModel(entry: ManifestModel): BakeModelInput | null {
     scale: entry.scale,
     facings: entry.facings,
     anchors: entry.anchors,
+    stretch: entry.stretch,
   };
 }
 

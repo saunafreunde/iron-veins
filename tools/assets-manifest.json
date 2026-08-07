@@ -1,27 +1,38 @@
 {
   "comment": [
-    "Kenney asset manifest (SPEC2 M12 stage 0, E-14/D-140/D-160). Pure text:",
-    "pack URLs + SHA-256 pins for `npm run assets:fetch`, and the model-to-",
-    "game mapping `npm run assets:bake` rasterises. The zip URLs embed a CMS",
-    "media hash, so a Kenney re-upload changes URL AND checksum together -",
-    "re-pin both from the pack's page when a fetch 404s.",
+    "Kenney asset manifest (SPEC2 M12 stage 0 + M13 bundle 1; E-14/D-140/",
+    "D-160/D-169). Pure text: pack URLs + SHA-256 pins for `npm run",
+    "assets:fetch`, and the model-to-game mapping `npm run assets:bake`",
+    "rasterises. The zip URLs embed a CMS media hash, so a Kenney re-upload",
+    "changes URL AND checksum together - re-pin both from the pack page when",
+    "a fetch 404s.",
     "Mapping targets: `vehicle:<catalogId>` (8 facings),",
     "`building:<zone>:<stage>[:<variant>]`, `industry:<TypeName>` and",
-    "`tree:<n>` (1 facing each). `scale` is model units to metres - an art",
+    "`tree:<climate>:<n>` (1 facing each; climates temperate/arctic/tropical/",
+    "desert after MapClimate). `scale` is model units to metres - an art",
     "choice per entry (vehicles ride ~1.7x over their catalogue lengthM so",
-    "they read at 64 px/tile, the TTD convention). This M12 subset is",
-    "REPRESENTATIVE; M13 completes the catalogue coverage.",
+    "they read at 64 px/tile, the TTD convention).",
+    "M13 completes the catalogue: every rail, road and water catalogue entry",
+    "is mapped; a coupling test in tests/unit/assetsBake.spec.ts holds this",
+    "file against the catalogues in both directions.",
     "Company-colour zones (`tint`): `materials` lists glTF material names",
     "(the older kits, e.g. Nature Kit, carry named materials);",
     "`hues` marks every face whose resolved colour falls in a hue band,",
     "because the colormap kits paint a livery as a RAMP of shades around one",
-    "hue inside a single 'colormap' material; `colors` pins exact #rrggbb",
+    "hue inside a single \"colormap\" material; `colors` pins exact #rrggbb",
     "patches. The bake renders zone faces neutral grey in the base cell and",
     "writes a mask cell whose grey value carries the NW shading - tinting",
     "the mask with a company colour multiplies to a shaded livery.",
-    "Gaps stay procedural per E-14: aircraft (no Kenney 3D aircraft kit),",
-    "buses (no bus model in the Car Kit), coal-mine headframe and oil",
-    "derrick (no kit equivalent), and every dev build without a cache."
+    "Reused-model variants (D-169): `recolor` {hueShift deg, saturation x,",
+    "value x} deterministically recolours the NON-tint hull faces, and",
+    "`stretch` [x, y, z] scales per model axis around the ground pivot (+z is",
+    "the travel axis). Every reuse carries a `note` naming the gap it fills;",
+    "the full register is the D-169 entry.",
+    "Gaps that stay procedural per E-14: aircraft (no Kenney 3D aircraft",
+    "kit), the coal-mine headframe and oil derrick, the Farm (no farmstead",
+    "model in any pinned kit), and every dev build without a cache. The",
+    "watercraft ship-large galleon and the Pirate Kit ships stay filed for",
+    "the pre-1920 eras (M23) - no current catalogue entry predates 1950."
   ],
   "version": 1,
   "license": "CC0-1.0",
@@ -130,6 +141,80 @@
       }
     },
     {
+      "target": "vehicle:1001",
+      "pack": "train-kit",
+      "file": "Models/GLB format/train-locomotive-b.glb",
+      "scale": 12,
+      "facings": 8,
+      "tint": {
+        "hues": [
+          {
+            "min": 345,
+            "max": 15,
+            "minSaturation": 0.35
+          }
+        ]
+      }
+    },
+    {
+      "target": "vehicle:1002",
+      "pack": "train-kit",
+      "file": "Models/GLB format/train-locomotive-c.glb",
+      "scale": 12,
+      "facings": 8,
+      "tint": {
+        "hues": [
+          {
+            "min": 345,
+            "max": 15,
+            "minSaturation": 0.35
+          }
+        ]
+      }
+    },
+    {
+      "target": "vehicle:1003",
+      "pack": "train-kit",
+      "file": "Models/GLB format/train-locomotive-a.glb",
+      "scale": 13.5,
+      "facings": 8,
+      "tint": {
+        "hues": [
+          {
+            "min": 138,
+            "max": 168,
+            "minSaturation": 0.3
+          }
+        ]
+      },
+      "recolor": {
+        "hueShift": 210,
+        "saturation": 0.7
+      },
+      "note": "Reuse (D-169): the Train Kit has three steam bodies for five steam entries; the express steam4 is locomotive-a scaled up with a blue-grey hull."
+    },
+    {
+      "target": "vehicle:1004",
+      "pack": "train-kit",
+      "file": "Models/GLB format/train-locomotive-b.glb",
+      "scale": 10.5,
+      "facings": 8,
+      "tint": {
+        "hues": [
+          {
+            "min": 345,
+            "max": 15,
+            "minSaturation": 0.35
+          }
+        ]
+      },
+      "recolor": {
+        "hueShift": 150,
+        "value": 0.85
+      },
+      "note": "Reuse (D-169): steam5 shunter is locomotive-b scaled down with a green hull."
+    },
+    {
       "target": "vehicle:1010",
       "pack": "train-kit",
       "file": "Models/GLB format/train-diesel-a.glb",
@@ -146,7 +231,214 @@
       }
     },
     {
+      "target": "vehicle:1011",
+      "pack": "train-kit",
+      "file": "Models/GLB format/train-diesel-b.glb",
+      "scale": 12,
+      "facings": 8,
+      "tint": {
+        "hues": [
+          {
+            "min": 345,
+            "max": 15,
+            "minSaturation": 0.35
+          }
+        ]
+      }
+    },
+    {
+      "target": "vehicle:1012",
+      "pack": "train-kit",
+      "file": "Models/GLB format/train-diesel-c.glb",
+      "scale": 12,
+      "facings": 8,
+      "tint": {
+        "hues": [
+          {
+            "min": 22,
+            "max": 48,
+            "minSaturation": 0.4
+          }
+        ]
+      }
+    },
+    {
+      "target": "vehicle:1013",
+      "pack": "train-kit",
+      "file": "Models/GLB format/train-diesel-box-a.glb",
+      "scale": 12,
+      "facings": 8,
+      "tint": {
+        "hues": [
+          {
+            "min": 130,
+            "max": 170,
+            "minSaturation": 0.35
+          }
+        ]
+      }
+    },
+    {
+      "target": "vehicle:1014",
+      "pack": "train-kit",
+      "file": "Models/GLB format/train-diesel-box-b.glb",
+      "scale": 12,
+      "facings": 8,
+      "tint": {
+        "hues": [
+          {
+            "min": 130,
+            "max": 170,
+            "minSaturation": 0.35
+          }
+        ]
+      }
+    },
+    {
+      "target": "vehicle:1015",
+      "pack": "train-kit",
+      "file": "Models/GLB format/train-diesel-box-c.glb",
+      "scale": 12,
+      "facings": 8,
+      "tint": {
+        "hues": [
+          {
+            "min": 130,
+            "max": 170,
+            "minSaturation": 0.35
+          }
+        ]
+      }
+    },
+    {
+      "target": "vehicle:1016",
+      "pack": "train-kit",
+      "file": "Models/GLB format/train-diesel-box-a.glb",
+      "scale": 13,
+      "facings": 8,
+      "tint": {
+        "hues": [
+          {
+            "min": 130,
+            "max": 170,
+            "minSaturation": 0.35
+          }
+        ]
+      },
+      "recolor": {
+        "hueShift": 200
+      },
+      "note": "Reuse (D-169): six diesel bodies for nine diesel entries; diesel7 is box-a scaled up with a blue hull."
+    },
+    {
+      "target": "vehicle:1017",
+      "pack": "train-kit",
+      "file": "Models/GLB format/train-diesel-box-b.glb",
+      "scale": 13,
+      "facings": 8,
+      "tint": {
+        "hues": [
+          {
+            "min": 130,
+            "max": 170,
+            "minSaturation": 0.35
+          }
+        ]
+      },
+      "recolor": {
+        "hueShift": 250,
+        "value": 0.9
+      },
+      "note": "Reuse (D-169): diesel8 is box-b scaled up with a violet-grey hull."
+    },
+    {
+      "target": "vehicle:1018",
+      "pack": "train-kit",
+      "file": "Models/GLB format/train-diesel-box-c.glb",
+      "scale": 13,
+      "facings": 8,
+      "tint": {
+        "hues": [
+          {
+            "min": 130,
+            "max": 170,
+            "minSaturation": 0.35
+          }
+        ]
+      },
+      "recolor": {
+        "hueShift": 318,
+        "saturation": 0.6,
+        "value": 1.1
+      },
+      "note": "Reuse (D-169): the hydrogen loco is box-c with a pale cyan hull - no dedicated model exists."
+    },
+    {
       "target": "vehicle:1030",
+      "pack": "train-kit",
+      "file": "Models/GLB format/train-electric-square-a.glb",
+      "scale": 12,
+      "facings": 8,
+      "tint": {
+        "hues": [
+          {
+            "min": 130,
+            "max": 170,
+            "minSaturation": 0.35
+          }
+        ]
+      }
+    },
+    {
+      "target": "vehicle:1031",
+      "pack": "train-kit",
+      "file": "Models/GLB format/train-electric-square-b.glb",
+      "scale": 12,
+      "facings": 8,
+      "tint": {
+        "hues": [
+          {
+            "min": 130,
+            "max": 170,
+            "minSaturation": 0.35
+          }
+        ]
+      }
+    },
+    {
+      "target": "vehicle:1032",
+      "pack": "train-kit",
+      "file": "Models/GLB format/train-electric-square-c.glb",
+      "scale": 12,
+      "facings": 8,
+      "tint": {
+        "hues": [
+          {
+            "min": 130,
+            "max": 170,
+            "minSaturation": 0.35
+          }
+        ]
+      }
+    },
+    {
+      "target": "vehicle:1033",
+      "pack": "train-kit",
+      "file": "Models/GLB format/train-electric-city-c.glb",
+      "scale": 12,
+      "facings": 8,
+      "tint": {
+        "hues": [
+          {
+            "min": 345,
+            "max": 15,
+            "minSaturation": 0.35
+          }
+        ]
+      }
+    },
+    {
+      "target": "vehicle:1034",
       "pack": "train-kit",
       "file": "Models/GLB format/train-electric-city-a.glb",
       "scale": 12,
@@ -157,6 +449,79 @@
             "min": 345,
             "max": 15,
             "minSaturation": 0.35
+          }
+        ]
+      }
+    },
+    {
+      "target": "vehicle:1035",
+      "pack": "train-kit",
+      "file": "Models/GLB format/train-electric-double-a.glb",
+      "scale": 12,
+      "facings": 8,
+      "tint": {
+        "hues": [
+          {
+            "min": 15,
+            "max": 48,
+            "minSaturation": 0.4
+          }
+        ]
+      }
+    },
+    {
+      "target": "vehicle:1036",
+      "pack": "train-kit",
+      "file": "Models/GLB format/train-electric-square-a.glb",
+      "scale": 13,
+      "facings": 8,
+      "tint": {
+        "hues": [
+          {
+            "min": 130,
+            "max": 170,
+            "minSaturation": 0.35
+          }
+        ]
+      },
+      "recolor": {
+        "hueShift": 190,
+        "value": 0.95
+      },
+      "note": "Reuse (D-169): eight electric bodies for nine entries; electric7 is square-a scaled up with a steel-blue hull."
+    },
+    {
+      "target": "vehicle:1037",
+      "pack": "train-kit",
+      "file": "Models/GLB format/train-electric-city-a.glb",
+      "scale": 12.5,
+      "facings": 8,
+      "tint": {
+        "hues": [
+          {
+            "min": 345,
+            "max": 15,
+            "minSaturation": 0.35
+          }
+        ]
+      },
+      "recolor": {
+        "value": 0.82
+      },
+      "note": "Reuse (D-169): electric8 is city-a scaled up with a darker hull."
+    },
+    {
+      "target": "vehicle:1038",
+      "pack": "train-kit",
+      "file": "Models/GLB format/train-electric-double-c.glb",
+      "scale": 12,
+      "facings": 8,
+      "tint": {
+        "hues": [
+          {
+            "min": 15,
+            "max": 48,
+            "minSaturation": 0.4
           }
         ]
       }
@@ -178,25 +543,65 @@
       }
     },
     {
-      "target": "vehicle:1060",
+      "target": "vehicle:1051",
       "pack": "train-kit",
-      "file": "Models/GLB format/train-diesel-b.glb",
-      "scale": 11,
+      "file": "Models/GLB format/train-electric-bullet-c.glb",
+      "scale": 12,
       "facings": 8,
       "tint": {
         "hues": [
           {
-            "min": 22,
-            "max": 48,
-            "minSaturation": 0.4
+            "min": 345,
+            "max": 15,
+            "minSaturation": 0.35
           }
         ]
       }
     },
     {
-      "target": "vehicle:1500",
+      "target": "vehicle:1052",
       "pack": "train-kit",
-      "file": "Models/GLB format/train-electric-city-c.glb",
+      "file": "Models/GLB format/train-electric-bullet-c.glb",
+      "scale": 13,
+      "facings": 8,
+      "tint": {
+        "hues": [
+          {
+            "min": 345,
+            "max": 15,
+            "minSaturation": 0.35
+          }
+        ]
+      },
+      "recolor": {
+        "value": 0.85
+      },
+      "note": "Reuse (D-169): two bullet heads for four HS entries; hs3 is bullet-c scaled up, darker."
+    },
+    {
+      "target": "vehicle:1053",
+      "pack": "train-kit",
+      "file": "Models/GLB format/train-electric-bullet-a.glb",
+      "scale": 13.5,
+      "facings": 8,
+      "tint": {
+        "hues": [
+          {
+            "min": 345,
+            "max": 15,
+            "minSaturation": 0.35
+          }
+        ]
+      },
+      "recolor": {
+        "value": 0.75
+      },
+      "note": "Reuse (D-169): hs4 is bullet-a scaled up, darkest hull of the family."
+    },
+    {
+      "target": "vehicle:1060",
+      "pack": "train-kit",
+      "file": "Models/GLB format/train-electric-subway-a.glb",
       "scale": 11,
       "facings": 8,
       "tint": {
@@ -210,6 +615,204 @@
       }
     },
     {
+      "target": "vehicle:1061",
+      "pack": "train-kit",
+      "file": "Models/GLB format/train-electric-subway-b.glb",
+      "scale": 11,
+      "facings": 8,
+      "tint": {
+        "hues": [
+          {
+            "min": 345,
+            "max": 15,
+            "minSaturation": 0.35
+          }
+        ]
+      },
+      "recolor": {
+        "hueShift": 130,
+        "saturation": 0.5
+      },
+      "note": "Faded first-generation paint over the subway-b body - the 1950 diesel unit must not read as its 1954 sibling (D-169)."
+    },
+    {
+      "target": "vehicle:1062",
+      "pack": "train-kit",
+      "file": "Models/GLB format/train-electric-subway-c.glb",
+      "scale": 11,
+      "facings": 8,
+      "tint": {
+        "hues": [
+          {
+            "min": 345,
+            "max": 15,
+            "minSaturation": 0.35
+          }
+        ]
+      }
+    },
+    {
+      "target": "vehicle:1063",
+      "pack": "train-kit",
+      "file": "Models/GLB format/train-tram-modern.glb",
+      "scale": 11,
+      "facings": 8,
+      "tint": {
+        "hues": [
+          {
+            "min": 205,
+            "max": 228,
+            "minSaturation": 0.3
+          }
+        ]
+      }
+    },
+    {
+      "target": "vehicle:1064",
+      "pack": "train-kit",
+      "file": "Models/GLB format/train-electric-city-c.glb",
+      "scale": 10.5,
+      "facings": 8,
+      "tint": {
+        "hues": [
+          {
+            "min": 345,
+            "max": 15,
+            "minSaturation": 0.35
+          }
+        ]
+      },
+      "recolor": {
+        "value": 0.9
+      },
+      "note": "Reuse (D-169): the 2006 electric railcar is the city-c EMU head as a single car, slightly darkened against 1033."
+    },
+    {
+      "target": "vehicle:1065",
+      "pack": "train-kit",
+      "file": "Models/GLB format/train-tram-round.glb",
+      "scale": 11,
+      "facings": 8,
+      "tint": {
+        "hues": [
+          {
+            "min": 345,
+            "max": 15,
+            "minSaturation": 0.35
+          }
+        ]
+      },
+      "recolor": {
+        "saturation": 0.3,
+        "value": 1.15
+      },
+      "note": "Reuse (D-169): the rounded tram shell in bright modern paint stands in for the 2024 battery railcar; its pantograph reads as a BEMU charging pantograph."
+    },
+    {
+      "target": "vehicle:1500",
+      "pack": "train-kit",
+      "file": "Models/GLB format/train-locomotive-passenger-a.glb",
+      "scale": 10.5,
+      "facings": 8,
+      "tint": {
+        "hues": [
+          {
+            "min": 15,
+            "max": 45,
+            "minSaturation": 0.3
+          }
+        ]
+      }
+    },
+    {
+      "target": "vehicle:1501",
+      "pack": "train-kit",
+      "file": "Models/GLB format/train-locomotive-passenger-b.glb",
+      "scale": 10.5,
+      "facings": 8,
+      "tint": {
+        "hues": [
+          {
+            "min": 15,
+            "max": 45,
+            "minSaturation": 0.3
+          }
+        ]
+      }
+    },
+    {
+      "target": "vehicle:1502",
+      "pack": "train-kit",
+      "file": "Models/GLB format/train-electric-city-b.glb",
+      "scale": 10.5,
+      "facings": 8,
+      "tint": {
+        "hues": [
+          {
+            "min": 345,
+            "max": 15,
+            "minSaturation": 0.35
+          }
+        ]
+      }
+    },
+    {
+      "target": "vehicle:1503",
+      "pack": "train-kit",
+      "file": "Models/GLB format/train-electric-double-b.glb",
+      "scale": 10.5,
+      "facings": 8,
+      "tint": {
+        "hues": [
+          {
+            "min": 15,
+            "max": 48,
+            "minSaturation": 0.4
+          }
+        ]
+      }
+    },
+    {
+      "target": "vehicle:1504",
+      "pack": "train-kit",
+      "file": "Models/GLB format/train-electric-bullet-b.glb",
+      "scale": 10.5,
+      "facings": 8,
+      "tint": {
+        "hues": [
+          {
+            "min": 345,
+            "max": 15,
+            "minSaturation": 0.35
+          }
+        ]
+      }
+    },
+    {
+      "target": "vehicle:1510",
+      "pack": "train-kit",
+      "file": "Models/GLB format/train-locomotive-passenger-b.glb",
+      "scale": 10,
+      "facings": 8,
+      "recolor": {
+        "hueShift": 190,
+        "value": 0.92
+      },
+      "note": "Reuse (D-169): no mail stock exists in the kit; the mail van is the passenger-b coach untinted with its accents shifted to postal blue."
+    },
+    {
+      "target": "vehicle:1511",
+      "pack": "train-kit",
+      "file": "Models/GLB format/train-electric-city-b.glb",
+      "scale": 10.5,
+      "facings": 8,
+      "recolor": {
+        "hueShift": 60,
+        "value": 0.95
+      },
+      "note": "Reuse (D-169): mail2 is the city-b coach untinted with yellow-shifted accents."
+    },
+    {
       "target": "vehicle:1520",
       "pack": "train-kit",
       "file": "Models/GLB format/train-carriage-coal.glb",
@@ -217,11 +820,45 @@
       "facings": 8
     },
     {
-      "target": "vehicle:1530",
+      "target": "vehicle:1521",
       "pack": "train-kit",
       "file": "Models/GLB format/train-carriage-box.glb",
       "scale": 10,
+      "facings": 8,
+      "note": "The kit's \"box\" carriage is an EMPTY open gondola - it serves as the modern open wagon, not as a covered van."
+    },
+    {
+      "target": "vehicle:1522",
+      "pack": "train-kit",
+      "file": "Models/GLB format/train-carriage-dirt.glb",
+      "scale": 10,
       "facings": 8
+    },
+    {
+      "target": "vehicle:1530",
+      "pack": "train-kit",
+      "file": "Models/GLB format/train-carriage-container-blue.glb",
+      "scale": 10,
+      "facings": 8,
+      "recolor": {
+        "hueShift": 155,
+        "saturation": 0.45,
+        "value": 0.8
+      },
+      "note": "Reuse (D-169): no covered van exists in the kit; box1 is the container body recoloured to a brown van."
+    },
+    {
+      "target": "vehicle:1531",
+      "pack": "train-kit",
+      "file": "Models/GLB format/train-carriage-container-blue.glb",
+      "scale": 10.5,
+      "facings": 8,
+      "recolor": {
+        "hueShift": 130,
+        "saturation": 0.4,
+        "value": 0.9
+      },
+      "note": "Reuse (D-169): box2 is the container body recoloured to a wine-red van, scaled up."
     },
     {
       "target": "vehicle:1540",
@@ -229,6 +866,45 @@
       "file": "Models/GLB format/train-carriage-tank.glb",
       "scale": 10,
       "facings": 8
+    },
+    {
+      "target": "vehicle:1541",
+      "pack": "train-kit",
+      "file": "Models/GLB format/train-carriage-tank-large.glb",
+      "scale": 10,
+      "facings": 8
+    },
+    {
+      "target": "vehicle:1550",
+      "pack": "train-kit",
+      "file": "Models/GLB format/train-carriage-container-blue.glb",
+      "scale": 10,
+      "facings": 8,
+      "recolor": {
+        "saturation": 0.08,
+        "value": 1.25
+      },
+      "note": "Reuse (D-169): reefer1 is the container body bleached near-white - whiteness is what a reefer is."
+    },
+    {
+      "target": "vehicle:1551",
+      "pack": "train-kit",
+      "file": "Models/GLB format/train-carriage-container-blue.glb",
+      "scale": 10.5,
+      "facings": 8,
+      "recolor": {
+        "saturation": 0.15,
+        "value": 1.15
+      },
+      "note": "Reuse (D-169): reefer2, the same white treatment one size up with a cold blue cast."
+    },
+    {
+      "target": "vehicle:1560",
+      "pack": "train-kit",
+      "file": "Models/GLB format/train-carriage-flatbed-wood.glb",
+      "scale": 10,
+      "facings": 8,
+      "note": "Reuse (D-169): no slatted livestock van exists; the wooden stake wagon is the nearest honest silhouette (an open stake pen), not a forced box."
     },
     {
       "target": "vehicle:1570",
@@ -247,6 +923,22 @@
       }
     },
     {
+      "target": "vehicle:1571",
+      "pack": "train-kit",
+      "file": "Models/GLB format/train-carriage-container-green.glb",
+      "scale": 10,
+      "facings": 8,
+      "tint": {
+        "hues": [
+          {
+            "min": 130,
+            "max": 170,
+            "minSaturation": 0.35
+          }
+        ]
+      }
+    },
+    {
       "target": "vehicle:1580",
       "pack": "train-kit",
       "file": "Models/GLB format/train-carriage-flatbed.glb",
@@ -254,10 +946,221 @@
       "facings": 8
     },
     {
+      "target": "vehicle:1581",
+      "pack": "train-kit",
+      "file": "Models/GLB format/train-carriage-lumber.glb",
+      "scale": 10,
+      "facings": 8
+    },
+    {
+      "target": "vehicle:1590",
+      "pack": "train-kit",
+      "file": "Models/GLB format/train-carriage-tank.glb",
+      "scale": 10,
+      "facings": 8,
+      "recolor": {
+        "saturation": 0.1,
+        "value": 1.2
+      },
+      "stretch": [
+        1,
+        1.12,
+        1
+      ],
+      "note": "Reuse (D-169): the silo wagon is the tank body raised and bleached to powder-grey - no silo model exists."
+    },
+    {
+      "target": "vehicle:1591",
+      "pack": "train-kit",
+      "file": "Models/GLB format/train-carriage-wood.glb",
+      "scale": 10,
+      "facings": 8
+    },
+    {
       "target": "vehicle:200",
       "pack": "car-kit",
       "file": "Models/GLB format/van.glb",
+      "scale": 5.5,
+      "facings": 8,
+      "stretch": [
+        1,
+        1,
+        1.55
+      ],
+      "tint": {
+        "hues": [
+          {
+            "min": 210,
+            "max": 248,
+            "minSaturation": 0.3
+          }
+        ]
+      }
+    },
+    {
+      "target": "vehicle:201",
+      "pack": "car-kit",
+      "file": "Models/GLB format/van.glb",
+      "scale": 5.7,
+      "facings": 8,
+      "stretch": [
+        1,
+        1,
+        1.85
+      ],
+      "tint": {
+        "hues": [
+          {
+            "min": 210,
+            "max": 248,
+            "minSaturation": 0.3
+          }
+        ]
+      },
+      "recolor": {
+        "value": 0.9
+      },
+      "note": "Bus gap reuse (E-14/D-169): longer stretched van, darker trim."
+    },
+    {
+      "target": "vehicle:202",
+      "pack": "car-kit",
+      "file": "Models/GLB format/delivery.glb",
       "scale": 5,
+      "facings": 8,
+      "stretch": [
+        1,
+        1,
+        1.6
+      ],
+      "tint": {
+        "hues": [
+          {
+            "min": 130,
+            "max": 170,
+            "minSaturation": 0.35
+          }
+        ]
+      }
+    },
+    {
+      "target": "vehicle:203",
+      "pack": "car-kit",
+      "file": "Models/GLB format/delivery.glb",
+      "scale": 5,
+      "facings": 8,
+      "stretch": [
+        1,
+        1,
+        2.4
+      ],
+      "tint": {
+        "hues": [
+          {
+            "min": 130,
+            "max": 170,
+            "minSaturation": 0.35
+          }
+        ]
+      },
+      "recolor": {
+        "value": 0.92
+      },
+      "note": "Bus gap reuse (E-14/D-169): the articulated bus is the delivery body at 2.4x length."
+    },
+    {
+      "target": "vehicle:204",
+      "pack": "car-kit",
+      "file": "Models/GLB format/van.glb",
+      "scale": 5.5,
+      "facings": 8,
+      "stretch": [
+        1,
+        1.15,
+        1.8
+      ],
+      "tint": {
+        "hues": [
+          {
+            "min": 210,
+            "max": 248,
+            "minSaturation": 0.3
+          }
+        ]
+      },
+      "recolor": {
+        "value": 0.95
+      },
+      "note": "Bus gap reuse (E-14/D-169): hybrid bus, taller roofline."
+    },
+    {
+      "target": "vehicle:205",
+      "pack": "car-kit",
+      "file": "Models/GLB format/delivery.glb",
+      "scale": 5.2,
+      "facings": 8,
+      "stretch": [
+        1,
+        1,
+        1.7
+      ],
+      "tint": {
+        "hues": [
+          {
+            "min": 130,
+            "max": 170,
+            "minSaturation": 0.35
+          }
+        ]
+      },
+      "recolor": {
+        "value": 1.08
+      },
+      "note": "Bus gap reuse (E-14/D-169): battery bus, lighter trim."
+    },
+    {
+      "target": "vehicle:206",
+      "pack": "car-kit",
+      "file": "Models/GLB format/van.glb",
+      "scale": 5.5,
+      "facings": 8,
+      "stretch": [
+        1,
+        1.65,
+        1.55
+      ],
+      "tint": {
+        "hues": [
+          {
+            "min": 210,
+            "max": 248,
+            "minSaturation": 0.3
+          }
+        ]
+      },
+      "note": "Bus gap reuse (E-14/D-169): the double-decker is the van body at 1.65x height - the one silhouette the stretch axis can genuinely produce."
+    },
+    {
+      "target": "vehicle:220",
+      "pack": "car-kit",
+      "file": "Models/GLB format/van.glb",
+      "scale": 4.2,
+      "facings": 8,
+      "tint": {
+        "hues": [
+          {
+            "min": 210,
+            "max": 248,
+            "minSaturation": 0.3
+          }
+        ]
+      }
+    },
+    {
+      "target": "vehicle:221",
+      "pack": "car-kit",
+      "file": "Models/GLB format/van.glb",
+      "scale": 4.6,
       "facings": 8,
       "tint": {
         "hues": [
@@ -268,26 +1171,45 @@
           }
         ]
       },
-      "note": "No bus model exists in the Car Kit (E-14 gap); the van stands in for the M12 subset, M13 decides kitbash vs. procedural."
+      "recolor": {
+        "value": 0.9
+      },
+      "note": "Reuse (D-169): mail van generations share the van body at growing scale."
     },
     {
-      "target": "vehicle:220",
+      "target": "vehicle:222",
       "pack": "car-kit",
       "file": "Models/GLB format/delivery.glb",
-      "scale": 4,
+      "scale": 4.3,
       "facings": 8,
       "tint": {
         "hues": [
           {
             "min": 130,
             "max": 170,
-            "minSaturation": 0.3
+            "minSaturation": 0.35
           }
         ]
       }
     },
     {
       "target": "vehicle:240",
+      "pack": "car-kit",
+      "file": "Models/GLB format/delivery-flat.glb",
+      "scale": 4.8,
+      "facings": 8,
+      "tint": {
+        "hues": [
+          {
+            "min": 130,
+            "max": 170,
+            "minSaturation": 0.35
+          }
+        ]
+      }
+    },
+    {
+      "target": "vehicle:241",
       "pack": "car-kit",
       "file": "Models/GLB format/truck.glb",
       "scale": 4.5,
@@ -297,26 +1219,142 @@
           {
             "min": 130,
             "max": 170,
-            "minSaturation": 0.3
+            "minSaturation": 0.35
           }
         ]
       }
     },
     {
-      "target": "vehicle:250",
+      "target": "vehicle:242",
       "pack": "car-kit",
-      "file": "Models/GLB format/delivery-flat.glb",
-      "scale": 4.5,
+      "file": "Models/GLB format/truck.glb",
+      "scale": 5,
       "facings": 8,
       "tint": {
         "hues": [
           {
             "min": 130,
             "max": 170,
-            "minSaturation": 0.3
+            "minSaturation": 0.35
+          }
+        ]
+      },
+      "recolor": {
+        "value": 0.88
+      },
+      "note": "Reuse (D-169): bulk lorry generations share the truck body at growing scale."
+    },
+    {
+      "target": "vehicle:243",
+      "pack": "car-kit",
+      "file": "Models/GLB format/truck.glb",
+      "scale": 5.4,
+      "facings": 8,
+      "tint": {
+        "hues": [
+          {
+            "min": 130,
+            "max": 170,
+            "minSaturation": 0.35
+          }
+        ]
+      },
+      "recolor": {
+        "value": 1.05
+      },
+      "note": "Reuse (D-169): bulk4, the same body one size up with lighter trim."
+    },
+    {
+      "target": "vehicle:250",
+      "pack": "car-kit",
+      "file": "Models/GLB format/delivery.glb",
+      "scale": 4.6,
+      "facings": 8,
+      "tint": {
+        "hues": [
+          {
+            "min": 130,
+            "max": 170,
+            "minSaturation": 0.35
           }
         ]
       }
+    },
+    {
+      "target": "vehicle:251",
+      "pack": "car-kit",
+      "file": "Models/GLB format/delivery.glb",
+      "scale": 5,
+      "facings": 8,
+      "tint": {
+        "hues": [
+          {
+            "min": 130,
+            "max": 170,
+            "minSaturation": 0.35
+          }
+        ]
+      },
+      "recolor": {
+        "value": 0.9
+      },
+      "note": "Reuse (D-169): box lorry generations share the delivery body at growing scale."
+    },
+    {
+      "target": "vehicle:252",
+      "pack": "car-kit",
+      "file": "Models/GLB format/delivery.glb",
+      "scale": 5.4,
+      "facings": 8,
+      "tint": {
+        "hues": [
+          {
+            "min": 130,
+            "max": 170,
+            "minSaturation": 0.35
+          }
+        ]
+      },
+      "recolor": {
+        "value": 1.08
+      },
+      "note": "Reuse (D-169): box3, one size up with lighter trim."
+    },
+    {
+      "target": "vehicle:260",
+      "pack": "car-kit",
+      "file": "Models/GLB format/delivery.glb",
+      "scale": 4.7,
+      "facings": 8,
+      "recolor": {
+        "saturation": 0.12,
+        "value": 1.25
+      },
+      "note": "Reuse (D-169): no reefer body exists; the delivery box bleached near-white and untinted IS the reefer read."
+    },
+    {
+      "target": "vehicle:261",
+      "pack": "car-kit",
+      "file": "Models/GLB format/delivery.glb",
+      "scale": 5,
+      "facings": 8,
+      "recolor": {
+        "saturation": 0.1,
+        "value": 1.3
+      },
+      "note": "Reuse (D-169): reefer2, whiter and one size up."
+    },
+    {
+      "target": "vehicle:262",
+      "pack": "car-kit",
+      "file": "Models/GLB format/delivery.glb",
+      "scale": 5.4,
+      "facings": 8,
+      "recolor": {
+        "saturation": 0.15,
+        "value": 1.2
+      },
+      "note": "Reuse (D-169): reefer3, largest of the white family."
     },
     {
       "target": "vehicle:270",
@@ -329,11 +1367,51 @@
           {
             "min": 130,
             "max": 170,
-            "minSaturation": 0.3
+            "minSaturation": 0.35
           }
         ]
       },
-      "note": "Closest enclosed-drum body the kit offers for a tanker; M13 revisits."
+      "note": "Closest enclosed-drum body the kit offers for a tanker (M12 note upheld in D-169)."
+    },
+    {
+      "target": "vehicle:271",
+      "pack": "car-kit",
+      "file": "Models/GLB format/garbage-truck.glb",
+      "scale": 5,
+      "facings": 8,
+      "tint": {
+        "hues": [
+          {
+            "min": 130,
+            "max": 170,
+            "minSaturation": 0.35
+          }
+        ]
+      },
+      "recolor": {
+        "value": 0.9
+      },
+      "note": "Reuse (D-169): tanker generations share the drum body at growing scale."
+    },
+    {
+      "target": "vehicle:272",
+      "pack": "car-kit",
+      "file": "Models/GLB format/garbage-truck.glb",
+      "scale": 5.4,
+      "facings": 8,
+      "tint": {
+        "hues": [
+          {
+            "min": 130,
+            "max": 170,
+            "minSaturation": 0.35
+          }
+        ]
+      },
+      "recolor": {
+        "value": 1.08
+      },
+      "note": "Reuse (D-169): tanker3, one size up with lighter trim."
     },
     {
       "target": "vehicle:280",
@@ -346,10 +1424,30 @@
           {
             "min": 130,
             "max": 170,
-            "minSaturation": 0.3
+            "minSaturation": 0.35
           }
         ]
       }
+    },
+    {
+      "target": "vehicle:281",
+      "pack": "car-kit",
+      "file": "Models/GLB format/truck-flat.glb",
+      "scale": 5,
+      "facings": 8,
+      "tint": {
+        "hues": [
+          {
+            "min": 130,
+            "max": 170,
+            "minSaturation": 0.35
+          }
+        ]
+      },
+      "recolor": {
+        "value": 0.9
+      },
+      "note": "Reuse (D-169): container lorry generations share the flatbed semi at growing scale."
     },
     {
       "target": "vehicle:290",
@@ -357,7 +1455,11 @@
       "file": "Models/GLB format/truck.glb",
       "scale": 4.5,
       "facings": 8,
-      "note": "Livestock lorry shares the truck body untinted for the subset."
+      "recolor": {
+        "hueShift": 230,
+        "saturation": 0.5
+      },
+      "note": "Reuse (D-169): the livestock lorry is the truck body untinted in a red-brown wood tone."
     },
     {
       "target": "vehicle:291",
@@ -374,43 +1476,26 @@
           }
         ]
       },
-      "note": "Site vehicle stands in for the cement lorry; M13 revisits."
+      "note": "Site vehicle stands in for the cement lorry (M12 note upheld in D-169 - no drum-mixer body exists)."
     },
     {
       "target": "vehicle:2000",
       "pack": "watercraft-kit",
-      "file": "Models/GLB format/ship-cargo-a.glb",
-      "scale": 8,
+      "file": "Models/GLB format/ship-cargo-c.glb",
+      "scale": 9,
       "facings": 8,
       "tint": {
         "hues": [
           {
-            "min": 4,
-            "max": 18,
-            "minSaturation": 0.4
+            "min": 350,
+            "max": 20,
+            "minSaturation": 0.35
           }
         ]
       }
     },
     {
-      "target": "vehicle:2002",
-      "pack": "watercraft-kit",
-      "file": "Models/GLB format/ship-cargo-c.glb",
-      "scale": 8,
-      "facings": 8,
-      "tint": {
-        "hues": [
-          {
-            "min": 8,
-            "max": 25,
-            "minSaturation": 0.35
-          }
-        ]
-      },
-      "note": "ship-large.glb turned out to be a sailing galleon in the bake - it belongs to the pre-1920 eras (M23), not to the 1950 bulker."
-    },
-    {
-      "target": "vehicle:2010",
+      "target": "vehicle:2001",
       "pack": "watercraft-kit",
       "file": "Models/GLB format/ship-cargo-b.glb",
       "scale": 8,
@@ -418,31 +1503,224 @@
       "tint": {
         "hues": [
           {
-            "min": 8,
-            "max": 25,
+            "min": 205,
+            "max": 232,
             "minSaturation": 0.35
           }
         ]
       }
     },
     {
+      "target": "vehicle:2002",
+      "pack": "watercraft-kit",
+      "file": "Models/GLB format/ship-cargo-b.glb",
+      "scale": 9.5,
+      "facings": 8,
+      "tint": {
+        "hues": [
+          {
+            "min": 205,
+            "max": 232,
+            "minSaturation": 0.35
+          }
+        ]
+      },
+      "recolor": {
+        "value": 0.85
+      },
+      "note": "Reuse (D-169): the 1995 bulker is the bulk-cargo hull scaled up with a darker deck load."
+    },
+    {
+      "target": "vehicle:2010",
+      "pack": "watercraft-kit",
+      "file": "Models/GLB format/ship-cargo-c.glb",
+      "scale": 10,
+      "facings": 8,
+      "stretch": [
+        1,
+        0.9,
+        1.35
+      ],
+      "tint": {
+        "hues": [
+          {
+            "min": 350,
+            "max": 20,
+            "minSaturation": 0.35
+          }
+        ]
+      },
+      "recolor": {
+        "saturation": 0.5,
+        "value": 0.55
+      },
+      "note": "Reuse (D-169): no tanker hull exists; tanker1 is the coaster hull lengthened, lowered and darkened."
+    },
+    {
+      "target": "vehicle:2011",
+      "pack": "watercraft-kit",
+      "file": "Models/GLB format/ship-cargo-c.glb",
+      "scale": 11.5,
+      "facings": 8,
+      "stretch": [
+        1,
+        0.95,
+        1.5
+      ],
+      "tint": {
+        "hues": [
+          {
+            "min": 350,
+            "max": 20,
+            "minSaturation": 0.35
+          }
+        ]
+      },
+      "recolor": {
+        "value": 0.7
+      },
+      "note": "Reuse (D-169): tanker2, the same treatment one size up."
+    },
+    {
+      "target": "vehicle:2020",
+      "pack": "watercraft-kit",
+      "file": "Models/GLB format/ship-cargo-a.glb",
+      "scale": 8,
+      "facings": 8,
+      "tint": {
+        "hues": [
+          {
+            "min": 28,
+            "max": 55,
+            "minSaturation": 0.4
+          }
+        ]
+      }
+    },
+    {
+      "target": "vehicle:2021",
+      "pack": "watercraft-kit",
+      "file": "Models/GLB format/ship-cargo-a.glb",
+      "scale": 9.5,
+      "facings": 8,
+      "tint": {
+        "hues": [
+          {
+            "min": 28,
+            "max": 55,
+            "minSaturation": 0.4
+          }
+        ]
+      },
+      "recolor": {
+        "value": 0.88
+      },
+      "note": "Reuse (D-169): container ship generations share the container-deck hull at growing scale."
+    },
+    {
+      "target": "vehicle:2022",
+      "pack": "watercraft-kit",
+      "file": "Models/GLB format/ship-cargo-a.glb",
+      "scale": 11,
+      "facings": 8,
+      "tint": {
+        "hues": [
+          {
+            "min": 28,
+            "max": 55,
+            "minSaturation": 0.4
+          }
+        ]
+      },
+      "recolor": {
+        "value": 1.1
+      },
+      "note": "Reuse (D-169): container3, largest of the family, lighter hull."
+    },
+    {
+      "target": "vehicle:2030",
+      "pack": "watercraft-kit",
+      "file": "Models/GLB format/boat-tow-b.glb",
+      "scale": 9,
+      "facings": 8,
+      "tint": {
+        "hues": [
+          {
+            "min": 25,
+            "max": 50,
+            "minSaturation": 0.4
+          }
+        ]
+      },
+      "recolor": {
+        "saturation": 0.2,
+        "value": 1.25
+      },
+      "note": "Reuse (D-169): the reefer ship is the twin-stack steamer bleached white."
+    },
+    {
       "target": "vehicle:2040",
       "pack": "watercraft-kit",
       "file": "Models/GLB format/ship-ocean-liner-small.glb",
       "scale": 7,
-      "facings": 8
+      "facings": 8,
+      "tint": {
+        "hues": [
+          {
+            "min": 18,
+            "max": 45,
+            "minSaturation": 0.45
+          }
+        ]
+      }
+    },
+    {
+      "target": "vehicle:2041",
+      "pack": "watercraft-kit",
+      "file": "Models/GLB format/ship-ocean-liner.glb",
+      "scale": 6.5,
+      "facings": 8,
+      "tint": {
+        "hues": [
+          {
+            "min": 18,
+            "max": 45,
+            "minSaturation": 0.45
+          }
+        ]
+      }
+    },
+    {
+      "target": "vehicle:2042",
+      "pack": "watercraft-kit",
+      "file": "Models/GLB format/ship-ocean-liner-small.glb",
+      "scale": 8,
+      "facings": 8,
+      "tint": {
+        "hues": [
+          {
+            "min": 18,
+            "max": 45,
+            "minSaturation": 0.45
+          }
+        ]
+      },
+      "recolor": {
+        "value": 1.15
+      },
+      "note": "Reuse (D-169): the 2025 fast ferry is the small liner scaled up with a bright modern hull."
     },
     {
       "target": "building:residential:0",
       "pack": "city-kit-suburban",
-      "file": "Models/GLB format/building-type-a.glb",
+      "file": "Models/GLB format/building-type-h.glb",
       "scale": 18,
       "facings": 1
     },
     {
       "target": "building:residential:0:1",
       "pack": "city-kit-suburban",
-      "file": "Models/GLB format/building-type-b.glb",
+      "file": "Models/GLB format/building-type-i.glb",
       "scale": 18,
       "facings": 1
     },
@@ -454,30 +1732,58 @@
       "facings": 1
     },
     {
+      "target": "building:residential:0:3",
+      "pack": "city-kit-suburban",
+      "file": "Models/GLB format/building-type-j.glb",
+      "scale": 18,
+      "facings": 1
+    },
+    {
       "target": "building:residential:1",
       "pack": "city-kit-suburban",
-      "file": "Models/GLB format/building-type-g.glb",
+      "file": "Models/GLB format/building-type-b.glb",
       "scale": 18,
       "facings": 1
     },
     {
       "target": "building:residential:1:1",
       "pack": "city-kit-suburban",
-      "file": "Models/GLB format/building-type-h.glb",
+      "file": "Models/GLB format/building-type-d.glb",
+      "scale": 18,
+      "facings": 1
+    },
+    {
+      "target": "building:residential:1:2",
+      "pack": "city-kit-suburban",
+      "file": "Models/GLB format/building-type-t.glb",
+      "scale": 18,
+      "facings": 1
+    },
+    {
+      "target": "building:residential:1:3",
+      "pack": "city-kit-suburban",
+      "file": "Models/GLB format/building-type-f.glb",
       "scale": 18,
       "facings": 1
     },
     {
       "target": "building:commercial:0",
       "pack": "city-kit-commercial",
-      "file": "Models/GLB format/building-a.glb",
+      "file": "Models/GLB format/building-e.glb",
       "scale": 16,
       "facings": 1
     },
     {
       "target": "building:commercial:0:1",
       "pack": "city-kit-commercial",
-      "file": "Models/GLB format/building-b.glb",
+      "file": "Models/GLB format/building-k.glb",
+      "scale": 16,
+      "facings": 1
+    },
+    {
+      "target": "building:commercial:0:2",
+      "pack": "city-kit-commercial",
+      "file": "Models/GLB format/building-j.glb",
       "scale": 16,
       "facings": 1
     },
@@ -491,21 +1797,63 @@
     {
       "target": "building:commercial:1:1",
       "pack": "city-kit-commercial",
-      "file": "Models/GLB format/building-skyscraper-b.glb",
+      "file": "Models/GLB format/building-skyscraper-c.glb",
+      "scale": 16,
+      "facings": 1
+    },
+    {
+      "target": "building:commercial:1:2",
+      "pack": "city-kit-commercial",
+      "file": "Models/GLB format/building-skyscraper-e.glb",
+      "scale": 16,
+      "facings": 1
+    },
+    {
+      "target": "building:commercial:1:3",
+      "pack": "city-kit-commercial",
+      "file": "Models/GLB format/building-m.glb",
       "scale": 16,
       "facings": 1
     },
     {
       "target": "building:industrial:0",
       "pack": "city-kit-industrial",
-      "file": "Models/GLB format/building-a.glb",
+      "file": "Models/GLB format/building-h.glb",
+      "scale": 16,
+      "facings": 1
+    },
+    {
+      "target": "building:industrial:0:1",
+      "pack": "city-kit-industrial",
+      "file": "Models/GLB format/building-i.glb",
+      "scale": 16,
+      "facings": 1
+    },
+    {
+      "target": "building:industrial:0:2",
+      "pack": "city-kit-industrial",
+      "file": "Models/GLB format/building-j.glb",
       "scale": 16,
       "facings": 1
     },
     {
       "target": "building:industrial:1",
       "pack": "city-kit-industrial",
-      "file": "Models/GLB format/building-h.glb",
+      "file": "Models/GLB format/building-p.glb",
+      "scale": 16,
+      "facings": 1
+    },
+    {
+      "target": "building:industrial:1:1",
+      "pack": "city-kit-industrial",
+      "file": "Models/GLB format/building-o.glb",
+      "scale": 16,
+      "facings": 1
+    },
+    {
+      "target": "building:industrial:1:2",
+      "pack": "city-kit-industrial",
+      "file": "Models/GLB format/building-n.glb",
       "scale": 16,
       "facings": 1
     },
@@ -526,21 +1874,21 @@
     {
       "target": "industry:SteelMill",
       "pack": "city-kit-industrial",
-      "file": "Models/GLB format/building-d.glb",
+      "file": "Models/GLB format/building-e.glb",
       "scale": 16,
       "facings": 1,
       "anchors": {
         "chimney": [
-          0,
-          1.4,
-          0
+          -0.58,
+          1.7,
+          0.66
         ]
       }
     },
     {
       "target": "industry:Sawmill",
       "pack": "city-kit-industrial",
-      "file": "Models/GLB format/building-b.glb",
+      "file": "Models/GLB format/building-k.glb",
       "scale": 16,
       "facings": 1
     },
@@ -561,35 +1909,234 @@
     {
       "target": "industry:CementWorks",
       "pack": "city-kit-industrial",
+      "file": "Models/GLB format/building-l.glb",
+      "scale": 16,
+      "facings": 1,
+      "anchors": {
+        "chimney": [
+          -0.27,
+          1.95,
+          0.95
+        ]
+      }
+    },
+    {
+      "target": "industry:Refinery",
+      "pack": "city-kit-industrial",
+      "file": "Models/GLB format/building-m.glb",
+      "scale": 16,
+      "facings": 1,
+      "anchors": {
+        "chimney": [
+          0.33,
+          1.55,
+          0.42
+        ],
+        "chimney2": [
+          0.33,
+          1.55,
+          -0.4
+        ]
+      }
+    },
+    {
+      "target": "industry:PlasticsPlant",
+      "pack": "city-kit-industrial",
+      "file": "Models/GLB format/building-c.glb",
+      "scale": 16,
+      "facings": 1,
+      "anchors": {
+        "chimney": [
+          0.32,
+          1.28,
+          0.12
+        ]
+      }
+    },
+    {
+      "target": "industry:MachineFactory",
+      "pack": "city-kit-industrial",
+      "file": "Models/GLB format/building-a.glb",
+      "scale": 16,
+      "facings": 1,
+      "anchors": {
+        "chimney": [
+          -0.67,
+          1.5,
+          0.34
+        ]
+      }
+    },
+    {
+      "target": "industry:ElectronicsFactory",
+      "pack": "city-kit-industrial",
+      "file": "Models/GLB format/building-q.glb",
+      "scale": 16,
+      "facings": 1
+    },
+    {
+      "target": "industry:FurnitureFactory",
+      "pack": "city-kit-industrial",
+      "file": "Models/GLB format/building-s.glb",
+      "scale": 16,
+      "facings": 1
+    },
+    {
+      "target": "industry:BuildersMerchant",
+      "pack": "city-kit-industrial",
       "file": "Models/GLB format/building-t.glb",
       "scale": 16,
       "facings": 1
     },
     {
-      "target": "tree:0",
+      "target": "industry:IronOreMine",
+      "pack": "factory-kit",
+      "file": "Models/GLB format/hopper-high-square.glb",
+      "scale": 14,
+      "facings": 1,
+      "recolor": {
+        "hueShift": 150,
+        "saturation": 0.55,
+        "value": 1.05
+      },
+      "anchors": {
+        "chimney": [
+          0,
+          1.5,
+          0
+        ]
+      },
+      "note": "The Factory Kit ore hopper stands in for the mine tipple, recoloured from kit navy to rust (D-169)."
+    },
+    {
+      "target": "industry:GravelPit",
+      "pack": "factory-kit",
+      "file": "Models/GLB format/hopper-round.glb",
+      "scale": 14,
+      "facings": 1,
+      "recolor": {
+        "hueShift": 170,
+        "saturation": 0.3,
+        "value": 1.15
+      },
+      "anchors": {
+        "chimney": [
+          0,
+          1,
+          0
+        ]
+      },
+      "note": "The Factory Kit round hopper stands in for the gravel classifier, recoloured to washed stone grey (D-169)."
+    },
+    {
+      "target": "industry:Forestry",
+      "pack": "nature-kit",
+      "file": "Models/GLTF format/log_stackLarge.glb",
+      "scale": 28,
+      "facings": 1
+    },
+    {
+      "target": "tree:temperate:0",
       "pack": "nature-kit",
       "file": "Models/GLTF format/tree_default.glb",
       "scale": 8,
       "facings": 1
     },
     {
-      "target": "tree:1",
+      "target": "tree:temperate:1",
       "pack": "nature-kit",
       "file": "Models/GLTF format/tree_oak.glb",
       "scale": 8,
       "facings": 1
     },
     {
-      "target": "tree:2",
+      "target": "tree:temperate:2",
       "pack": "nature-kit",
-      "file": "Models/GLTF format/tree_cone.glb",
+      "file": "Models/GLTF format/tree_detailed.glb",
       "scale": 8,
       "facings": 1
     },
     {
-      "target": "tree:3",
+      "target": "tree:temperate:3",
+      "pack": "nature-kit",
+      "file": "Models/GLTF format/tree_fat.glb",
+      "scale": 8,
+      "facings": 1
+    },
+    {
+      "target": "tree:arctic:0",
+      "pack": "nature-kit",
+      "file": "Models/GLTF format/tree_pineDefaultA.glb",
+      "scale": 8,
+      "facings": 1
+    },
+    {
+      "target": "tree:arctic:1",
+      "pack": "nature-kit",
+      "file": "Models/GLTF format/tree_pineTallA.glb",
+      "scale": 8,
+      "facings": 1
+    },
+    {
+      "target": "tree:arctic:2",
+      "pack": "nature-kit",
+      "file": "Models/GLTF format/tree_pineRoundA.glb",
+      "scale": 8,
+      "facings": 1
+    },
+    {
+      "target": "tree:arctic:3",
+      "pack": "nature-kit",
+      "file": "Models/GLTF format/tree_pineSmallA.glb",
+      "scale": 8,
+      "facings": 1
+    },
+    {
+      "target": "tree:tropical:0",
       "pack": "nature-kit",
       "file": "Models/GLTF format/tree_palm.glb",
+      "scale": 8,
+      "facings": 1
+    },
+    {
+      "target": "tree:tropical:1",
+      "pack": "nature-kit",
+      "file": "Models/GLTF format/tree_palmDetailedTall.glb",
+      "scale": 8,
+      "facings": 1
+    },
+    {
+      "target": "tree:tropical:2",
+      "pack": "nature-kit",
+      "file": "Models/GLTF format/tree_palmShort.glb",
+      "scale": 8,
+      "facings": 1
+    },
+    {
+      "target": "tree:tropical:3",
+      "pack": "nature-kit",
+      "file": "Models/GLTF format/tree_palmTall.glb",
+      "scale": 8,
+      "facings": 1
+    },
+    {
+      "target": "tree:desert:0",
+      "pack": "nature-kit",
+      "file": "Models/GLTF format/cactus_tall.glb",
+      "scale": 10,
+      "facings": 1
+    },
+    {
+      "target": "tree:desert:1",
+      "pack": "nature-kit",
+      "file": "Models/GLTF format/cactus_short.glb",
+      "scale": 10,
+      "facings": 1
+    },
+    {
+      "target": "tree:desert:2",
+      "pack": "nature-kit",
+      "file": "Models/GLTF format/tree_thin.glb",
       "scale": 8,
       "facings": 1
     }

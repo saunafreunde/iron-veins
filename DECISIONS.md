@@ -41,13 +41,13 @@ no entry below. A number may appear under several topics.
 - **Competitors, AI & tenders:** D-107, D-108, D-109, D-115, D-116, D-121,
   D-122, D-147, D-152, D-153, D-154, D-155, D-156, D-158
 - **Rendering & art:** D-013, D-014, D-033, D-035, D-112, D-117, D-125, D-127,
-  D-136, D-140, D-160, D-161, D-162, D-163, D-164, D-165, D-166
+  D-136, D-140, D-160, D-161, D-162, D-163, D-164, D-165, D-166, D-169
 - **UI & input:** D-011, D-013, D-015, D-035, D-110, D-113, D-114, D-119,
   D-126, D-148, D-165, D-166
 - **Performance & measurement:** D-002, D-120, D-135, D-136, D-161, D-162,
   D-163, D-164, D-167
 - **Platform, tooling & build:** D-012, D-014, D-015, D-016, D-017, D-029,
-  D-030, D-031, D-160, D-168
+  D-030, D-031, D-160, D-168, D-169
 - **Crash safety:** D-132, D-139
 - **Testing method & fixtures:** D-010, D-038, D-072, D-074, D-084, D-133,
   D-167
@@ -4126,3 +4126,115 @@ markdown emphasis handling would CORRUPT prose - it rewrites
 because of the literal `A*` - so the cleanup needs a decision about
 exempting the prose documents first, and that is its own change, not a
 side effect of line endings.
+
+## M13 - living trains, bundle 1: the catalogue mapped whole (2026-08-07)
+
+### D-169 The full catalogue is mapped, a reuse is a recoloured stretch and never a wrong silhouette, and the coupling test holds art to the catalogues
+
+D-160 shipped a representative subset of 43 mappings; M13's first bundle
+completes it. `tools/assets-manifest.json` now carries 145 models: all 33
+traction units and 23 wagons of `railCatalog.ts`, all 27 road vehicles of
+`catalog.ts`, all 12 ships of `waterCatalog.ts`, 21 town-building cells
+(three zones x two expansion stages x variants), 14 of the 17 industries,
+and 15 trees keyed per climate. Baked on the pinned twelve kits that gives
+810 cells per zoom - 2,430 cells, six pages, ~5.7 MiB, one bake ~25 s -
+verified reproducible by a second bake with byte-identical SHA-256 on
+every file, the D-160 promise re-proven on the full set.
+
+**What stays procedural is a named list, and the test enforces it in both
+directions.** Aircraft (E-14: no Kenney 3D aircraft kit exists), the
+coal-mine headframe and the oil derrick (E-14 by name), and the FARM -
+no pinned kit carries a farmstead, and a suburban house under an
+industry marker would be exactly the wrong-silhouette forcing this
+bundle's order forbids; `shapes.ts` keeps all four. The coupling test
+(`assetsBake.spec.ts`, the i18n.spec.ts device applied to art) asserts
+every rail/road/water catalogue id is mapped exactly once, every aircraft
+id is NOT mapped, no mapped id is missing from the catalogues, the
+industry set is exactly IndustryType minus {CoalMine, OilWell, Farm},
+every zone x stage town cell exists, and every MapClimate has at least
+two trees - the manifest and the catalogues can now drift in neither
+direction without a red build.
+
+**Two manifest features carry the honest reuses: `recolor` and
+`stretch`.** The kits hold fewer distinguishable bodies than the
+catalogue has entries, and the bundle's rule was: real model variety
+first, reuse with recolour/scale variation where the kit genuinely lacks
+a body, never a forced wrong silhouette. `recolor`
+{hueShift/saturation/value} is a pure HSV transform applied at extract
+time to NON-tint faces only - tint classification reads the authored
+colours first, so a hue variant keeps exactly the company-colour zones of
+the original, and an untinted reuse (the white reefer families) recolours
+everything. `stretch` [x,y,z] scales per model axis around the ground
+pivot (+z is travel), turning one van body into seven bus generations -
+including the double-decker via the height axis, the one silhouette a
+stretch can genuinely produce. Both are deterministic float maths on
+fixed inputs; the reproducibility test covers them by construction.
+
+**The reuse register.** Rail: five steam entries on three locomotive
+bodies (steam4/5 are recoloured rescales); nine diesels on six bodies
+(diesel7/8 and the hydrogen loco are recoloured box-cabs, the hydrogen
+one pale cyan); nine electrics on eight bodies (electric7/8 recoloured);
+four high-speed heads on two bullet noses (hs3/4 recoloured rescales);
+the railcars follow the catalogue's TRACTION, not just its count: the
+three diesel units take the three pantograph-free subway bodies (the 1950
+one in olive paint against its 1954 sibling), the electric pair the
+modern tram and the city-c EMU head as a single car, and the battery unit
+the rounded tram shell in bright paint - a pantograph on a diesel railcar
+would be a wrong silhouette in exactly the D-117 sense, and a BEMU
+honestly carries one. Wagons: the five coaches are the two
+locomotive-passenger coaches plus the city-b, double-b and bullet-b
+EMU/coach middles; both mail vans are untinted recoloured coaches (no
+mail stock exists); box1/2 and reefer1/2 are the container body
+recoloured (no covered van exists - brown van and bleached white
+respectively); the silo is the tank body raised and bleached; the
+livestock wagon is the wooden stake wagon (an open pen, not a forced
+box). Road: all seven buses are stretched van/delivery bodies - the
+named E-14 bus gap; the three tankers keep the garbage-drum stand-in
+with a note, the cement lorry the site vehicle; bulk/box/reefer/mail
+generations are scale-and-recolour ladders on truck/delivery/van; the
+livestock lorry is the truck untinted in wood-brown. Ships: tankers are
+the coaster hull lengthened, lowered and darkened (no tanker hull
+exists); the three container generations share the container-deck hull;
+the bulker is the bulk-pile hull scaled; the reefer ship is the
+twin-stack steamer bleached; the 2025 fast ferry is the small liner
+brightened. Every reuse carries a `note` in the manifest naming the gap.
+
+**The M12 subset had four misreads, corrected here rather than carried.**
+The pax1 coach was `electric-city-c` - a pantographed EMU head standing
+in for an unpowered carriage; the kit's `train-locomotive-passenger-a/b`
+are actual coaches and carry the five-generation family now. The ship
+hulls were sorted by name, not by deck load: `ship-cargo-a` carries
+visible containers (it is the container family now), `ship-cargo-b`
+bulk piles (coaster2/bulker), `ship-cargo-c` is the small coaster. The
+steel mill moved from the plain block `building-d` to the twin-stacked
+`building-e`, the sawmill onto the sawtooth `building-k` (D-117's own
+north-light trope), the cement works onto the kiln-stacked `building-l`.
+And the town-industrial zone cells no longer share models with mapped
+industries - a zone building that IS an industry sprite would make the
+two unreadable side by side.
+
+**Chimney anchors come from measured geometry.** The emitter positions
+for the eight smoking industries were read from the models' top-vertex
+clusters (a scratch script over the parsed GLBs), not guessed: the
+refinery carries two stack anchors, the mine hoppers a dust anchor at the
+funnel mouth. The two Factory-Kit hoppers are recoloured away from the
+kit's navy (rust for the ore tipple, washed stone for the gravel
+classifier) so mine-side structures do not read as factory interiors.
+
+**Base and mask cells pack as one atomic double-width rect.** The full
+catalogue overflows one 4096 page at zoom 4 (four pages now), and the
+M12 packer placed base and mask as two independent cells - a pair
+straddling a page boundary was a hard error the subset never triggered.
+Packing the pair as one rect makes "both halves share a page" true by
+construction; a unit test overflows a synthetic catalogue and asserts
+both rectangles of every cell inside its page. Tree targets renamed from
+`tree:<n>` to `tree:<climate>:<n>` (temperate/arctic/tropical/desert
+after MapClimate) while nothing consumes them - the M13 render bundle
+reads the new grammar from the start.
+
+The SPEC2 6.2 booking is honestly overrun and recorded (Fehlerkatalog
+40): the plan's ~600 cells were a pre-Kenney estimate, the measured
+truth is 810 cells per zoom - z1 one 4092x1067 page, z2 one 4092x3609,
+z4 four pages under 4096 squared, with only ONE zoom's pages GPU-resident
+at a time. Render-only in the strictest sense: this bundle touches
+tools, manifest, tests and documentation - not one byte under `src/`.

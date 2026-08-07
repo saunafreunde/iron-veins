@@ -15,6 +15,7 @@ import {
   SHADE_UP,
   SHADE_X,
   SHADE_Y,
+  applyRecolor,
   bakeAtlases,
   decodePng,
   encodePng,
@@ -29,7 +30,10 @@ import {
 } from '../../tools/bake-lib.ts';
 import { HEIGHT_PX, TILE_H, TILE_W } from '../../src/render/projection';
 import { FACE_LEFT, FACE_RIGHT, FACE_TOP } from '../../src/render/shapes';
-import { HEIGHT_STEP_M, TILE_SIZE_M } from '../../src/sim/constants';
+import { HEIGHT_STEP_M, MapClimate, TILE_SIZE_M } from '../../src/sim/constants';
+import { IndustryType } from '../../src/sim/industry/types';
+import { VEHICLE_SPECS } from '../../src/sim/vehicles/catalog';
+import { VehicleKind } from '../../src/sim/vehicles/spec';
 
 /**
  * The Kenney bake pipeline (SPEC2 M12 stage 0, E-14/D-160), proven on
@@ -181,6 +185,83 @@ describe('the dimetric rasteriser', () => {
   });
 });
 
+describe('the reused-model variants of D-169: recolor and stretch', () => {
+  it('applyRecolor rotates the hue wheel and scales saturation and value', () => {
+    // Pure red shifted 120 degrees is pure green; 240 is pure blue.
+    expect(applyRecolor(255, 0, 0, { hueShift: 120 })).toEqual([0, 255, 0]);
+    expect(applyRecolor(255, 0, 0, { hueShift: 240 })).toEqual([0, 0, 255]);
+    // Saturation zero collapses to grey at the colour's value.
+    expect(applyRecolor(200, 40, 40, { saturation: 0 })).toEqual([200, 200, 200]);
+    // Value scales brightness and clamps.
+    expect(applyRecolor(100, 50, 50, { value: 2 })).toEqual([200, 100, 100]);
+    expect(applyRecolor(200, 100, 100, { value: 2 })).toEqual([255, 128, 128]);
+    // An empty spec is the identity.
+    expect(applyRecolor(123, 45, 67, {})).toEqual([123, 45, 67]);
+  });
+
+  it('recolours only the non-tint faces at extract time', () => {
+    // The cube is one untinted material (authored 200,0,0): fully recoloured.
+    const cube = extractTriangles(parseGlb(syntheticCubeGlb()), {
+      recolor: { hueShift: 120 },
+    });
+    for (const tri of cube) {
+      expect([tri.r, tri.g, tri.b]).toEqual([0, 200, 0]);
+    }
+    // The wagon's livery zone keeps its authored colour - a company-colour
+    // zone renders neutral grey in the base cell whatever the hull wears -
+    // while the hull goes through exactly applyRecolor.
+    const plain = extractTriangles(parseGlb(syntheticWagonGlb()), {
+      tintMaterials: ['livery'],
+    });
+    const recoloured = extractTriangles(parseGlb(syntheticWagonGlb()), {
+      tintMaterials: ['livery'],
+      recolor: { hueShift: 120 },
+    });
+    expect(recoloured).toHaveLength(plain.length);
+    for (let i = 0; i < plain.length; i++) {
+      const before = plain[i]!;
+      const after = recoloured[i]!;
+      expect(after.tint).toBe(before.tint);
+      const expected = before.tint
+        ? [before.r, before.g, before.b]
+        : applyRecolor(before.r, before.g, before.b, { hueShift: 120 });
+      expect([after.r, after.g, after.b]).toEqual(expected);
+    }
+  });
+
+  it('stretch lengthens the travel axis and moves the anchors with it', () => {
+    const cube = extractTriangles(parseGlb(syntheticCubeGlb()));
+    const plain = renderSprite(cube, {
+      scale: 10,
+      facing: 0,
+      zoom: 2,
+      anchors: { vent: [0, 1, 0] },
+    });
+    const long = renderSprite(cube, {
+      scale: 10,
+      facing: 0,
+      zoom: 2,
+      anchors: { vent: [0, 1, 0] },
+      stretch: [1, 1, 2],
+    });
+    const tall = renderSprite(cube, {
+      scale: 10,
+      facing: 0,
+      zoom: 2,
+      anchors: { vent: [0, 1, 0] },
+      stretch: [1, 2, 1],
+    });
+    expect(long.width).toBeGreaterThan(plain.width);
+    expect(tall.height).toBeGreaterThan(plain.height);
+    expect(tall.width).toBe(plain.width);
+    // The vent sits on the cube's top centre: doubling the height doubles
+    // its lift over the ground anchor.
+    const plainLift = plain.anchorY - plain.points['vent']![1];
+    const tallLift = tall.anchorY - tall.points['vent']![1];
+    expect(tallLift).toBeCloseTo(2 * plainLift, 6);
+  });
+});
+
 describe('PNG codec', () => {
   it('round-trips RGBA pixels bit-exactly', () => {
     const pixels = Uint8Array.from(
@@ -216,6 +297,35 @@ describe('atlas layout', () => {
         expect(overlap).toBe(false);
       }
     }
+  });
+});
+
+describe('base and mask cells are packed as one atomic pair', () => {
+  it('keeps every pair on one page even when the catalogue spans pages', () => {
+    // Enough large models to overflow a 4096 page at zoom 4 - the full M13
+    // catalogue does exactly that, and a base/mask pair straddling a page
+    // boundary used to be a hard bakeAtlases error.
+    const triangles = extractTriangles(parseGlb(syntheticCubeGlb()));
+    const models = Array.from({ length: 14 }, (_, i) => ({
+      target: `vehicle:${9100 + i}`,
+      triangles,
+      scale: 95,
+      facings: 2,
+    }));
+    const { manifest } = bakeAtlases(models, [4]);
+    expect(manifest.pages.length).toBeGreaterThan(1);
+    let cells = 0;
+    for (const page of manifest.pages) {
+      for (const cell of page.cells) {
+        cells++;
+        // Both rectangles of the pair lie inside THIS page's bitmap.
+        expect(cell.x + cell.width).toBeLessThanOrEqual(page.width);
+        expect(cell.maskX + cell.width).toBeLessThanOrEqual(page.width);
+        expect(cell.y + cell.height).toBeLessThanOrEqual(page.height);
+        expect(cell.maskY + cell.height).toBeLessThanOrEqual(page.height);
+      }
+    }
+    expect(cells).toBe(14 * 2);
   });
 });
 
@@ -274,7 +384,15 @@ describe('tools/assets-manifest.json', () => {
     readFileSync(join(REPO_ROOT, 'tools', 'assets-manifest.json'), 'utf8'),
   ) as {
     packs: Array<{ id: string; url: string; sha256: string; page: string }>;
-    models: Array<{ target: string; pack: string; file: string; scale: number; facings: number }>;
+    models: Array<{
+      target: string;
+      pack: string;
+      file: string;
+      scale: number;
+      facings: number;
+      recolor?: { hueShift?: number; saturation?: number; value?: number };
+      stretch?: [number, number, number];
+    }>;
   };
 
   it('pins every pack with a kenney.nl URL and a SHA-256', () => {
@@ -294,29 +412,105 @@ describe('tools/assets-manifest.json', () => {
       expect(targets.has(model.target), `duplicate ${model.target}`).toBe(false);
       targets.add(model.target);
       expect(model.scale, model.target).toBeGreaterThan(0);
-      expect([1, 8], model.target).toContain(model.facings);
+      // A vehicle drives (8 facings); everything else stands (1).
+      expect(model.facings, model.target).toBe(model.target.startsWith('vehicle:') ? 8 : 1);
       expect(model.file, model.target).toMatch(/\.glb$/);
+      if (model.stretch) {
+        expect(model.stretch, model.target).toHaveLength(3);
+        for (const axis of model.stretch) expect(axis, model.target).toBeGreaterThan(0);
+      }
+      if (model.recolor) {
+        for (const key of Object.keys(model.recolor)) {
+          expect(['hueShift', 'saturation', 'value'], model.target).toContain(key);
+        }
+      }
     }
   });
 
-  it('covers the representative M12 subset (M13 completes the catalogue)', () => {
-    const count = (predicate: (target: string) => boolean): number =>
-      manifest.models.filter((model) => predicate(model.target)).length;
-    const catalogId = (target: string): number => Number(target.split(':')[1]);
-    expect(
-      count((t) => t.startsWith('vehicle:') && catalogId(t) >= 1000 && catalogId(t) < 2000),
-      'rail vehicles',
-    ).toBeGreaterThanOrEqual(10);
-    expect(
-      count((t) => t.startsWith('vehicle:') && catalogId(t) < 1000),
-      'road vehicles',
-    ).toBeGreaterThanOrEqual(8);
-    expect(
-      count((t) => t.startsWith('vehicle:') && catalogId(t) >= 2000 && catalogId(t) < 3000),
-      'ships',
-    ).toBeGreaterThanOrEqual(4);
-    expect(count((t) => t.startsWith('building:')), 'town buildings').toBeGreaterThanOrEqual(10);
-    expect(count((t) => t.startsWith('industry:')), 'industry structures').toBeGreaterThanOrEqual(5);
-    expect(count((t) => t.startsWith('tree:')), 'trees').toBeGreaterThanOrEqual(4);
+  // The M13 bundle-1 coupling test (D-169): the manifest and the catalogues
+  // can drift in neither direction without turning this suite red - the
+  // i18n.spec.ts device applied to art.
+  describe('the full catalogue coverage of M13', () => {
+    const vehicleTargets = new Map<number, string>();
+    for (const model of manifest.models) {
+      if (model.target.startsWith('vehicle:')) {
+        vehicleTargets.set(Number(model.target.split(':')[1]), model.target);
+      }
+    }
+
+    it('maps every rail, road and water catalogue entry exactly once', () => {
+      for (const spec of VEHICLE_SPECS) {
+        if (spec.kind === VehicleKind.Aircraft) continue;
+        expect(vehicleTargets.has(spec.id), `vehicle:${spec.id} (${spec.nameKey})`).toBe(true);
+      }
+    });
+
+    it('maps no aircraft - they stay procedural per E-14', () => {
+      for (const spec of VEHICLE_SPECS) {
+        if (spec.kind !== VehicleKind.Aircraft) continue;
+        expect(vehicleTargets.has(spec.id), `vehicle:${spec.id} must stay procedural`).toBe(false);
+      }
+    });
+
+    it('maps no vehicle id the catalogue does not know', () => {
+      const known = new Set(VEHICLE_SPECS.map((spec) => spec.id));
+      for (const id of vehicleTargets.keys()) {
+        expect(known.has(id), `vehicle:${id} is not in any catalogue`).toBe(true);
+      }
+    });
+
+    it('maps every industry except the procedural three (D-169)', () => {
+      // CoalMine (headframe) and OilWell (derrick) per E-14; Farm because
+      // no pinned kit carries a farmstead and a suburban house would be a
+      // wrong silhouette. shapes.ts stays their source.
+      const procedural = new Set(['CoalMine', 'OilWell', 'Farm']);
+      const mapped = new Set(
+        manifest.models
+          .filter((model) => model.target.startsWith('industry:'))
+          .map((model) => model.target.split(':')[1]!),
+      );
+      for (const name of Object.keys(IndustryType)) {
+        if (procedural.has(name)) {
+          expect(mapped.has(name), `industry:${name} must stay procedural`).toBe(false);
+        } else {
+          expect(mapped.has(name), `industry:${name}`).toBe(true);
+        }
+      }
+      for (const name of mapped) {
+        expect(Object.keys(IndustryType), `industry:${name} unknown`).toContain(name);
+      }
+    });
+
+    it('covers all three town zones at both expansion stages', () => {
+      const targets = new Set(
+        manifest.models
+          .filter((model) => model.target.startsWith('building:'))
+          .map((model) => model.target),
+      );
+      for (const zone of ['residential', 'commercial', 'industrial']) {
+        for (const stage of [0, 1]) {
+          expect(targets.has(`building:${zone}:${stage}`), `building:${zone}:${stage}`).toBe(true);
+        }
+      }
+      for (const target of targets) {
+        const [, zone, stage] = target.split(':');
+        expect(['residential', 'commercial', 'industrial'], target).toContain(zone);
+        expect(['0', '1'], target).toContain(stage);
+      }
+    });
+
+    it('covers every MapClimate with at least two tree variants', () => {
+      const climates = Object.keys(MapClimate).map((name) => name.toLowerCase());
+      const byClimate = new Map<string, number>();
+      for (const model of manifest.models) {
+        if (!model.target.startsWith('tree:')) continue;
+        const climate = model.target.split(':')[1]!;
+        expect(climates, model.target).toContain(climate);
+        byClimate.set(climate, (byClimate.get(climate) ?? 0) + 1);
+      }
+      for (const climate of climates) {
+        expect(byClimate.get(climate) ?? 0, `tree:${climate}`).toBeGreaterThanOrEqual(2);
+      }
+    });
   });
 });
