@@ -551,8 +551,9 @@ to the deterministic blink counter, never `performance.now()`
   test against `projection.ts`) with an own ~400-line rasteriser and a
   fflate PNG writer ("bake twice, bit-identical" across machines). No
   cache means a warning and procedural art - the game ALWAYS starts. The
-  glob test walks the git index and is the guard. The game consumes
-  nothing yet: `bakedAtlas.ts` is the M13 door.
+  glob test walks the git index and is the guard. `bakedAtlas.ts` was the
+  door M13 walked through: the game consumes the bake since D-170 (see
+  the M13 digest below).
 - **A chunk is a checksum with a texture** (D-161). At 0.5x and below the
   static world is 32x32-tile RenderTextures; the per-chunk FNV digest
   (corners one PAST the range - seams are shared) is what makes "only

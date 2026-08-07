@@ -811,14 +811,15 @@
     {
       "target": "vehicle:1511",
       "pack": "train-kit",
-      "file": "Models/GLB format/train-electric-city-b.glb",
+      "file": "Models/GLB format/train-carriage-container-blue.glb",
       "scale": 10.5,
       "facings": 8,
       "recolor": {
-        "hueShift": 60,
-        "value": 0.95
+        "hueShift": 180,
+        "saturation": 2.0,
+        "value": 1.05
       },
-      "note": "Reuse (D-169): mail2 is the city-b coach untinted with yellow-shifted accents."
+      "note": "Reuse (D-175): mail2 is the container body recoloured postal yellow, one size up - the city-b EMU middle it used carried a pantograph, a wrong silhouette on an unpowered mail van."
     },
     {
       "target": "vehicle:1520",

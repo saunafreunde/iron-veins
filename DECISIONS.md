@@ -42,13 +42,13 @@ no entry below. A number may appear under several topics.
   D-122, D-147, D-152, D-153, D-154, D-155, D-156, D-158
 - **Rendering & art:** D-013, D-014, D-033, D-035, D-112, D-117, D-125, D-127,
   D-136, D-140, D-160, D-161, D-162, D-163, D-164, D-165, D-166, D-169, D-170,
-  D-171, D-172, D-173, D-174
+  D-171, D-172, D-173, D-174, D-175
 - **UI & input:** D-011, D-013, D-015, D-035, D-110, D-113, D-114, D-119,
   D-126, D-148, D-165, D-166
 - **Performance & measurement:** D-002, D-120, D-135, D-136, D-161, D-162,
   D-163, D-164, D-167, D-170, D-171, D-172, D-173, D-174
 - **Platform, tooling & build:** D-012, D-014, D-015, D-016, D-017, D-029,
-  D-030, D-031, D-160, D-168, D-169, D-170, D-172
+  D-030, D-031, D-160, D-168, D-169, D-170, D-172, D-175
 - **Crash safety:** D-132, D-139
 - **Testing method & fixtures:** D-010, D-038, D-072, D-074, D-084, D-133,
   D-167
@@ -4815,3 +4815,49 @@ file touched is the marker-assembly extraction, which moves worker code
 verbatim; zero save bumps, zero snapshot changes, and the determinism
 suite never sees a puff. i18n untouched: the badges are glyphs, not
 strings.
+
+## M14 - instruments, bundle 0: M13 verifier cosmetics (2026-08-07)
+
+### D-175 The mail2 wagon moves off the pantographed EMU middle onto the covered-van body - D-169's own rule applied to its one miss
+
+The M14 verifier pass caught a wrong silhouette the D-169 register had
+waved through: `vehicle:1511` (mail2, an unpowered wagon, intro 1985) was
+mapped onto `train-electric-city-b.glb` - the one EMU middle in the kit
+that CARRIES A PANTOGRAPH (measured: the model stands 2.219 units against
+1.683 for its a/c siblings, and the extra half-unit is a narrow roof
+frame). A pantograph on a hauled mail van claims traction the catalogue
+entry does not have - exactly the wrongness that moved the diesel
+railcars onto the pantograph-free subway bodies and pax1 off the city-c
+EMU head in D-169. The recolour was dishonest twice over: the note said
+"yellow-shifted accents", but shifting the body's measured 229-degree
+slate blue by +60 lands at 289 - the old mail2 was purple.
+
+The remap follows the kit's own covered-van convention: mail2 is now
+`train-carriage-container-blue.glb` - the body D-169 already uses for
+box1/2 and reefer1/2, "no covered van/mail stock exists" being one gap,
+not two - recoloured to postal yellow (hueShift 180 from measured hue
+229 to ~49, saturation 2.0, value 1.05) at the same one-size-up scale
+10.5 that marks the modern generations. The coupling test held
+throughout (every catalogue id mapped exactly once); pax3 KEEPS city-b,
+because a pantographed middle coach inside an electric consist is an
+honest silhouette - the fault was the traction claim on a mail van, not
+the model.
+
+Re-bake evidence and the honest re-booking (SPEC2 6.2 updated; the
+6.1.1 M13 row stands untouched as the acceptance history it is):
+double bake bit-identical by SHA-256 over all eleven output files, 145
+models -> 10 pages, 810 cells per zoom, one zoom GPU-resident -
+unchanged. Page geometry moved with the lost pantograph headroom and is
+re-booked: z1 base 4096x1057 (was x1067), z4 page 0 4056x4015 (was
+4062x4063); z1 emissive 4096x568 (was 4090), z4 emissive 0 4082x4034
+(was 4095x4040); z2 dimensions unchanged. Emissive twins move from
+543/550/551 to 545/552/553 per zoom (z1/z2/z4): the container body's
+glazing detail survives occlusion in all eight facings (as it already
+does for box1/2 and reefer1/2), where the city-b middle kept six. The
+6.1.1 M13 row's flat "548 je Zoomstufe" matched no single zoom when
+re-measured before the remap (543/550/551) - the occlusion decision is
+per facing per zoom and the counts differ; the per-zoom truth stands in
+6.2 with the new numbers now. No byte under
+`src/`, no save, no snapshot, no i18n; the game reads whatever
+`baked-manifest.json` the bake wrote (D-170), so the remap is complete
+at bake time.
