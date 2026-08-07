@@ -212,6 +212,8 @@ const SAMPLES: Record<keyof typeof CommandKind, Command> = {
   },
   AssignVehicleToLine: { kind: CommandKind.AssignVehicleToLine, vehicleId: 8, lineId: 1 },
   ReleaseVehicleFromLine: { kind: CommandKind.ReleaseVehicleFromLine, vehicleId: 8 },
+  SetLineTakt: { kind: CommandKind.SetLineTakt, lineId: 2, taktTicks: 4_000, offsetTicks: 600 },
+  SetTransferNode: { kind: CommandKind.SetTransferNode, stationId: 5, transferNode: true },
 };
 
 function auditParserRoundTrip(

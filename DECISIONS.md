@@ -11,10 +11,10 @@ decision is missing from this register or the register cites a number that has
 no entry below. A number may appear under several topics.
 
 - **Determinism, RNG & hashing:** D-001, D-002, D-003, D-004, D-009, D-010,
-  D-024, D-093, D-106, D-128, D-137, D-142, D-145, D-146
+  D-024, D-093, D-106, D-128, D-137, D-142, D-145, D-146, D-149
 - **Commands, snapshot & worker boundary:** D-004, D-005, D-006, D-011, D-032,
   D-100, D-111, D-145, D-146, D-148
-- **Lines & timetables:** D-145, D-146, D-147, D-148
+- **Lines & timetables:** D-145, D-146, D-147, D-148, D-149, D-150, D-151
 - **Map generation & terrain:** D-018, D-019, D-020, D-021, D-022, D-023,
   D-025, D-027
 - **Terraforming & structures:** D-028, D-034, D-050, D-051, D-052, D-124,
@@ -24,15 +24,15 @@ no entry below. A number may appear under several topics.
 - **Rail & track:** D-042, D-043, D-044, D-045, D-046, D-047, D-053, D-141
 - **Signals & reservations:** D-054, D-055, D-056, D-057, D-058, D-059, D-060,
   D-061, D-073, D-080, D-081, D-082, D-083
-- **Stations & catchment:** D-049, D-080, D-095
+- **Stations & catchment:** D-049, D-080, D-095, D-150
 - **Cargo, payment & routing:** D-036, D-037, D-065, D-067, D-075, D-077,
-  D-078, D-118, D-142
+  D-078, D-118, D-142, D-151
 - **Industry & production:** D-022, D-062, D-063, D-064, D-069, D-071, D-079,
   D-085, D-086
 - **Towns, council & ownership:** D-101, D-102, D-103, D-104
 - **Economy, finance & emissions:** D-008, D-090, D-091, D-092, D-105
 - **Balancing & scenarios:** D-038, D-039, D-040, D-041, D-066, D-087, D-088,
-  D-116
+  D-116, D-151
 - **Vehicles & fleet:** D-043, D-044, D-045, D-068, D-076, D-089, D-093,
   D-096, D-142, D-143, D-145, D-146
 - **Water & air:** D-094, D-095, D-096, D-097, D-098, D-099
@@ -2952,3 +2952,149 @@ wearing a measurement's face would be the panel lying about the one number
 takt planning (stage C) will hang off. The snapshot gained `lineId` per
 vehicle - M11's one layout bump (version 6) - so map-side highlighting of a
 line's vehicles never needs a marker round trip.
+
+## M11 - the line backbone, stage C1: takt and connection protection (2026-08-07)
+
+### D-149 A line has ONE takt point - its first station order - and the grid is pure arithmetic
+
+Section 12.3 gives a line a takt and a start offset, and has vehicles wait
+"an definierten Taktpunkten bis zur Sollabfahrt". What defines the takt
+point here is the SCHEDULE: it is the line's first station order - its
+Startbahnhof - and only that stop, deliberately. A grid enforced at every
+stop quantises every LEG up to a whole takt: measured on the two-train
+fixture, legs of 19 and 27 days against a 22-day takt need 1 + 2 = three
+takts per round, and the stations then see service at alternating [T, 2T]
+gaps - the timetable making regularity WORSE. Anchored once, the round
+rounds up once, departures leave the anchor every takt, and every later
+stop inherits that spacing shifted by the measured legs - which is what a
+clock-face timetable is. Waypoints, depots and open line are never takt
+points (E-07: a vehicle waits standing at its platform, or not at all).
+
+The mechanics, and the three rules under them:
+
+* **The slot is latched at ARRIVAL, by integer arithmetic, zero randomness**
+  (E-07): the first grid point `offset + n*takt` at or after the arrival
+  tick that no other vehicle of the line standing at the station has
+  latched. That skip rule is the de-bunching: a bunched pair's second
+  arrival finds the slot taken and is pushed one takt out, and from then on
+  the two run half a cycle apart. Slot arithmetic runs at the stop event
+  only; the per-tick share of a wait is one integer compare in its state
+  case (`WaitingForSlot`, hot-path law #7).
+* **A late vehicle slips to the next free slot rather than bolting
+  off-grid.** Departing immediately was tried first and produced exactly
+  the irregularity the takt exists to remove: phases only re-sort when two
+  vehicles stand at the anchor together, so one late round pushed the pair
+  into [10, 42]-day gaps that never re-converged. The recorded delay - what
+  the line panel shows as "Verspätung in Spieltagen" per vehicle - is the
+  slip to the slot actually taken, in whole takts; a vehicle that made its
+  slot shows zero.
+* **The takt is LINE data, not a world rule.** `SetLineTakt` validates and
+  writes it exactly as `SetLineOrders` writes the order list; switching a
+  takt off releases every waiting vehicle within a tick, because the wait
+  states re-read the line every tick rather than trusting the latch.
+
+Saved state (Z4): `taktTicks`/`taktOffsetTicks` per line, and per vehicle
+the latched `taktDueTick`, the `connectionDeadlineTick` of D-150 and the
+displayed `taktDelayTicks` - all serialised, all hashed, all covered by the
+D-134 field audit, with `WaitingForSlot`/`WaitingForConnection` as saved
+states of the 11.4 automaton. The v24 migration (same bump, Z5) defaults
+them to "no takt, nothing latched, not late", which is provably inert: the
+corpus regeneration decoded the v22, v23 and v24 fixtures to ONE identical
+hash again (`7abe526eb9e027f8`). The hash change re-recorded the canonical
+cross-OS pin under the D-137 protocol (v24, seed 424,242, tick 10,000:
+`62776cfa408a92bc`). The fleet advisor formula of 12.3 -
+`ceil(round / takt)`, with the leftover as headroom - lives ONCE, in
+`lines/metrics.ts` (`adviseFleet`); the panel displays it and stage C2's AI
+will call the same function (E-06).
+
+### D-150 The transfer node is a station mark; the waiting graph is derived, and a waiter provably never blocks its connector
+
+Section 12.3, verbatim: "An als 'Umsteigeknoten' markierten STATIONEN
+wartet ein Fahrzeug bis zu X Ticks auf ein anderes derselben Gruppe." The
+mark is therefore per STATION - `SetTransferNode`, owner only, saved and
+hashed - not per line stop: the section marks places where lines meet, and
+one flag serves every line calling there. What the section leaves open is
+answered as follows, in the per-line spirit of 12.3:
+
+* **The group** is the same owner's OTHER lines: a departure holds for a
+  vehicle that is assigned to a different line of the same company and is
+  genuinely INBOUND - under way with this station as its current order.
+  Private schedules connect to nothing: the group notion of 12.3 is a line
+  notion.
+* **The hold is part of the line's timetable feature**: a vehicle holds for
+  connections only while its line runs a takt, because every clause of 12.3
+  is "optional pro Linie aktivierbar" and the takt IS that switch.
+* **The hard cap** is `CONNECTION_WAIT_MAX_TICKS` (two game days), latched
+  as a deadline at the stop; an arriving connector of the group expires the
+  deadline early, so the waiter runs its ordinary departure - slot wait
+  included - on its next step. Release-by-expiry rather than a state
+  rewrite keeps the arrival handler free of second-hand state machines.
+
+The waiting graph is DERIVED (D-054 pattern): an edge "A waits for B"
+exists only as a function of current state - A holding at a marked station,
+B inbound to it - and is rebuilt wherever it is asked, never saved. It is
+acyclic BY CONSTRUCTION: only a standing vehicle waits, only a moving one
+is waited for, and a moving vehicle waits for nobody - so every edge points
+from standing to moving and no walk returns. The cycle guard demanded by
+the section exists anyway (`reachesSelf`, iterative with an explicit stack,
+law #8), runs before any hold begins, and a planted cyclic adjacency in the
+unit test proves it fires - because the acyclicity argument holds only
+until somebody widens what "inbound" means, and a guard that cannot be
+exercised is a comment.
+
+The Fertig-wenn property - a waiting vehicle never blocks the vehicle it
+waits for - is structural: a vehicle standing at a station holds NO track
+reservations (its route ended, `releaseAll` ran), so nothing it does can
+exclude an arriving train even from the single platform it is standing on.
+The test named by the milestone builds that exact worst case - a one-
+platform transfer station, the waiter's train standing on it - and watches
+the connector arrive, serve, and release the hold before the cap; two
+companion tests hold the cap when no connector ever comes and the refusal
+to hold when nothing is inbound.
+
+### D-151 What the takt band measured, what it caught, and the honest residue
+
+SPEC2 M11's band: a takted two-train line earns within +-10 % of an
+untakted identical line and HALVES the station-rating variance. Building
+the measurement (`tests/balance/taktLine.spec.ts`) surfaced three real
+defects and one design truth, in that order:
+
+* **`LINK_SAMPLE_MAX_TICKS` silently made every leg beyond ~25 tiles
+  unmeasurable.** The M5 outlier guard stood at ten game days, and a leg
+  sample above it was discarded - so scenario 2's own coal line ran on the
+  54 km/h straight-line seed for ever, `roundMeasured` never came true, and
+  the "gemessene Umlaufzeit" the 12.3 advisor divides by could not exist.
+  Raised to a quarter game year: the interruption filter (D-077's cleared
+  arrival clock) already handles stops and order changes, and a leg slower
+  than three times the cargo-expiry horizon needs a different line, not an
+  honest mean.
+* **A naive single-track two-train fixture measures standoffs, not
+  timetables.** Two trains meeting head-on spent 38 % of the run in
+  `WaitingForPath`; that noise dominated every rating statistic in both
+  runs. The fixture became the railway a two-train line actually needs -
+  a one-way oval laid by the 9.4 auto-signalling - the D-082 lesson
+  verbatim.
+* **Off-grid late departures churn the phase lock** - fixed in the
+  mechanics themselves (the slip rule of D-149).
+
+The design truth: takt slack spent at the LOADING end rides aboard - the
+cargo ages a whole slot-wait before it departs, which alone measured a
+-14.5 % earnings drift. Anchoring the takt at the DELIVERY terminus, where
+the train waits empty, restored the band; the fixture pins that playbook
+("Startbahnhof = leerer Endbahnhof") and the handbook owes it a sentence.
+
+Measured and banded (four years, headroom three days - below the round's
+own +-3-day jitter the phase lock churns, above it the cadence loss eats
+the earnings band): earnings -8.3 % (band +-10 %), takt-point departure-gap
+variance 0.46 of untakted (band <= 0.5), delivery-station rating variance
+0.57 (band <= 0.6), origin station 1.06 (band <= 1.1). Two deviations from
+the SPEC2 sentence, stated rather than papered over: the delivery station
+reaches 0.57, not 0.5 - the residue is the phase disturbance the round's
+own jitter forces through any finite slack - and the ORIGIN station's
+variance is its cargo-age sawtooth, which is set by visit CADENCE; a
+timetable on a FIXED fleet cannot shorten a cadence, only a bigger fleet
+can, so "halved" is not reachable there by any takt at all. If a later
+milestone wants the full halving, the levers are known: per-stop offsets
+instead of one anchor, or a stop model that loads at departure instead of
+arrival - both real redesigns of 11.4/12.1 machinery, neither smuggled in
+here.

@@ -305,6 +305,8 @@ beforeAll(() => {
       id: 0,
       ownerId: 0,
       autoRenew: true,
+      taktTicks: 4_000,
+      taktOffsetTicks: 600,
       orders: [
         {
           target: 0,

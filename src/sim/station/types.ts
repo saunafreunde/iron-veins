@@ -139,6 +139,14 @@ export interface Station {
   townId: number;
   /** Building tiles of that town inside the catchment; the production share. */
   buildingsCovered: number;
+  /**
+   * Marked as an "Umsteigeknoten" of section 12.3: departures of takted lines
+   * hold here, up to the hard cap, for a connecting vehicle of the same
+   * group. Per STATION - the section marks stations, not line stops - and
+   * saved + hashed like the name: it changes what every takted line calling
+   * here does.
+   */
+  transferNode: boolean;
 
   /**
    * Bit mask of the cargo types this station takes in, one bit per Cargo.

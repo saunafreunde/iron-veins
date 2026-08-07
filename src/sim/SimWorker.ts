@@ -33,6 +33,7 @@ import {
 import { loanLimitCt } from './economy/company';
 import { scheduleOf } from './lines/LineStore';
 import {
+  adviseFleet,
   lineProfitPerYearCt,
   lineRoundTicks,
   lineStations,
@@ -293,10 +294,12 @@ function postStructure(current: World): void {
     stations: current.stations.map((station) => ({
       id: station.id,
       name: station.name,
+      ownerId: station.ownerId,
       x: station.x,
       y: station.y,
       rating: stationRating(station, current.tick),
       waiting: Math.round(station.waiting.reduce((sum, stack) => sum + stack.amount, 0)),
+      transferNode: station.transferNode,
       modules: station.modules.map((module) => ({ kind: module.kind, x: module.x, y: module.y })),
     })),
   });
@@ -331,6 +334,7 @@ function postFleet(current: World): void {
       tileIndex: vehicles.tileIndex[id]!,
       waitingTicks:
         vehicles.waitingSinceTick[id]! < 0 ? 0 : current.tick - vehicles.waitingSinceTick[id]!,
+      taktDelayTicks: vehicles.taktDelayTicks[id]!,
     });
   }
   scope.postMessage({ type: 'fleetChanged', vehicles: markers });
@@ -350,6 +354,9 @@ function postLines(current: World): void {
 
     const vehicleIds = lineVehicles(current, lineId);
     const round = lineRoundTicks(current, lineId);
+    // THE advisor formula, computed sim-side (lines/metrics.ts) - the panel
+    // only displays it, and stage C2's AI calls the same function.
+    const advice = adviseFleet(round.ticks, current.lines.taktTicks[lineId]!);
     markers.push({
       id: lineId,
       stops: lineStations(current, lineId).map((stationId) => ({
@@ -363,6 +370,10 @@ function postLines(current: World): void {
       roundTicks: round.ticks,
       roundMeasured: round.measured,
       autoRenew: current.lines.autoRenew[lineId] === 1,
+      taktTicks: current.lines.taktTicks[lineId]!,
+      taktOffsetTicks: current.lines.taktOffsetTicks[lineId]!,
+      advisedVehicles: advice === null ? 0 : advice.vehiclesNeeded,
+      headroomTicks: advice === null ? 0 : advice.headroomTicks,
     });
   }
   scope.postMessage({ type: 'linesChanged', lines: markers });

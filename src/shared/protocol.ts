@@ -131,10 +131,13 @@ export interface StationModuleMarker {
 export interface StationMarker {
   readonly id: number;
   readonly name: string;
+  readonly ownerId: number;
   readonly x: number;
   readonly y: number;
   readonly rating: number;
   readonly waiting: number;
+  /** Marked as an "Umsteigeknoten" of section 12.3. */
+  readonly transferNode: boolean;
   readonly modules: readonly StationModuleMarker[];
 }
 
@@ -195,6 +198,11 @@ export interface VehicleMarker {
    * Past DEADLOCK_WARNING_TICKS it counts as stuck (section 9.3).
    */
   readonly waitingTicks: number;
+  /**
+   * How late the vehicle left its last takt point, or 0 - the "Verspätung in
+   * Spieltagen" of section 12.3, converted to days by the panel. [ticks]
+   */
+  readonly taktDelayTicks: number;
 }
 
 /** One stop of a line, with what is waiting there (section 12.2). */
@@ -230,6 +238,18 @@ export interface LineMarker {
   readonly roundMeasured: boolean;
   /** Per-line auto-renewal (section 11.3). */
   readonly autoRenew: boolean;
+  /** Takt of the line's timetable, 0 when off (section 12.3). [ticks] */
+  readonly taktTicks: number;
+  /** Start offset of the takt grid. [ticks] */
+  readonly taktOffsetTicks: number;
+  /**
+   * The fleet advisor of section 12.3: vehicles the takt needs
+   * (ceil(round / takt), computed sim-side in lines/metrics.ts), or 0 when
+   * the takt is off or the round is unmeasurable.
+   */
+  readonly advisedVehicles: number;
+  /** Slack per round at the advised size. [ticks] */
+  readonly headroomTicks: number;
 }
 
 export type MainToWorkerMessage =

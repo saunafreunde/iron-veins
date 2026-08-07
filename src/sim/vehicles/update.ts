@@ -61,6 +61,15 @@ import {
 } from '../station/types';
 import { creditDelivery } from '../economy/contracts';
 import { scheduleOf } from '../lines/LineStore';
+import {
+  beginConnectionHold,
+  beginSlotWait,
+  dropLatchedHolds,
+  finishSlotWait,
+  latchTaktSlot,
+  releaseConnectionWaiters,
+  taktOf,
+} from '../lines/takt';
 import type { World } from '../World';
 import { holdBody, releaseAll, releaseBehind, tryClaim } from './reservations';
 import { pathDirection, pathStepM, routeLengthM } from './route';
@@ -484,6 +493,32 @@ export function startVehicle(world: World, id: number): boolean {
   return true;
 }
 
+/**
+ * Departure from a finished station stop (section 12.3): first the
+ * connection hold at a transfer node, then the takt slot, then the next
+ * order. Both waits exist only at STATION stops - the vehicle is standing at
+ * its platform, which is what "Taktpunkte nur auf Bahnsteigen, nie auf
+ * freier Strecke" (E-07) means here; a waypoint or depot dwell runs straight
+ * on. Runs at the stop event; the per-tick share of either wait is a single
+ * integer compare in its state case.
+ */
+function departStop(world: World, id: number, order: Order | undefined): void {
+  if (order !== undefined && order.target === OrderTarget.Station) {
+    const station = world.stations[order.targetId];
+    if (station !== undefined) {
+      if (beginConnectionHold(world, id, station)) return;
+      if (beginSlotWait(world, id)) return;
+      advanceOrder(world, id);
+      return;
+    }
+  }
+  // The stop this vehicle stood at is not a place that can hold it - a
+  // vanished station keeps no latched slot alive. The displayed delay stays:
+  // it belongs to the last takt departure, not to this dwell.
+  dropLatchedHolds(world, id);
+  advanceOrder(world, id);
+}
+
 /** Move to the next order and start driving towards it. */
 function advanceOrder(world: World, id: number): void {
   const vehicles = world.vehicles;
@@ -536,6 +571,13 @@ function serveStation(world: World, id: number, station: Station): number {
   }
   vehicles.lastStationId[id] = station.id;
   vehicles.lastArrivalTick[id] = world.tick;
+
+  // The arrival is the stop event of section 12.3: it releases every
+  // connection hold it satisfies at a transfer node, and it latches the takt
+  // slot THIS vehicle now owes its own departure - slot arithmetic at the
+  // stop, never per tick, and drawing no randomness (E-07).
+  releaseConnectionWaiters(world, id, station);
+  latchTaktSlot(world, id, station);
 
   if (order.unload !== OrderUnload.None) {
     for (let i = carried.length - 1; i >= 0; i--) {
@@ -975,7 +1017,7 @@ function stepVehicle(world: World, id: number): void {
         vehicles.state[id] = VehicleState.WaitingForCargo;
         return;
       }
-      advanceOrder(world, id);
+      departStop(world, id, order);
       return;
     }
 
@@ -984,7 +1026,7 @@ function stepVehicle(world: World, id: number): void {
       const order = orders[vehicles.orderIndex[id]! % orders.length];
       const station = order === undefined ? undefined : world.stations[order.targetId];
       if (station === undefined) {
-        advanceOrder(world, id);
+        departStop(world, id, order);
         return;
       }
       const cargo = vehicles.refitCargo[id]! as Cargo;
@@ -992,7 +1034,7 @@ function stepVehicle(world: World, id: number): void {
       if (space > 0 && loadFromStation(world, id, station, cargo, space) > 0) {
         vehicles.refreshAggregate(id);
       }
-      if (isFull(world, id)) advanceOrder(world, id);
+      if (isFull(world, id)) departStop(world, id, order);
       return;
     }
 
@@ -1015,6 +1057,28 @@ function stepVehicle(world: World, id: number): void {
         order?.waitTicks ?? 0,
       );
       vehicles.state[id] = VehicleState.Loading;
+      return;
+    }
+
+    case VehicleState.WaitingForSlot: {
+      // One compare per tick; the slot itself was computed at the stop. The
+      // line is re-read so a takt switched off - or a line dissolved - under
+      // a waiting vehicle releases it at once instead of stranding it.
+      const due = vehicles.taktDueTick[id]!;
+      if (due >= 0 && world.tick < due && taktOf(world, id) > 0) return;
+      finishSlotWait(world, id);
+      advanceOrder(world, id);
+      return;
+    }
+
+    case VehicleState.WaitingForConnection: {
+      // The deadline is the hard cap of section 12.3; an arriving connector
+      // expires it early (lines/takt.ts). Then the ordinary departure runs -
+      // takt slot included, so a held vehicle still leaves on its grid.
+      if (world.tick < vehicles.connectionDeadlineTick[id]!) return;
+      vehicles.connectionDeadlineTick[id] = -1;
+      if (beginSlotWait(world, id)) return;
+      advanceOrder(world, id);
       return;
     }
 

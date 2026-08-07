@@ -469,14 +469,20 @@ divergence between platforms is a law-#3 break and is never re-pinned.
   finishes a 512-map quarter century worth about 580 000 against a band of five
   to twenty-five million. The test is NOT in the suite - see D-116 for why a
   red light nobody can act on is worse than a written-down gap.
-- **The timetable of 12.3** (takt, connection protection, the fleet advisor)
-  - M11 stage C. Lines themselves exist since M11 stage B: `LineStore` is the
-  ONE line entity (E-06), vehicles point at it via `lineId` and read its order
-  list live through `lines/LineStore.scheduleOf` - which is the ONLY correct
-  way to read a vehicle's schedule anywhere in the sim. Auto-renewal is
-  per line now (D-146), the AI runs real lines through the player's own
-  commands (D-147), and the L key opens the line list while the station list
-  sits on H (D-148).
+- **The timetable of 12.3 exists since M11 stage C1**: per-line takt with ONE
+  takt point (the first station order - D-149 says why not every stop),
+  slip-to-next-slot on a missed departure, the per-station transfer nodes of
+  the Anschlusssicherung (derived waiting graph, hard cap, never-blocks
+  proof - D-150), and the fleet advisor `adviseFleet` in `lines/metrics.ts` -
+  the ONE formula stage C2's AI must call too (E-06). Lines themselves exist
+  since stage B: `LineStore` is the ONE line entity, vehicles point at it via
+  `lineId` and read its order list live through `lines/LineStore.scheduleOf` -
+  the ONLY correct way to read a vehicle's schedule anywhere in the sim.
+  Auto-renewal is per line (D-146), the AI runs real lines through the
+  player's own commands (D-147), L opens the line list (D-148). Still owed by
+  stage C2: the AI fleet sized by the advisor, D-082-shaped AI railways, and
+  scenario 5 into the suite. Read D-151 before touching the takt balance
+  fixture - it records why the band is measured the way it is.
 - **Undo and redo** (section 17.2). See D-114.
 - The installer BUILDS: `npm run build:desktop` produced both bundles in about
   eight minutes, and Tauri fetched WiX and NSIS itself. Neither is signed, so

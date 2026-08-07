@@ -31,6 +31,7 @@ function vehicle(overrides: Partial<VehicleMarker>): VehicleMarker {
     lengthM: 8,
     tileIndex: 10 * MAP_SIZE + 10,
     waitingTicks: 0,
+    taktDelayTicks: 0,
     ...overrides,
   };
 }
@@ -39,10 +40,12 @@ function depotStation(kind: ModuleKind): StationMarker {
   return {
     id: 0,
     name: 'Depot',
+    ownerId: 0,
     x: 10,
     y: 10,
     rating: 50,
     waiting: 0,
+    transferNode: false,
     modules: [{ kind, x: 10, y: 10 }],
   };
 }

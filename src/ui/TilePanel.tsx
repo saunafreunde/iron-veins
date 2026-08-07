@@ -21,6 +21,7 @@ import {
   WAYPOINT_COST_CT,
 } from '../sim/constants';
 import { inflatedCostCt } from '../sim/cargo/payment';
+import { CommandKind } from '../sim/commands/types';
 import { INDUSTRY_SPECS } from '../sim/industry/types';
 import { isOneWay, SIGNAL_KIND_KEYS, signalDirection, signalKind, SignalKind } from '../sim/map/signals';
 import { WAYPOINT_KIND_KEYS } from '../sim/map/waypoints';
@@ -343,6 +344,24 @@ export function TilePanel({ client }: { readonly client: SimClient }): ReactElem
               </div>
             )}
           </dl>
+          {/* The "Umsteigeknoten" mark of section 12.3 - per STATION, and
+              only its owner may flip it, so the box shows on own stations. */}
+          {station.ownerId === 0 && (
+            <label className="panel__hint">
+              <input
+                type="checkbox"
+                checked={station.transferNode}
+                onChange={(event) =>
+                  client.send({
+                    kind: CommandKind.SetTransferNode,
+                    stationId: station.id,
+                    transferNode: event.target.checked,
+                  })
+                }
+              />{' '}
+              {t('ui.station.transferNode')}
+            </label>
+          )}
           {station.rating < 40 && <p className="panel__hint">{t('ui.station.lowRating')}</p>}
         </>
       )}

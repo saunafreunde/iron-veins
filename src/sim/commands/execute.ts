@@ -4,11 +4,14 @@ import {
   MAX_COMPANY_NAME_LENGTH,
   MAX_ORDERS_PER_VEHICLE,
   MAX_ORDER_WAIT_TICKS,
+  TAKT_MAX_TICKS,
+  TAKT_MIN_TICKS,
 } from '../constants';
 import { bookExpense, repayLoan, takeLoan } from '../economy/company';
 import type { ModuleKind } from '../station/types';
 import { waypointServes } from '../map/waypoints';
 import { reAnchorVehicle, releaseVehicle, scheduleOf } from '../lines/LineStore';
+import { clearStopHolds } from '../lines/takt';
 import { refitCapacity } from '../vehicles/refit';
 import {
   OrderComparator,
@@ -314,6 +317,49 @@ export function executeCommand(world: World, command: Command): CommandOutcome {
       return ACCEPTED;
     }
 
+    case CommandKind.SetLineTakt: {
+      if (!world.lines.isAlive(command.lineId)) {
+        return { ok: false, reasonKey: RejectReason.NoSuchLine };
+      }
+      if (world.lines.ownerId[command.lineId] !== world.company.id) {
+        return { ok: false, reasonKey: RejectReason.NotYours };
+      }
+      const takt = command.taktTicks;
+      const offset = command.offsetTicks;
+      if (!Number.isInteger(takt) || !Number.isInteger(offset)) {
+        return { ok: false, reasonKey: RejectReason.InvalidTakt };
+      }
+      if (takt === 0) {
+        if (offset !== 0) return { ok: false, reasonKey: RejectReason.InvalidTakt };
+      } else if (takt < TAKT_MIN_TICKS || takt > TAKT_MAX_TICKS || offset < 0 || offset >= takt) {
+        return { ok: false, reasonKey: RejectReason.InvalidTakt };
+      }
+      world.lines.taktTicks[command.lineId] = takt;
+      world.lines.taktOffsetTicks[command.lineId] = offset;
+      // Slots latched under the old grid mean nothing under the new one. The
+      // vehicles re-latch at their next arrival; one already waiting re-reads
+      // the line every tick and runs on by itself when the takt went off.
+      for (let id = 0; id < world.vehicles.count; id++) {
+        if (world.vehicles.alive[id] !== 1) continue;
+        if (world.vehicles.lineId[id] !== command.lineId) continue;
+        world.vehicles.taktDueTick[id] = -1;
+      }
+      world.vehicles.ordersRevision++;
+      return ACCEPTED;
+    }
+
+    case CommandKind.SetTransferNode: {
+      const station = world.stations[command.stationId];
+      if (station === undefined) {
+        return { ok: false, reasonKey: RejectReason.NoSuchStation };
+      }
+      if (station.ownerId !== world.company.id) {
+        return { ok: false, reasonKey: RejectReason.NotYours };
+      }
+      station.transferNode = command.transferNode;
+      return ACCEPTED;
+    }
+
     case CommandKind.BuildStationModule:
       return buildStationModule(world, command.x, command.y, command.moduleKind as ModuleKind);
 
@@ -393,6 +439,8 @@ export function executeCommand(world: World, command: Command): CommandOutcome {
         world.vehicles.state[id] = VehicleState.Stopped;
         world.vehicles.speedMs[id] = 0;
         forgetTrip(world, id);
+        // A parked vehicle owes no slot and holds no departure (12.3).
+        clearStopHolds(world, id);
         return ACCEPTED;
       }
       if (scheduleOf(world, id).length === 0) {

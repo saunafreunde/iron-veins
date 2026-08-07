@@ -35,10 +35,12 @@ function markerFor(s: Scenario, id: number): StationMarker {
   return {
     id: station.id,
     name: station.name,
+    ownerId: station.ownerId,
     x: station.x,
     y: station.y,
     rating: 50,
     waiting: 0,
+    transferNode: false,
     modules: station.modules.map((module) => ({ kind: module.kind, x: module.x, y: module.y })),
   };
 }

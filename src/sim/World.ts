@@ -796,6 +796,9 @@ function hashDynamicState(h: Fnv1a64, world: World): void {
   for (let lineId = 0; lineId < lines.count; lineId++) {
     if (lines.alive[lineId] !== 1) continue;
     h.u32(lineId).u32(lines.ownerId[lineId]!).u32(lines.autoRenew[lineId]!);
+    // The timetable of 12.3 is line data like the order list: a bent takt is
+    // a different departure for every vehicle of the line.
+    h.u32(lines.taktTicks[lineId]!).u32(lines.taktOffsetTicks[lineId]!);
     const orders = lines.orders[lineId]!;
     h.u32(orders.length);
     for (const order of orders) {
@@ -833,6 +836,9 @@ function hashDynamicState(h: Fnv1a64, world: World): void {
     h.u32(station.name.length).str(station.name);
     h.u32(station.x).u32(station.y).u32(station.townId).u32(station.buildingsCovered);
     h.u32(station.servedReliability).f64(station.overflowUnits);
+    // The transfer-node mark of 12.3 changes what every takted line calling
+    // here does, so it is fingerprinted like the name.
+    h.u32(station.transferNode ? 1 : 0);
     h.u32(station.modules.length);
     for (const module of station.modules) {
       h.u32(module.kind).u32(module.tileIndex).u32(module.x).u32(module.y);
@@ -907,6 +913,10 @@ function hashDynamicState(h: Fnv1a64, world: World): void {
     // The line a vehicle runs decides which order list it reads, so a bent
     // assignment is a different future exactly as a bent order is.
     h.int(vehicles.lineId[id]!);
+    // The latched holds of 12.3 are historical inputs to the next departure
+    // (Z4); the delay is state the panel shows, saved like the news log.
+    h.int(vehicles.taktDueTick[id]!).int(vehicles.connectionDeadlineTick[id]!);
+    h.int(vehicles.taktDelayTicks[id]!);
     h.u32(vehicles.orderIndex[id]!).u32(vehicles.reliability[id]!);
     h.u32(vehicles.breakdownTicks[id]!).f64(vehicles.loadTicks[id]!);
     h.f64(vehicles.earnedCt[id]!).f64(vehicles.workJ[id]!);

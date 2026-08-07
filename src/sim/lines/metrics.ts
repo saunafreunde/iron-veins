@@ -118,6 +118,31 @@ export function lineRoundTicks(
   return { ticks, measured };
 }
 
+/** What the fleet advisor of section 12.3 recommends for one line. */
+export interface FleetAdvice {
+  /** Vehicles the takt needs: ceil(round time / takt). */
+  readonly vehiclesNeeded: number;
+  /** Slack per round at that fleet size: needed * takt - round time. [ticks] */
+  readonly headroomTicks: number;
+}
+
+/**
+ * THE fleet-sizing formula of section 12.3 - `ceil(rundenzeit / taktzeit)` -
+ * said once, on the sim side. The line detail panel displays it, and stage C2
+ * feeds the SAME function to the AI (E-06: the advisor formula replaces
+ * `AI_VEHICLES_PER_LINE`); a second copy in the interface would be the two
+ * figures drifting apart the day one of them is edited.
+ *
+ * Returns null when the line has no takt or no measurable round. The
+ * headroom is the slack the takt leaves per round at the advised size - zero
+ * headroom means every dwell overrun becomes delay.
+ */
+export function adviseFleet(roundTicks: number, taktTicks: number): FleetAdvice | null {
+  if (taktTicks <= 0 || roundTicks <= 0) return null;
+  const vehiclesNeeded = Math.ceil(roundTicks / taktTicks);
+  return { vehiclesNeeded, headroomTicks: vehiclesNeeded * taktTicks - roundTicks };
+}
+
 /** Cargo units waiting at one of the line's stations. */
 export function stationWaitingUnits(world: World, stationId: number): number {
   const station = world.stations[stationId];

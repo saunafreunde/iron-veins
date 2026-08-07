@@ -39,6 +39,17 @@ export const VehicleState = {
   WaitingForPath: 8,
   /** Circling: every runway at the destination is busy (section 8.4). */
   Holding: 9,
+  /**
+   * Standing at its platform, loaded and ready, waiting for the next takt
+   * slot of its line (section 12.3). Entered only at station stops, never on
+   * open line - a takt point is a platform (SPEC2 E-07).
+   */
+  WaitingForSlot: 10,
+  /**
+   * Holding its departure at a transfer node for a connecting vehicle of the
+   * same group, up to the hard CONNECTION_WAIT_MAX_TICKS cap (section 12.3).
+   */
+  WaitingForConnection: 11,
 } as const;
 export type VehicleState = (typeof VehicleState)[keyof typeof VehicleState];
 
@@ -54,6 +65,8 @@ export const VEHICLE_STATE_KEYS: readonly string[] = [
   'veh.state.noRoute',
   'veh.state.waitingForPath',
   'veh.state.holding',
+  'veh.state.waitingForSlot',
+  'veh.state.waitingForConnection',
 ];
 
 export const OrderLoad = {
@@ -292,6 +305,26 @@ export class VehicleStore {
    * release it gets a private copy back. An id, never a reference (law #9).
    */
   readonly lineId: Int32Array;
+  /**
+   * The takt slot this vehicle owes its current stop, or -1 (section 12.3).
+   *
+   * Latched at ARRIVAL by pure grid arithmetic - `lines/takt.ts`, zero
+   * randomness (SPEC2 E-07) - and consumed when the vehicle departs. Saved
+   * and hashed: a latched slot is a historical input to a sim decision (Z4).
+   */
+  readonly taktDueTick: Int32Array;
+  /**
+   * Tick at which a connection hold at a transfer node expires, or -1
+   * (section 12.3). An arriving connector expires it early; the hard cap is
+   * what the deadline was set from. Saved and hashed for the same Z4 reason.
+   */
+  readonly connectionDeadlineTick: Int32Array;
+  /**
+   * How late the vehicle left its most recent takt point, or 0 when it
+   * departed on its slot. What the line panel shows as "Verspätung in
+   * Spieltagen" (section 12.3). [ticks]
+   */
+  readonly taktDelayTicks: Int32Array;
   readonly builtTick: Int32Array;
   readonly reliability: Uint16Array;
   readonly breakdownTicks: Int32Array;
@@ -357,6 +390,9 @@ export class VehicleStore {
     this.needsCatenary = new Uint8Array(capacity);
     this.orderIndex = new Uint8Array(capacity);
     this.lineId = new Int32Array(capacity).fill(-1);
+    this.taktDueTick = new Int32Array(capacity).fill(-1);
+    this.connectionDeadlineTick = new Int32Array(capacity).fill(-1);
+    this.taktDelayTicks = new Int32Array(capacity);
     this.builtTick = new Int32Array(capacity);
     this.reliability = new Uint16Array(capacity);
     this.breakdownTicks = new Int32Array(capacity);
@@ -450,6 +486,9 @@ export class VehicleStore {
     this.lastArrivalTick[id] = -1;
     this.orderIndex[id] = 0;
     this.lineId[id] = -1;
+    this.taktDueTick[id] = -1;
+    this.connectionDeadlineTick[id] = -1;
+    this.taktDelayTicks[id] = 0;
     this.builtTick[id] = tick;
     // A train is only as reliable as its worst unit, which is what
     // aggregateConsist already works out. Leaving this unset made every vehicle
@@ -487,6 +526,9 @@ export class VehicleStore {
     this.lastStationId[id] = -1;
     this.lastArrivalTick[id] = -1;
     this.lineId[id] = -1;
+    this.taktDueTick[id] = -1;
+    this.connectionDeadlineTick[id] = -1;
+    this.taktDelayTicks[id] = 0;
     this.orders[id] = [];
     this.cargo[id] = [];
     this.consist[id] = [];

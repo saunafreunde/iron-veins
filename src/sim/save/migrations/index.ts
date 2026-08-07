@@ -633,6 +633,13 @@ const v22_to_v23: SaveMigration = (payload) => ({ ...payload, worldDigest: '' })
  *    honest reading, stated in DECISIONS.md, is that renewal is a per-line
  *    rule now and a save from before lines simply has no lines yet.
  *
+ * Stage C's half, still the SAME bump (Z5): the timetable of 12.3. A line
+ * that predates takt runs none (`taktTicks` 0), a station is no transfer
+ * node until somebody marks one, and a vehicle owes no slot and holds no
+ * departure (-1/-1) and is not late (0). All of that is exactly what those
+ * worlds contained - the takt machinery is provably inert at these defaults,
+ * which is what keeps the corpus one-hash property standing.
+ *
  * Nothing here invents behaviour: a migrated schedule runs exactly as it
  * did, which the hash-identity test of tests/unit/save.spec.ts holds for the
  * lineless case and the corpus holds for good. Fields that are already
@@ -773,13 +780,37 @@ const v23_to_v24: SaveMigration = (payload) => {
     return next;
   });
 
+  // A payload with no station section is left as it is rather than rejected
+  // here: the decoder validates the section itself, and saying so twice in
+  // two places means saying it differently in one of them (the v17_to_v18
+  // precedent for the command log).
+  const stations = Array.isArray(inner['stations']) ? inner['stations'] : null;
+
+  // Kept when present: the corpus wraps a CURRENT state in this container.
+  const lines = Array.isArray(inner['lines'])
+    ? (inner['lines'] as Record<string, unknown>[])
+    : migratedLines;
+
   return {
     ...payload,
     state: {
       ...inner,
       map: { ...layers, waypoint },
-      // Kept when present: the corpus wraps a CURRENT state in this container.
-      lines: inner['lines'] ?? migratedLines,
+      // Stage C: a line from before the timetable runs none.
+      lines: lines.map((line) => ({
+        ...line,
+        taktTicks: line['taktTicks'] ?? 0,
+        taktOffsetTicks: line['taktOffsetTicks'] ?? 0,
+      })),
+      // Stage C: no station was a transfer node before somebody could mark one.
+      ...(stations === null
+        ? {}
+        : {
+            stations: stations.map((station) => {
+              const previous = station as Record<string, unknown>;
+              return { ...previous, transferNode: previous['transferNode'] ?? false };
+            }),
+          }),
       ai: migratedAi,
       companies: companies.map((company) => {
         const previous = company as Record<string, unknown>;
@@ -798,6 +829,10 @@ const v23_to_v24: SaveMigration = (payload) => {
         return {
           ...previous,
           lineId: assigned ?? previous['lineId'] ?? -1,
+          // Stage C: no slot latched, no departure held, not late.
+          taktDueTick: previous['taktDueTick'] ?? -1,
+          connectionDeadlineTick: previous['connectionDeadlineTick'] ?? -1,
+          taktDelayTicks: previous['taktDelayTicks'] ?? 0,
           // An assigned vehicle's list lives on its line; the private copy
           // goes, exactly as an AssignVehicleToLine leaves it.
           orders: assigned !== undefined ? [] : orders.map(defaultOrder),

@@ -44,6 +44,8 @@ export const CommandKind = {
   SetLineOrders: 36,
   AssignVehicleToLine: 37,
   ReleaseVehicleFromLine: 38,
+  SetLineTakt: 39,
+  SetTransferNode: 40,
 } as const;
 export type CommandKind = (typeof CommandKind)[keyof typeof CommandKind];
 
@@ -349,6 +351,32 @@ export interface ReleaseVehicleFromLineCommand {
 }
 
 /**
+ * Set a line's timetable (section 12.3): the takt and the start offset of
+ * its departure grid, both in ticks. A takt of 0 - with offset 0 - switches
+ * the timetable off. Pure line data set by an ordinary command, exactly like
+ * the order list; no world rule and no randomness anywhere near it (E-07).
+ */
+export interface SetLineTaktCommand {
+  readonly kind: typeof CommandKind.SetLineTakt;
+  readonly lineId: number;
+  /** 0, or TAKT_MIN_TICKS..TAKT_MAX_TICKS. [ticks] */
+  readonly taktTicks: number;
+  /** 0 <= offset < taktTicks; 0 when the takt is off. [ticks] */
+  readonly offsetTicks: number;
+}
+
+/**
+ * Mark a station as an "Umsteigeknoten" of section 12.3, or unmark it. Per
+ * STATION - the section marks stations, not line stops - and only the
+ * station's owner may flip it.
+ */
+export interface SetTransferNodeCommand {
+  readonly kind: typeof CommandKind.SetTransferNode;
+  readonly stationId: number;
+  readonly transferNode: boolean;
+}
+
+/**
  * Place a support module - crane, canopy or cold store - on clear ground beside
  * a station that already exists (section 10).
  */
@@ -413,6 +441,8 @@ export type Command =
   | SetLineOrdersCommand
   | AssignVehicleToLineCommand
   | ReleaseVehicleFromLineCommand
+  | SetLineTaktCommand
+  | SetTransferNodeCommand
   | BuyExclusiveRightsCommand
   | ApplyTownMeasureCommand
   | DemolishBuildingCommand
@@ -531,5 +561,6 @@ export const RejectReason = {
   BadJumpTarget: 'cmd.reject.badJumpTarget',
   NoSuchLine: 'cmd.reject.noSuchLine',
   TooManyLines: 'cmd.reject.tooManyLines',
+  InvalidTakt: 'cmd.reject.invalidTakt',
 } as const;
 export type RejectReason = (typeof RejectReason)[keyof typeof RejectReason];

@@ -27,6 +27,14 @@ export class LineStore {
   readonly ownerId: Uint8Array;
   /** 1 when vehicles of this line are renewed automatically (section 11.3). */
   readonly autoRenew: Uint8Array;
+  /**
+   * Takt of the line's timetable, or 0 when the takt is off (section 12.3).
+   * Pure line data, saved and hashed - NOT a world rule: it is set by an
+   * ordinary command exactly as the order list is. [ticks]
+   */
+  readonly taktTicks: Int32Array;
+  /** Start offset of the takt grid, 0 <= offset < taktTicks. [ticks] */
+  readonly taktOffsetTicks: Int32Array;
 
   /** The shared order list, read LIVE by every vehicle assigned to the line. */
   readonly orders: Order[][] = [];
@@ -36,6 +44,8 @@ export class LineStore {
     this.alive = new Uint8Array(capacity);
     this.ownerId = new Uint8Array(capacity);
     this.autoRenew = new Uint8Array(capacity);
+    this.taktTicks = new Int32Array(capacity);
+    this.taktOffsetTicks = new Int32Array(capacity);
   }
 
   /**
@@ -63,6 +73,8 @@ export class LineStore {
     this.alive[id] = 1;
     this.ownerId[id] = ownerId;
     this.autoRenew[id] = 0;
+    this.taktTicks[id] = 0;
+    this.taktOffsetTicks[id] = 0;
     this.orders[id] = [];
     return id;
   }
@@ -71,6 +83,8 @@ export class LineStore {
     if (this.alive[id] !== 1) return;
     this.alive[id] = 0;
     this.autoRenew[id] = 0;
+    this.taktTicks[id] = 0;
+    this.taktOffsetTicks[id] = 0;
     this.orders[id] = [];
   }
 
@@ -161,6 +175,11 @@ export function reAnchorVehicle(world: World, id: number): void {
   // The leg in progress is no longer a leg of anything (D-077).
   vehicles.lastStationId[id] = -1;
   vehicles.lastArrivalTick[id] = -1;
+  // Neither is a slot or a connection hold latched for the old schedule: the
+  // stop they were latched at is not necessarily a stop of the new list.
+  vehicles.taktDueTick[id] = -1;
+  vehicles.connectionDeadlineTick[id] = -1;
+  vehicles.taktDelayTicks[id] = 0;
 }
 
 /**
@@ -175,4 +194,9 @@ export function releaseVehicle(world: World, id: number): void {
   const orders = world.lines.alive[lineId] === 1 ? world.lines.orders[lineId]! : [];
   vehicles.orders[id] = orders.map((order) => ({ ...order }));
   vehicles.lineId[id] = -1;
+  // The takt is the LINE's; a vehicle off the line owes no slot. A wait in
+  // progress resolves itself: the slot states re-check the line every tick
+  // and run on the moment there is no takt left to wait for.
+  vehicles.taktDueTick[id] = -1;
+  vehicles.taktDelayTicks[id] = 0;
 }

@@ -758,6 +758,21 @@ export function parseCommand(value: unknown, path: string): Command {
         vehicleId: asInt(raw['vehicleId'], `${path}.vehicleId`),
       };
 
+    case CommandKind.SetLineTakt:
+      return {
+        kind: CommandKind.SetLineTakt,
+        lineId: asInt(raw['lineId'], `${path}.lineId`),
+        taktTicks: asInt(raw['taktTicks'], `${path}.taktTicks`),
+        offsetTicks: asInt(raw['offsetTicks'], `${path}.offsetTicks`),
+      };
+
+    case CommandKind.SetTransferNode:
+      return {
+        kind: CommandKind.SetTransferNode,
+        stationId: asInt(raw['stationId'], `${path}.stationId`),
+        transferNode: asBoolean(raw['transferNode'], `${path}.transferNode`),
+      };
+
     case CommandKind.BuildStationModule:
       return {
         kind: CommandKind.BuildStationModule,

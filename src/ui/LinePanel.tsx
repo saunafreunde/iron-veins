@@ -1,8 +1,8 @@
-import type { ReactElement } from 'react';
+import { useState, type ReactElement } from 'react';
 import { formatMoney, t } from '../i18n';
 import type { LineMarker } from '../shared/protocol';
 import { CommandKind } from '../sim/commands/types';
-import { TICKS_PER_DAY } from '../sim/constants';
+import { TAKT_MAX_TICKS, TAKT_MIN_TICKS, TICKS_PER_DAY } from '../sim/constants';
 import { vehicleSpec } from '../sim/vehicles/catalog';
 import { ListPanel, type Column } from './ListPanel';
 import { OrderEditor, toSpec } from './OrderEditor';
@@ -106,7 +106,7 @@ export function LinePanel({ client }: { readonly client: SimClient }): ReactElem
           {t('ui.line.create')}
         </button>
       </div>
-      {selected !== undefined && <LineDetail client={client} line={selected} />}
+      {selected !== undefined && <LineDetail key={selected.id} client={client} line={selected} />}
     </>
   );
 }
@@ -188,6 +188,15 @@ function LineDetail({
           <div className="button-row">
             {line.vehicleIds.map((vehicleId) => {
               const vehicle = fleet.find((entry) => entry.id === vehicleId);
+              const name =
+                vehicle === undefined ? `#${vehicleId}` : t(vehicleSpec(vehicle.specId).nameKey);
+              // The "Verspätung in Spieltagen" of section 12.3, per vehicle:
+              // how late it left its last takt point. Zero is on time and
+              // says nothing.
+              const delayDays =
+                vehicle === undefined || line.taktTicks <= 0
+                  ? 0
+                  : Math.round((vehicle.taktDelayTicks / TICKS_PER_DAY) * 10) / 10;
               return (
                 <button
                   key={vehicleId}
@@ -195,13 +204,15 @@ function LineDetail({
                   className="button"
                   onClick={() => setSelectedVehicle(vehicleId)}
                 >
-                  {vehicle === undefined ? `#${vehicleId}` : t(vehicleSpec(vehicle.specId).nameKey)}
+                  {delayDays > 0 ? `${name} ${t('ui.line.delayDays', { days: delayDays })}` : name}
                 </button>
               );
             })}
           </div>
         </>
       )}
+
+      <TaktEditor client={client} line={line} />
 
       {/* The per-line auto-renewal of section 11.3 - the rule D-093 parked on
           the company until lines existed lives HERE now. */}
@@ -248,5 +259,96 @@ function LineDetail({
         </button>
       </div>
     </section>
+  );
+}
+
+/**
+ * The timetable of section 12.3: takt and start offset, edited in the unit
+ * the section itself speaks - game days - and sent as ticks in ONE
+ * `SetLineTakt`. The fleet advisor line shows the sim-computed
+ * ceil(round / takt) with its headroom; the panel never recomputes it.
+ */
+function TaktEditor({
+  client,
+  line,
+}: {
+  readonly client: SimClient;
+  readonly line: LineMarker;
+}): ReactElement {
+  const active = line.taktTicks > 0;
+  const [taktDays, setTaktDays] = useState(
+    active ? Math.round(line.taktTicks / TICKS_PER_DAY) : 20,
+  );
+  const [offsetDays, setOffsetDays] = useState(Math.round(line.taktOffsetTicks / TICKS_PER_DAY));
+
+  const headroomDays = Math.round((line.headroomTicks / TICKS_PER_DAY) * 10) / 10;
+
+  return (
+    <>
+      <span className="field__label field__label--spaced">{t('ui.line.takt')}</span>
+      {active && line.advisedVehicles > 0 && (
+        <p className="panel__hint">
+          {t('ui.line.advisor', {
+            count: line.advisedVehicles,
+            crew: line.vehicleIds.length,
+            days: headroomDays,
+          })}
+        </p>
+      )}
+      <label className="field">
+        <span className="field__label">{t('ui.line.taktDays')}</span>
+        <input
+          className="field__input"
+          type="number"
+          min={Math.round(TAKT_MIN_TICKS / TICKS_PER_DAY)}
+          max={Math.round(TAKT_MAX_TICKS / TICKS_PER_DAY)}
+          value={taktDays}
+          onChange={(event) => setTaktDays(Number(event.target.value))}
+        />
+      </label>
+      <label className="field">
+        <span className="field__label">{t('ui.line.taktOffsetDays')}</span>
+        <input
+          className="field__input"
+          type="number"
+          min={0}
+          max={Math.max(0, taktDays - 1)}
+          value={offsetDays}
+          onChange={(event) => setOffsetDays(Number(event.target.value))}
+        />
+      </label>
+      <div className="button-row">
+        <button
+          type="button"
+          className="button"
+          onClick={() =>
+            client.send({
+              kind: CommandKind.SetLineTakt,
+              lineId: line.id,
+              taktTicks: Math.round(taktDays) * TICKS_PER_DAY,
+              offsetTicks: Math.round(offsetDays) * TICKS_PER_DAY,
+            })
+          }
+        >
+          {t('ui.line.taktApply')}
+        </button>
+        {active && (
+          <button
+            type="button"
+            className="button"
+            onClick={() =>
+              client.send({
+                kind: CommandKind.SetLineTakt,
+                lineId: line.id,
+                taktTicks: 0,
+                offsetTicks: 0,
+              })
+            }
+          >
+            {t('ui.line.taktOff')}
+          </button>
+        )}
+      </div>
+    </>
   );
 }

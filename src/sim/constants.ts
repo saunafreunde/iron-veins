@@ -723,11 +723,17 @@ export const LINK_ESTIMATE_SPEED_MS = 15;
 /**
  * A measured trip longer than this is thrown away rather than averaged. [ticks]
  *
- * A vehicle that was stopped, sold off its orders or sent to a depot half way
- * would otherwise report a leg time of several game months and make the whole
- * network look unreachable.
+ * A quarter game year. This is the outlier guard of last resort, NOT the
+ * interruption filter: a stopped, sold or re-ordered vehicle is already
+ * discarded by clearing its arrival clock (D-077). It stood at ten game DAYS
+ * until M11, which silently made every leg beyond ~25 tiles unmeasurable -
+ * scenario 2's own coal line ran on the 54 km/h seed for ever, and the
+ * fleet advisor of section 12.3 ("gemessene Umlaufzeit") had nothing to
+ * measure. A quarter year is three times the horizon past which cargo has
+ * expired or decayed to the floor anyway - a leg slower than that needs no
+ * honest mean, it needs a different line (M11 stage C, DECISIONS.md).
  */
-export const LINK_SAMPLE_MAX_TICKS = 10 * TICKS_PER_DAY;
+export const LINK_SAMPLE_MAX_TICKS = TICKS_PER_YEAR / 4;
 
 /**
  * How many destinations one batch of produced cargo is split between.
@@ -1213,6 +1219,32 @@ export const MAX_STATIONS = 1_000;
  * headroom. [lines]
  */
 export const MAX_LINES = 256;
+
+// ------------------------------------------------- timetable (section 12.3)
+
+/**
+ * Smallest takt a line may run: one game day. A denser grid than a station
+ * stop would make every slot "now" and the wait degenerate to nothing, so the
+ * command refuses anything below a day rather than pretending it means
+ * something. [ticks]
+ */
+export const TAKT_MIN_TICKS = TICKS_PER_DAY;
+
+/**
+ * Largest takt: one game year. Past that a "timetable" is a parked fleet with
+ * paperwork; the stop command is the honest way to park a vehicle. Sanity cap,
+ * not balancing - section 12.3 names no bound. [ticks]
+ */
+export const TAKT_MAX_TICKS = TICKS_PER_YEAR;
+
+/**
+ * Hard ceiling on holding a departure for a connecting vehicle at a transfer
+ * node - the "bis zu X Ticks" of section 12.3, which the section itself
+ * demands as the guard against circular waiting. Two game days: long enough
+ * to bridge a late feeder, short enough that a missed connection costs a
+ * fraction of any sensible takt. [ticks]
+ */
+export const CONNECTION_WAIT_MAX_TICKS = 2 * TICKS_PER_DAY;
 
 // ---------------------------------------------------------------- rail
 

@@ -33,6 +33,8 @@ export interface StationSave {
   buildingsCovered: number;
   servedReliability: number;
   overflowUnits: number;
+  /** Marked as an "Umsteigeknoten" of section 12.3. */
+  transferNode: boolean;
   modules: StationModule[];
   waiting: CargoStack[];
   visitTicks: number[];
@@ -68,6 +70,12 @@ export interface VehicleSave {
   orderIndex: number;
   /** Line the vehicle is assigned to, or -1 (section 12.2). */
   lineId: number;
+  /** Takt slot latched for the current stop, or -1 (section 12.3). */
+  taktDueTick: number;
+  /** Expiry of a connection hold at a transfer node, or -1 (section 12.3). */
+  connectionDeadlineTick: number;
+  /** How late the last takt departure left, or 0. [ticks] */
+  taktDelayTicks: number;
   builtTick: number;
   reliability: number;
   breakdownTicks: number;
@@ -94,6 +102,7 @@ export function encodeStations(stations: readonly Station[]): StationSave[] {
     buildingsCovered: station.buildingsCovered,
     servedReliability: station.servedReliability,
     overflowUnits: station.overflowUnits,
+    transferNode: station.transferNode,
     modules: station.modules.map((module) => ({ ...module })),
     waiting: station.waiting.map((stack) => ({ ...stack })),
     visitTicks: [...station.visitTicks],
@@ -133,6 +142,9 @@ export function encodeVehicles(store: VehicleStore): VehicleSave[] {
       path,
       orderIndex: store.orderIndex[id]!,
       lineId: store.lineId[id]!,
+      taktDueTick: store.taktDueTick[id]!,
+      connectionDeadlineTick: store.connectionDeadlineTick[id]!,
+      taktDelayTicks: store.taktDelayTicks[id]!,
       builtTick: store.builtTick[id]!,
       reliability: store.reliability[id]!,
       breakdownTicks: store.breakdownTicks[id]!,
@@ -231,6 +243,7 @@ export function decodeStations(value: unknown, path: string): Station[] {
       buildingsCovered: int(raw['buildingsCovered'], `${path}[${i}].buildingsCovered`),
       servedReliability: int(raw['servedReliability'], `${path}[${i}].servedReliability`),
       overflowUnits: num(raw['overflowUnits'], `${path}[${i}].overflowUnits`),
+      transferNode: bool(raw['transferNode'], `${path}[${i}].transferNode`),
       modules,
       // Derived from the map on load, exactly as the land masses are.
       acceptedCargo: 0,
@@ -292,6 +305,12 @@ export function decodeVehicles(value: unknown, path: string): VehicleSave[] {
       path: pathTiles.map((tile, t) => int(tile, `${path}[${i}].path[${t}]`)),
       orderIndex: int(raw['orderIndex'], `${path}[${i}].orderIndex`),
       lineId: int(raw['lineId'], `${path}[${i}].lineId`),
+      taktDueTick: int(raw['taktDueTick'], `${path}[${i}].taktDueTick`),
+      connectionDeadlineTick: int(
+        raw['connectionDeadlineTick'],
+        `${path}[${i}].connectionDeadlineTick`,
+      ),
+      taktDelayTicks: int(raw['taktDelayTicks'], `${path}[${i}].taktDelayTicks`),
       builtTick: int(raw['builtTick'], `${path}[${i}].builtTick`),
       reliability: int(raw['reliability'], `${path}[${i}].reliability`),
       breakdownTicks: int(raw['breakdownTicks'], `${path}[${i}].breakdownTicks`),
@@ -337,6 +356,10 @@ export interface LineSave {
   ownerId: number;
   /** Per-line auto-renewal (section 11.3). */
   autoRenew: boolean;
+  /** Takt of the line's timetable, 0 when off (section 12.3). [ticks] */
+  taktTicks: number;
+  /** Start offset of the takt grid, 0 <= offset < taktTicks. [ticks] */
+  taktOffsetTicks: number;
   orders: Order[];
 }
 
@@ -348,6 +371,8 @@ export function encodeLines(store: LineStore): LineSave[] {
       id,
       ownerId: store.ownerId[id]!,
       autoRenew: store.autoRenew[id] === 1,
+      taktTicks: store.taktTicks[id]!,
+      taktOffsetTicks: store.taktOffsetTicks[id]!,
       orders: store.orders[id]!.map((order) => ({ ...order })),
     });
   }
@@ -370,6 +395,8 @@ export function decodeLines(value: unknown, path: string): LineSave[] {
       id,
       ownerId: int(raw['ownerId'], `${path}[${i}].ownerId`),
       autoRenew: bool(raw['autoRenew'], `${path}[${i}].autoRenew`),
+      taktTicks: int(raw['taktTicks'], `${path}[${i}].taktTicks`),
+      taktOffsetTicks: int(raw['taktOffsetTicks'], `${path}[${i}].taktOffsetTicks`),
       orders: ordersRaw.map((orderValue, o) => {
         const where = `${path}[${i}].orders[${o}]`;
         const order = record(orderValue, where);
@@ -399,6 +426,8 @@ export function buildLineStore(saves: readonly LineSave[]): LineStore {
     if (id >= store.count) store.count = id + 1;
     store.ownerId[id] = save.ownerId;
     store.autoRenew[id] = save.autoRenew ? 1 : 0;
+    store.taktTicks[id] = save.taktTicks;
+    store.taktOffsetTicks[id] = save.taktOffsetTicks;
     store.orders[id] = save.orders.map((order) => ({ ...order }));
   }
   return store;
@@ -449,6 +478,9 @@ export function buildVehicleStore(saves: readonly VehicleSave[]): VehicleStore {
     store.paths[id] = new Int32Array(MAX_PATH_TILES);
     for (let t = 0; t < save.path.length; t++) store.paths[id]![t] = save.path[t]!;
 
+    store.taktDueTick[id] = save.taktDueTick;
+    store.connectionDeadlineTick[id] = save.connectionDeadlineTick;
+    store.taktDelayTicks[id] = save.taktDelayTicks;
     store.orders[id] = save.orders.map((order) => ({ ...order }));
     store.cargo[id] = save.cargo.map((stack) => ({ ...stack }));
     // The cached aggregate is derived, never stored: keeping it out of the save

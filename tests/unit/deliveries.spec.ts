@@ -41,10 +41,12 @@ function station(id: number, x: number, y: number): StationMarker {
   return {
     id,
     name: `S${id}`,
+    ownerId: 0,
     x,
     y,
     rating: 60,
     waiting: 0,
+    transferNode: false,
     modules: [{ kind: 0, x, y }],
   };
 }

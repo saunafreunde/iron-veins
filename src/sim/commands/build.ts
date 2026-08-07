@@ -683,6 +683,7 @@ function attachModule(world: World, module: StationModule): Station {
       overflowUnits: 0,
       townId: -1,
       buildingsCovered: 0,
+      transferNode: false,
       acceptedCargo: 0,
       servedIndustries: [],
       runwayFreeTick: [],
