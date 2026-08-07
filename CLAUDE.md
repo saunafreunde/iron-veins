@@ -611,6 +611,68 @@ M13's emissive row, D-172, and rail-furniture row, D-173), page 0-detail
 FULL at 4096x4096 (D-163, D-173 - any further detail cell needs a new
 page) - every further cell needs a 6.2 booking first (Fehlerkatalog 40).
 
+## M13 - living trains, breathing day, working world
+
+The white box dies: every catalogue entry drawn from the Kenney bake in
+eight facings and company colours, a ten-wagon train as ten wagons, the
+full 16.3 day/night with emissive windows, signal aspects as world art,
+catenary, smoke and status badges. Render-only in the strictest sense -
+and even the ONE permitted snapshot-layout bump (`IndustryMarker.level`)
+turned out to be already spent: the field has travelled the marker channel
+since M5, so M13 changed ZERO protocol bytes and SAVE_VERSION stayed 24
+(D-174, the D-171 pattern). Bundle 0 (D-167/D-168) is digested in the
+perf and environment notes above.
+
+- **The full catalogue is mapped, and a reuse is never a wrong
+  silhouette** (D-169). 145 manifest models cover all rail, road and
+  water catalogue ids; aircraft, headframe, derrick and farm stay
+  procedural BY NAME, and the coupling test holds art to catalogues in
+  both directions. Honest reuses via `recolor`/`stretch` carry manifest
+  notes; chimney anchors were measured from model geometry, not guessed.
+- **The catalogue drives baked, the white box retires to a fallback**
+  (D-170). Facing = the interpolated glide vector (never the tile step -
+  no quarter-turn snaps), cached for standing vehicles; two-pass tint as
+  two sprites sharing one zIndex; contact shadows are baked INTO the
+  cells (clipped - the unclipped version overran the 6.2 booking and was
+  refused); `vehicleVariantFor` drops incomplete variants WHOLE. Every
+  fallback floor is a pure decision under test.
+- **A consist is wagons on the path the head actually drove** (D-171).
+  `VehicleMarker.consist` already travelled the marker channel; the
+  breadcrumb ring records the generation that just became PREVIOUS (never
+  a point ahead of the drawn sprite), resets on the head's own teleport
+  rule, and where history runs out the tail extends straight - stated
+  floor, no guessed paths through junctions. Road/water/air stay
+  single-sprite; 0.25x stays one dot per train.
+- **Light is the tint curve read backwards** (D-172). `emissiveIntensity`
+  is the D-127 curve's missing luminance - one source of truth, lights
+  come on exactly as fast as the world darkens. Glows sit INSIDE the
+  tinted container (occlusion stays exact; the night dims them a little,
+  measured and accepted); glazing is one kit-wide hue band; procedural
+  twins reuse the same drawing code windows-only; street lamps are an
+  (x+y) parity rule on town roads; headlights are eight pre-baked ground
+  cones on Driving/Braking only; at 0.5x the chunk glows through a baked
+  twin (the D-164 pattern, same winner).
+- **The aspect is the F3 claim read at the lamp** (D-173). One BlockIndex
+  serves the overlay AND the world art (found and fixed: it had been
+  zero-sized since M4); four signal kinds are four post silhouettes
+  (D-117 applied), the lamp is a position first and a colour second
+  (17.4-safe pair); catenary hangs on the new Catenary layer above the
+  vehicles, masts on every second plain-line tile, electrified-only.
+  Aspects exist at 1x+ where posts are readable (D-165 argument).
+- **The working world reads sim truth through the marker level** (D-174).
+  ONE capped ParticleContainer (cap 2000, spawn REFUSES at the cap;
+  measured p50 0.32 ms at overload against the 2 ms budget, in the
+  tripwire): chimney smoke at `INDUSTRY_SMOKE_ANCHORS` - the drawings
+  consume the same table, so smoke leaves the drawn stack by
+  construction - cadenced by the marker level (dormant = none, booming =
+  dense), exhaust from the audio's own throttle proxy, breakdown smoke
+  from the State field. All cadence on the blink counter plus avalanche
+  hashes - no RNG stream, no wall clock (Fehlerkatalog 25/39). Status
+  badges (stuck/breakdown/no-orders) keep the ONE definition of stuck
+  (the 9.3 deadlock clock), gate at 1x, live outside the day/night tint.
+  A dormant and a booming works differ in a STILL image: plume density
+  by day, `industryGlowFactor` on the window twin by night.
+
 ## Still outstanding
 
 - **The two named walls of D-158.** A passenger pile a fleet merely

@@ -1,7 +1,6 @@
 import type {
   CompanyMarker,
   ContractMarker,
-  IndustryMarker,
   MainToWorkerMessage,
   TownMarker,
   WorkerToMainMessage,
@@ -32,6 +31,7 @@ import {
 } from './constants';
 import { loanLimitCt } from './economy/company';
 import { scheduleOf } from './lines/LineStore';
+import { industryMarkers } from './markers';
 import {
   adviseFleet,
   lineProfitPerYearCt,
@@ -151,21 +151,6 @@ function structureSignature(current: World): string {
     `${current.industries.length}:${levels}:${closed}:${current.vehicles.ordersRevision}:` +
     `${current.lines.livingCount}`
   );
-}
-
-/** Live production state of every industry, for the tile panel. */
-function industryMarkers(current: World): IndustryMarker[] {
-  return current.industries.map((industry) => ({
-    id: industry.id,
-    type: industry.type,
-    x: industry.x,
-    y: industry.y,
-    level: industry.open ? industry.productionLevel : 0,
-    stock: Math.round(industry.outputStock0 + industry.outputStock1),
-    service: Math.round(industry.serviceAverage * 100),
-    neglectedMonths: industry.monthsWithoutCollection,
-    open: industry.open,
-  }));
 }
 
 /** Town markers, which carry a population that changes every month. */
@@ -303,7 +288,7 @@ function postStructure(current: World): void {
       modules: station.modules.map((module) => ({ kind: module.kind, x: module.x, y: module.y })),
     })),
   });
-  scope.postMessage({ type: 'industriesChanged', industries: industryMarkers(current) });
+  scope.postMessage({ type: 'industriesChanged', industries: industryMarkers(current.industries) });
   postFleet(current);
 }
 
@@ -712,7 +697,7 @@ function adoptWorld(current: World, sink: SnapshotWriter): void {
     townCount: current.towns.length,
     industryCount: current.industries.length,
     towns: townMarkers(current),
-    industries: industryMarkers(current),
+    industries: industryMarkers(current.industries),
   });
 }
 

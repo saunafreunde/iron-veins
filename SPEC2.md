@@ -340,7 +340,7 @@ abgenommen.** Eine Überschreitung ist ein Abnahme-Fehler, kein Schulterzucken.
 | M10 | **v23** — Save-Digest + Metadatenblock | — | +0,00 ms (Fixes/Validierung) | 0 |
 | M11 | **v24** — Order-Grammatik-Stride, LineStore, Takt-Felder, AiState-Migration | +`lineId` je Fahrzeug (Layout-Bump) | +0,20 ms (Halt-Checks, Slot-Logik) | 0 |
 | M12 | — | — | +0,00 ms (render-only) | +4 Wasser-Animationszeilen Seite 0 |
-| M13 | — | +`IndustryMarker.level` (Layout-Bump) | +0,00 ms (render-only) | Seite 1 (~600 Fahrzeug-Zellen), Seite 2 (Emissive) |
+| M13 | — | +`IndustryMarker.level` (Layout-Bump) — **B6 gemessen: seit M5 vorhanden (Marker-Kanal, Industrie-Uhr); null Byte Layout-Änderung, `SNAPSHOT_LAYOUT_VERSION` bleibt 6 (D-174, das D-171-Muster)** | +0,00 ms (render-only) | Seite 1 (~600 Fahrzeug-Zellen), Seite 2 (Emissive) |
 | M14 | **v25** — Stations-Frachthistorie-Ring | +FlowMarker-Block (Layout-Bump) | +0,00 ms Tick; ≤ +0,5 ms je Snapshot-Publish | 0 (Vektor) |
 | M15 | **v26** — 8.4-Weltregeln + Stau-Layer (~1 MB gehasht auf 1024²) | +Stau-Overlay-Block | +0,50 ms (Inkremente, Zerfall, A*-Term) | 0 |
 | M16 | **v27** — Checkpoint-Ring-Metadaten, `.ironreplay` | — | +0,00 ms (Checkpoints auf Save-Pfad) | 0 |
@@ -385,6 +385,7 @@ Headroom und lehrt, ein rotes Gate zu ignorieren (D-136).
 | M10 | 2026-08-07 | **1,45 ms / 3,26 ms** (max 39,4 ms über 6 500 Ticks inkl. Monatsgrenze) | Grundlinie | D-135 |
 | M11 | 2026-08-07 | **1,20 ms / 2,54 ms** (max 36,0 ms über 6 500 Ticks) | **−0,72 ms** (Budget +0,20; die Halt-Checks/Slot-Logik verschwinden im Messrauschen — kein Mehrverbrauch nachweisbar) | D-141–D-159 |
 | M12 | 2026-08-07 | **1,46 ms / 3,69 ms** (max 19,1 ms über 6 500 Ticks; Zweitlauf 1,34 / 3,19) | **+0,00 ms belegt** (render-only, kein Byte unter `src/sim` verändert; die zwei Läufe messen +0,43 und −0,07 gegen die Grundlinie — sie STRADDELN sie, das ist das ±0,7-ms-Laufrauschen dieser Maschine, das schon die M11-Zeile dokumentiert) | D-160–D-166 |
+| M13 | 2026-08-07 | **1,27 ms / 2,92 ms** (max 17,4 ms über 6 500 Ticks) | **+0,00 ms belegt** (render-only; gemessen −0,34 gegen die Grundlinie — dasselbe ±0,7-ms-Laufrauschen; der einzige Sim-seitige Diff ist die wörtliche Marker-Assembly-Extraktion nach `src/sim/markers.ts`, D-174) | D-167–D-174 |
 
 M11-Zeile im Detail: **SAVE_VERSION v24** — genau EIN Bump für alle drei
 Stufen (Z5; Order-Grammatik-Stride, LineStore, Takt-Felder,
@@ -427,6 +428,37 @@ bei 0,25× ist ein GPU-Kriterium und bleibt Handmessung nach dem
 M9-Verfahren (README) — der CPU-Anteil ist über die Chunk- und
 Draw-Prep-Proxies belegt, mehr kann ein headless Test nicht sehen
 (D-136).
+
+M13-Zeile im Detail: **kein SAVE_VERSION-Bump — v24 bleibt.** Der als
+Snapshot-Layout-Bump gebuchte `+IndustryMarker.level` war bei der
+Umsetzung **seit M5 vorhanden** (Marker-Kanal, Industrie-Uhr;
+`structureSignature` faltet die Level-Summe, Frische damit ≤ 1 Publish):
+null Byte Layout-Änderung, `SNAPSHOT_LAYOUT_VERSION` bleibt 6 — das
+D-171-Muster, ehrlich protokolliert statt einer Leerbump-Version (D-174);
+der Level-Roundtrip ist seither Testgegenstand
+(`tests/unit/industryMarkers.spec.ts`). Abnahme-Messwerte
+(Referenzmaschine, `npm run test:perf` 2026-08-07): **Partikel-Frame p50
+0,32 / p99 1,35 ms** am Cap 2000 im Überlast-Szenario (300 boomende
+Industrien + 1 500 Fahrzeuge emittierend, Pool am Cap — Spawns, Refusals,
+Step- und Mirror-Loop voll bepreist) **gegen das 2-ms-Akzeptanzbudget**;
+das Tripwire-Gate IST hier das Budget (Median 2 ms = > 6× sauberer
+Median, Backstop 20 ms — D-167 und Abnahmezahl fallen ausnahmsweise
+zusammen, mit Headroom statt gegen ihn). Übrige Tripwires nach allen
+M13-Bundles grün: Sprite-Pool-Rebuild Median 1,8 ms (Gate 10),
+Draw-Prep 2,5–2,6 ms in der Konsist-Szene mit 9 000 Units (Gate 10),
+Chunk-Bake 0,5 ms (Gate 3), Aspekt-Refresh 0,03 ms (Gate 2),
+Emissive-Walk 0,05 ms (Gate 2). Atlas-Buchungen: in 6.2 durch B1/B2/B4/B5
+nachgeführt (Seite 1 ehrlich überbucht auf 810 Zellen je Zoom, Seite 2
+548 Emissive-Zwillinge je Zoom, Seite 0 auf 2176×3840, Seite 0-detail
+VOLL). Fertig-wenn-Posten der M13-Sektion: alle Katalogeinträge in 8
+Facings mit eigener Silhouette ✓ (D-169-Reuse-Regel „nie falsche
+Silhouette", D-170), 10-Wagen-Kohlezug als 10 Wagen ✓ (D-171), nachts
+Fenster/Signale/Straßenlampen additiv + Aspekte ohne F3 ✓ (D-172/D-173),
+boomende vs. schlafende Industrie im Standbild unterscheidbar ✓
+(Level-Feld getestet: Rauchdichte am Tag, `industryGlowFactor` nachts,
+D-174), Partikel-CPU gemessen ≤ 2 ms ✓, kein Binärbild im Repo
+(Glob-Test) ✓. Dazu die Status-Badges (stuck/Panne/ohne Aufträge) aus dem
+State-Feld im Stride mit der EINEN Stuck-Definition der 9.3-Uhr (D-174).
 
 Die M10-Grundlinie liegt UNTER der linearen Extrapolation (~3–4 ms) — der
 Eskalationspfad (Kanten-Graph vor M14) ist nicht ausgelöst. Referenzmaschine:

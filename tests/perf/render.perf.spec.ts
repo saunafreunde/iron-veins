@@ -41,11 +41,28 @@ import { coastEdgeMask, FOAM_EDGE_COUNT, foamVariant, isDeepWater } from '../../
 import { lampOffsetForRoadTile } from '../../src/render/emissive';
 import { CATENARY_RAIL_TYPE, catenaryMastOffset } from '../../src/render/catenary';
 import { collectClaimedBlocks, signalAspect } from '../../src/render/signalAspects';
+import {
+  BREAKDOWN_PUFF,
+  BREAKDOWN_SMOKE_PERIOD,
+  BREAKDOWN_TINT,
+  emitterPhase,
+  EXHAUST_PUFF,
+  EXHAUST_TINT,
+  exhaustPeriodForThrottle,
+  INDUSTRY_PUFF,
+  PARTICLE_CAP,
+  ParticlePool,
+  smokePeriodForLevel,
+  spawnPuff,
+  vehicleThrottle,
+} from '../../src/render/particles';
+import { STATE_BROKEN_DOWN } from '../../src/render/badges';
+import { INDUSTRY_SMOKE_ANCHORS } from '../../src/render/industryArt';
 
 /**
- * The render CPU tripwire of SPEC2 6.3: Sprite-Pool-Rebuild-ms, Draw-Prep-ms
- * and - since M12 - Chunk-Bake-ms, held in CI before the M12/M13 art
- * milestones start spending against them.
+ * The render CPU tripwire of SPEC2 6.3: Sprite-Pool-Rebuild-ms, Draw-Prep-ms,
+ * since M12 Chunk-Bake-ms and since M13 Partikel-ms, held in CI before and
+ * while the art milestones spend against them.
  *
  * The two frame-rate budgets of section 21 need a GPU and a compositor and
  * stay hand-measured (README.md). What CAN run headless is the CPU side of a
@@ -126,6 +143,22 @@ const CHUNK_BAKE_P50_TRIPWIRE_MS = 3;
 
 /** p99 backstop for the chunk bake: worst saturated observations 11-13 ms. [ms] */
 const CHUNK_BAKE_P99_BACKSTOP_MS = 30;
+
+/**
+ * Median tripwire: one frame of the M13 particle CPU at the cap, in the
+ * reference scene run at OVERLOAD - 300 booming industries plus a full
+ * 1,500-vehicle block all emitting, the pool pinned at PARTICLE_CAP so the
+ * step loop, the spawn refusals and the ParticleContainer mirror are all
+ * priced at their worst. The gate is the SPEC2 M13 budget itself
+ * ("<= 2 ms Frame-CPU, im Tripwire") - and it is simultaneously a very
+ * generous D-167 multiple of the clean median, so the acceptance sentence
+ * and the tripwire philosophy agree for once instead of colliding as they
+ * did in D-167's chunk-bake story. [ms]
+ */
+const PARTICLE_P50_TRIPWIRE_MS = 2;
+
+/** p99 backstop for the particle frame, the usual order of magnitude. [ms] */
+const PARTICLE_P99_BACKSTOP_MS = 20;
 
 /**
  * Median tripwire: one signal-aspect refresh on the claim edge (M13 B5) -
@@ -785,6 +818,123 @@ function emissiveWalkProxy(
   return used;
 }
 
+/** One synthetic industry emitter of the particle scene. */
+interface ProxyIndustry {
+  readonly id: number;
+  readonly type: number;
+  readonly x: number;
+  readonly y: number;
+  readonly level: number;
+}
+
+/**
+ * The reference particle scene at overload: 300 industries (the perf
+ * fixture's own count), every one a smoking type at a booming level, so
+ * every anchor emits at its densest cadence.
+ */
+function syntheticIndustries(): ProxyIndustry[] {
+  const smokingTypes = Object.keys(INDUSTRY_SMOKE_ANCHORS).map(Number);
+  const industries: ProxyIndustry[] = [];
+  const span = WINDOW_MAX - WINDOW_MIN;
+  for (let i = 0; i < 300; i++) {
+    industries.push({
+      id: i,
+      type: smokingTypes[i % smokingTypes.length]!,
+      x: WINDOW_MIN + ((i * 11) % span),
+      y: WINDOW_MIN + ((i * 17) % span),
+      level: 200,
+    });
+  }
+  return industries;
+}
+
+/** The flat-array stand-in for the ParticleContainer's per-particle writes. */
+interface ParticleOut {
+  readonly x: Float64Array;
+  readonly y: Float64Array;
+  readonly scale: Float64Array;
+  readonly alpha: Float64Array;
+  readonly tint: Int32Array;
+}
+
+/**
+ * The CPU of one MapView particle frame (M13): the industry emitter pass
+ * (anchor lookup, level cadence, phase modulo, spawn attempt - refused at
+ * the cap, which is exactly the overload guarantee under test), the
+ * per-vehicle exhaust/breakdown decision over a full snapshot block, one
+ * `ParticlePool.step()` over a pool at the cap, and the mirror loop that
+ * writes position, scale, alpha and tint per live particle - everything
+ * except the GPU buffer upload, stated per D-136.
+ */
+function particleProxy(
+  pool: ParticlePool,
+  industries: readonly ProxyIndustry[],
+  vehicleData: Int32Array,
+  blink: number,
+  out: ParticleOut,
+): number {
+  let attempts = 0;
+  for (const industry of industries) {
+    const anchors = INDUSTRY_SMOKE_ANCHORS[industry.type];
+    if (anchors === undefined) continue;
+    const period = smokePeriodForLevel(industry.level);
+    if (period === 0) continue;
+    const wx = ((industry.x - industry.y) * TILE_W) / 2;
+    const wy = ((industry.x + industry.y) * TILE_H) / 2 - GROUND * HEIGHT_PX;
+    for (let i = 0; i < anchors.length; i++) {
+      const anchor = anchors[i]!;
+      const seed = industry.id * 8 + i;
+      if ((blink + emitterPhase(seed)) % period !== 0) continue;
+      spawnPuff(
+        pool,
+        INDUSTRY_PUFF,
+        wx + ((anchor.u - anchor.v) * TILE_W) / 2,
+        wy + TILE_H / 2 + ((anchor.u + anchor.v) * TILE_H) / 2 - anchor.height,
+        seed ^ Math.imul(blink, 0x85ebca6b),
+        anchor.tint,
+      );
+      attempts++;
+    }
+  }
+
+  const size = MAP_SIZE;
+  for (let i = 0; i < SNAPSHOT_MAX_VEHICLES; i++) {
+    const base = i * SNAPSHOT_VEHICLE_STRIDE;
+    const tile = vehicleData[base + SnapshotVehicle.Tile]!;
+    const next = vehicleData[base + SnapshotVehicle.NextTile]!;
+    const state = vehicleData[base + SnapshotVehicle.State]!;
+    const vehicleId = vehicleData[base + SnapshotVehicle.VehicleId]!;
+    const worldX = ((tile % size) - ((tile / size) | 0)) * (TILE_W / 2);
+    const worldY = ((tile % size) + ((tile / size) | 0)) * (TILE_H / 2);
+    const salt = vehicleId ^ Math.imul(blink, 0x85ebca6b);
+    if (state === STATE_BROKEN_DOWN) {
+      if ((blink + emitterPhase(vehicleId)) % BREAKDOWN_SMOKE_PERIOD === 0) {
+        spawnPuff(pool, BREAKDOWN_PUFF, worldX, worldY - 14, salt, BREAKDOWN_TINT);
+        attempts++;
+      }
+    } else {
+      const progressMilli = vehicleData[base + SnapshotVehicle.ProgressMilli]!;
+      const period = exhaustPeriodForThrottle(vehicleThrottle(tile !== next, progressMilli));
+      if (period > 0 && (blink + emitterPhase(vehicleId)) % period === 0) {
+        spawnPuff(pool, EXHAUST_PUFF, worldX, worldY - 6, salt, EXHAUST_TINT);
+        attempts++;
+      }
+    }
+  }
+
+  pool.step();
+
+  const count = pool.count;
+  for (let i = 0; i < count; i++) {
+    out.x[i] = pool.x[i]!;
+    out.y[i] = pool.y[i]!;
+    out.scale[i] = pool.size[i]! / 32;
+    out.alpha[i] = pool.alphaOf(i);
+    out.tint[i] = pool.tint[i]!;
+  }
+  return count + attempts;
+}
+
 function percentile(samples: Float64Array, share: number): number {
   const sorted = Array.from(samples).sort((a, b) => a - b);
   return sorted[Math.floor(sorted.length * share)]!;
@@ -1007,6 +1157,58 @@ describe('render CPU tripwire (SPEC2 6.3)', () => {
     expect(placed).toBeGreaterThan(100);
     expect(p50).toBeLessThan(EMISSIVE_WALK_P50_TRIPWIRE_MS);
     expect(p99).toBeLessThan(EMISSIVE_WALK_P99_BACKSTOP_MS);
+  });
+
+  it('runs one particle frame at the cap inside the 2 ms budget (M13)', () => {
+    const pool = new ParticlePool();
+    // Pin the pool AT the cap with staggered lifetimes: the emitters spawn
+    // more per frame than expire, so every sample pays the full step loop,
+    // the full mirror loop, real spawn writes for the freed rows AND the
+    // refusal path for the rest - the emitter-overload steady state the
+    // cap exists for.
+    for (let i = 0; i < PARTICLE_CAP; i++) {
+      pool.spawn(i, 0, 0.1, -0.5, 30 + (i % 90), 6, 0.05, 0xffffff);
+    }
+    expect(pool.count).toBe(PARTICLE_CAP);
+
+    const industries = syntheticIndustries();
+    const data = new Int32Array(syntheticVehicleBlock(map));
+    // Every tenth vehicle broken down, so the dense-smoke branch is priced.
+    for (let i = 0; i < SNAPSHOT_MAX_VEHICLES; i += 10) {
+      data[i * SNAPSHOT_VEHICLE_STRIDE + SnapshotVehicle.State] = STATE_BROKEN_DOWN;
+    }
+    const out: ParticleOut = {
+      x: new Float64Array(PARTICLE_CAP),
+      y: new Float64Array(PARTICLE_CAP),
+      scale: new Float64Array(PARTICLE_CAP),
+      alpha: new Float64Array(PARTICLE_CAP),
+      tint: new Int32Array(PARTICLE_CAP),
+    };
+    const touched = particleProxy(pool, industries, data, 0, out);
+
+    const samples = new Float64Array(DRAW_PREP_SAMPLES);
+    for (let i = 0; i < DRAW_PREP_SAMPLES; i++) {
+      const started = performance.now();
+      particleProxy(pool, industries, data, i + 1, out);
+      samples[i] = performance.now() - started;
+    }
+
+    const p50 = percentile(samples, 0.5);
+    const p99 = percentile(samples, 0.99);
+    console.log(
+      `particle frame: pool at cap ${PARTICLE_CAP}, ${industries.length} industries + ` +
+        `${SNAPSHOT_MAX_VEHICLES} vehicles emitting (${touched} rows touched in the warm frame), ` +
+        `p50 ${p50.toFixed(4)} ms, p99 ${p99.toFixed(4)} ms ` +
+        `(median tripwire ${PARTICLE_P50_TRIPWIRE_MS} ms, backstop ${PARTICLE_P99_BACKSTOP_MS} ms)`,
+    );
+
+    // The cap held through every overloaded frame - the pool never grew
+    // past it, and the churn kept it within one frame's deaths of full.
+    expect(pool.count).toBeLessThanOrEqual(PARTICLE_CAP);
+    expect(pool.count).toBeGreaterThan(PARTICLE_CAP - 200);
+    expect(touched).toBeGreaterThan(PARTICLE_CAP);
+    expect(p50).toBeLessThan(PARTICLE_P50_TRIPWIRE_MS);
+    expect(p99).toBeLessThan(PARTICLE_P99_BACKSTOP_MS);
   });
 
   it('rebakes one 32x32 chunk inside the tripwire', () => {

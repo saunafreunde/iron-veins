@@ -4,6 +4,8 @@ import {
   BitmapText,
   Container,
   Graphics,
+  Particle,
+  ParticleContainer,
   Rectangle,
   RenderTexture,
   Sprite,
@@ -197,6 +199,118 @@ function makeHeadlightCones(): HeadlightCone[] {
   return cones;
 }
 
+/**
+ * Placement constants of the M13 working-world layer. The POLICIES -
+ * cadence from level and throttle, the cap, the badge states - live in
+ * particles.ts and badges.ts under unit test; these are the world-pixel
+ * placements only.
+ */
+/** Vehicle-sourced particles and badges exist at this zoom and above: a
+ * three-pixel vehicle at the chunked zooms can carry neither a wisp nor a
+ * chip that reads as anything (the D-165 gate). Industry smoke runs at
+ * every non-abstract zoom - a plume is exactly what survives map scale.
+ * [zoom factor] */
+const VEHICLE_PARTICLE_MIN_ZOOM = 1;
+/** Exhaust puffs start this far above the vehicle's ground anchor. [world px] */
+const EXHAUST_LIFT_PX = 6;
+/** Breakdown smoke rises from engine height, not the axles. [world px] */
+const BREAKDOWN_LIFT_PX = 14;
+/** Emitters this far outside the viewport still spawn - their plume drifts
+ * into view before it fades. [world px] */
+const SMOKE_CULL_MARGIN_PX = 96;
+/** Badge chip bottom above the vehicle's ground anchor. [world px] */
+const BADGE_LIFT_PX = 34;
+/** Ceiling on one publish edge's tick delta entering the stuck counters: a
+ * loaded world's tick jump must not instantly promote every signal wait to
+ * a stuck badge. Above any real fast-forward batch. [ticks] */
+const STUCK_TICKS_MAX_STEP = 40;
+
+/**
+ * The one smoke-puff texture every particle shares (M13): a soft white
+ * radial blob, tinted per puff - dust, exhaust and breakdown smoke are one
+ * texture under three tints, which is what lets ONE ParticleContainer
+ * batch all of it. Drawn once at attach - procedural, no binary (E-14).
+ */
+const SMOKE_TEX_SIZE = 32;
+
+function makeSmokeTexture(): Texture {
+  const canvas = document.createElement('canvas');
+  canvas.width = SMOKE_TEX_SIZE;
+  canvas.height = SMOKE_TEX_SIZE;
+  const ctx = canvas.getContext('2d')!;
+  const half = SMOKE_TEX_SIZE / 2;
+  const gradient = ctx.createRadialGradient(half, half, 0, half, half, half);
+  gradient.addColorStop(0, 'rgba(255,255,255,1)');
+  gradient.addColorStop(0.55, 'rgba(255,255,255,0.6)');
+  gradient.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, SMOKE_TEX_SIZE, SMOKE_TEX_SIZE);
+  return Texture.from(canvas);
+}
+
+/**
+ * The three status-badge chips of M13 (badges.ts owns the POLICY): a
+ * rounded colour chip with a white glyph - an hourglass for stuck, an
+ * exclamation mark for a breakdown, three dots for "no orders". Shapes,
+ * not text: a glyph from a font would render differently per platform, and
+ * these three read at sixteen pixels. Indexed by BadgeKind.
+ */
+const BADGE_TEX_W = 26;
+const BADGE_TEX_H = 18;
+
+function makeBadgeTextures(): Texture[] {
+  const textures: Texture[] = [];
+  for (let kind = 0; kind < BADGE_KIND_COUNT; kind++) {
+    const canvas = document.createElement('canvas');
+    canvas.width = BADGE_TEX_W;
+    canvas.height = BADGE_TEX_H;
+    const ctx = canvas.getContext('2d')!;
+    ctx.fillStyle = `#${BADGE_COLORS[kind]!.toString(16).padStart(6, '0')}`;
+    ctx.beginPath();
+    ctx.roundRect(1, 1, BADGE_TEX_W - 2, BADGE_TEX_H - 2, 4);
+    ctx.fill();
+    // The same near-black the label outline uses, so a pale chip still
+    // separates from pale terrain.
+    ctx.strokeStyle = 'rgba(17,22,28,0.9)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    const cx = BADGE_TEX_W / 2;
+    const cy = BADGE_TEX_H / 2;
+    ctx.fillStyle = '#ffffff';
+    if (kind === BadgeKind.Stuck) {
+      // Hourglass: two triangles meeting at the waist.
+      ctx.beginPath();
+      ctx.moveTo(cx - 4, cy - 5);
+      ctx.lineTo(cx + 4, cy - 5);
+      ctx.lineTo(cx, cy - 0.5);
+      ctx.closePath();
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(cx - 4, cy + 5);
+      ctx.lineTo(cx + 4, cy + 5);
+      ctx.lineTo(cx, cy + 0.5);
+      ctx.closePath();
+      ctx.fill();
+    } else if (kind === BadgeKind.Breakdown) {
+      // Exclamation mark: bar and dot.
+      ctx.fillRect(cx - 1.5, cy - 6, 3, 7);
+      ctx.beginPath();
+      ctx.arc(cx, cy + 4.5, 1.8, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      // Ellipsis: idle, nothing to do.
+      for (let dot = -1; dot <= 1; dot++) {
+        ctx.beginPath();
+        ctx.arc(cx + dot * 5, cy, 1.7, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    textures.push(Texture.from(canvas));
+  }
+  return textures;
+}
+
 /** One vehicle as the audio engine wants it; reused between frames. */
 export interface VehicleAudioInput {
   id: number;
@@ -226,8 +340,34 @@ import {
   EMISSIVE_MAX_ALPHA,
   headlightGroundPoints,
   headlightsOn,
+  industryGlowFactor,
   lampOffsetForRoadTile,
 } from './emissive';
+import {
+  BREAKDOWN_SMOKE_PERIOD,
+  BREAKDOWN_PUFF,
+  BREAKDOWN_TINT,
+  emitterPhase,
+  EXHAUST_PUFF,
+  EXHAUST_TINT,
+  exhaustPeriodForThrottle,
+  INDUSTRY_PUFF,
+  PARTICLE_CAP,
+  ParticlePool,
+  smokePeriodForLevel,
+  spawnPuff,
+  vehicleThrottle,
+} from './particles';
+import {
+  BADGE_COLORS,
+  BADGE_KIND_COUNT,
+  BADGE_MIN_ZOOM,
+  badgeForState,
+  BadgeKind,
+  STATE_BROKEN_DOWN,
+  STATE_WAITING_FOR_PATH,
+} from './badges';
+import { INDUSTRY_SMOKE_ANCHORS } from './industryArt';
 import {
   coastEdgeMask,
   FOAM_EDGE_COUNT,
@@ -728,6 +868,13 @@ export class MapView {
   private appliedEmissiveAlpha = -1;
   /** Pool slots of the glow sprites the last rebuild placed (M13). */
   private readonly emissiveSlots: number[] = [];
+  /**
+   * Per-slot alpha multiplier, parallel to `emissiveSlots`: 1 for windows
+   * and lamps, the level-driven `industryGlowFactor` for industry twins -
+   * a booming works glows brighter than a dormant one (SPEC2 M13, with the
+   * smoke the still-image half of "unterscheidbar").
+   */
+  private readonly emissiveFactors: number[] = [];
   /** The street-lamp glow texture, drawn once at attach (M13). */
   private lampTexture: Texture | null = null;
   /** The eight pre-baked headlight cones, indexed by facing (M13). */
@@ -815,6 +962,54 @@ export class MapView {
   private selectedVehicleId: number | null = null;
 
   /**
+   * The M13 particle layer: ONE capped ParticleContainer (SPEC2 M13 - cap
+   * PARTICLE_CAP, budget in the perf tripwire) holding every smoke puff in
+   * the world - chimneys, exhaust, breakdowns - as tinted copies of one
+   * shared texture. It sits INSIDE `art`, above the sprite layers: smoke
+   * takes the day/night tint like everything else in the world, and one
+   * batched container cannot interleave the 16.1 painter - a plume drifts
+   * OVER a hill in front of it, accepted because smoke lives above roof
+   * height and the alternative is a sprite per puff, the per-frame bill the
+   * container exists to delete.
+   */
+  private particleLayer: ParticleContainer | null = null;
+  /** The pure capped pool (particles.ts) the layer mirrors every frame. */
+  private readonly particlePool = new ParticlePool();
+  /** The PARTICLE_CAP preallocated Pixi particles, index-parallel to the pool. */
+  private readonly particleSprites: Particle[] = [];
+  /** Rows synced last frame, so hiding dead rows touches only what lived. */
+  private syncedParticles = 0;
+  private smokeTexture: Texture | null = null;
+
+  /**
+   * The status badges of M13 (badges.ts owns the policy): a stage of small
+   * chips over troubled vehicles, world-positioned but counter-scaled to
+   * screen-constant size. A sibling of the overlay, outside the D-127
+   * tint - a diagnostic is interface, and interface does not dim at night.
+   */
+  private readonly badgeLayer = new Container();
+  private readonly badgeSprites: Sprite[] = [];
+  private badgeTextures: Texture[] | null = null;
+  /** Badge sprites used this frame; the rest are hidden after the draw. */
+  private badgeUsed = 0;
+  /**
+   * Ticks each vehicle id has spent WaitingForPath, accumulated from the
+   * published tick deltas on every generation edge - the render-side stand-in
+   * for the sim's waitingTicks, feeding the stuck badge's 9.3 clock.
+   */
+  private readonly stuckTicks = new Int32Array(MAX_VEHICLES);
+
+  /**
+   * This frame's emitter cull rectangle in world pixels (viewport plus
+   * SMOKE_CULL_MARGIN_PX), refreshed once per update - plain fields, so
+   * the per-vehicle test allocates nothing.
+   */
+  private emitLeft = 0;
+  private emitRight = 0;
+  private emitTop = 0;
+  private emitBottom = 0;
+
+  /**
    * Create the WebGL context and start rendering.
    *
    * `init` is asynchronous, and a component can be unmounted while it is still
@@ -860,6 +1055,7 @@ export class MapView {
     this.lampTexture = makeLampTexture();
     this.signalGlowTexture = makeSignalGlowTexture();
     this.headlightCones = makeHeadlightCones();
+    this.badgeTextures = makeBadgeTextures();
 
     // The baked Kenney pages load in the background (M13): the game is
     // already running on procedural art, swaps to the baked cells the frame
@@ -882,8 +1078,32 @@ export class MapView {
     this.art.addChild(this.net);
     this.art.addChild(this.tiles);
     this.art.addChild(this.dots);
+    // The M13 particle layer: last child of `art`, so smoke draws over the
+    // world it rises from and still takes the D-127 tint. All PARTICLE_CAP
+    // particles exist up front at alpha 0 - adding and removing children
+    // would rebuild the container's buffers, and the cap is small enough
+    // that a fully idle layer costs one batched no-op draw.
+    const smoke = makeSmokeTexture();
+    this.smokeTexture = smoke;
+    this.particleLayer = new ParticleContainer({
+      texture: smoke,
+      // Position and colour move every frame a puff lives; the vertex
+      // stream carries the growing scale.
+      dynamicProperties: { position: true, color: true, vertex: true },
+    });
+    for (let i = 0; i < PARTICLE_CAP; i++) {
+      const particle = new Particle({ texture: smoke, anchorX: 0.5, anchorY: 0.5, alpha: 0 });
+      this.particleSprites.push(particle);
+      this.particleLayer.addParticle(particle);
+    }
+    this.art.addChild(this.particleLayer);
     this.world.addChild(this.art);
     this.world.addChild(this.overlay);
+    // Badges above the overlay: a chip must not vanish under the selection
+    // ring of the vehicle it warns about.
+    this.badgeLayer.eventMode = 'none';
+    this.badgeLayer.interactiveChildren = false;
+    this.world.addChild(this.badgeLayer);
     this.app.stage.addChild(this.world);
     // The label layer sits ABOVE the world on the stage, unscaled: glyphs
     // render 1:1 at every zoom, and names stay at full contrast at night
@@ -1187,6 +1407,16 @@ export class MapView {
       for (const cone of this.headlightCones) cone.texture.destroy(true);
     }
     this.headlightCones = null;
+    // The smoke and badge canvases own their sources like the shadow does.
+    this.smokeTexture?.destroy(true);
+    this.smokeTexture = null;
+    if (this.badgeTextures !== null) {
+      for (const texture of this.badgeTextures) texture.destroy(true);
+    }
+    this.badgeTextures = null;
+    this.particleLayer = null;
+    this.particleSprites.length = 0;
+    this.badgeSprites.length = 0;
     // The BitmapText objects died with the stage; the pool must not hand
     // out corpses to a later attach. The FONT stays installed: it is
     // page-global by design (see LABEL_FONT_NAME).
@@ -1328,6 +1558,10 @@ export class MapView {
     // that just became the PREVIOUS one - the position the interpolated
     // head has provably passed.
     if (generationMoved && this.consists.size > 0) this.recordConsistBreadcrumbs(map);
+    // The stuck-badge clock (M13): published tick deltas accumulate per
+    // vehicle while it is WaitingForPath - the same publish edge, so a
+    // frame inside one tick pays nothing.
+    if (generationMoved) this.updateStuckCounters();
 
     // Day/night (section 16.3): ONE tint on the world-art container -
     // chunks, tiles, network lines and vehicles alike - computed once per
@@ -1399,7 +1633,17 @@ export class MapView {
     this.animateWater(map, chunked, abstract);
     this.applyEmissive();
     this.updateSignalAspects(map);
+    // The emitter cull rectangle of the M13 particles, refreshed before the
+    // vehicle pass so exhaust and industry smoke share one answer.
+    {
+      const view = this.viewRect();
+      this.emitLeft = view.left - SMOKE_CULL_MARGIN_PX;
+      this.emitRight = view.right + SMOKE_CULL_MARGIN_PX;
+      this.emitTop = view.top - SMOKE_CULL_MARGIN_PX;
+      this.emitBottom = view.bottom + SMOKE_CULL_MARGIN_PX;
+    }
     this.drawVehicles(map, abstract);
+    this.updateParticles(map, abstract);
     this.drawOverlay(map);
 
     // Map text (SPEC2 M12): re-laid-out only when zoom, lists or revision
@@ -1592,14 +1836,129 @@ export class MapView {
       this.appliedEmissiveAlpha = alpha;
       for (let i = 0; i < this.emissiveSlots.length; i++) {
         const sprite = this.pool[this.emissiveSlots[i]!]!;
-        sprite.alpha = alpha;
-        sprite.visible = alpha > 0;
+        // Per-slot factor (M13): 1 for windows and lamps, the level-driven
+        // industryGlowFactor for industry twins.
+        const scaled = alpha * this.emissiveFactors[i]!;
+        sprite.alpha = scaled;
+        sprite.visible = scaled > 0;
       }
     }
     for (let i = 0; i < this.chunkEmissiveSprites.length; i++) {
       const sprite = this.chunkEmissiveSprites[i]!;
       if (sprite.visible) sprite.alpha = alpha;
     }
+  }
+
+  /**
+   * Accumulate the stuck-badge clock (M13, badges.ts): on every publish
+   * edge, a vehicle WaitingForPath collects the published tick delta and
+   * any other state clears it - the render-side reading of the sim's own
+   * waitingTicks, erring towards silence (a loaded world starts at zero).
+   * The delta is clamped so the tick jump of a load or a new game cannot
+   * promote every signal wait to a stuck badge in one step.
+   */
+  private updateStuckCounters(): void {
+    const interp = this.interpolator;
+    let dt = interp.phase(1) - interp.phase(0);
+    if (dt <= 0) return;
+    if (dt > STUCK_TICKS_MAX_STEP) dt = STUCK_TICKS_MAX_STEP;
+    const data = interp.data;
+    const count = interp.count;
+    for (let i = 0; i < count; i++) {
+      const base = i * SNAPSHOT_VEHICLE_STRIDE;
+      const id = data[base + SnapshotVehicle.VehicleId]!;
+      if (id < 0 || id >= MAX_VEHICLES) continue;
+      if (data[base + SnapshotVehicle.State] === STATE_WAITING_FOR_PATH) {
+        this.stuckTicks[id] = this.stuckTicks[id]! + dt;
+      } else {
+        this.stuckTicks[id] = 0;
+      }
+    }
+  }
+
+  /**
+   * The M13 particle frame: spawn this frame's industry smoke, advance the
+   * capped pool one fixed step and mirror it into the ParticleContainer.
+   * Vehicle exhaust and breakdown smoke were already spawned by
+   * `drawVehicles` - they need the interpolated positions it computes.
+   * Everything keys on the blink counter (Fehlerkatalog 39); the 0.25x
+   * abstract mode runs no particle work at all and clears the field once,
+   * so zooming back in starts fresh plumes instead of resuming stale ones.
+   */
+  private updateParticles(map: TileMap, abstract: boolean): void {
+    const layer = this.particleLayer;
+    if (layer === null) return;
+    if (abstract) {
+      if (this.particlePool.count > 0 || this.syncedParticles > 0) {
+        this.particlePool.clear();
+        this.syncParticles();
+      }
+      layer.visible = false;
+      return;
+    }
+    layer.visible = true;
+    this.spawnIndustrySmoke(map);
+    this.particlePool.step();
+    this.syncParticles();
+  }
+
+  /**
+   * Chimney and dust emitters (SPEC2 M13): every visible industry with a
+   * smoke anchor (industryArt.ts - the anchors the drawings themselves are
+   * built from) puffs on the cadence its marker LEVEL commands: nothing
+   * when dormant or closed, a dense column when booming. The marker channel
+   * has carried the level since M5; the smoke is that number made visible.
+   */
+  private spawnIndustrySmoke(map: TileMap): void {
+    for (const industry of this.industries) {
+      const anchors = INDUSTRY_SMOKE_ANCHORS[industry.type];
+      if (anchors === undefined) continue;
+      const period = smokePeriodForLevel(industry.level);
+      if (period === 0) continue;
+      const height = map.baseHeight(industry.x, industry.y);
+      const wx = (industry.x - industry.y) * (TILE_W / 2);
+      const wy = (industry.x + industry.y) * (TILE_H / 2) - height * HEIGHT_PX;
+      if (wx < this.emitLeft || wx > this.emitRight || wy < this.emitTop || wy > this.emitBottom) {
+        continue;
+      }
+      for (let i = 0; i < anchors.length; i++) {
+        const anchor = anchors[i]!;
+        const seed = industry.id * 8 + i;
+        if ((this.blink + emitterPhase(seed)) % period !== 0) continue;
+        spawnPuff(
+          this.particlePool,
+          INDUSTRY_PUFF,
+          wx + ((anchor.u - anchor.v) * TILE_W) / 2,
+          wy + TILE_H / 2 + ((anchor.u + anchor.v) * TILE_H) / 2 - anchor.height,
+          seed ^ Math.imul(this.blink, 0x85ebca6b),
+          anchor.tint,
+        );
+      }
+    }
+  }
+
+  /**
+   * Mirror the pool into the preallocated Pixi particles: live rows take
+   * position, size and colour, rows that died since last frame drop to
+   * alpha 0 - never the whole cap, only what actually lived.
+   */
+  private syncParticles(): void {
+    const pool = this.particlePool;
+    const count = pool.count;
+    for (let i = 0; i < count; i++) {
+      const particle = this.particleSprites[i]!;
+      particle.x = pool.x[i]!;
+      particle.y = pool.y[i]!;
+      const scale = pool.size[i]! / SMOKE_TEX_SIZE;
+      particle.scaleX = scale;
+      particle.scaleY = scale;
+      particle.alpha = pool.alphaOf(i);
+      particle.tint = pool.tint[i]!;
+    }
+    for (let i = count; i < this.syncedParticles; i++) {
+      this.particleSprites[i]!.alpha = 0;
+    }
+    this.syncedParticles = count;
   }
 
   /**
@@ -1656,12 +2015,13 @@ export class MapView {
    * resets blend and alpha on every placement, so a pool sprite that was a
    * glow last rebuild draws as ordinary world art the moment it is reused.
    */
-  private markEmissive(sprite: Sprite, slot: number): void {
-    const alpha = this.emissiveNow * EMISSIVE_MAX_ALPHA;
+  private markEmissive(sprite: Sprite, slot: number, factor = 1): void {
+    const alpha = this.emissiveNow * EMISSIVE_MAX_ALPHA * factor;
     sprite.blendMode = 'add';
     sprite.alpha = alpha;
     sprite.visible = alpha > 0;
     this.emissiveSlots.push(slot);
+    this.emissiveFactors.push(factor);
   }
 
   private clampCentre(size: number): void {
@@ -1807,6 +2167,7 @@ export class MapView {
     // Fresh emissive bookkeeping (M13): every glow this rebuild places is
     // stamped with the current ramp value, so applyEmissive owes nothing.
     this.emissiveSlots.length = 0;
+    this.emissiveFactors.length = 0;
     this.appliedEmissiveAlpha = this.emissiveNow * EMISSIVE_MAX_ALPHA;
 
     // Fresh signal-aspect bookkeeping (M13 B5): the lamps this rebuild
@@ -2195,7 +2556,10 @@ export class MapView {
       );
       // The glazed industries get their window twin (M13), additively over
       // the block - live like the block itself, on BOTH render paths, since
-      // industries never enter a chunk (D-161).
+      // industries never enter a chunk (D-161). The glow scales with the
+      // marker LEVEL: a booming works burns bright, a closed one is dark -
+      // with the smoke cadence, the still-image half of SPEC2 M13's
+      // "dormant and booming tell apart".
       if (this.dayNight) {
         const frame = emissiveIndustryFrame(industry.type);
         if (frame !== null) {
@@ -2207,7 +2571,7 @@ export class MapView {
             world.y,
             zIndex,
           );
-          this.markEmissive(glow, used - 1);
+          this.markEmissive(glow, used - 1, industryGlowFactor(industry.level));
         }
       }
     }
@@ -2269,6 +2633,7 @@ export class MapView {
     // placement below records; buildings and lamps glow from the chunk's
     // baked twin instead (M13).
     this.emissiveSlots.length = 0;
+    this.emissiveFactors.length = 0;
     this.appliedEmissiveAlpha = this.emissiveNow * EMISSIVE_MAX_ALPHA;
     // No aspect lamps at the chunked zooms (M13 B5): the D-165 argument -
     // a two-pixel lamp on a baked post is noise, and the F3 overlay stays
@@ -2963,12 +3328,18 @@ export class MapView {
     // than by snapshot row, because since M13 one RAIL row draws its whole
     // consist - a ten-wagon coal train is eleven triples (SPEC2 M13, E-05).
     let spriteSlot = 0;
+    // Status badges (M13) restart their cursor every frame, like the ids.
+    this.badgeUsed = 0;
+    const badges = !abstract && this.zoom >= BADGE_MIN_ZOOM;
+    const vehicleParticles =
+      !abstract && this.particleLayer !== null && this.zoom >= VEHICLE_PARTICLE_MIN_ZOOM;
 
     for (let i = 0; i < count; i++) {
       const base = i * SNAPSHOT_VEHICLE_STRIDE;
       const tile = data[base + SnapshotVehicle.Tile]!;
       const next = data[base + SnapshotVehicle.NextTile]!;
-      const progress = data[base + SnapshotVehicle.ProgressMilli]! / 1000;
+      const progressMilli = data[base + SnapshotVehicle.ProgressMilli]!;
+      const progress = progressMilli / 1000;
       const state = data[base + SnapshotVehicle.State]!;
       const kind = data[base + SnapshotVehicle.Kind]!;
       const vehicleId = data[base + SnapshotVehicle.VehicleId]!;
@@ -3150,6 +3521,51 @@ export class MapView {
             );
           }
         }
+
+        // The working world of M13: a status badge over a troubled vehicle
+        // (badges.ts owns the policy) and the smoke its engine truthfully
+        // produces - breakdown smoke from the State field, exhaust from the
+        // same throttle proxy the audio has always read. Both cadence off
+        // the blink counter, both culled to the viewport.
+        const inView =
+          worldX >= this.emitLeft &&
+          worldX <= this.emitRight &&
+          worldY >= this.emitTop &&
+          worldY <= this.emitBottom;
+        if (badges && inView) {
+          const badge = badgeForState(
+            state,
+            vehicleId >= 0 && vehicleId < MAX_VEHICLES ? this.stuckTicks[vehicleId]! : 0,
+          );
+          if (badge >= 0) this.placeBadge(badge, worldX, worldY);
+        }
+        if (vehicleParticles && inView) {
+          const salt = vehicleId ^ Math.imul(this.blink, 0x85ebca6b);
+          if (state === STATE_BROKEN_DOWN) {
+            if ((this.blink + emitterPhase(vehicleId)) % BREAKDOWN_SMOKE_PERIOD === 0) {
+              spawnPuff(
+                this.particlePool,
+                BREAKDOWN_PUFF,
+                worldX,
+                worldY - BREAKDOWN_LIFT_PX,
+                salt,
+                BREAKDOWN_TINT,
+              );
+            }
+          } else {
+            const period = exhaustPeriodForThrottle(vehicleThrottle(tile !== next, progressMilli));
+            if (period > 0 && (this.blink + emitterPhase(vehicleId)) % period === 0) {
+              spawnPuff(
+                this.particlePool,
+                EXHAUST_PUFF,
+                worldX,
+                worldY - EXHAUST_LIFT_PX,
+                salt,
+                EXHAUST_TINT,
+              );
+            }
+          }
+        }
       }
 
       this.vehicleIds[this.drawnVehicles] = vehicleId;
@@ -3172,6 +3588,34 @@ export class MapView {
         this.vehicleLightSprites[i]!.visible = false;
       }
     }
+    // Badges not re-placed this frame vanish - in the abstract mode that is
+    // all of them, since the cursor never moved.
+    for (let i = this.badgeUsed; i < this.badgeSprites.length; i++) {
+      this.badgeSprites[i]!.visible = false;
+    }
+  }
+
+  /**
+   * Place one status badge (M13): a screen-constant chip above the
+   * vehicle's ground anchor - world-positioned so it pans and occludes
+   * nothing it should not, counter-scaled so it reads the same at 1x and
+   * 4x. Pooled like the labels; textures exist from attach.
+   */
+  private placeBadge(kind: number, worldX: number, worldY: number): void {
+    const textures = this.badgeTextures;
+    if (textures === null) return;
+    let sprite = this.badgeSprites[this.badgeUsed];
+    if (sprite === undefined) {
+      sprite = new Sprite();
+      sprite.anchor.set(0.5, 1);
+      this.badgeSprites.push(sprite);
+      this.badgeLayer.addChild(sprite);
+    }
+    sprite.texture = textures[kind]!;
+    sprite.scale.set(1 / this.zoom);
+    sprite.position.set(worldX, worldY - BADGE_LIFT_PX);
+    sprite.visible = true;
+    this.badgeUsed++;
   }
 
   /**
@@ -3430,7 +3874,8 @@ export class MapView {
       entry.id = this.vehicleIds[i] ?? 0;
       entry.power = this.powerOf(data[base + SnapshotVehicle.Kind]!);
       entry.panX = Math.max(-1, Math.min(1, dx / Math.max(1, halfWidth)));
-      entry.throttle = moving ? 0.35 + (progress % 1000) / 4000 : 0;
+      // One throttle proxy for sound AND exhaust since M13 (particles.ts).
+      entry.throttle = vehicleThrottle(moving, progress);
       entry.distance = Math.min(
         1,
         Math.sqrt(dx * dx + dy * dy) / Math.max(1, Math.hypot(halfWidth, halfHeight)),

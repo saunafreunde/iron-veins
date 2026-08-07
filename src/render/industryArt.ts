@@ -62,7 +62,14 @@ const WINDOW_SPECS: Partial<
     }
   >
 > = {
-  [IndustryType.FurnitureFactory]: { u: 0.7, v: 0.5, height: 11, rows: 2, columns: 3, colour: GLASS },
+  [IndustryType.FurnitureFactory]: {
+    u: 0.7,
+    v: 0.5,
+    height: 11,
+    rows: 2,
+    columns: 3,
+    colour: GLASS,
+  },
   [IndustryType.ElectronicsFactory]: {
     u: 0.8,
     v: 0.56,
@@ -82,6 +89,61 @@ const WINDOW_SPECS: Partial<
     offsetV: 0.08,
   },
 };
+
+/**
+ * The smoke-source positions of the working industries (SPEC2 M13: "Emitter
+ * an Schornstein-Ankern aus industryArt.ts") - the WINDOW_SPECS device
+ * again: ONE table that BOTH the drawings and the particle emitters read,
+ * so a puff rises from the pixel the stack was drawn at by construction and
+ * the two can never drift. `u`/`v` are tile-space offsets from the tile
+ * centre (the drawings' own coordinate system), `height` is the emitter
+ * mouth in design pixels - which ARE world pixels, because the ATLAS_SCALE
+ * the drawings multiply in is divided back out at placement.
+ *
+ * Eight smoking industries: the three diggers vent dust off their working
+ * heaps, the five combustion works smoke from the chimneys the D-117
+ * silhouettes gave them. Everything else is honestly smokeless - a
+ * builders' merchant that smoked would be a lie.
+ */
+export interface SmokeAnchor {
+  /** Tile-space offset from the tile centre, +u to the lower right. */
+  readonly u: number;
+  readonly v: number;
+  /** Height of the emitter mouth above ground. [design px = world px] */
+  readonly height: number;
+  /** Puff colour: dust takes the heap's own tone, smoke the stack's grey. */
+  readonly tint: number;
+}
+
+const SMOKE_GREY = 0xb9bcc1;
+const SMOKE_DARK = 0x8e9298;
+
+export const INDUSTRY_SMOKE_ANCHORS: Partial<Record<number, readonly SmokeAnchor[]>> = {
+  // The crest of the black heap - coal dust, near-black.
+  [IndustryType.CoalMine]: [{ u: 0.3, v: 0.34, height: 9, tint: 0x3a3a40 }],
+  // The red heap - rust-coloured ore dust.
+  [IndustryType.IronOreMine]: [{ u: 0.32, v: 0.3, height: 10, tint: 0x8a5a42 }],
+  // The working heap of the pit - pale stone dust.
+  [IndustryType.GravelPit]: [{ u: -0.2, v: 0.22, height: 8, tint: 0xb3a992 }],
+  [IndustryType.PowerPlant]: [{ u: 0.34, v: 0.06, height: 34, tint: SMOKE_GREY }],
+  [IndustryType.SteelMill]: [
+    { u: -0.3, v: -0.28, height: 28, tint: SMOKE_DARK },
+    { u: 0.06, v: -0.32, height: 22, tint: SMOKE_DARK },
+  ],
+  [IndustryType.FurnitureFactory]: [{ u: 0.28, v: -0.3, height: 15, tint: SMOKE_GREY }],
+  [IndustryType.Refinery]: [{ u: 0.3, v: -0.3, height: 24, tint: SMOKE_DARK }],
+  [IndustryType.CementWorks]: [{ u: 0.26, v: -0.3, height: 20, tint: 0xc4bcab }],
+};
+
+/** Anchor lookup for the drawings below; module-load only, so a miss throws
+ * at startup rather than silently drawing a stack the table forgot. */
+function smokeAnchor(type: number, index: number): SmokeAnchor {
+  const anchor = INDUSTRY_SMOKE_ANCHORS[type]?.[index];
+  if (anchor === undefined) {
+    throw new Error(`industryArt: no smoke anchor ${index} for industry type ${type}`);
+  }
+  return anchor;
+}
 
 /** Draw one industry's windows; `colour` overrides the daytime glass. */
 function industryWindows(
@@ -163,9 +225,24 @@ function chimney(
 /** Every industry's drawing, indexed by IndustryType. */
 const ART: readonly Draw[] = [
   // 0 CoalMine - a headframe over the shaft, a winding house and a black heap.
+  // The heap doubles as the M13 dust vent: its crest is the smoke anchor.
   (ctx, view, s) => {
-    heap(ctx, view, { offsetU: 0.3, offsetV: 0.34, radius: 0.34, height: 9 * s.px, colour: '#2b2b30' });
-    box(ctx, view, { u: 0.44, v: 0.34, height: 9 * s.px, colour: BRICK, offsetU: -0.28, offsetV: 0.2 });
+    const dust = smokeAnchor(IndustryType.CoalMine, 0);
+    heap(ctx, view, {
+      offsetU: dust.u,
+      offsetV: dust.v,
+      radius: 0.34,
+      height: dust.height * s.px,
+      colour: '#2b2b30',
+    });
+    box(ctx, view, {
+      u: 0.44,
+      v: 0.34,
+      height: 9 * s.px,
+      colour: BRICK,
+      offsetU: -0.28,
+      offsetV: 0.2,
+    });
     lattice(ctx, view, {
       width: 0.34,
       height: 26 * s.px,
@@ -178,8 +255,22 @@ const ART: readonly Draw[] = [
 
   // 1 IronOreMine - the same shaft, a red heap and a loading bunker.
   (ctx, view, s) => {
-    heap(ctx, view, { offsetU: 0.32, offsetV: 0.3, radius: 0.36, height: 10 * s.px, colour: '#7a3b28' });
-    box(ctx, view, { u: 0.5, v: 0.3, height: 11 * s.px, colour: RUST, offsetU: -0.24, offsetV: 0.24 });
+    const dust = smokeAnchor(IndustryType.IronOreMine, 0);
+    heap(ctx, view, {
+      offsetU: dust.u,
+      offsetV: dust.v,
+      radius: 0.36,
+      height: dust.height * s.px,
+      colour: '#7a3b28',
+    });
+    box(ctx, view, {
+      u: 0.5,
+      v: 0.3,
+      height: 11 * s.px,
+      colour: RUST,
+      offsetU: -0.24,
+      offsetV: 0.24,
+    });
     lattice(ctx, view, {
       width: 0.32,
       height: 23 * s.px,
@@ -216,12 +307,26 @@ const ART: readonly Draw[] = [
     conifer(ctx, view, { offsetU: -0.26, offsetV: -0.22, height: 22 * s.px, radius: 0.2 });
     conifer(ctx, view, { offsetU: 0.18, offsetV: -0.3, height: 17 * s.px, radius: 0.17 });
     conifer(ctx, view, { offsetU: -0.06, offsetV: 0.12, height: 26 * s.px, radius: 0.22 });
-    box(ctx, view, { u: 0.5, v: 0.16, height: 5 * s.px, colour: '#9a7448', offsetU: 0.16, offsetV: 0.34 });
+    box(ctx, view, {
+      u: 0.5,
+      v: 0.16,
+      height: 5 * s.px,
+      colour: '#9a7448',
+      offsetU: 0.16,
+      offsetV: 0.34,
+    });
   },
 
   // 4 Farm - a gabled barn and a grain silo.
   (ctx, view, s) => {
-    box(ctx, view, { u: 0.62, v: 0.42, height: 8 * s.px, colour: '#a8503c', offsetU: -0.12, offsetV: 0.08 });
+    box(ctx, view, {
+      u: 0.62,
+      v: 0.42,
+      height: 8 * s.px,
+      colour: '#a8503c',
+      offsetU: -0.12,
+      offsetV: 0.08,
+    });
     gableRoof(ctx, view, {
       u: 0.62,
       v: 0.42,
@@ -243,15 +348,42 @@ const ART: readonly Draw[] = [
   // 5 GravelPit - a bitten-out terrace, a conveyor and two heaps.
   (ctx, view, s) => {
     box(ctx, view, { u: 0.86, v: 0.7, height: 1 * s.px, colour: '#8c8375' });
-    heap(ctx, view, { offsetU: -0.2, offsetV: 0.22, radius: 0.3, height: 8 * s.px, colour: '#a49a88' });
-    heap(ctx, view, { offsetU: 0.26, offsetV: -0.06, radius: 0.24, height: 6 * s.px, colour: '#8f8676' });
-    box(ctx, view, { u: 0.5, v: 0.1, height: 9 * s.px, colour: STEEL, offsetU: 0.1, offsetV: 0.32 });
+    const dust = smokeAnchor(IndustryType.GravelPit, 0);
+    heap(ctx, view, {
+      offsetU: dust.u,
+      offsetV: dust.v,
+      radius: 0.3,
+      height: dust.height * s.px,
+      colour: '#a49a88',
+    });
+    heap(ctx, view, {
+      offsetU: 0.26,
+      offsetV: -0.06,
+      radius: 0.24,
+      height: 6 * s.px,
+      colour: '#8f8676',
+    });
+    box(ctx, view, {
+      u: 0.5,
+      v: 0.1,
+      height: 9 * s.px,
+      colour: STEEL,
+      offsetU: 0.1,
+      offsetV: 0.32,
+    });
   },
 
   // 6 PowerPlant - two cooling towers and the stack. The most recognisable
   // silhouette in the whole game, and worth the three shapes it costs.
   (ctx, view, s) => {
-    box(ctx, view, { u: 0.7, v: 0.4, height: 9 * s.px, colour: CONCRETE, offsetU: 0, offsetV: 0.28 });
+    box(ctx, view, {
+      u: 0.7,
+      v: 0.4,
+      height: 9 * s.px,
+      colour: CONCRETE,
+      offsetU: 0,
+      offsetV: 0.28,
+    });
     cylinder(ctx, view, {
       radius: 0.24,
       height: 22 * s.px,
@@ -268,21 +400,38 @@ const ART: readonly Draw[] = [
       offsetV: -0.3,
       topRadius: 0.17,
     });
-    chimney(ctx, view, s, { u: 0.34, v: 0.06, height: 34, radius: 0.09 });
+    const stack = smokeAnchor(IndustryType.PowerPlant, 0);
+    chimney(ctx, view, s, { u: stack.u, v: stack.v, height: stack.height, radius: 0.09 });
   },
 
   // 7 SteelMill - a long hall and two stacks.
   (ctx, view, s) => {
     hall(ctx, view, s, '#6d6862', { u: 0.9, v: 0.46, height: 12, offsetV: 0.14 });
-    chimney(ctx, view, s, { u: -0.3, v: -0.28, height: 28, radius: 0.08 });
-    chimney(ctx, view, s, { u: 0.06, v: -0.32, height: 22, radius: 0.07 });
+    const stack0 = smokeAnchor(IndustryType.SteelMill, 0);
+    const stack1 = smokeAnchor(IndustryType.SteelMill, 1);
+    chimney(ctx, view, s, { u: stack0.u, v: stack0.v, height: stack0.height, radius: 0.08 });
+    chimney(ctx, view, s, { u: stack1.u, v: stack1.v, height: stack1.height, radius: 0.07 });
   },
 
   // 8 Sawmill - a saw-tooth hall and a log stack outside it.
   (ctx, view, s) => {
     hall(ctx, view, s, '#8a6a44', { u: 0.66, v: 0.44, height: 9, offsetU: -0.1, offsetV: -0.06 });
-    box(ctx, view, { u: 0.44, v: 0.18, height: 6 * s.px, colour: '#a37f4e', offsetU: 0.22, offsetV: 0.34 });
-    box(ctx, view, { u: 0.4, v: 0.14, height: 4 * s.px, colour: '#8d6b40', offsetU: -0.24, offsetV: 0.36 });
+    box(ctx, view, {
+      u: 0.44,
+      v: 0.18,
+      height: 6 * s.px,
+      colour: '#a37f4e',
+      offsetU: 0.22,
+      offsetV: 0.34,
+    });
+    box(ctx, view, {
+      u: 0.4,
+      v: 0.14,
+      height: 4 * s.px,
+      colour: '#8d6b40',
+      offsetU: -0.24,
+      offsetV: 0.36,
+    });
   },
 
   // 9 FurnitureFactory - a workshop with a pitched roof and a small stack.
@@ -290,13 +439,22 @@ const ART: readonly Draw[] = [
     box(ctx, view, { u: 0.7, v: 0.5, height: 11 * s.px, colour: '#9d7a55' });
     gableRoof(ctx, view, { u: 0.7, v: 0.5, base: 11 * s.px, rise: 5 * s.px, colour: '#63483a' });
     industryWindows(ctx, view, s, IndustryType.FurnitureFactory);
-    chimney(ctx, view, s, { u: 0.28, v: -0.3, height: 15, radius: 0.06 });
+    const stack = smokeAnchor(IndustryType.FurnitureFactory, 0);
+    chimney(ctx, view, s, { u: stack.u, v: stack.v, height: stack.height, radius: 0.06 });
   },
 
   // 10 MachineFactory - a big shed with roof plant on top.
   (ctx, view, s) => {
     hall(ctx, view, s, STEEL, { u: 0.86, v: 0.56, height: 13 });
-    box(ctx, view, { u: 0.2, v: 0.16, height: 5 * s.px, colour: '#6d7681', offsetU: 0.22, offsetV: -0.16, base: 16 * s.px });
+    box(ctx, view, {
+      u: 0.2,
+      v: 0.16,
+      height: 5 * s.px,
+      colour: '#6d7681',
+      offsetU: 0.22,
+      offsetV: -0.16,
+      base: 16 * s.px,
+    });
   },
 
   // 11 ElectronicsFactory - the clean one: a flat glazed block.
@@ -308,43 +466,141 @@ const ART: readonly Draw[] = [
 
   // 12 FoodFactory - a block with a pair of silos beside it.
   (ctx, view, s) => {
-    box(ctx, view, { u: 0.62, v: 0.5, height: 13 * s.px, colour: '#e0dbcd', offsetU: -0.1, offsetV: 0.08 });
+    box(ctx, view, {
+      u: 0.62,
+      v: 0.5,
+      height: 13 * s.px,
+      colour: '#e0dbcd',
+      offsetU: -0.1,
+      offsetV: 0.08,
+    });
     industryWindows(ctx, view, s, IndustryType.FoodFactory);
-    cylinder(ctx, view, { radius: 0.13, height: 18 * s.px, colour: '#cdc6b2', offsetU: 0.3, offsetV: -0.2 });
-    cylinder(ctx, view, { radius: 0.13, height: 16 * s.px, colour: '#c4bda9', offsetU: 0.34, offsetV: 0.06 });
+    cylinder(ctx, view, {
+      radius: 0.13,
+      height: 18 * s.px,
+      colour: '#cdc6b2',
+      offsetU: 0.3,
+      offsetV: -0.2,
+    });
+    cylinder(ctx, view, {
+      radius: 0.13,
+      height: 16 * s.px,
+      colour: '#c4bda9',
+      offsetU: 0.34,
+      offsetV: 0.06,
+    });
   },
 
   // 13 Refinery - distillation columns and a floating-roof tank.
   (ctx, view, s) => {
     box(ctx, view, { u: 0.8, v: 0.6, height: 1.5 * s.px, colour: '#7c776d' });
-    cylinder(ctx, view, { radius: 0.08, height: 34 * s.px, colour: '#c6ccd2', offsetU: -0.24, offsetV: -0.2 });
-    cylinder(ctx, view, { radius: 0.07, height: 27 * s.px, colour: '#b6bcc2', offsetU: -0.06, offsetV: -0.3 });
-    cylinder(ctx, view, { radius: 0.24, height: 9 * s.px, colour: '#9fa8ae', offsetU: 0.24, offsetV: 0.24 });
-    chimney(ctx, view, s, { u: 0.3, v: -0.3, height: 24, radius: 0.06 });
+    cylinder(ctx, view, {
+      radius: 0.08,
+      height: 34 * s.px,
+      colour: '#c6ccd2',
+      offsetU: -0.24,
+      offsetV: -0.2,
+    });
+    cylinder(ctx, view, {
+      radius: 0.07,
+      height: 27 * s.px,
+      colour: '#b6bcc2',
+      offsetU: -0.06,
+      offsetV: -0.3,
+    });
+    cylinder(ctx, view, {
+      radius: 0.24,
+      height: 9 * s.px,
+      colour: '#9fa8ae',
+      offsetU: 0.24,
+      offsetV: 0.24,
+    });
+    const stack = smokeAnchor(IndustryType.Refinery, 0);
+    chimney(ctx, view, s, { u: stack.u, v: stack.v, height: stack.height, radius: 0.06 });
   },
 
   // 14 PlasticsPlant - a row of pressure vessels and a low shed.
   (ctx, view, s) => {
-    box(ctx, view, { u: 0.56, v: 0.4, height: 9 * s.px, colour: '#a9adb2', offsetU: -0.18, offsetV: 0.22 });
-    cylinder(ctx, view, { radius: 0.15, height: 16 * s.px, colour: '#7fa8b8', offsetU: 0.2, offsetV: -0.24 });
-    cylinder(ctx, view, { radius: 0.15, height: 16 * s.px, colour: '#74a0b0', offsetU: 0.3, offsetV: 0.06 });
-    cylinder(ctx, view, { radius: 0.12, height: 12 * s.px, colour: '#87b0bf', offsetU: -0.06, offsetV: -0.3 });
+    box(ctx, view, {
+      u: 0.56,
+      v: 0.4,
+      height: 9 * s.px,
+      colour: '#a9adb2',
+      offsetU: -0.18,
+      offsetV: 0.22,
+    });
+    cylinder(ctx, view, {
+      radius: 0.15,
+      height: 16 * s.px,
+      colour: '#7fa8b8',
+      offsetU: 0.2,
+      offsetV: -0.24,
+    });
+    cylinder(ctx, view, {
+      radius: 0.15,
+      height: 16 * s.px,
+      colour: '#74a0b0',
+      offsetU: 0.3,
+      offsetV: 0.06,
+    });
+    cylinder(ctx, view, {
+      radius: 0.12,
+      height: 12 * s.px,
+      colour: '#87b0bf',
+      offsetU: -0.06,
+      offsetV: -0.3,
+    });
   },
 
   // 15 CementWorks - the long inclined kiln, which nothing else has.
   (ctx, view, s) => {
     box(ctx, view, { u: 0.86, v: 0.26, height: 6 * s.px, colour: '#9c968a', offsetV: 0.06 });
-    cylinder(ctx, view, { radius: 0.1, height: 5 * s.px, colour: '#8e887c', offsetU: -0.3, offsetV: 0.06, base: 6 * s.px });
-    cylinder(ctx, view, { radius: 0.1, height: 5 * s.px, colour: '#8e887c', offsetU: 0.3, offsetV: 0.06, base: 6 * s.px });
-    box(ctx, view, { u: 0.8, v: 0.14, height: 4 * s.px, colour: '#b0a99b', offsetV: 0.06, base: 8 * s.px });
-    cylinder(ctx, view, { radius: 0.16, height: 21 * s.px, colour: '#cdc6b8', offsetU: -0.26, offsetV: -0.3 });
-    chimney(ctx, view, s, { u: 0.26, v: -0.3, height: 20, radius: 0.06 });
+    cylinder(ctx, view, {
+      radius: 0.1,
+      height: 5 * s.px,
+      colour: '#8e887c',
+      offsetU: -0.3,
+      offsetV: 0.06,
+      base: 6 * s.px,
+    });
+    cylinder(ctx, view, {
+      radius: 0.1,
+      height: 5 * s.px,
+      colour: '#8e887c',
+      offsetU: 0.3,
+      offsetV: 0.06,
+      base: 6 * s.px,
+    });
+    box(ctx, view, {
+      u: 0.8,
+      v: 0.14,
+      height: 4 * s.px,
+      colour: '#b0a99b',
+      offsetV: 0.06,
+      base: 8 * s.px,
+    });
+    cylinder(ctx, view, {
+      radius: 0.16,
+      height: 21 * s.px,
+      colour: '#cdc6b8',
+      offsetU: -0.26,
+      offsetV: -0.3,
+    });
+    const stack = smokeAnchor(IndustryType.CementWorks, 0);
+    chimney(ctx, view, s, { u: stack.u, v: stack.v, height: stack.height, radius: 0.06 });
   },
 
   // 16 BuildersMerchant - a yard: open shed, stacked pallets, no chimney.
   (ctx, view, s) => {
     box(ctx, view, { u: 0.8, v: 0.6, height: 1 * s.px, colour: '#8b8579' });
-    box(ctx, view, { u: 0.5, v: 0.34, height: 8 * s.px, colour: '#c0b7a4', offsetU: -0.18, offsetV: -0.14 });
+    box(ctx, view, {
+      u: 0.5,
+      v: 0.34,
+      height: 8 * s.px,
+      colour: '#c0b7a4',
+      offsetU: -0.18,
+      offsetV: -0.14,
+    });
     gableRoof(ctx, view, {
       u: 0.5,
       v: 0.34,
@@ -354,8 +610,22 @@ const ART: readonly Draw[] = [
       offsetU: -0.18,
       offsetV: -0.14,
     });
-    box(ctx, view, { u: 0.22, v: 0.2, height: 6 * s.px, colour: '#b9793f', offsetU: 0.26, offsetV: 0.2 });
-    box(ctx, view, { u: 0.2, v: 0.18, height: 4 * s.px, colour: '#a8703c', offsetU: 0.06, offsetV: 0.34 });
+    box(ctx, view, {
+      u: 0.22,
+      v: 0.2,
+      height: 6 * s.px,
+      colour: '#b9793f',
+      offsetU: 0.26,
+      offsetV: 0.2,
+    });
+    box(ctx, view, {
+      u: 0.2,
+      v: 0.18,
+      height: 4 * s.px,
+      colour: '#a8703c',
+      offsetU: 0.06,
+      offsetV: 0.34,
+    });
   },
 ];
 
@@ -404,4 +674,12 @@ if (INDUSTRY_ART_COUNT !== INDUSTRY_TYPE_COUNT) {
   throw new Error(
     `industryArt: ${INDUSTRY_ART_COUNT} drawings for ${INDUSTRY_TYPE_COUNT} industry types`,
   );
+}
+
+/** Sanity: every smoke anchor names a real type and a real position (M13). */
+for (const [type, anchors] of Object.entries(INDUSTRY_SMOKE_ANCHORS)) {
+  const typeIndex = Number(type);
+  if (typeIndex < 0 || typeIndex >= INDUSTRY_TYPE_COUNT || (anchors?.length ?? 0) === 0) {
+    throw new Error(`industryArt: invalid smoke anchor entry for industry type ${type}`);
+  }
 }

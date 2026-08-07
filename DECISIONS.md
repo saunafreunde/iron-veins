@@ -13,7 +13,7 @@ no entry below. A number may appear under several topics.
 - **Determinism, RNG & hashing:** D-001, D-002, D-003, D-004, D-009, D-010,
   D-024, D-093, D-106, D-128, D-137, D-142, D-145, D-146, D-149, D-153
 - **Commands, snapshot & worker boundary:** D-004, D-005, D-006, D-011, D-032,
-  D-100, D-111, D-145, D-146, D-148, D-162
+  D-100, D-111, D-145, D-146, D-148, D-162, D-174
 - **Lines & timetables:** D-145, D-146, D-147, D-148, D-149, D-150, D-151,
   D-152, D-155, D-159
 - **Map generation & terrain:** D-018, D-019, D-020, D-021, D-022, D-023,
@@ -30,23 +30,23 @@ no entry below. A number may appear under several topics.
 - **Cargo, payment & routing:** D-036, D-037, D-065, D-067, D-075, D-077,
   D-078, D-118, D-142, D-151
 - **Industry & production:** D-022, D-062, D-063, D-064, D-069, D-071, D-079,
-  D-085, D-086
+  D-085, D-086, D-174
 - **Towns, council & ownership:** D-101, D-102, D-103, D-104
 - **Economy, finance & emissions:** D-008, D-090, D-091, D-092, D-105, D-154
 - **Balancing & scenarios:** D-038, D-039, D-040, D-041, D-066, D-087, D-088,
   D-116, D-151, D-152, D-156, D-158, D-159
 - **Vehicles & fleet:** D-043, D-044, D-045, D-068, D-076, D-089, D-093,
-  D-096, D-142, D-143, D-145, D-146, D-155, D-157, D-171
+  D-096, D-142, D-143, D-145, D-146, D-155, D-157, D-171, D-174
 - **Water & air:** D-094, D-095, D-096, D-097, D-098, D-099
 - **Competitors, AI & tenders:** D-107, D-108, D-109, D-115, D-116, D-121,
   D-122, D-147, D-152, D-153, D-154, D-155, D-156, D-158
 - **Rendering & art:** D-013, D-014, D-033, D-035, D-112, D-117, D-125, D-127,
   D-136, D-140, D-160, D-161, D-162, D-163, D-164, D-165, D-166, D-169, D-170,
-  D-171, D-172, D-173
+  D-171, D-172, D-173, D-174
 - **UI & input:** D-011, D-013, D-015, D-035, D-110, D-113, D-114, D-119,
   D-126, D-148, D-165, D-166
 - **Performance & measurement:** D-002, D-120, D-135, D-136, D-161, D-162,
-  D-163, D-164, D-167, D-170, D-171, D-172, D-173
+  D-163, D-164, D-167, D-170, D-171, D-172, D-173, D-174
 - **Platform, tooling & build:** D-012, D-014, D-015, D-016, D-017, D-029,
   D-030, D-031, D-160, D-168, D-169, D-170, D-172
 - **Crash safety:** D-132, D-139
@@ -4709,3 +4709,109 @@ Render-only throughout: zero sim bytes, zero save bumps, zero snapshot
 changes - the one permitted M13 layout bump (`IndustryMarker.level`)
 still belongs to the particle bundle. i18n untouched: no new user-visible
 string.
+
+## M13 - living trains, bundle 6: the working world (2026-08-07)
+
+### D-174 The permitted layout bump was already spent in M5, the smoke is the level field made visible, and the cap is a budget rather than a hope
+
+SPEC2 M13 orders the industry-life bundle: the milestone's ONE permitted
+snapshot-layout bump (`IndustryMarker.level`), the capped particle system
+(chimney smoke by production level, exhaust by throttle, breakdown smoke by
+state), the status badges over troubled vehicles, and the still-image
+distinguishability of a dormant versus a booming industry. This entry
+records the shape it took and the six choices inside it.
+
+**The one permitted layout bump turned out to be spent since M5 - zero
+protocol bytes change, and that is recorded, not hidden.** The ledger row
+booked "+`IndustryMarker.level` (Layout-Bump)" for this bundle; the field
+has travelled the marker channel since the industry clock of M5
+(`level: open ? productionLevel : 0`, commit b823519), `structureSignature`
+already folds the level sum so a level change re-sends the markers within a
+publish, and every consumer - tile panel, lists, delivery panel, minimap,
+tutorial, MapView - reads it today. The D-171 precedent repeats
+(`VehicleMarker.consist` was equally found already aboard): the honest
+outcome is that `SNAPSHOT_LAYOUT_VERSION` stays 6 and `SAVE_VERSION` stays
+24, because bumping a version whose layout did not change would teach the
+version to mean nothing. What the bundle DID change: the marker assembly
+moved out of SimWorker into `src/sim/markers.ts` (pure state-to-protocol
+mapping, no worker globals), so the level round trip the ledger cites is a
+unit test (`industryMarkers.spec.ts`) instead of an untested closure inside
+the one file no test can import.
+
+**One capped ParticleContainer, and the cap is enforced where the CPU is
+spent.** The pure half (`particles.ts` - the emissive.ts/water.ts split) is
+a preallocated `ParticlePool` of exactly `PARTICLE_CAP` (2000) rows with
+swap-remove expiry; `spawn` REFUSES at the cap, so emitter overload means
+the oldest puffs live out their lives and new ones are dropped - never an
+allocation, never a growing frame bill. MapView mirrors the pool into ONE
+`ParticleContainer` of 2000 preallocated particles (adding and removing
+children would rebuild the container's buffers; dead rows sit at alpha 0),
+as the LAST child of `art`: smoke takes the D-127 day/night tint like the
+world it rises from, and one batched container deliberately cannot
+interleave the 16.1 painter - a plume drifts over a hill that stands in
+front of it, accepted because smoke lives above roof height and the honest
+alternative is a sprite per puff, exactly the per-frame bill the container
+exists to delete. The 0.25x abstract mode runs no particle work and clears
+the field once (16.1 strips detail there by design); vehicle-sourced
+particles and badges gate at 1x, the D-165 argument.
+
+**Every emitter reads sim truth, every jitter reads a counter.** Industry
+smoke rises from `INDUSTRY_SMOKE_ANCHORS` - the WINDOW_SPECS device applied
+to stacks: the drawings themselves now consume the same table their
+emitters do, so the puff leaves the pixel the chimney was drawn at by
+construction. Eight industries smoke (the three diggers vent dust in their
+heap's own tone, the five combustion works smoke from their stacks); a
+builders' merchant stays honestly smokeless. Cadence comes from the marker
+LEVEL (`smokePeriodForLevel`: nothing at 0, a puff per 16 frames at the
+sim's base level 100, per 8 at the 200 ceiling), exhaust from
+`vehicleThrottle` - the audio engine's throttle proxy, moved to
+particles.ts so sound and smoke read ONE formula - and breakdown smoke from
+the State field at a dense fixed period. Spawn cadence and jitter key on
+the blink counter plus integer avalanche hashes over emitter ids
+(Fehlerkatalog 25/39): no RNG stream is touched, no wall clock read, the
+same frame sequence reproduces the same smoke, and the E-05 caveat carries
+over verbatim - two screenshots of the same TICK may differ in particle
+phase, and a paused game keeps shimmering water AND rising smoke, both on
+the same counter.
+
+**A dormant works and a booming one differ in a still image, by day and by
+night.** By day the plume density IS the level (steady-state puffs per
+stack roughly double from level 100 to 200, none at all at 0 - pinned by a
+headless run of the exact emitter loop). By night the D-172 window twins
+join in: `markEmissive` grew a per-slot factor and the industry twins pass
+`industryGlowFactor(level)` - a closed works is dark (factor 0), an open
+one brightens with its level towards 1. Coordinated with bundle 4 rather
+than duplicating it: the factor multiplies the existing ramp alpha, and
+windows, lamps and chunk twins are untouched at factor 1.
+
+**The badges keep the game's one definition of stuck.** `badgeForState`
+(badges.ts, state values pinned against `VehicleState` by test - the
+interpolation.spec.ts device): a breakdown chips immediately, `NoRoute`
+chips as stuck immediately (the simulation already said it cannot move), a
+`WaitingForPath` vehicle chips as stuck only past `DEADLOCK_WARN_TICKS` -
+the section-9.3 clock the F3 blink and the news already use, because a
+second, shorter definition of "stuck" would cry wolf at every ordinary
+signal halt - and `Stopped` earns the "no orders" chip. The render side
+accumulates published tick deltas per vehicle id on the generation edge
+(clamped per edge, so a loaded world's tick jump cannot promote every
+signal wait to an alarm; the counter restarting at zero errs towards
+silence). The chips are procedural canvas shapes - hourglass, exclamation
+mark, ellipsis on 17.4-palette colours; glyphs from a font would render
+differently per platform - world-positioned but counter-scaled to
+screen-constant size, in a layer OUTSIDE the D-127 tint above the overlay:
+a diagnostic is interface, and interface does not dim at night.
+
+**The budget is measured at overload and the gate is the SPEC's own
+number.** The perf suite gained the particle tripwire: pool pinned at the
+cap with churning lifetimes, 300 booming industries and a full
+1,500-vehicle block emitting every frame - spawn writes, refusals, the
+full step and the full mirror loop all priced. Measured clean (reference
+machine, Ryzen 5 7520U, Node 24): p50 0.32 ms / p99 1.30 ms. The median
+gate is 2 ms - for once the acceptance sentence ("<= 2 ms Frame-CPU, im
+Tripwire") and the D-167 generosity rule agree, since the budget is over
+six times the clean median - with the usual 20 ms backstop. Render-only
+throughout, in the strictest sense the milestone allows: the one sim-side
+file touched is the marker-assembly extraction, which moves worker code
+verbatim; zero save bumps, zero snapshot changes, and the determinism
+suite never sees a puff. i18n untouched: the badges are glyphs, not
+strings.

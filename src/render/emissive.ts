@@ -34,6 +34,30 @@ export const EMISSIVE_WINDOW_HEX = '#ffd98c';
 export const EMISSIVE_MAX_ALPHA = 0.85;
 
 /**
+ * Level-driven emissive intensity of an industry's window twin (SPEC2 M13:
+ * a dormant and a booming industry must tell apart in a still image -
+ * "level-getriebener Rauch + Emissive-Intensitaet"). The factor multiplies
+ * the glow sprite's ramped alpha: a CLOSED industry (marker level 0) is
+ * dark - nobody works there and honest windows say so - while an open one
+ * brightens with its production level, from a dimmed base glow at the
+ * sim's INDUSTRY_LEVEL_START (100) to the full ramp at INDUSTRY_LEVEL_MAX
+ * (200). Clamped at 1 so the alpha budget of EMISSIVE_MAX_ALPHA holds.
+ */
+
+/** Glow factor floor for an open industry at the lowest level. [0-1] */
+const INDUSTRY_GLOW_MIN = 0.55;
+
+/** Marker level at which the glow reaches full strength. [level %] */
+const INDUSTRY_GLOW_FULL_LEVEL = 200;
+
+/** Alpha multiplier for an industry window twin, from the marker level. */
+export function industryGlowFactor(level: number): number {
+  if (level <= 0) return 0;
+  const factor = INDUSTRY_GLOW_MIN + (1 - INDUSTRY_GLOW_MIN) * (level / INDUSTRY_GLOW_FULL_LEVEL);
+  return factor >= 1 ? 1 : factor;
+}
+
+/**
  * Street lamp glow: which road tiles of a town carry one, and where on the
  * tile it stands. The caller gates on `townId >= 0` - country roads are
  * unlit, which is what makes a town readable as a town at night - and this
