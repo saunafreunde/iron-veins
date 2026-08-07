@@ -44,7 +44,11 @@ export const KEY_BINDINGS: readonly KeyBinding[] = [
   { display: 'X', descriptionKey: 'ui.key.demolish' },
   { display: 'M', descriptionKey: 'ui.key.manual' },
   { display: 'V', descriptionKey: 'ui.key.vehicles' },
-  { display: 'L', descriptionKey: 'ui.key.stations' },
+  // L belongs to the LINE list, as section 17.2 always said - D-114 lent it
+  // to the station list only while lines did not exist. The station list
+  // moved to H (for "Haltestellen"), the nearest free letter with a mnemonic.
+  { display: 'L', descriptionKey: 'ui.key.lines' },
+  { display: 'H', descriptionKey: 'ui.key.stations' },
   { display: 'T', descriptionKey: 'ui.key.towns' },
   { display: 'I', descriptionKey: 'ui.key.industries' },
   { display: 'N', descriptionKey: 'ui.key.minimapMode' },

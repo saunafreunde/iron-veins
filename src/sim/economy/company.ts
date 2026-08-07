@@ -56,7 +56,6 @@ export function createCompany(
     bankrupt: false,
     co2ThisYearKg: 0,
     co2LastYearKg: 0,
-    autoRenew: false,
   };
 }
 

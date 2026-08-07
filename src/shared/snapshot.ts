@@ -12,7 +12,7 @@
  * refuses to interpret a buffer written by a different layout.
  */
 
-export const SNAPSHOT_LAYOUT_VERSION = 5;
+export const SNAPSHOT_LAYOUT_VERSION = 6;
 
 /** Header fields, shared by both slots. */
 export const SnapshotHeader = {
@@ -109,8 +109,15 @@ export const SnapshotVehicle = {
   VehicleId: 5,
   /** Company that owns it, so the map can colour it (section 15). */
   Owner: 6,
+  /**
+   * Line the vehicle is assigned to, or -1 (section 12.2, M11) - the ONE
+   * snapshot-layout change of M11. Per tick because the panels highlight a
+   * line's vehicles on the map, and a marker round-trip per hover would lag
+   * a running fleet by a game day.
+   */
+  LineId: 7,
 } as const;
-export const SNAPSHOT_VEHICLE_STRIDE = 7;
+export const SNAPSHOT_VEHICLE_STRIDE = 8;
 
 /**
  * Track claims the F3 overlay may draw in one tick (section 9.3).

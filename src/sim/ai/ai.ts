@@ -20,8 +20,11 @@ import {
   TICKS_PER_YEAR,
 } from '../constants';
 import { loanLimitCt } from '../economy/company';
+import { lineVehicles } from '../lines/metrics';
 import type { Station } from '../station/types';
+import { aggregateConsist } from '../vehicles/consist';
 import { OrderLoad, OrderTarget, OrderUnload, VehicleState } from '../vehicles/VehicleStore';
+import { VehicleKind } from '../vehicles/spec';
 import { vehicleSpec } from '../vehicles/catalog';
 import {
   depotTileNear,
@@ -44,12 +47,16 @@ import type { World } from '../World';
  * same route assistant, same prices, same refusals, and all of it in the
  * replay log.
  *
- * A line is built over three cycles rather than in one (DECISIONS.md D-108).
- * The AI cannot know what a command will produce - which station id, which
- * vehicle id - while the command is still queued, so each stage observes what
- * the previous one left behind. A route the assistant refused, a stop the
- * council blocked or a purchase there was no money for simply ends the
- * project, rather than leaving the AI convinced it owns a railway.
+ * A line is built over FOUR cycles rather than one (DECISIONS.md D-108). The
+ * AI cannot know what a command will produce - which station id, which
+ * vehicle id, which LINE id - while the command is still queued, so each
+ * stage observes what the previous one left behind. Since M11 (E-06) the
+ * lines themselves are the real Line entities of section 12.2, opened with
+ * `CreateLine`, scheduled with `SetLineOrders` and crewed with
+ * `AssignVehicleToLine` - the exact commands the player's panel sends. A
+ * route the assistant refused, a stop the council blocked or a purchase there
+ * was no money for simply ends the project, rather than leaving the AI
+ * convinced it owns a railway.
  */
 
 /** Run whichever competitors are due. Called once per tick. */
@@ -78,7 +85,7 @@ function decide(world: World, queue: CommandQueue, state: AiState): void {
 // ---------------------------------------------------------------- new lines
 
 function startProject(world: World, queue: CommandQueue, state: AiState): void {
-  if (state.lines.length >= AI_MAX_LINES) return;
+  if (world.lines.ownedBy(state.companyId).length >= AI_MAX_LINES) return;
   if (world.tick - state.lastBuildTick < AI_RETRY_TICKS) return;
 
   const company = world.companyOf(state.companyId);
@@ -123,7 +130,7 @@ function startProject(world: World, queue: CommandQueue, state: AiState): void {
       // Borrowing is for getting started, or for a company whose nature it is.
       // A business that already runs lines should be paying for the next one
       // out of what the last one earns.
-      const bootstrapping = state.lines.length === 0;
+      const bootstrapping = world.lines.ownedBy(state.companyId).length === 0;
       if (!bootstrapping && state.personality !== Personality.Expansive) continue;
       if (takeLoan(world, queue, state, wanted - company.cashCt)) {
         state.lastBuildTick = world.tick;
@@ -158,7 +165,7 @@ function startProject(world: World, queue: CommandQueue, state: AiState): void {
       cargo: opportunity.cargo,
       specIds,
       startedTick: world.tick,
-      lineIndex: -1,
+      lineId: -1,
     };
     return;
   }
@@ -172,22 +179,20 @@ function advanceProject(world: World, queue: CommandQueue, state: AiState): void
 
   // A reinforcement: the line already exists, so all that is left is to find
   // the vehicle in the depot and put it to work on it.
-  if (project.lineIndex >= 0) {
-    const line = state.lines[project.lineIndex];
+  if (project.lineId >= 0) {
     state.project = null;
-    if (line === undefined) return;
-    const from = stationById(world, line.fromStationId);
-    const to = stationById(world, line.toStationId);
-    if (from === null || to === null) return;
+    if (!world.lines.isAlive(project.lineId)) return;
 
     const fresh = idleVehiclesAt(world, state.companyId, depotTile);
     if (fresh.length === 0) return;
-    crew(world, queue, state, project.cargo, from, to, fresh);
-    line.vehicleIds.push(...fresh);
+    crewOntoLine(world, queue, state, project.lineId, project.cargo, fresh);
     // A bigger fleet earns more and costs more; judging it against the old
     // baseline would credit the new vehicles with the old ones' work.
-    line.reviewTick = world.tick;
-    line.earnedAtReviewCt = earnedOn(world, line.vehicleIds);
+    const review = state.reviews.find((entry) => entry.lineId === project.lineId);
+    if (review !== undefined) {
+      review.reviewTick = world.tick;
+      review.earnedAtReviewCt = earnedOn(world, lineVehicles(world, project.lineId));
+    }
     return;
   }
 
@@ -207,23 +212,71 @@ function advanceProject(world: World, queue: CommandQueue, state: AiState): void
     return;
   }
 
+  if (project.stage === 2) {
+    // The vehicles are either in the shed or were never built; only then is a
+    // line worth opening. The id it gets cannot be known while the command is
+    // queued, so the next cycle OBSERVES it (D-108) - a competitor's line is
+    // opened by the very command the player's panel sends (E-06).
+    if (idleVehiclesAt(world, state.companyId, depotTile).length === 0) {
+      state.project = null;
+      return;
+    }
+    queue.enqueue({ kind: CommandKind.CreateLine }, world.tick + 1, state.companyId);
+    project.stage = 3;
+    return;
+  }
+
+  // Stage 3: find the line the previous cycle opened - the one empty line
+  // this company owns - give it the schedule, and crew it.
   const vehicleIds = idleVehiclesAt(world, state.companyId, depotTile);
   state.project = null;
-  if (vehicleIds.length === 0) return;
+  const lineId = emptyLineOf(world, state.companyId);
+  if (lineId < 0) return;
+  if (vehicleIds.length === 0) {
+    // The vehicles vanished between the cycles - the empty line would be a
+    // schedule nobody can ever run, so it is closed like any dead one.
+    queue.enqueue({ kind: CommandKind.DeleteLine, lineId }, world.tick + 1, state.companyId);
+    return;
+  }
 
-  crew(world, queue, state, project.cargo, from, to, vehicleIds);
-  state.lines.push({
-    fromStationId: from.id,
-    toStationId: to.id,
-    depotTile,
-    rail: project.rail,
-    specIds: [...project.specIds],
-    cargo: project.cargo,
-    builtTick: world.tick,
-    vehicleIds,
-    reviewTick: world.tick,
-    earnedAtReviewCt: 0,
-  });
+  const tick = world.tick + 1;
+  queue.enqueue(
+    {
+      kind: CommandKind.SetLineOrders,
+      lineId,
+      orders: [
+        {
+          // PARTIAL, not full.
+          //
+          // A new station is rated around thirty, and the collection gate of
+          // section 7.3 caps what an industry hands over by that rating - so
+          // a train waiting for a full load at a station nobody has visited
+          // yet waits for a load that cannot arrive. It stood there for six
+          // months, earned nothing, and the line was closed as unprofitable
+          // (measured on balancing scenario 5).
+          //
+          // Leaving with whatever is there is worth less per trip and far
+          // more per year: the visits raise the rating, the rating raises
+          // the gate, and the gate is what decides how much there is to
+          // carry at all.
+          target: OrderTarget.Station,
+          targetId: from.id,
+          load: OrderLoad.Partial,
+          unload: OrderUnload.None,
+        },
+        {
+          target: OrderTarget.Station,
+          targetId: to.id,
+          load: OrderLoad.None,
+          unload: OrderUnload.All,
+        },
+      ],
+    },
+    tick,
+    state.companyId,
+  );
+  crewOntoLine(world, queue, state, lineId, project.cargo, vehicleIds);
+  state.reviews.push({ lineId, reviewTick: world.tick, earnedAtReviewCt: 0 });
 }
 
 function buyVehicles(
@@ -248,58 +301,23 @@ function buyVehicles(
   }
 }
 
-/** Refit, order and start whatever came out of the depot. */
-function crew(
+/** Refit what came out of the depot, put it on the line, and start it. */
+function crewOntoLine(
   world: World,
   queue: CommandQueue,
   state: AiState,
+  lineId: number,
   cargo: number,
-  from: Station,
-  to: Station,
   vehicleIds: readonly number[],
 ): void {
   const tick = world.tick + 1;
 
   for (const vehicleId of vehicleIds) {
     if (world.vehicles.refitCargo[vehicleId] !== cargo) {
-      queue.enqueue(
-        { kind: CommandKind.RefitVehicle, vehicleId, cargo },
-        tick,
-        state.companyId,
-      );
+      queue.enqueue({ kind: CommandKind.RefitVehicle, vehicleId, cargo }, tick, state.companyId);
     }
     queue.enqueue(
-      {
-        kind: CommandKind.SetVehicleOrders,
-        vehicleId,
-        orders: [
-          {
-            // PARTIAL, not full.
-            //
-            // A new station is rated around thirty, and the collection gate of
-            // section 7.3 caps what an industry hands over by that rating - so
-            // a train waiting for a full load at a station nobody has visited
-            // yet waits for a load that cannot arrive. It stood there for six
-            // months, earned nothing, and the line was closed as unprofitable
-            // (measured on balancing scenario 5).
-            //
-            // Leaving with whatever is there is worth less per trip and far
-            // more per year: the visits raise the rating, the rating raises
-            // the gate, and the gate is what decides how much there is to
-            // carry at all.
-            target: OrderTarget.Station,
-            targetId: from.id,
-            load: OrderLoad.Partial,
-            unload: OrderUnload.None,
-          },
-          {
-            target: OrderTarget.Station,
-            targetId: to.id,
-            load: OrderLoad.None,
-            unload: OrderUnload.All,
-          },
-        ],
-      },
+      { kind: CommandKind.AssignVehicleToLine, vehicleId, lineId },
       tick,
       state.companyId,
     );
@@ -325,11 +343,6 @@ function crew(
  * is a cycle not spent reaching for the next line.
  */
 function optimise(world: World, queue: CommandQueue, state: AiState): boolean {
-  for (const line of state.lines) {
-    line.vehicleIds = line.vehicleIds.filter((id) => world.vehicles.isAlive(id));
-  }
-  state.lines = state.lines.filter((line) => line.vehicleIds.length > 0);
-
   if (closeDeadLine(world, queue, state)) return true;
 
   const company = world.companyOf(state.companyId);
@@ -346,26 +359,35 @@ function optimise(world: World, queue: CommandQueue, state: AiState): boolean {
     return true;
   }
 
-  for (let index = 0; index < state.lines.length; index++) {
-    const line = state.lines[index]!;
-    if (line.vehicleIds.length >= AI_MAX_VEHICLES_PER_LINE) continue;
+  for (const review of state.reviews) {
+    const lineId = review.lineId;
+    if (!world.lines.isAlive(lineId)) continue;
+    const crewIds = lineVehicles(world, lineId);
+    if (crewIds.length === 0 || crewIds.length >= AI_MAX_VEHICLES_PER_LINE) continue;
 
-    const from = stationById(world, line.fromStationId);
-    if (from === null) continue;
+    const firstStop = firstStationOf(world, lineId);
+    if (firstStop === null) continue;
     let waiting = 0;
-    for (const stack of from.waiting) waiting += stack.amount;
+    for (const stack of firstStop.waiting) waiting += stack.amount;
     if (waiting < AI_REINFORCE_WAITING) continue;
 
+    // The line's composition, read back off the fleet that runs it (the M6
+    // rule): the reinforcement buys what the line already uses.
+    const lead = crewIds[0]!;
+    const consist = world.vehicles.consist[lead]!;
+    const rail = world.vehicles.kind[lead] === VehicleKind.Train;
+    const specIds = consist.length > 0 ? [...consist] : [world.vehicles.specId[lead]!];
     let priceCt = 0;
-    for (const specId of line.specIds) priceCt += vehicleSpec(specId).priceCt;
+    for (const specId of specIds) priceCt += vehicleSpec(specId).priceCt;
     if (company.cashCt < world.costCt(priceCt) * capitalFactor(state.personality)) continue;
 
-    const x = line.depotTile % world.map.size;
-    const y = (line.depotTile / world.map.size) | 0;
+    const depotTile = world.vehicles.homeDepotTile[lead]!;
+    const x = depotTile % world.map.size;
+    const y = (depotTile / world.map.size) | 0;
     queue.enqueue(
-      line.rail
-        ? { kind: CommandKind.BuyTrain, x, y, specIds: [...line.specIds] }
-        : { kind: CommandKind.BuyRoadVehicle, x, y, specId: line.specIds[0]! },
+      rail
+        ? { kind: CommandKind.BuyTrain, x, y, specIds }
+        : { kind: CommandKind.BuyRoadVehicle, x, y, specId: specIds[0]! },
       world.tick + 1,
       state.companyId,
     );
@@ -377,11 +399,11 @@ function optimise(world: World, queue: CommandQueue, state: AiState): boolean {
       toY: y,
       depotX: x,
       depotY: y,
-      rail: line.rail,
-      cargo: line.cargo,
-      specIds: line.specIds,
+      rail,
+      cargo: world.vehicles.refitCargo[lead]!,
+      specIds,
       startedTick: world.tick,
-      lineIndex: index,
+      lineId,
     };
     return true;
   }
@@ -395,15 +417,31 @@ function optimise(world: World, queue: CommandQueue, state: AiState): boolean {
  * A line dies quietly: its source closes, or its lorries sit waiting for a full
  * load that will never arrive. Nothing else in the simulation notices, and the
  * company pays their upkeep until it is wound up - which is precisely what the
- * first twenty-five year run did to all three competitors.
+ * first twenty-five year run did to all three competitors. A line that is shut
+ * is DELETED through the ordinary command, exactly as a player would close it.
  */
 function closeDeadLine(world: World, queue: CommandQueue, state: AiState): boolean {
-  for (let index = 0; index < state.lines.length; index++) {
-    const line = state.lines[index]!;
-    if (world.tick - line.reviewTick < AI_LINE_REVIEW_TICKS) continue;
+  for (let index = 0; index < state.reviews.length; index++) {
+    const review = state.reviews[index]!;
+    const lineId = review.lineId;
 
-    const earned = earnedOn(world, line.vehicleIds);
-    const gained = earned - line.earnedAtReviewCt;
+    // The line is gone - deleted by a winding-up, or never truly opened.
+    if (!world.lines.isAlive(lineId)) {
+      state.reviews.splice(index, 1);
+      return true;
+    }
+    const crewIds = lineVehicles(world, lineId);
+    // Every vehicle died or was sold: the line is a schedule nobody runs.
+    if (crewIds.length === 0) {
+      queue.enqueue({ kind: CommandKind.DeleteLine, lineId }, world.tick + 1, state.companyId);
+      state.reviews.splice(index, 1);
+      return true;
+    }
+
+    if (world.tick - review.reviewTick < AI_LINE_REVIEW_TICKS) continue;
+
+    const earned = earnedOn(world, crewIds);
+    const gained = earned - review.earnedAtReviewCt;
 
     // Upkeep is quoted per YEAR and the window is half of one. Comparing the
     // two directly asks a line to earn a year's costs in six months, which a
@@ -411,20 +449,26 @@ function closeDeadLine(world: World, queue: CommandQueue, state: AiState): boole
     // every competitor before it had been running a season (measured against
     // balancing scenario 5).
     let upkeepCtPerYear = 0;
-    for (const specId of line.specIds) upkeepCtPerYear += vehicleSpec(specId).upkeepCtPerYear;
-    upkeepCtPerYear *= line.vehicleIds.length;
+    for (const id of crewIds) {
+      const units = world.vehicles.consist[id]!;
+      upkeepCtPerYear +=
+        units.length > 0
+          ? aggregateConsist(units).upkeepCtPerYear
+          : vehicleSpec(world.vehicles.specId[id]!).upkeepCtPerYear;
+    }
     const owed = world.costCt(upkeepCtPerYear) * (AI_LINE_REVIEW_TICKS / TICKS_PER_YEAR);
 
     if (gained >= owed) {
-      line.reviewTick = world.tick;
-      line.earnedAtReviewCt = earned;
+      review.reviewTick = world.tick;
+      review.earnedAtReviewCt = earned;
       continue;
     }
 
-    for (const vehicleId of line.vehicleIds) {
+    for (const vehicleId of crewIds) {
       queue.enqueue({ kind: CommandKind.SellVehicle, vehicleId }, world.tick + 1, state.companyId);
     }
-    state.lines.splice(index, 1);
+    queue.enqueue({ kind: CommandKind.DeleteLine, lineId }, world.tick + 1, state.companyId);
+    state.reviews.splice(index, 1);
     return true;
   }
   return false;
@@ -472,9 +516,26 @@ function takeLoan(world: World, queue: CommandQueue, state: AiState, wantedCt: n
   return true;
 }
 
-function stationById(world: World, id: number): Station | null {
-  for (const station of world.stations) {
-    if (station.id === id) return station;
+/**
+ * The one line of this company that has no schedule yet - the line a
+ * CreateLine of the previous cycle opened. Lowest id, so the answer is a
+ * total order even if a winding-up left another empty line behind.
+ */
+function emptyLineOf(world: World, companyId: number): number {
+  for (let lineId = 0; lineId < world.lines.count; lineId++) {
+    if (world.lines.alive[lineId] !== 1) continue;
+    if (world.lines.ownerId[lineId] !== companyId) continue;
+    if (world.lines.orders[lineId]!.length === 0) return lineId;
+  }
+  return -1;
+}
+
+/** First station of a line's cycle - where its cargo piles up. */
+function firstStationOf(world: World, lineId: number): Station | null {
+  for (const order of world.lines.orders[lineId]!) {
+    if (order.target !== OrderTarget.Station) continue;
+    const station = world.stations[order.targetId];
+    if (station !== undefined) return station;
   }
   return null;
 }
@@ -497,6 +558,7 @@ function idleVehiclesAt(world: World, companyId: number, depotTile: number): num
     if (vehicles.alive[id] !== 1 || vehicles.ownerId[id] !== companyId) continue;
     if (vehicles.homeDepotTile[id] !== depotTile) continue;
     if (vehicles.state[id] !== VehicleState.Stopped) continue;
+    if (vehicles.lineId[id]! >= 0) continue;
     if (vehicles.orders[id]!.length > 0) continue;
     found.push(id);
   }

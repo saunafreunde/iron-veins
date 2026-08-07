@@ -281,20 +281,7 @@ beforeAll(() => {
       personality: 1,
       nextDecisionTick: AUDIT_TICKS + 100,
       lastBuildTick: -1,
-      lines: [
-        {
-          fromStationId: 0,
-          toStationId: 1,
-          depotTile: 5,
-          rail: false,
-          specIds: [200],
-          cargo: 0,
-          builtTick: 100,
-          vehicleIds: [0],
-          reviewTick: AUDIT_TICKS + 5_000,
-          earnedAtReviewCt: 0,
-        },
-      ],
+      reviews: [{ lineId: 0, reviewTick: AUDIT_TICKS + 5_000, earnedAtReviewCt: 250 }],
       project: {
         stage: 1,
         fromX: 1,
@@ -307,8 +294,31 @@ beforeAll(() => {
         cargo: 0,
         specIds: [200],
         startedTick: 50,
-        lineIndex: -1,
+        lineId: -1,
       },
+    });
+  }
+  if (state.lines.length === 0) {
+    // A representative line of section 12.2, with a full-grammar order so
+    // every LineSave leaf is walked and probed.
+    state.lines.push({
+      id: 0,
+      ownerId: 0,
+      autoRenew: true,
+      orders: [
+        {
+          target: 0,
+          targetId: 0,
+          load: 1,
+          unload: 0,
+          refitTo: 2,
+          waitTicks: 200,
+          condKind: 1,
+          condComparator: 4,
+          condValue: 60,
+          condJumpTo: 0,
+        },
+      ],
     });
   }
 

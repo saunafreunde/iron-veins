@@ -36,11 +36,15 @@ import { ReservationTable } from './net/reservations';
 import { BlockIndex } from './signals/blocks';
 import { RoadPathfinder } from './net/roadPath';
 import {
+  buildLineStore,
   buildVehicleStore,
+  encodeLines,
   encodeStations,
   encodeVehicles,
+  type LineSave,
   type VehicleSave,
 } from './save/entities';
+import { LineStore } from './lines/LineStore';
 import { assignStationIndustries } from './industry/catchment';
 import { openNewIndustries } from './industry/lifecycle';
 import { SaveFormatError } from './save/format';
@@ -94,6 +98,8 @@ export interface WorldStateData {
   industries: Industry[];
   stations: Station[];
   vehicles: VehicleSave[];
+  /** The lines of section 12.2 (M11): shared order lists, saved and hashed. */
+  lines: LineSave[];
   /** Measured travel times between stations; the connection table of 7.4. */
   cargoLinks: CargoLinkSave[];
   /** The news log, oldest first. */
@@ -181,6 +187,12 @@ export class World {
   readonly stations: Station[] = [];
   /** Replaced wholesale when a save is loaded, hence not readonly. */
   vehicles = new VehicleStore();
+  /**
+   * The lines of section 12.2 (M11) - the ONE line entity of the game
+   * (SPEC2 E-06): the player's and every competitor's lines live here alike.
+   * Replaced wholesale when a save is loaded, exactly like the vehicles.
+   */
+  lines = new LineStore();
   readonly roadPathfinder: RoadPathfinder;
   readonly railPathfinder: RailPathfinder;
   /**
@@ -544,6 +556,7 @@ export class World {
       industries: this.industries.map((industry) => ({ ...industry })),
       stations: encodeStations(this.stations),
       vehicles: encodeVehicles(this.vehicles),
+      lines: encodeLines(this.lines),
       cargoLinks: this.cargoLinks.toData(),
       news: this.news.toData(),
       contracts: this.contracts.map((contract) => ({
@@ -554,7 +567,7 @@ export class World {
       nextContractId: this.nextContractId,
       ai: this.ai.map((state) => ({
         ...state,
-        lines: state.lines.map((line) => ({ ...line, vehicleIds: [...line.vehicleIds] })),
+        reviews: state.reviews.map((review) => ({ ...review })),
         project: state.project === null ? null : { ...state.project },
       })),
     };
@@ -604,6 +617,7 @@ export class World {
     // worked out again here rather than trusted from the file.
     for (const station of world.stations) assignStationIndustries(world, station);
     world.vehicles = buildVehicleStore(data.vehicles);
+    world.lines = buildLineStore(data.lines);
     world.cargoLinks.loadData(data.cargoLinks);
     world.news.loadData(data.news);
     world.contracts = data.contracts.map((contract) => ({
@@ -614,7 +628,7 @@ export class World {
     world.nextContractId = data.nextContractId;
     world.ai = data.ai.map((state) => ({
       ...state,
-      lines: state.lines.map((line) => ({ ...line, vehicleIds: [...line.vehicleIds] })),
+      reviews: state.reviews.map((review) => ({ ...review })),
       project: state.project === null ? null : { ...state.project },
     }));
     world.cargoLinks.refreshLinks(world);
@@ -696,9 +710,7 @@ function hashDynamicState(h: Fnv1a64, world: World): void {
     h.int(c.profitThisYearCt);
     h.int(c.lastYearProfitCt);
     h.int(c.fixedAssetsCt);
-    h.u32(c.monthsInDebt)
-      .u32(c.bankrupt ? 1 : 0)
-      .u32(c.autoRenew ? 1 : 0);
+    h.u32(c.monthsInDebt).u32(c.bankrupt ? 1 : 0);
     h.int(c.vehicleUpkeepPerYearCt).int(c.infrastructureUpkeepPerYearCt);
     h.int(c.revenueThisMonthCt).int(c.expensesThisMonthCt);
     h.int(c.accumulatedDepreciationCt).u32(c.historyCursor);
@@ -758,15 +770,11 @@ function hashDynamicState(h: Fnv1a64, world: World): void {
     const state = world.ai[i]!;
     h.u32(state.companyId).u32(state.personality);
     h.u32(state.nextDecisionTick).int(state.lastBuildTick);
-    h.u32(state.lines.length);
-    for (const line of state.lines) {
-      h.int(line.fromStationId).int(line.toStationId).u32(line.depotTile);
-      h.u32(line.rail ? 1 : 0).u32(line.cargo).u32(line.builtTick);
-      h.u32(line.reviewTick).int(line.earnedAtReviewCt);
-      h.u32(line.specIds.length);
-      for (const specId of line.specIds) h.u32(specId);
-      h.u32(line.vehicleIds.length);
-      for (const vehicleId of line.vehicleIds) h.u32(vehicleId);
+    // The lines themselves are world entities and are hashed below with the
+    // line store; what an AI keeps is its judgement baseline per line (E-06).
+    h.u32(state.reviews.length);
+    for (const review of state.reviews) {
+      h.u32(review.lineId).u32(review.reviewTick).int(review.earnedAtReviewCt);
     }
     const project = state.project;
     h.u32(project === null ? 0 : 1);
@@ -774,9 +782,28 @@ function hashDynamicState(h: Fnv1a64, world: World): void {
     h.u32(project.stage).u32(project.fromX).u32(project.fromY);
     h.u32(project.toX).u32(project.toY).u32(project.depotX).u32(project.depotY);
     h.u32(project.rail ? 1 : 0).u32(project.cargo).u32(project.startedTick);
-    h.int(project.lineIndex);
+    h.int(project.lineId);
     h.u32(project.specIds.length);
     for (const specId of project.specIds) h.u32(specId);
+  }
+
+  // The lines of section 12.2. Only the LIVING lines are fingerprinted, with
+  // their ids: a trailing dead slot is behaviourally identical to its absence
+  // (the store reuses the lowest dead slot), so hashing it would make a saved
+  // and a played world disagree about nothing.
+  const lines = world.lines;
+  h.u32(lines.livingCount);
+  for (let lineId = 0; lineId < lines.count; lineId++) {
+    if (lines.alive[lineId] !== 1) continue;
+    h.u32(lineId).u32(lines.ownerId[lineId]!).u32(lines.autoRenew[lineId]!);
+    const orders = lines.orders[lineId]!;
+    h.u32(orders.length);
+    for (const order of orders) {
+      h.u32(order.target).int(order.targetId).u32(order.load).u32(order.unload);
+      h.int(order.refitTo).u32(order.waitTicks);
+      h.int(order.condKind).u32(order.condComparator);
+      h.f64(order.condValue).u32(order.condJumpTo);
+    }
   }
 
   h.u32(world.industries.length);
@@ -877,6 +904,9 @@ function hashDynamicState(h: Fnv1a64, world: World): void {
     // whose path was bent must not fingerprint like the one that was written.
     h.u32(vehicles.pathIndex[id]!).u32(vehicles.pathLength[id]!);
     for (let t = 0; t < vehicles.pathLength[id]!; t++) h.u32(vehicles.paths[id]![t]!);
+    // The line a vehicle runs decides which order list it reads, so a bent
+    // assignment is a different future exactly as a bent order is.
+    h.int(vehicles.lineId[id]!);
     h.u32(vehicles.orderIndex[id]!).u32(vehicles.reliability[id]!);
     h.u32(vehicles.breakdownTicks[id]!).f64(vehicles.loadTicks[id]!);
     h.f64(vehicles.earnedCt[id]!).f64(vehicles.workJ[id]!);

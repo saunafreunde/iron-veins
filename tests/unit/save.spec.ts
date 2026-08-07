@@ -307,6 +307,10 @@ describe('the registered migrations', () => {
     expect(migrated['worldDigest']).toBe('');
     // v24 added the waypoint layer of M11; a pre-M11 world had no markers.
     expect(map['waypoint']).toEqual(new Uint8Array(64 * 64));
+    // ...and the lines of 12.2, which a pre-M11 world could not have. The
+    // company-wide renewal flag went with them (per-line since M11).
+    expect(state['lines']).toEqual([]);
+    expect('autoRenew' in companies[0]!).toBe(false);
     expect(migrated['saveVersion']).toBe(SAVE_VERSION);
   });
 
@@ -317,6 +321,8 @@ describe('the registered migrations', () => {
       state: {
         mapSize: 64,
         map: { terrain: new Uint8Array(64 * 64) },
+        companies: [{ id: 0, autoRenew: true }],
+        ai: [],
         vehicles: [
           {
             id: 0,
@@ -365,6 +371,103 @@ describe('the registered migrations', () => {
     expect(orders[1]!['condKind']).toBe(1);
     const map = state['map'] as Record<string, unknown>;
     expect(map['waypoint']).toEqual(new Uint8Array(64 * 64));
+
+    // Stage B of the same bump: a v23 world had no lines, its vehicles ran no
+    // line, and the company-wide renewal flag is gone - a player's save has
+    // no line to map it onto (the migration's own comment says why).
+    expect(state['lines']).toEqual([]);
+    expect(vehicles[0]!['lineId']).toBe(-1);
+    const companies = state['companies'] as Record<string, unknown>[];
+    expect('autoRenew' in companies[0]!).toBe(false);
+  });
+
+  it('turns an AI competitor\'s private lines into real line entities (E-06)', () => {
+    const order = (targetId: number): Record<string, unknown> => ({
+      target: 0,
+      targetId,
+      load: 1,
+      unload: 0,
+    });
+    const payload = {
+      magic: SAVE_MAGIC,
+      saveVersion: 23,
+      state: {
+        mapSize: 64,
+        map: { terrain: new Uint8Array(64 * 64) },
+        companies: [
+          { id: 0, autoRenew: false },
+          { id: 1, autoRenew: true },
+        ],
+        ai: [
+          {
+            companyId: 1,
+            personality: 1,
+            nextDecisionTick: 500,
+            lastBuildTick: 0,
+            lines: [
+              {
+                fromStationId: 0,
+                toStationId: 1,
+                depotTile: 70,
+                rail: false,
+                specIds: [200],
+                cargo: 0,
+                builtTick: 100,
+                vehicleIds: [0],
+                reviewTick: 6_000,
+                earnedAtReviewCt: 12_345,
+              },
+            ],
+            project: {
+              stage: 2,
+              fromX: 1,
+              fromY: 2,
+              toX: 3,
+              toY: 4,
+              depotX: 5,
+              depotY: 6,
+              rail: false,
+              cargo: 0,
+              specIds: [200],
+              startedTick: 50,
+              lineIndex: 0,
+            },
+          },
+        ],
+        vehicles: [{ id: 0, specId: 200, orders: [order(0), order(1)] }],
+      },
+    };
+
+    const migrated = migrateSavePayload(payload, 23, 24);
+    const state = migrated['state'] as Record<string, unknown>;
+
+    // The private line became THE line: entity 0, owned by company 1, with
+    // the schedule its vehicle was running and the old company flag on it.
+    const lines = state['lines'] as Record<string, unknown>[];
+    expect(lines).toHaveLength(1);
+    expect(lines[0]!['id']).toBe(0);
+    expect(lines[0]!['ownerId']).toBe(1);
+    expect(lines[0]!['autoRenew']).toBe(true);
+    const lineOrders = lines[0]!['orders'] as Record<string, unknown>[];
+    expect(lineOrders).toHaveLength(2);
+    expect(lineOrders[0]!['targetId']).toBe(0);
+    expect(lineOrders[0]!['refitTo']).toBe(-1);
+
+    // Its vehicle is ASSIGNED: line id set, private list cleared.
+    const vehicles = state['vehicles'] as Record<string, unknown>[];
+    expect(vehicles[0]!['lineId']).toBe(0);
+    expect(vehicles[0]!['orders']).toEqual([]);
+
+    // The AI keeps only its judgement baseline, and the reinforcement
+    // project now names the entity id.
+    const ai = state['ai'] as Record<string, unknown>[];
+    expect('lines' in ai[0]!).toBe(false);
+    expect(ai[0]!['reviews']).toEqual([
+      { lineId: 0, reviewTick: 6_000, earnedAtReviewCt: 12_345 },
+    ]);
+    const project = ai[0]!['project'] as Record<string, unknown>;
+    expect(project['lineId']).toBe(0);
+    expect('lineIndex' in project).toBe(false);
   });
 
   it('migrates a v22 save to v23 without moving the world hash', () => {

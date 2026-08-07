@@ -179,7 +179,7 @@ const SAMPLES: Record<keyof typeof CommandKind, Command> = {
   DemolishSignal: { kind: CommandKind.DemolishSignal, x: 23, y: 24 },
   RefitVehicle: { kind: CommandKind.RefitVehicle, vehicleId: 7, cargo: 2 },
   BuildStationModule: { kind: CommandKind.BuildStationModule, x: 25, y: 26, moduleKind: 6 },
-  SetAutoRenew: { kind: CommandKind.SetAutoRenew, enabled: true },
+  SetAutoRenew: { kind: CommandKind.SetAutoRenew, lineId: 3, enabled: true },
   BuildWaterStop: { kind: CommandKind.BuildWaterStop, x: 27, y: 28, moduleKind: 8 },
   BuyShip: { kind: CommandKind.BuyShip, x: 29, y: 30, specId: 320 },
   BuildAirport: { kind: CommandKind.BuildAirport, x: 31, y: 32, moduleKind: 11 },
@@ -190,6 +190,28 @@ const SAMPLES: Record<keyof typeof CommandKind, Command> = {
   AcceptContract: { kind: CommandKind.AcceptContract, contractId: 9 },
   BuildWaypoint: { kind: CommandKind.BuildWaypoint, x: 37, y: 38 },
   DemolishWaypoint: { kind: CommandKind.DemolishWaypoint, x: 39, y: 40 },
+  CreateLine: { kind: CommandKind.CreateLine },
+  DeleteLine: { kind: CommandKind.DeleteLine, lineId: 2 },
+  SetLineOrders: {
+    kind: CommandKind.SetLineOrders,
+    lineId: 1,
+    orders: [
+      {
+        target: 0,
+        targetId: 4,
+        load: 1,
+        unload: 0,
+        refitTo: 2,
+        waitTicks: 400,
+        condKind: 3,
+        condComparator: 4,
+        condValue: 5,
+        condJumpTo: 0,
+      },
+    ],
+  },
+  AssignVehicleToLine: { kind: CommandKind.AssignVehicleToLine, vehicleId: 8, lineId: 1 },
+  ReleaseVehicleFromLine: { kind: CommandKind.ReleaseVehicleFromLine, vehicleId: 8 },
 };
 
 function auditParserRoundTrip(

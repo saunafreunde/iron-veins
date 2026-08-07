@@ -1,0 +1,42 @@
+[
+  { "tick": 10, "command": { "kind": 1, "name": "Linien Referenz GmbH" } },
+  { "tick": 30, "command": { "kind": 3, "amountCt": 20000000 } },
+  { "tick": 40, "command": { "kind": 8, "x1": 95, "y1": 41, "x2": 117, "y2": 31 } },
+  { "tick": 41, "command": { "kind": 8, "x1": 95, "y1": 41, "x2": 95, "y2": 42 } },
+  { "tick": 42, "command": { "kind": 10, "x": 95, "y": 41, "moduleKind": 0 } },
+  { "tick": 43, "command": { "kind": 10, "x": 117, "y": 31, "moduleKind": 0 } },
+  { "tick": 44, "command": { "kind": 10, "x": 95, "y": 42, "moduleKind": 2 } },
+  { "tick": 50, "command": { "kind": 11, "x": 95, "y": 42, "specId": 200 } },
+  { "tick": 51, "command": { "kind": 11, "x": 95, "y": 42, "specId": 200 } },
+  { "tick": 60, "command": { "kind": 34 } },
+  { "tick": 61, "command": { "kind": 34 } },
+  {
+    "tick": 62,
+    "command": {
+      "kind": 36,
+      "lineId": 0,
+      "orders": [
+        { "target": 0, "targetId": 0, "load": 1, "unload": 0 },
+        { "target": 0, "targetId": 1, "load": 1, "unload": 0 }
+      ]
+    }
+  },
+  { "tick": 63, "command": { "kind": 37, "vehicleId": 0, "lineId": 0 } },
+  { "tick": 64, "command": { "kind": 37, "vehicleId": 1, "lineId": 0 } },
+  { "tick": 65, "command": { "kind": 35, "lineId": 1 } },
+  { "tick": 70, "command": { "kind": 14, "vehicleId": 0, "running": true } },
+  { "tick": 71, "command": { "kind": 14, "vehicleId": 1, "running": true } },
+  { "tick": 5000, "command": { "kind": 23, "lineId": 0, "enabled": true } },
+  {
+    "tick": 6000,
+    "command": {
+      "kind": 36,
+      "lineId": 0,
+      "orders": [
+        { "target": 0, "targetId": 1, "load": 1, "unload": 0 },
+        { "target": 0, "targetId": 0, "load": 1, "unload": 0 }
+      ]
+    }
+  },
+  { "tick": 8000, "command": { "kind": 38, "vehicleId": 1 } }
+]

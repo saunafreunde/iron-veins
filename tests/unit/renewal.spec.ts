@@ -40,6 +40,24 @@ function busLine(): Scenario {
   return scenario;
 }
 
+/**
+ * Renewal is a LINE rule since M11: the bus is put on a line whose schedule
+ * is its shed, and the switch is turned on for that line.
+ */
+function renewingBusLine(): Scenario {
+  const scenario = busLine();
+  const depotTile = scenario.world.map.tileIndex(40, 40);
+  apply(scenario, { kind: CommandKind.CreateLine });
+  apply(scenario, {
+    kind: CommandKind.SetLineOrders,
+    lineId: 0,
+    orders: [{ target: 1, targetId: depotTile, load: 2, unload: 1 }],
+  });
+  apply(scenario, { kind: CommandKind.AssignVehicleToLine, vehicleId: 0, lineId: 0 });
+  apply(scenario, { kind: CommandKind.SetAutoRenew, lineId: 0, enabled: true });
+  return scenario;
+}
+
 describe('choosing a successor', () => {
   it('picks a vehicle of the same mode that is on sale and carries as much', () => {
     const bus = vehicleSpec(BUS);
@@ -98,7 +116,9 @@ describe('renewing a fleet', () => {
     expect(dueForRenewal(world, 0)).toBe(true);
   });
 
-  it('does nothing at all while the switch is off', () => {
+  it('does nothing at all for a vehicle that runs no line', () => {
+    // The flag lives on the LINE (section 11.3, M11): with no line there is
+    // nowhere to turn renewal on, and an ancient bus simply grows old.
     const scenario = busLine();
     const world = scenario.world;
     world.vehicles.builtTick[0] = -50 * TICKS_PER_YEAR;
@@ -108,15 +128,20 @@ describe('renewing a fleet', () => {
     expect(world.vehicles.specId[0]).toBe(specBefore);
   });
 
-  it('replaces an old vehicle, keeps its orders and gives back its shed', () => {
-    const scenario = busLine();
+  it('does nothing at all while the line switch is off', () => {
+    const scenario = renewingBusLine();
     const world = scenario.world;
-    apply(scenario, { kind: CommandKind.SetAutoRenew, enabled: true });
-    apply(scenario, {
-      kind: CommandKind.SetVehicleOrders,
-      vehicleId: 0,
-      orders: [{ target: 1, targetId: world.map.tileIndex(40, 40), load: 2, unload: 1 }],
-    });
+    apply(scenario, { kind: CommandKind.SetAutoRenew, lineId: 0, enabled: false });
+    world.vehicles.builtTick[0] = -50 * TICKS_PER_YEAR;
+    const specBefore = world.vehicles.specId[0];
+
+    for (let tick = 0; tick < TICKS_PER_YEAR; tick++) world.step(scenario.queue, null);
+    expect(world.vehicles.specId[0]).toBe(specBefore);
+  });
+
+  it('replaces an old vehicle, keeps it on its line and gives back its shed', () => {
+    const scenario = renewingBusLine();
+    const world = scenario.world;
 
     // Old enough to be due, and late enough that a successor exists.
     world.tick = 50 * TICKS_PER_YEAR;
@@ -125,7 +150,8 @@ describe('renewing a fleet', () => {
 
     for (let tick = 0; tick < TICKS_PER_YEAR; tick++) world.step(scenario.queue, null);
 
-    // Exactly one vehicle, of a newer type, with the same orders.
+    // Exactly one vehicle, of a newer type, on the same line - which is what
+    // "keeps its orders" means for a line vehicle: the schedule is the line's.
     expect(world.vehicles.livingCount).toBe(1);
     let alive = -1;
     for (let id = 0; id < world.vehicles.count; id++) {
@@ -133,15 +159,16 @@ describe('renewing a fleet', () => {
     }
     expect(alive).toBeGreaterThanOrEqual(0);
     expect(world.vehicles.specId[alive]).not.toBe(before);
-    expect(world.vehicles.orders[alive]).toHaveLength(1);
+    expect(world.vehicles.lineId[alive]).toBe(0);
+    expect(world.lines.orders[0]).toHaveLength(1);
   });
 
   it('draws no randomness, so an existing world runs on unchanged', () => {
     // Two worlds, identical but for the switch. The rng state after a year has
     // to match, or every seeded future diverges the moment a player enables it.
-    const plain = busLine();
-    const renewing = busLine();
-    apply(renewing, { kind: CommandKind.SetAutoRenew, enabled: true });
+    const plain = renewingBusLine();
+    apply(plain, { kind: CommandKind.SetAutoRenew, lineId: 0, enabled: false });
+    const renewing = renewingBusLine();
     renewing.world.vehicles.builtTick[0] = -50 * TICKS_PER_YEAR;
     renewing.world.tick = 50 * TICKS_PER_YEAR;
     plain.world.tick = 50 * TICKS_PER_YEAR;

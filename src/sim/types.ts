@@ -87,14 +87,6 @@ export interface CompanyState {
    */
   co2ThisYearKg: number;
   co2LastYearKg: number;
-  /**
-   * Replace vehicles automatically as they near the end of their design life
-   * (section 11.3).
-   *
-   * A company-wide switch rather than the per-line one the spec asks for,
-   * because lines are section 12.2 and do not exist yet (D-093).
-   */
-  autoRenew: boolean;
 }
 
 /** Calendar position derived from a tick count. */

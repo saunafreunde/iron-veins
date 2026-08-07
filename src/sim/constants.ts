@@ -1205,6 +1205,15 @@ export const MAX_VEHICLES = 4_000;
 /** Upper bound on stations per company. */
 export const MAX_STATIONS = 1_000;
 
+/**
+ * Upper bound on lines across ALL companies, sizing the line store of section
+ * 12.2 (SPEC2 M11). One store rather than one per company, because a line id
+ * has to be unique game-wide - it is what a vehicle's `lineId` points at.
+ * Six companies at the AI's twenty-line cap use 120; the rest is the player's
+ * headroom. [lines]
+ */
+export const MAX_LINES = 256;
+
 // ---------------------------------------------------------------- rail
 
 /**

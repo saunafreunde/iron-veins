@@ -15,7 +15,7 @@ import {
 import { INDUSTRY_TYPE_COUNT, type Industry } from '../industry/types';
 import { TownSize, type Town } from '../town/types';
 import type { TileMapData, WorldStateData } from '../World';
-import { decodeStations, decodeVehicles } from './entities';
+import { decodeLines, decodeStations, decodeVehicles } from './entities';
 import type { CompanyState, RngState } from '../types';
 
 /** Four byte marker at the start of every save payload. */
@@ -51,9 +51,12 @@ export const SAVE_MAGIC = 'IRVN';
  * competitors of section 15, 23 the world digest of M10 - a container-only
  * change: the hashed state itself is untouched, which the migration test
  * proves by hash identity - and 24 the M11 line backbone: the full order
- * grammar of section 12.1 (waypoints, refit, dwell, conditional jumps) and
- * the waypoint tile layer. M11's ONE bump (SPEC2 Z5): the later stages of
- * the milestone extend the same v24 migration rather than adding numbers.
+ * grammar of section 12.1 (waypoints, refit, dwell, conditional jumps), the
+ * waypoint tile layer, and - Stage B of the same bump - the line entities of
+ * section 12.2 with the per-vehicle assignment, the per-line auto-renewal
+ * that replaces the company-wide flag, and the AI's line adoption (E-06).
+ * M11's ONE bump (SPEC2 Z5): the later stages of the milestone extend the
+ * same v24 migration rather than adding numbers.
  */
 export const SAVE_VERSION = 24;
 
@@ -196,7 +199,7 @@ function parseRngState(value: unknown, path: string): RngState {
   ];
 }
 
-/** The AI competitors of section 15 and what each has built. */
+/** The AI competitors of section 15 and what each remembers (E-06). */
 function parseAi(value: unknown, path: string): AiState[] {
   return asArray(value, path).map((entry, i) => {
     const raw = asRecord(entry, `${path}[${i}]`);
@@ -207,21 +210,16 @@ function parseAi(value: unknown, path: string): AiState[] {
       personality: asInt(raw['personality'], `${path}[${i}].personality`),
       nextDecisionTick: asInt(raw['nextDecisionTick'], `${path}[${i}].nextDecisionTick`),
       lastBuildTick: asInt(raw['lastBuildTick'], `${path}[${i}].lastBuildTick`),
-      lines: asArray(raw['lines'], `${path}[${i}].lines`).map((line, j) => {
-        const row = asRecord(line, `${path}[${i}].lines[${j}]`);
+      // The lines themselves are world entities in `state.lines` since M11;
+      // what a competitor keeps is its review baseline per line (Z4).
+      reviews: asArray(raw['reviews'], `${path}[${i}].reviews`).map((review, j) => {
+        const row = asRecord(review, `${path}[${i}].reviews[${j}]`);
         return {
-          fromStationId: asInt(row['fromStationId'], `${path}[${i}].lines[${j}].fromStationId`),
-          toStationId: asInt(row['toStationId'], `${path}[${i}].lines[${j}].toStationId`),
-          depotTile: asInt(row['depotTile'], `${path}[${i}].lines[${j}].depotTile`),
-          rail: asBoolean(row['rail'], `${path}[${i}].lines[${j}].rail`),
-          specIds: parseNumbers(row['specIds'], `${path}[${i}].lines[${j}].specIds`),
-          cargo: asInt(row['cargo'], `${path}[${i}].lines[${j}].cargo`),
-          builtTick: asInt(row['builtTick'], `${path}[${i}].lines[${j}].builtTick`),
-          vehicleIds: parseNumbers(row['vehicleIds'], `${path}[${i}].lines[${j}].vehicleIds`),
-          reviewTick: asInt(row['reviewTick'], `${path}[${i}].lines[${j}].reviewTick`),
+          lineId: asInt(row['lineId'], `${path}[${i}].reviews[${j}].lineId`),
+          reviewTick: asInt(row['reviewTick'], `${path}[${i}].reviews[${j}].reviewTick`),
           earnedAtReviewCt: asInt(
             row['earnedAtReviewCt'],
-            `${path}[${i}].lines[${j}].earnedAtReviewCt`,
+            `${path}[${i}].reviews[${j}].earnedAtReviewCt`,
           ),
         };
       }),
@@ -247,7 +245,7 @@ function parseAiProject(value: unknown, path: string): AiProject {
     cargo: asInt(raw['cargo'], `${path}.cargo`),
     specIds: parseNumbers(raw['specIds'], `${path}.specIds`),
     startedTick: asInt(raw['startedTick'], `${path}.startedTick`),
-    lineIndex: asInt(raw['lineIndex'], `${path}.lineIndex`),
+    lineId: asInt(raw['lineId'], `${path}.lineId`),
   };
 }
 
@@ -333,7 +331,6 @@ function parseCompany(value: unknown, path: string): CompanyState {
     co2ThisYearKg: asFinite(raw['co2ThisYearKg'], `${path}.co2ThisYearKg`),
     co2LastYearKg: asFinite(raw['co2LastYearKg'], `${path}.co2LastYearKg`),
     bankrupt: asBoolean(raw['bankrupt'], `${path}.bankrupt`),
-    autoRenew: asBoolean(raw['autoRenew'], `${path}.autoRenew`),
     vehicleUpkeepPerYearCt: asInt(raw['vehicleUpkeepPerYearCt'], `${path}.vehicleUpkeepPerYearCt`),
     infrastructureUpkeepPerYearCt: asInt(
       raw['infrastructureUpkeepPerYearCt'],
@@ -513,6 +510,58 @@ function parseIndustries(value: unknown, path: string): Industry[] {
 }
 
 /**
+ * The wire form of one order list of the 12.1 grammar - shared by the
+ * per-vehicle and the per-line schedule commands, so the two cannot drift.
+ *
+ * The fields beyond the M5 four are optional on the wire, so every log
+ * recorded before M11 parses unchanged; absent means the documented default,
+ * and the parser emits the canonical full form.
+ */
+function parseOrderSpecs(
+  value: unknown,
+  path: string,
+): {
+  target: number;
+  targetId: number;
+  load: number;
+  unload: number;
+  refitTo: number;
+  waitTicks: number;
+  condKind: number;
+  condComparator: number;
+  condValue: number;
+  condJumpTo: number;
+}[] {
+  return asArray(value, path).map((order, i) => {
+    const entry = asRecord(order, `${path}[${i}]`);
+    return {
+      target: asInt(entry['target'], `${path}[${i}].target`),
+      targetId: asInt(entry['targetId'], `${path}[${i}].targetId`),
+      load: asInt(entry['load'], `${path}[${i}].load`),
+      unload: asInt(entry['unload'], `${path}[${i}].unload`),
+      refitTo:
+        entry['refitTo'] === undefined ? -1 : asInt(entry['refitTo'], `${path}[${i}].refitTo`),
+      waitTicks:
+        entry['waitTicks'] === undefined ? 0 : asInt(entry['waitTicks'], `${path}[${i}].waitTicks`),
+      condKind:
+        entry['condKind'] === undefined ? -1 : asInt(entry['condKind'], `${path}[${i}].condKind`),
+      condComparator:
+        entry['condComparator'] === undefined
+          ? 0
+          : asInt(entry['condComparator'], `${path}[${i}].condComparator`),
+      condValue:
+        entry['condValue'] === undefined
+          ? 0
+          : asFinite(entry['condValue'], `${path}[${i}].condValue`),
+      condJumpTo:
+        entry['condJumpTo'] === undefined
+          ? 0
+          : asInt(entry['condJumpTo'], `${path}[${i}].condJumpTo`),
+    };
+  });
+}
+
+/**
  * The one command parser there is.
  *
  * The save log and the determinism fixtures go through this same function on
@@ -677,7 +726,36 @@ export function parseCommand(value: unknown, path: string): Command {
     case CommandKind.SetAutoRenew:
       return {
         kind: CommandKind.SetAutoRenew,
+        // Absent on the wire in every pre-M11 log, where the switch was
+        // company-wide; -1 keeps that meaning as "every line I own".
+        lineId: raw['lineId'] === undefined ? -1 : asInt(raw['lineId'], `${path}.lineId`),
         enabled: asBoolean(raw['enabled'], `${path}.enabled`),
+      };
+
+    case CommandKind.CreateLine:
+      return { kind: CommandKind.CreateLine };
+
+    case CommandKind.DeleteLine:
+      return { kind: CommandKind.DeleteLine, lineId: asInt(raw['lineId'], `${path}.lineId`) };
+
+    case CommandKind.SetLineOrders:
+      return {
+        kind: CommandKind.SetLineOrders,
+        lineId: asInt(raw['lineId'], `${path}.lineId`),
+        orders: parseOrderSpecs(raw['orders'], `${path}.orders`),
+      };
+
+    case CommandKind.AssignVehicleToLine:
+      return {
+        kind: CommandKind.AssignVehicleToLine,
+        vehicleId: asInt(raw['vehicleId'], `${path}.vehicleId`),
+        lineId: asInt(raw['lineId'], `${path}.lineId`),
+      };
+
+    case CommandKind.ReleaseVehicleFromLine:
+      return {
+        kind: CommandKind.ReleaseVehicleFromLine,
+        vehicleId: asInt(raw['vehicleId'], `${path}.vehicleId`),
       };
 
     case CommandKind.BuildStationModule:
@@ -729,42 +807,7 @@ export function parseCommand(value: unknown, path: string): Command {
       return {
         kind: CommandKind.SetVehicleOrders,
         vehicleId: asInt(raw['vehicleId'], `${path}.vehicleId`),
-        orders: asArray(raw['orders'], `${path}.orders`).map((order, i) => {
-          const entry = asRecord(order, `${path}.orders[${i}]`);
-          // The 12.1 fields beyond the M5 four are optional on the wire, so
-          // every log recorded before M11 parses unchanged; absent means the
-          // documented default, and the parser emits the canonical full form.
-          return {
-            target: asInt(entry['target'], `${path}.orders[${i}].target`),
-            targetId: asInt(entry['targetId'], `${path}.orders[${i}].targetId`),
-            load: asInt(entry['load'], `${path}.orders[${i}].load`),
-            unload: asInt(entry['unload'], `${path}.orders[${i}].unload`),
-            refitTo:
-              entry['refitTo'] === undefined
-                ? -1
-                : asInt(entry['refitTo'], `${path}.orders[${i}].refitTo`),
-            waitTicks:
-              entry['waitTicks'] === undefined
-                ? 0
-                : asInt(entry['waitTicks'], `${path}.orders[${i}].waitTicks`),
-            condKind:
-              entry['condKind'] === undefined
-                ? -1
-                : asInt(entry['condKind'], `${path}.orders[${i}].condKind`),
-            condComparator:
-              entry['condComparator'] === undefined
-                ? 0
-                : asInt(entry['condComparator'], `${path}.orders[${i}].condComparator`),
-            condValue:
-              entry['condValue'] === undefined
-                ? 0
-                : asFinite(entry['condValue'], `${path}.orders[${i}].condValue`),
-            condJumpTo:
-              entry['condJumpTo'] === undefined
-                ? 0
-                : asInt(entry['condJumpTo'], `${path}.orders[${i}].condJumpTo`),
-          };
-        }),
+        orders: parseOrderSpecs(raw['orders'], `${path}.orders`),
       };
     case CommandKind.SetVehicleRunning:
       return {
@@ -907,6 +950,7 @@ export function parseSaveFile(value: unknown): SaveFile {
     industries: parseIndustries(stateRaw['industries'], 'save.state.industries'),
     stations: decodeStations(stateRaw['stations'], 'save.state.stations'),
     vehicles: decodeVehicles(stateRaw['vehicles'], 'save.state.vehicles'),
+    lines: decodeLines(stateRaw['lines'], 'save.state.lines'),
     cargoLinks: parseCargoLinks(stateRaw['cargoLinks'], 'save.state.cargoLinks'),
     news: parseNews(stateRaw['news'], 'save.state.news'),
     contracts: parseContracts(stateRaw['contracts'], 'save.state.contracts'),

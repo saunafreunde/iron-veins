@@ -39,6 +39,11 @@ export const CommandKind = {
   AcceptContract: 31,
   BuildWaypoint: 32,
   DemolishWaypoint: 33,
+  CreateLine: 34,
+  DeleteLine: 35,
+  SetLineOrders: 36,
+  AssignVehicleToLine: 37,
+  ReleaseVehicleFromLine: 38,
 } as const;
 export type CommandKind = (typeof CommandKind)[keyof typeof CommandKind];
 
@@ -287,10 +292,60 @@ export interface BuyShipCommand {
  * A command rather than a UI preference, because it spends money and changes
  * the fleet - and everything that changes state goes through a command, which
  * is what buys the replay (law #6).
+ *
+ * Per LINE since M11, where the spec always attached it (the company-wide
+ * switch was the D-093 stopgap). `lineId` -1 - which is also what a pre-M11
+ * log's entry parses to - addresses every line the acting company owns, so an
+ * old command stays parseable and keeps a meaning instead of becoming a
+ * refusal.
  */
 export interface SetAutoRenewCommand {
   readonly kind: typeof CommandKind.SetAutoRenew;
+  /** A line id, or -1 for every line the acting company owns. */
+  readonly lineId: number;
   readonly enabled: boolean;
+}
+
+/**
+ * Open a new, empty line (section 12.2) owned by the acting company.
+ *
+ * Deliberately parameterless: the id the store hands out is observed, never
+ * predicted - the player's panel and the AI's project machinery both find the
+ * new line by looking (the D-108 discipline), because a command cannot carry
+ * an id that does not exist yet.
+ */
+export interface CreateLineCommand {
+  readonly kind: typeof CommandKind.CreateLine;
+}
+
+/** Dissolve a line. Its vehicles are released and keep a private copy. */
+export interface DeleteLineCommand {
+  readonly kind: typeof CommandKind.DeleteLine;
+  readonly lineId: number;
+}
+
+/**
+ * Replace a line's shared order list. Every vehicle assigned to the line
+ * switches to the new list in this very tick and re-anchors to its nearest
+ * stop (the rule in lines/LineStore.ts).
+ */
+export interface SetLineOrdersCommand {
+  readonly kind: typeof CommandKind.SetLineOrders;
+  readonly lineId: number;
+  readonly orders: readonly OrderSpec[];
+}
+
+/** Put a vehicle on a line; from then on it runs the line's list, live. */
+export interface AssignVehicleToLineCommand {
+  readonly kind: typeof CommandKind.AssignVehicleToLine;
+  readonly vehicleId: number;
+  readonly lineId: number;
+}
+
+/** Take a vehicle off its line, leaving it a private copy of the list. */
+export interface ReleaseVehicleFromLineCommand {
+  readonly kind: typeof CommandKind.ReleaseVehicleFromLine;
+  readonly vehicleId: number;
 }
 
 /**
@@ -353,6 +408,11 @@ export type Command =
   | AcceptContractCommand
   | BuildWaypointCommand
   | DemolishWaypointCommand
+  | CreateLineCommand
+  | DeleteLineCommand
+  | SetLineOrdersCommand
+  | AssignVehicleToLineCommand
+  | ReleaseVehicleFromLineCommand
   | BuyExclusiveRightsCommand
   | ApplyTownMeasureCommand
   | DemolishBuildingCommand
@@ -469,5 +529,7 @@ export const RejectReason = {
   InvalidOrder: 'cmd.reject.invalidOrder',
   TooManyOrders: 'cmd.reject.tooManyOrders',
   BadJumpTarget: 'cmd.reject.badJumpTarget',
+  NoSuchLine: 'cmd.reject.noSuchLine',
+  TooManyLines: 'cmd.reject.tooManyLines',
 } as const;
 export type RejectReason = (typeof RejectReason)[keyof typeof RejectReason];

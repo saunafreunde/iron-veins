@@ -56,7 +56,9 @@ function measure(world: World, companyId: number): Measured {
     railTiles,
     stations: world.stations.filter((station) => station.ownerId === companyId).length,
     vehicles,
-    lines: state?.lines.length ?? 0,
+    // Real line entities since M11 (E-06): a competitor's lines are counted
+    // where everybody's are, in the world's own store.
+    lines: world.lines.ownedBy(companyId).length,
     loanCt: company.loanCt,
     valueCt: company.cashCt - company.loanCt + company.fixedAssetsCt,
     bankrupt: company.bankrupt,

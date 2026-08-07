@@ -7,6 +7,7 @@ import { RailRole } from './spec';
 import type { Cargo } from '../cargo/types';
 import type { VehicleSpec } from './spec';
 import { buyRoadVehicle, buyTrain, sellVehicle } from '../commands/build';
+import { reAnchorVehicle } from '../lines/LineStore';
 import { reportRenewal } from '../news/report';
 import { startVehicle } from './update';
 import { VehicleState } from './VehicleStore';
@@ -16,10 +17,10 @@ import type { World } from '../World';
 /**
  * Auto-renewal (section 11.3): replace a vehicle before it becomes a liability.
  *
- * The spec attaches the setting to a LINE. Lines are section 12.2 and do not
- * exist yet, so it is a company-wide switch instead - a departure recorded in
- * DECISIONS.md D-093, and one that costs nothing to move onto lines later
- * because the rule itself is per vehicle.
+ * The setting lives on the LINE, where section 11.3 always attached it: M11
+ * built lines, and the company-wide switch D-093 kept in the meantime is
+ * gone. A vehicle running no line is never renewed automatically - there is
+ * no flag anywhere that could say so.
  *
  * Two properties matter more than the feature does:
  *
@@ -131,16 +132,19 @@ export function renewalCostCt(world: World, replacement: readonly number[]): num
  * there is one (section 15, M8).
  */
 export function renewFleet(world: World, company: CompanyState): number {
-  if (!company.autoRenew) return 0;
-
   const vehicles = world.vehicles;
+  const lines = world.lines;
   let replaced = 0;
 
-  // A snapshot of the ids first: buying inside the loop appends to the store,
+  // A snapshot of the ids first: buying inside the loop can grow the store,
   // and a freshly bought vehicle must not be considered for renewal itself.
   const count = vehicles.count;
   for (let id = 0; id < count; id++) {
     if (vehicles.alive[id] !== 1 || vehicles.ownerId[id] !== company.id) continue;
+
+    // The flag lives on the vehicle's LINE (section 11.3, M11).
+    const lineId = vehicles.lineId[id]!;
+    if (lineId < 0 || lines.alive[lineId] !== 1 || lines.autoRenew[lineId] !== 1) continue;
     if (!dueForRenewal(world, id)) continue;
 
     const replacement = renewalConsist(world, id);
@@ -148,7 +152,6 @@ export function renewFleet(world: World, company: CompanyState): number {
     if (renewalCostCt(world, replacement) > company.cashCt) continue;
 
     const depotTile = vehicles.homeDepotTile[id]!;
-    const orders = vehicles.orders[id]!.map((order) => ({ ...order }));
     const cargo = vehicles.refitCargo[id]! as Cargo;
     const wasRunning = vehicles.state[id] !== VehicleState.Stopped;
 
@@ -164,10 +167,27 @@ export function renewFleet(world: World, company: CompanyState): number {
         : buyTrain(world, x, y, replacement);
     if (!outcome.ok) continue;
 
-    const fresh = vehicles.count - 1;
+    // The fresh vehicle is the one BUILT THIS TICK at that shed - never
+    // `count - 1`: the store reuses freed slots, so the replacement usually
+    // lands exactly in the slot the old vehicle vacated.
+    let fresh = -1;
+    for (let candidate = 0; candidate < vehicles.count; candidate++) {
+      if (vehicles.alive[candidate] !== 1) continue;
+      if (vehicles.builtTick[candidate] !== world.tick) continue;
+      if (vehicles.homeDepotTile[candidate] !== depotTile) continue;
+      if (vehicles.ownerId[candidate] !== company.id) continue;
+      fresh = candidate;
+      break;
+    }
+    if (fresh < 0) continue;
+
     vehicles.refitCargo[fresh] = cargo;
     vehicles.refreshAggregate(fresh);
-    vehicles.orders[fresh] = orders;
+    // The successor takes the old vehicle's place ON THE LINE, anchored to
+    // the nearest stop - the shed it stands in (the re-anchor rule of
+    // lines/LineStore.ts).
+    vehicles.lineId[fresh] = lineId;
+    reAnchorVehicle(world, fresh);
     if (wasRunning) startVehicle(world, fresh);
     replaced++;
     reportRenewal(world, fresh, replaced);

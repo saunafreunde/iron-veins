@@ -31,6 +31,15 @@ import {
   TILE_SIZE_M,
 } from './constants';
 import { loanLimitCt } from './economy/company';
+import { scheduleOf } from './lines/LineStore';
+import {
+  lineProfitPerYearCt,
+  lineRoundTicks,
+  lineStations,
+  lineUtilisation,
+  lineVehicles,
+  stationWaitingUnits,
+} from './lines/metrics';
 import type { NewGameOptions, SaveSlotKind } from '../shared/protocol';
 import { bookValueCt, companyValueCt, monthsInOrder } from './economy/ledger';
 import { contractProgress, isOpen } from './economy/contracts';
@@ -138,7 +147,8 @@ function structureSignature(current: World): string {
   }
   return (
     `${current.stations.length}:${modules}:${current.vehicles.livingCount}:` +
-    `${current.industries.length}:${levels}:${closed}:${current.vehicles.ordersRevision}`
+    `${current.industries.length}:${levels}:${closed}:${current.vehicles.ordersRevision}:` +
+    `${current.lines.livingCount}`
   );
 }
 
@@ -241,7 +251,6 @@ function postMonthly(current: World): void {
       bookValueCt: bookValueCt(company),
       loanCt: company.loanCt,
       cashCt: company.cashCt,
-      autoRenew: company.autoRenew,
       co2ThisYearKg: company.co2ThisYearKg,
       co2LastYearKg: company.co2LastYearKg,
     },
@@ -312,8 +321,10 @@ function postFleet(current: World): void {
       cargoUnits: Math.round(units),
       capacity: vehicles.capacityUnits[id]!,
       earnedCt: vehicles.earnedCt[id]!,
-      // The whole grammar, so the order editor can show what it will send.
-      orders: vehicles.orders[id]!.map((order) => ({ ...order })),
+      lineId: vehicles.lineId[id]!,
+      // The whole grammar of the list the vehicle RUNS - its line's when it
+      // is assigned to one - so the panel shows what actually happens.
+      orders: scheduleOf(current, id).map((order) => ({ ...order })),
       consist: [...vehicles.consist[id]!],
       maxSpeedMs: vehicles.maxSpeedMs[id]!,
       lengthM: vehicles.lengthM[id]!,
@@ -323,6 +334,38 @@ function postFleet(current: World): void {
     });
   }
   scope.postMessage({ type: 'fleetChanged', vehicles: markers });
+  postLines(current);
+}
+
+/**
+ * The PLAYER's lines with their recomputed statistics (section 12.2). Rides
+ * the fleet cadence: everything a line shows - utilisation, earnings, round
+ * time - moves exactly when the fleet does.
+ */
+function postLines(current: World): void {
+  const markers = [];
+  for (let lineId = 0; lineId < current.lines.count; lineId++) {
+    if (current.lines.alive[lineId] !== 1) continue;
+    if (current.lines.ownerId[lineId] !== current.playerCompanyId) continue;
+
+    const vehicleIds = lineVehicles(current, lineId);
+    const round = lineRoundTicks(current, lineId);
+    markers.push({
+      id: lineId,
+      stops: lineStations(current, lineId).map((stationId) => ({
+        stationId,
+        waitingUnits: Math.round(stationWaitingUnits(current, stationId)),
+      })),
+      orders: current.lines.orders[lineId]!.map((order) => ({ ...order })),
+      vehicleIds,
+      utilisation: lineUtilisation(current, vehicleIds),
+      profitPerYearCt: lineProfitPerYearCt(current, vehicleIds),
+      roundTicks: round.ticks,
+      roundMeasured: round.measured,
+      autoRenew: current.lines.autoRenew[lineId] === 1,
+    });
+  }
+  scope.postMessage({ type: 'linesChanged', lines: markers });
 }
 
 /**
@@ -365,6 +408,7 @@ function writeVehicles(current: World, block: Int32Array): number {
     // keeps a sound attached to the same vehicle between frames.
     block[base + SnapshotVehicle.VehicleId] = id;
     block[base + SnapshotVehicle.Owner] = vehicles.ownerId[id]!;
+    block[base + SnapshotVehicle.LineId] = vehicles.lineId[id]!;
     written++;
   }
   return written;

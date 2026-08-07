@@ -7,6 +7,7 @@ import type {
   CompanyMarker,
   ContractMarker,
   IndustryMarker,
+  LineMarker,
   NewsMarker,
   StationMarker,
   TownMarker,
@@ -123,6 +124,8 @@ export interface SimUiState extends SnapshotValues {
   minimapMode: MinimapMode;
   stations: readonly StationMarker[];
   fleet: readonly VehicleMarker[];
+  /** The player's lines, as the line list shows them (section 12.2). */
+  lines: readonly LineMarker[];
   /** The books, as the finance panel shows them (section 14.1). */
   finances: FinanceReport | null;
   news: readonly NewsMarker[];
@@ -147,9 +150,11 @@ export interface SimUiState extends SnapshotValues {
   } | null;
   /** Which full-screen overlay is open, if any. */
   overlay: OverlayKind;
-  /** Which entity list is open, or null. The V/T/I keys of section 17.2. */
-  openList: 'vehicles' | 'stations' | 'towns' | 'industries' | null;
+  /** Which entity list is open, or null. The V/L/H/T/I keys of section 17.2. */
+  openList: 'vehicles' | 'lines' | 'stations' | 'towns' | 'industries' | null;
   selectedVehicleId: number | null;
+  /** Line the line panel has open, or null. */
+  selectedLineId: number | null;
   /** First corner of a road drag; the second click completes it. */
   roadAnchor: { readonly x: number; readonly y: number } | null;
   trackPreview: TrackPreview | null;
@@ -227,12 +232,14 @@ export interface SimUiState extends SnapshotValues {
     } | null,
   ) => void;
   setOverlay: (overlay: OverlayKind) => void;
-  toggleList: (list: 'vehicles' | 'stations' | 'towns' | 'industries') => void;
+  toggleList: (list: 'vehicles' | 'lines' | 'stations' | 'towns' | 'industries') => void;
   /** Wired to the map view so a list row can jump to what it names. */
   centreOnTile: (x: number, y: number) => void;
   setCentreOnTile: (centre: (x: number, y: number) => void) => void;
   setFleet: (vehicles: readonly VehicleMarker[]) => void;
   setSelectedVehicle: (id: number | null) => void;
+  setLines: (lines: readonly LineMarker[]) => void;
+  setSelectedLine: (id: number | null) => void;
   setRoadAnchor: (anchor: { readonly x: number; readonly y: number } | null) => void;
   setTrackPreview: (preview: TrackPreview | null) => void;
   setConnectAnchor: (stationId: number | null) => void;
@@ -301,6 +308,7 @@ export const useSimStore = create<SimUiState>((set) => ({
   minimapMode: MinimapMode.Terrain,
   stations: [],
   fleet: [],
+  lines: [],
   finances: null,
   news: [],
   companies: [],
@@ -311,6 +319,7 @@ export const useSimStore = create<SimUiState>((set) => ({
   overlay: null,
   openList: null,
   selectedVehicleId: null,
+  selectedLineId: null,
   roadAnchor: null,
   trackPreview: null,
   connectAnchor: null,
@@ -383,6 +392,8 @@ export const useSimStore = create<SimUiState>((set) => ({
   setStations: (stations) => set({ stations }),
   setFleet: (vehicles) => set({ fleet: vehicles }),
   setSelectedVehicle: (id) => set({ selectedVehicleId: id }),
+  setLines: (lines) => set({ lines }),
+  setSelectedLine: (id) => set({ selectedLineId: id }),
   setRoadAnchor: (anchor) => set({ roadAnchor: anchor, trackPreview: null }),
   addTrainUnit: (specId) => set((state) => ({ trainDraft: [...state.trainDraft, specId] })),
   removeTrainUnit: (index) =>
@@ -396,6 +407,7 @@ export const useSimStore = create<SimUiState>((set) => ({
       industries: [],
       stations: [],
       fleet: [],
+      lines: [],
       companies: [],
       contracts: [],
       news: [],
@@ -403,6 +415,7 @@ export const useSimStore = create<SimUiState>((set) => ({
       hoveredTile: null,
       selectedTile: null,
       selectedVehicleId: null,
+      selectedLineId: null,
       roadAnchor: null,
       trackPreview: null,
       trainDraft: [],

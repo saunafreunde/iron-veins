@@ -38,32 +38,20 @@ export const PERSONALITY_KEYS: readonly string[] = [
   'ai.personality.townNetwork',
 ];
 
-/** One line an AI has built and is running. */
-export interface AiLine {
-  /** Station at each end. */
-  readonly fromStationId: number;
-  readonly toStationId: number;
-  /** Tile of the depot its vehicles were bought at. */
-  readonly depotTile: number;
-  /** True for a railway, false for a road line. */
-  readonly rail: boolean;
-  /** Catalogue ids the vehicles on it were built from. */
-  readonly specIds: readonly number[];
-  /** What it carries. A value of Cargo. */
-  readonly cargo: number;
-  readonly builtTick: number;
-  /** Vehicles running on it. Grows when the line is reinforced. */
-  vehicleIds: number[];
-  /**
-   * When the line was last judged, and what its vehicles had earned by then.
-   *
-   * Section 15 step 3 asks for unprofitable lines to be closed, and a line
-   * cannot be judged on a total: it has to be judged on what it earned SINCE
-   * the last look. A source that dries up leaves vehicles waiting for a full
-   * load that never comes, and without this the company pays their upkeep
-   * until it is wound up - which is exactly what the first run of the
-   * twenty-five year game did.
-   */
+/**
+ * The AI's judgement memory about ONE real line (E-06): when the line was
+ * last reviewed and what its vehicles had earned by then.
+ *
+ * Since M11 a competitor's line IS the Line entity of section 12.2 - the AI
+ * keeps no line list of its own any more. What it does keep is this baseline,
+ * because section 15 step 3 judges a line on what it earned SINCE the last
+ * look, and "since" is a historical input no store can recompute - so it is
+ * save state (Z4). The line itself is addressed by id, never held (law #9);
+ * everything else the review needs - the vehicles, their specs, the stops -
+ * is read back out of the stores when the review runs (the M6 rule).
+ */
+export interface AiLineReview {
+  readonly lineId: number;
   reviewTick: number;
   earnedAtReviewCt: number;
 }
@@ -76,7 +64,10 @@ export interface AiLine {
  * stage therefore OBSERVES what the previous one left behind.
  */
 export interface AiProject {
-  /** 1: infrastructure ordered. 2: vehicles ordered, waiting in the depot. */
+  /**
+   * 1: infrastructure ordered. 2: vehicles ordered, waiting in the depot.
+   * 3: line opened, waiting to be observed so it can be crewed.
+   */
   stage: number;
   /** Stop tiles, for a new line. */
   readonly fromX: number;
@@ -90,11 +81,11 @@ export interface AiProject {
   readonly specIds: readonly number[];
   readonly startedTick: number;
   /**
-   * Index into `AiState.lines` when this is a reinforcement rather than a new
-   * line, or -1. A reinforcement already knows its stations, so it skips
-   * straight to crewing whatever comes out of the depot.
+   * The REAL line being reinforced (a Line entity id) when this is a
+   * reinforcement rather than a new build, or -1. A reinforcement already has
+   * its line, so it skips straight to crewing whatever comes out of the depot.
    */
-  readonly lineIndex: number;
+  readonly lineId: number;
 }
 
 /** Everything one AI company remembers between decisions. */
@@ -108,7 +99,12 @@ export interface AiState {
    * of a one-company game.
    */
   nextDecisionTick: number;
-  lines: AiLine[];
+  /**
+   * Review baselines, one per line this company runs, in the order the lines
+   * were opened. The lines themselves live in `world.lines` like everybody
+   * else's (E-06).
+   */
+  reviews: AiLineReview[];
   /** The line currently being built, or null. */
   project: AiProject | null;
   /**

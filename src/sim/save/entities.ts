@@ -8,7 +8,8 @@ import {
 } from '../station/types';
 import { hasVehicleSpec, vehicleSpec } from '../vehicles/catalog';
 import { powerCode } from '../vehicles/spec';
-import { MAX_CONSIST_UNITS } from '../constants';
+import { LineStore } from '../lines/LineStore';
+import { MAX_CONSIST_UNITS, MAX_LINES, MAX_ORDERS_PER_VEHICLE } from '../constants';
 import type { OrderLoad, OrderTarget, OrderUnload } from '../vehicles/VehicleStore';
 import { MAX_PATH_TILES, VehicleStore, type Order } from '../vehicles/VehicleStore';
 import { SaveFormatError } from './format';
@@ -65,6 +66,8 @@ export interface VehicleSave {
   pathIndex: number;
   path: number[];
   orderIndex: number;
+  /** Line the vehicle is assigned to, or -1 (section 12.2). */
+  lineId: number;
   builtTick: number;
   reliability: number;
   breakdownTicks: number;
@@ -129,6 +132,7 @@ export function encodeVehicles(store: VehicleStore): VehicleSave[] {
       pathIndex: store.pathIndex[id]!,
       path,
       orderIndex: store.orderIndex[id]!,
+      lineId: store.lineId[id]!,
       builtTick: store.builtTick[id]!,
       reliability: store.reliability[id]!,
       breakdownTicks: store.breakdownTicks[id]!,
@@ -168,6 +172,11 @@ function int(value: unknown, path: string): number {
 
 function text(value: unknown, path: string): string {
   if (typeof value !== 'string') throw new SaveFormatError(`${path}: expected a string`);
+  return value;
+}
+
+function bool(value: unknown, path: string): boolean {
+  if (typeof value !== 'boolean') throw new SaveFormatError(`${path}: expected a boolean`);
   return value;
 }
 
@@ -282,6 +291,7 @@ export function decodeVehicles(value: unknown, path: string): VehicleSave[] {
       pathIndex: int(raw['pathIndex'], `${path}[${i}].pathIndex`),
       path: pathTiles.map((tile, t) => int(tile, `${path}[${i}].path[${t}]`)),
       orderIndex: int(raw['orderIndex'], `${path}[${i}].orderIndex`),
+      lineId: int(raw['lineId'], `${path}[${i}].lineId`),
       builtTick: int(raw['builtTick'], `${path}[${i}].builtTick`),
       reliability: int(raw['reliability'], `${path}[${i}].reliability`),
       breakdownTicks: int(raw['breakdownTicks'], `${path}[${i}].breakdownTicks`),
@@ -312,6 +322,86 @@ export function decodeVehicles(value: unknown, path: string): VehicleSave[] {
       cargo: decodeStacks(raw['cargo'], `${path}[${i}].cargo`),
     };
   });
+}
+
+// ------------------------------------------------------------------- lines
+
+/**
+ * One line of section 12.2 as the save carries it: the LIVING lines with
+ * their ids and shared order lists. Dead slots are not written - the store's
+ * lowest-dead-slot allocation makes the alive bitmap alone reproduce every
+ * future id choice, so holes need no representation (see LineStore.create).
+ */
+export interface LineSave {
+  id: number;
+  ownerId: number;
+  /** Per-line auto-renewal (section 11.3). */
+  autoRenew: boolean;
+  orders: Order[];
+}
+
+export function encodeLines(store: LineStore): LineSave[] {
+  const result: LineSave[] = [];
+  for (let id = 0; id < store.count; id++) {
+    if (store.alive[id] !== 1) continue;
+    result.push({
+      id,
+      ownerId: store.ownerId[id]!,
+      autoRenew: store.autoRenew[id] === 1,
+      orders: store.orders[id]!.map((order) => ({ ...order })),
+    });
+  }
+  return result;
+}
+
+/** Validate the line section of a save. */
+export function decodeLines(value: unknown, path: string): LineSave[] {
+  return list(value, path).map((entry, i) => {
+    const raw = record(entry, `${path}[${i}]`);
+    const id = int(raw['id'], `${path}[${i}].id`);
+    if (id < 0 || id >= MAX_LINES) {
+      throw new SaveFormatError(`${path}[${i}].id: ${id} is outside the line store`);
+    }
+    const ordersRaw = list(raw['orders'], `${path}[${i}].orders`);
+    if (ordersRaw.length > MAX_ORDERS_PER_VEHICLE) {
+      throw new SaveFormatError(`${path}[${i}].orders: ${ordersRaw.length} orders is too many`);
+    }
+    return {
+      id,
+      ownerId: int(raw['ownerId'], `${path}[${i}].ownerId`),
+      autoRenew: bool(raw['autoRenew'], `${path}[${i}].autoRenew`),
+      orders: ordersRaw.map((orderValue, o) => {
+        const where = `${path}[${i}].orders[${o}]`;
+        const order = record(orderValue, where);
+        return {
+          target: int(order['target'], `${where}.target`) as OrderTarget,
+          targetId: int(order['targetId'], `${where}.targetId`),
+          load: int(order['load'], `${where}.load`) as OrderLoad,
+          unload: int(order['unload'], `${where}.unload`) as OrderUnload,
+          refitTo: int(order['refitTo'], `${where}.refitTo`),
+          waitTicks: int(order['waitTicks'], `${where}.waitTicks`),
+          condKind: int(order['condKind'], `${where}.condKind`),
+          condComparator: int(order['condComparator'], `${where}.condComparator`),
+          condValue: num(order['condValue'], `${where}.condValue`),
+          condJumpTo: int(order['condJumpTo'], `${where}.condJumpTo`),
+        };
+      }),
+    };
+  });
+}
+
+/** Rebuild a live line store from validated save data. */
+export function buildLineStore(saves: readonly LineSave[]): LineStore {
+  const store = new LineStore();
+  for (const save of saves) {
+    const id = save.id;
+    store.alive[id] = 1;
+    if (id >= store.count) store.count = id + 1;
+    store.ownerId[id] = save.ownerId;
+    store.autoRenew[id] = save.autoRenew ? 1 : 0;
+    store.orders[id] = save.orders.map((order) => ({ ...order }));
+  }
+  return store;
 }
 
 /** Rebuild a live vehicle store from validated save data. */
@@ -345,6 +435,7 @@ export function buildVehicleStore(saves: readonly VehicleSave[]): VehicleStore {
     store.pathIndex[id] = save.pathIndex;
     store.pathLength[id] = save.path.length;
     store.orderIndex[id] = save.orderIndex;
+    store.lineId[id] = save.lineId;
     store.builtTick[id] = save.builtTick;
     store.reliability[id] = save.reliability;
     store.breakdownTicks[id] = save.breakdownTicks;

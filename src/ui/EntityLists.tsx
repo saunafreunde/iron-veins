@@ -13,12 +13,10 @@ import { ListPanel, type Column } from './ListPanel';
 import { useSimStore } from './store';
 
 /**
- * The four entity lists of section 17.1, each one a `ListPanel` with its own
- * columns.
- *
- * The fifth list the spec names is lines, and lines are section 12.2, which no
- * milestone has built yet - so there is nothing to list. That is stated in
- * CLAUDE.md rather than faked with an empty panel.
+ * Four of the five entity lists of section 17.1, each one a `ListPanel` with
+ * its own columns. The fifth - the LINE list of section 12.2, on the L key -
+ * lives in LinePanel.tsx, because it carries a detail panel and an editor
+ * beside the list.
  */
 
 export function StationList(): ReactElement {

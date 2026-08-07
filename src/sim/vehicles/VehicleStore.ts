@@ -284,6 +284,14 @@ export class VehicleStore {
   readonly needsCatenary: Uint8Array;
 
   readonly orderIndex: Uint8Array;
+  /**
+   * Line this vehicle is assigned to, or -1 (section 12.2, M11).
+   *
+   * While assigned, the vehicle reads the LINE's order list live - see
+   * `lines/LineStore.scheduleOf` - and its own `orders` array is empty. On
+   * release it gets a private copy back. An id, never a reference (law #9).
+   */
+  readonly lineId: Int32Array;
   readonly builtTick: Int32Array;
   readonly reliability: Uint16Array;
   readonly breakdownTicks: Int32Array;
@@ -348,6 +356,7 @@ export class VehicleStore {
     this.hasCooling = new Uint8Array(capacity);
     this.needsCatenary = new Uint8Array(capacity);
     this.orderIndex = new Uint8Array(capacity);
+    this.lineId = new Int32Array(capacity).fill(-1);
     this.builtTick = new Int32Array(capacity);
     this.reliability = new Uint16Array(capacity);
     this.breakdownTicks = new Int32Array(capacity);
@@ -440,6 +449,7 @@ export class VehicleStore {
     this.lastStationId[id] = -1;
     this.lastArrivalTick[id] = -1;
     this.orderIndex[id] = 0;
+    this.lineId[id] = -1;
     this.builtTick[id] = tick;
     // A train is only as reliable as its worst unit, which is what
     // aggregateConsist already works out. Leaving this unset made every vehicle
@@ -476,6 +486,7 @@ export class VehicleStore {
     this.waitingSinceTick[id] = -1;
     this.lastStationId[id] = -1;
     this.lastArrivalTick[id] = -1;
+    this.lineId[id] = -1;
     this.orders[id] = [];
     this.cargo[id] = [];
     this.consist[id] = [];

@@ -234,6 +234,9 @@ export class SimClient {
       case 'fleetChanged':
         store.setFleet(message.vehicles);
         return;
+      case 'linesChanged':
+        store.setLines(message.lines);
+        return;
       case 'commandRejected':
         store.setRejection(message.reasonKey);
         return;

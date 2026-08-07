@@ -7,6 +7,7 @@ import {
 } from '../constants';
 import { stationAccepts } from '../industry/catchment';
 import { industrySpec } from '../industry/types';
+import { scheduleOf } from '../lines/LineStore';
 import type { Station } from '../station/types';
 import { OrderTarget } from '../vehicles/VehicleStore';
 import type { World } from '../World';
@@ -51,7 +52,8 @@ function reserveAllowed(count: number): Uint8Array {
  * shed. Scanning wraps, because orders are a cycle.
  */
 export function nextStationOf(world: World, id: number, here: number): number {
-  const orders = world.vehicles.orders[id]!;
+  // The list the vehicle actually runs: its line's when assigned (12.2).
+  const orders = scheduleOf(world, id);
   if (orders.length === 0) return -1;
   const current = world.vehicles.orderIndex[id]! % orders.length;
 

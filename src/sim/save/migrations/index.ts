@@ -607,18 +607,37 @@ const v21_to_v22: SaveMigration = (payload) => {
 const v22_to_v23: SaveMigration = (payload) => ({ ...payload, worldDigest: '' });
 
 /**
- * M11 brought the full order grammar of section 12.1 and the waypoint layer -
- * the milestone's single bump (SPEC2 Z5); the later M11 stages extend THIS
- * migration.
+ * M11 brought the full order grammar of section 12.1, the waypoint layer,
+ * and - Stage B of the SAME bump (SPEC2 Z5) - the line entities of section
+ * 12.2 with everything that hangs off them.
  *
- * A version 23 world had no waypoints, so the layer is zero-filled, and its
- * orders knew only target/load/unload - the new fields get the values that
- * mean "not used": no refit (-1), no minimum dwell (0), no condition
- * (condKind -1, companions 0). Nothing here invents behaviour: a migrated
- * schedule runs exactly as it did, which the hash-identity test of
- * tests/unit/save.spec.ts holds. Fields that are already present are kept,
- * so re-wrapping a current state in an old container (the corpus trick)
- * cannot flatten real values back to defaults.
+ * Stage A's half: a version 23 world had no waypoints, so the layer is
+ * zero-filled, and its orders knew only target/load/unload - the new fields
+ * get the values that mean "not used": no refit (-1), no minimum dwell (0),
+ * no condition (condKind -1, companions 0).
+ *
+ * Stage B's half, and what "maps the old flags sensibly" means here:
+ *
+ *  - Every line an AI kept privately in its own state becomes a REAL line
+ *    entity (E-06), ids handed out in roster order, carrying the order list
+ *    its first vehicle was actually running - the schedule is moved, not
+ *    reinvented. Its vehicles are assigned (`lineId`) and their private
+ *    lists cleared, which is exactly the assigned state; their position in
+ *    the identical list is kept, so nothing about any journey changes. The
+ *    AI's review baseline per line moves into `reviews`, and a reinforcement
+ *    project's `lineIndex` is translated to the entity id it now names.
+ *  - The company-wide `autoRenew` flag of D-093 is REMOVED and mapped onto
+ *    the lines migrated for that company. A company with the flag on and no
+ *    lines - every human player's save, since players could not have lines -
+ *    loses the switch, because there is nothing left to attach it to: the
+ *    honest reading, stated in DECISIONS.md, is that renewal is a per-line
+ *    rule now and a save from before lines simply has no lines yet.
+ *
+ * Nothing here invents behaviour: a migrated schedule runs exactly as it
+ * did, which the hash-identity test of tests/unit/save.spec.ts holds for the
+ * lineless case and the corpus holds for good. Fields that are already
+ * present are kept, so re-wrapping a current state in an old container (the
+ * corpus trick) cannot flatten real values back to defaults.
  */
 const v23_to_v24: SaveMigration = (payload) => {
   const tiles = tileCount(payload);
@@ -629,36 +648,159 @@ const v23_to_v24: SaveMigration = (payload) => {
   }
   const vehicles = inner['vehicles'];
   if (!Array.isArray(vehicles)) throw new SaveFormatError('save.state.vehicles: expected an array');
+  const companies = inner['companies'];
+  if (!Array.isArray(companies)) {
+    throw new SaveFormatError('save.state.companies: expected an array');
+  }
+  const ai = inner['ai'];
+  if (!Array.isArray(ai)) throw new SaveFormatError('save.state.ai: expected an array');
 
   const layers = map as Record<string, unknown>;
   const waypoint =
     layers['waypoint'] instanceof Uint8Array ? layers['waypoint'] : new Uint8Array(tiles);
+
+  // The old company-wide renewal flags, remembered before they are removed.
+  const renewedCompany = companies.map(
+    (company) => (company as Record<string, unknown>)['autoRenew'] === true,
+  );
+
+  // Which line entity each vehicle joins, and the entities themselves.
+  const vehicleLine = new Map<number, number>();
+  const migratedLines: Record<string, unknown>[] = [];
+  const defaultOrder = (order: unknown): Record<string, unknown> => {
+    const entry = order as Record<string, unknown>;
+    return {
+      ...entry,
+      refitTo: entry['refitTo'] ?? -1,
+      waitTicks: entry['waitTicks'] ?? 0,
+      condKind: entry['condKind'] ?? -1,
+      condComparator: entry['condComparator'] ?? 0,
+      condValue: entry['condValue'] ?? 0,
+      condJumpTo: entry['condJumpTo'] ?? 0,
+    };
+  };
+  const ordersOfVehicle = (vehicleId: number): Record<string, unknown>[] => {
+    for (const vehicle of vehicles) {
+      const record = vehicle as Record<string, unknown>;
+      if (record['id'] !== vehicleId) continue;
+      const orders = record['orders'];
+      if (!Array.isArray(orders)) return [];
+      return orders.map(defaultOrder);
+    }
+    return [];
+  };
+
+  const migratedAi = ai.map((entry) => {
+    const previous = entry as Record<string, unknown>;
+    // A state written by this version already: pass through.
+    if (previous['reviews'] !== undefined) return previous;
+
+    const companyId = previous['companyId'];
+    const oldLines = Array.isArray(previous['lines']) ? previous['lines'] : [];
+    const lineIds: number[] = [];
+    const reviews: Record<string, unknown>[] = [];
+
+    for (const oldLine of oldLines) {
+      const line = oldLine as Record<string, unknown>;
+      const lineId = migratedLines.length;
+      lineIds.push(lineId);
+      const vehicleIds = Array.isArray(line['vehicleIds']) ? (line['vehicleIds'] as number[]) : [];
+      // The schedule the line's vehicles were actually running; the two-stop
+      // shape the AI always ordered, reconstructed only if no vehicle is
+      // left to read it from.
+      const first = vehicleIds.length > 0 ? ordersOfVehicle(vehicleIds[0]!) : [];
+      const orders =
+        first.length > 0
+          ? first
+          : [
+              {
+                target: 0,
+                targetId: line['fromStationId'] ?? 0,
+                load: 1,
+                unload: 1,
+                refitTo: -1,
+                waitTicks: 0,
+                condKind: -1,
+                condComparator: 0,
+                condValue: 0,
+                condJumpTo: 0,
+              },
+              {
+                target: 0,
+                targetId: line['toStationId'] ?? 0,
+                load: 2,
+                unload: 0,
+                refitTo: -1,
+                waitTicks: 0,
+                condKind: -1,
+                condComparator: 0,
+                condValue: 0,
+                condJumpTo: 0,
+              },
+            ];
+      migratedLines.push({
+        id: lineId,
+        ownerId: companyId,
+        autoRenew: typeof companyId === 'number' ? (renewedCompany[companyId] ?? false) : false,
+        orders,
+      });
+      for (const vehicleId of vehicleIds) {
+        if (typeof vehicleId === 'number') vehicleLine.set(vehicleId, lineId);
+      }
+      reviews.push({
+        lineId,
+        reviewTick: line['reviewTick'] ?? 0,
+        earnedAtReviewCt: line['earnedAtReviewCt'] ?? 0,
+      });
+    }
+
+    const next: Record<string, unknown> = { ...previous, reviews };
+    delete next['lines'];
+    const project = previous['project'];
+    if (typeof project === 'object' && project !== null) {
+      const oldProject = project as Record<string, unknown>;
+      if (oldProject['lineId'] === undefined) {
+        const lineIndex = oldProject['lineIndex'];
+        const mapped =
+          typeof lineIndex === 'number' && lineIndex >= 0 && lineIndex < lineIds.length
+            ? lineIds[lineIndex]!
+            : -1;
+        const migratedProject: Record<string, unknown> = { ...oldProject, lineId: mapped };
+        delete migratedProject['lineIndex'];
+        next['project'] = migratedProject;
+      }
+    }
+    return next;
+  });
 
   return {
     ...payload,
     state: {
       ...inner,
       map: { ...layers, waypoint },
+      // Kept when present: the corpus wraps a CURRENT state in this container.
+      lines: inner['lines'] ?? migratedLines,
+      ai: migratedAi,
+      companies: companies.map((company) => {
+        const previous = company as Record<string, unknown>;
+        const next = { ...previous };
+        delete next['autoRenew'];
+        return next;
+      }),
       vehicles: vehicles.map((vehicle) => {
         const previous = vehicle as Record<string, unknown>;
         const orders = previous['orders'];
         if (!Array.isArray(orders)) {
           throw new SaveFormatError('save.state.vehicles[].orders: expected an array');
         }
+        const id = previous['id'];
+        const assigned = typeof id === 'number' ? vehicleLine.get(id) : undefined;
         return {
           ...previous,
-          orders: orders.map((order) => {
-            const entry = order as Record<string, unknown>;
-            return {
-              ...entry,
-              refitTo: entry['refitTo'] ?? -1,
-              waitTicks: entry['waitTicks'] ?? 0,
-              condKind: entry['condKind'] ?? -1,
-              condComparator: entry['condComparator'] ?? 0,
-              condValue: entry['condValue'] ?? 0,
-              condJumpTo: entry['condJumpTo'] ?? 0,
-            };
-          }),
+          lineId: assigned ?? previous['lineId'] ?? -1,
+          // An assigned vehicle's list lives on its line; the private copy
+          // goes, exactly as an AssignVehicleToLine leaves it.
+          orders: assigned !== undefined ? [] : orders.map(defaultOrder),
         };
       }),
     },

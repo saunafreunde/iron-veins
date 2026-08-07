@@ -90,17 +90,8 @@ export function FinancePanel({ client }: { readonly client: SimClient }): ReactE
         </dl>
       )}
 
-      <label className="panel__hint">
-        <input
-          type="checkbox"
-          checked={finances?.autoRenew ?? false}
-          onChange={(event) =>
-            client.send({ kind: CommandKind.SetAutoRenew, enabled: event.target.checked })
-          }
-        />{' '}
-        {t('ui.finance.autoRenew')}
-      </label>
-
+      {/* Auto-renewal moved to the line detail panel with M11: the switch is
+          per LINE now (section 11.3), so the books no longer carry it. */}
       {finances !== null && <Books report={finances} />}
     </section>
   );

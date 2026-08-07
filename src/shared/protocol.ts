@@ -83,7 +83,6 @@ export interface FinanceReport {
   readonly bookValueCt: number;
   readonly loanCt: number;
   readonly cashCt: number;
-  readonly autoRenew: boolean;
   /** Carbon emitted this game year and last, in kilograms (section 14.3). */
   readonly co2ThisYearKg: number;
   readonly co2LastYearKg: number;
@@ -177,7 +176,12 @@ export interface VehicleMarker {
   readonly cargoUnits: number;
   readonly capacity: number;
   readonly earnedCt: number;
-  /** The full order list, for the order editor of section 12.1. */
+  /** Line the vehicle is assigned to, or -1 (section 12.2). */
+  readonly lineId: number;
+  /**
+   * The order list the vehicle RUNS: its line's when it is assigned to one,
+   * its own otherwise - for the order editor of section 12.1.
+   */
   readonly orders: readonly OrderMarker[];
   /** Units the train is made of, empty for anything else. */
   readonly consist: readonly number[];
@@ -191,6 +195,41 @@ export interface VehicleMarker {
    * Past DEADLOCK_WARNING_TICKS it counts as stuck (section 9.3).
    */
   readonly waitingTicks: number;
+}
+
+/** One stop of a line, with what is waiting there (section 12.2). */
+export interface LineStopMarker {
+  readonly stationId: number;
+  /** Cargo units waiting at the station. */
+  readonly waitingUnits: number;
+}
+
+/**
+ * A line as the line list and the line detail panel show it (section 12.2).
+ * Every figure is recomputed from the stores on the marker cadence - the
+ * entity itself carries no statistics (the M6 rule).
+ */
+export interface LineMarker {
+  readonly id: number;
+  /** Station stops in cycle order, with their waiting cargo. */
+  readonly stops: readonly LineStopMarker[];
+  /** The full shared order list, for the line's order editor. */
+  readonly orders: readonly OrderMarker[];
+  /** Vehicles assigned to the line, ascending id. */
+  readonly vehicleIds: readonly number[];
+  /** Share of the line's capacity currently aboard, 0..1. */
+  readonly utilisation: number;
+  /** Revenue rate minus upkeep, per game year (section 12.2). [cent] */
+  readonly profitPerYearCt: number;
+  /** Mean round time, arrival to arrival over the D-077 legs. [ticks] */
+  readonly roundTicks: number;
+  /**
+   * False while any leg is still the straight-line 54 km/h seed - the panel
+   * must SAY estimate then (D-077), not dress the guess up as a measurement.
+   */
+  readonly roundMeasured: boolean;
+  /** Per-line auto-renewal (section 11.3). */
+  readonly autoRenew: boolean;
 }
 
 export type MainToWorkerMessage =
@@ -276,6 +315,8 @@ export type WorkerToMainMessage =
   | { readonly type: 'newsChanged'; readonly news: readonly NewsMarker[] }
   /** Fleet overview for the vehicle list; sent when it changes, not per tick. */
   | { readonly type: 'fleetChanged'; readonly vehicles: readonly VehicleMarker[] }
+  /** The PLAYER's lines, on the same cadence as the fleet (section 12.2). */
+  | { readonly type: 'linesChanged'; readonly lines: readonly LineMarker[] }
   /** A save the worker encoded. The main thread decides where it goes. */
   | {
       readonly type: 'saveWritten';

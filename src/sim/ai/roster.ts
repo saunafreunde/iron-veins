@@ -39,7 +39,7 @@ export function createAiStates(companyCount: number, rng: Rng): AiState[] {
       // Offset by one so nobody thinks on tick zero, when the world has not
       // finished being built yet.
       nextDecisionTick: 1 + index * stagger,
-      lines: [],
+      reviews: [],
       project: null,
       lastBuildTick: -AI_DECISION_INTERVAL_TICKS,
     });

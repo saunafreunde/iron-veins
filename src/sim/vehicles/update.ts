@@ -60,6 +60,7 @@ import {
   type Station,
 } from '../station/types';
 import { creditDelivery } from '../economy/contracts';
+import { scheduleOf } from '../lines/LineStore';
 import type { World } from '../World';
 import { holdBody, releaseAll, releaseBehind, tryClaim } from './reservations';
 import { pathDirection, pathStepM, routeLengthM } from './route';
@@ -372,7 +373,7 @@ function routeTo(world: World, id: number, targetTile: number): boolean {
 /** Tile the current order sends the vehicle to, or -1 if it is unreachable. */
 function orderTargetTile(world: World, id: number): number {
   const vehicles = world.vehicles;
-  const orders = vehicles.orders[id]!;
+  const orders = scheduleOf(world, id);
   if (orders.length === 0) return -1;
 
   const order = orders[vehicles.orderIndex[id]! % orders.length]!;
@@ -449,7 +450,7 @@ function conditionHolds(world: World, id: number, order: Order): boolean {
  * targets were range-checked when the orders were set).
  */
 function resolveOrderIndex(world: World, id: number, start: number): number {
-  const orders = world.vehicles.orders[id]!;
+  const orders = scheduleOf(world, id);
   let index = start;
   for (let jumps = 0; jumps < MAX_ORDER_JUMPS_PER_STOP; jumps++) {
     const order = orders[index]!;
@@ -469,7 +470,7 @@ function resolveOrderIndex(world: World, id: number, start: number): number {
  */
 export function startVehicle(world: World, id: number): boolean {
   const vehicles = world.vehicles;
-  const orders = vehicles.orders[id]!;
+  const orders = scheduleOf(world, id);
   if (orders.length > 0) {
     // Starting from a stand is a stop event, so the conditions speak here too.
     vehicles.orderIndex[id] = resolveOrderIndex(world, id, vehicles.orderIndex[id]! % orders.length);
@@ -486,7 +487,7 @@ export function startVehicle(world: World, id: number): boolean {
 /** Move to the next order and start driving towards it. */
 function advanceOrder(world: World, id: number): void {
   const vehicles = world.vehicles;
-  const orders = vehicles.orders[id]!;
+  const orders = scheduleOf(world, id);
   if (orders.length === 0) {
     vehicles.state[id] = VehicleState.Stopped;
     return;
@@ -520,7 +521,7 @@ function advanceOrder(world: World, id: number): void {
  */
 function serveStation(world: World, id: number, station: Station): number {
   const vehicles = world.vehicles;
-  const orders = vehicles.orders[id]!;
+  const orders = scheduleOf(world, id);
   const order = orders[vehicles.orderIndex[id]! % orders.length]!;
   const carried = vehicles.cargo[id]!;
   const hasCooling = vehicles.hasCooling[id] === 1;
@@ -740,7 +741,7 @@ function holdingOver(world: World, stationId: number): number {
   for (let id = 0; id < vehicles.count; id++) {
     if (vehicles.alive[id] !== 1) continue;
     if (vehicles.state[id] !== VehicleState.Holding) continue;
-    const orders = vehicles.orders[id]!;
+    const orders = scheduleOf(world, id);
     if (orders.length === 0) continue;
     if (orders[vehicles.orderIndex[id]! % orders.length]!.targetId === stationId) count++;
   }
@@ -758,7 +759,7 @@ function mayDepart(world: World, id: number): boolean {
   const vehicles = world.vehicles;
   if (vehicles.kind[id] !== VehicleKind.Aircraft) return true;
 
-  const orders = vehicles.orders[id]!;
+  const orders = scheduleOf(world, id);
   if (orders.length === 0) return true;
   const order = orders[vehicles.orderIndex[id]! % orders.length]!;
   if (order.target !== OrderTarget.Station) return true;
@@ -929,7 +930,7 @@ function stepVehicle(world: World, id: number): void {
       // depot round trips): the vehicle dwells and then runs on. A vehicle
       // whose only order is the depot stays parked - there is nowhere to run
       // on to - and parking on purpose is what the stop command is for.
-      const orders = vehicles.orders[id]!;
+      const orders = scheduleOf(world, id);
       if (orders.length <= 1) return;
       vehicles.loadTicks[id] = vehicles.loadTicks[id]! - 1;
       if (vehicles.loadTicks[id]! > 0) return;
@@ -958,7 +959,7 @@ function stepVehicle(world: World, id: number): void {
       vehicles.loadTicks[id] = vehicles.loadTicks[id]! - 1;
       if (vehicles.loadTicks[id]! > 0) return;
 
-      const orders = vehicles.orders[id]!;
+      const orders = scheduleOf(world, id);
       const order = orders[vehicles.orderIndex[id]! % orders.length];
       // FullAny waits exactly as Full does: a vehicle here carries one cargo
       // at a time, so "full of anything" and "full" are the same condition
@@ -979,7 +980,7 @@ function stepVehicle(world: World, id: number): void {
     }
 
     case VehicleState.WaitingForCargo: {
-      const orders = vehicles.orders[id]!;
+      const orders = scheduleOf(world, id);
       const order = orders[vehicles.orderIndex[id]! % orders.length];
       const station = order === undefined ? undefined : world.stations[order.targetId];
       if (station === undefined) {
@@ -998,7 +999,7 @@ function stepVehicle(world: World, id: number): void {
     case VehicleState.Holding: {
       // Circling costs a tick of everybody's time and nothing else; the moment
       // a runway frees, the aircraft lands and is served.
-      const orders = vehicles.orders[id]!;
+      const orders = scheduleOf(world, id);
       const order = orders[vehicles.orderIndex[id]! % orders.length];
       const station = order === undefined ? undefined : world.stations[order.targetId];
       if (station === undefined) {
@@ -1114,7 +1115,7 @@ function stepVehicle(world: World, id: number): void {
       // approach for the rest of the game.
       releaseAll(world, id);
 
-      const orders = vehicles.orders[id]!;
+      const orders = scheduleOf(world, id);
       const order = orders[vehicles.orderIndex[id]! % orders.length];
       if (order === undefined) {
         vehicles.state[id] = VehicleState.Stopped;

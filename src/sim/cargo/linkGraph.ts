@@ -5,6 +5,7 @@ import {
   TICK_SECONDS,
   TILE_SIZE_M,
 } from '../constants';
+import { scheduleOf } from '../lines/LineStore';
 import { OrderTarget } from '../vehicles/VehicleStore';
 import type { World } from '../World';
 import { tileDistance } from './payment';
@@ -127,6 +128,18 @@ export class LinkGraph {
     return link >= 0 && this.active[link] === 1;
   }
 
+  /**
+   * True once at least one real trip has been recorded over the leg.
+   *
+   * The line panel asks this so it can label a mean that is still the
+   * straight-line 54 km/h seed as the ESTIMATE it is (D-077), instead of
+   * presenting a guess with the same face as a measurement.
+   */
+  legMeasured(fromStationId: number, toStationId: number): boolean {
+    const link = this.linkAt(fromStationId, toStationId);
+    return link >= 0 && this.links[link]!.samples.length > 0;
+  }
+
   private linkAt(fromStationId: number, toStationId: number): number {
     if (fromStationId < 0 || toStationId < 0) return -1;
     return this.index.get(fromStationId * LINK_KEY_STRIDE + toStationId) ?? -1;
@@ -173,7 +186,9 @@ export class LinkGraph {
     const vehicles = world.vehicles;
     for (let id = 0; id < vehicles.count; id++) {
       if (vehicles.alive[id] !== 1) continue;
-      const orders = vehicles.orders[id]!;
+      // The list the vehicle actually runs: its line's when it is assigned to
+      // one (section 12.2), its own otherwise.
+      const orders = scheduleOf(world, id);
 
       let first = -1;
       let previous = -1;

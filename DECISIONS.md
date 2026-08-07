@@ -11,15 +11,16 @@ decision is missing from this register or the register cites a number that has
 no entry below. A number may appear under several topics.
 
 - **Determinism, RNG & hashing:** D-001, D-002, D-003, D-004, D-009, D-010,
-  D-024, D-093, D-106, D-128, D-137, D-142
+  D-024, D-093, D-106, D-128, D-137, D-142, D-145, D-146
 - **Commands, snapshot & worker boundary:** D-004, D-005, D-006, D-011, D-032,
-  D-100, D-111
+  D-100, D-111, D-145, D-146, D-148
+- **Lines & timetables:** D-145, D-146, D-147, D-148
 - **Map generation & terrain:** D-018, D-019, D-020, D-021, D-022, D-023,
   D-025, D-027
 - **Terraforming & structures:** D-028, D-034, D-050, D-051, D-052, D-124,
   D-141
 - **Save format, migrations & replays:** D-007, D-025, D-026, D-027, D-048,
-  D-111, D-130, D-131, D-134, D-142, D-144
+  D-111, D-130, D-131, D-134, D-142, D-144, D-145, D-146, D-147
 - **Rail & track:** D-042, D-043, D-044, D-045, D-046, D-047, D-053, D-141
 - **Signals & reservations:** D-054, D-055, D-056, D-057, D-058, D-059, D-060,
   D-061, D-073, D-080, D-081, D-082, D-083
@@ -33,14 +34,14 @@ no entry below. A number may appear under several topics.
 - **Balancing & scenarios:** D-038, D-039, D-040, D-041, D-066, D-087, D-088,
   D-116
 - **Vehicles & fleet:** D-043, D-044, D-045, D-068, D-076, D-089, D-093,
-  D-096, D-142, D-143
+  D-096, D-142, D-143, D-145, D-146
 - **Water & air:** D-094, D-095, D-096, D-097, D-098, D-099
 - **Competitors, AI & tenders:** D-107, D-108, D-109, D-115, D-116, D-121,
-  D-122
+  D-122, D-147
 - **Rendering & art:** D-013, D-014, D-033, D-035, D-112, D-117, D-125, D-127,
   D-136, D-140
 - **UI & input:** D-011, D-013, D-015, D-035, D-110, D-113, D-114, D-119,
-  D-126
+  D-126, D-148
 - **Performance & measurement:** D-002, D-120, D-135, D-136
 - **Platform, tooling & build:** D-012, D-014, D-015, D-016, D-017, D-029,
   D-030, D-031
@@ -2810,3 +2811,144 @@ the migration invented would make every later verification a tautology.
 What is genuinely given up is bit-rot detection on old-format files; what
 is kept is every corruption check on the format the game actually writes,
 which is the case the `.bak` machinery exists for.
+
+## M11 - the line backbone, stage B: the line entity (2026-08-07)
+
+### D-145 A line is a shared order list a vehicle points at, and nothing else
+
+Section 12.2 says vehicles are assigned to lines, a line edit reaches all of
+them, and the line overview shows statistics. The entity built for that is
+deliberately minimal: `LineStore` (struct of arrays, `MAX_LINES` in
+constants.ts) holds per line an owner, the auto-renewal flag and the shared
+order list - and NO vehicle list and NO statistics. Which vehicles run a
+line is answered by scanning the fleet for `lineId`, and every figure the
+panel shows is recomputed from the stores when asked (`lines/metrics.ts`) -
+the M6 rule, chosen here for the same reason as there: a cached membership
+list would need correcting from every sell, renewal and winding-up, and any
+drift would be invisible until a save was reloaded.
+
+The mechanism that makes "an edit reaches every vehicle in the same tick"
+true is that there is no mechanism: `scheduleOf(world, id)` returns the
+LINE's array for an assigned vehicle and the private one otherwise, and it
+is the single read path for schedules - the state machine, the routing rule
+of D-078, the link graph, the renewal, the AI and the fleet markers all go
+through it. The moment `SetLineOrders` replaces the array, every reader is
+already looking at the new list; nothing propagates because nothing is
+copied. Three consequences are the semantics, each tested:
+
+* **Re-anchoring.** A vehicle whose schedule is replaced under it anchors on
+  the entry of the NEW list whose target lies nearest to where it stands
+  (straight line over tile coordinates, a station measured at its centre),
+  ties to the LOWER index - a total order. Its route, claims and the leg in
+  progress are dropped (the time either side of an edit measures nothing,
+  D-077), and it repaths exactly as an edited private schedule always has.
+* **Release copies.** A released vehicle - and every vehicle of a deleted
+  line - keeps a private COPY of the list and its position in it, so nothing
+  about its journey changes; the next edit simply no longer reaches it.
+* **A private edit detaches.** `SetVehicleOrders` on an assigned vehicle
+  takes it off its line first. Two authors of one schedule would mean asking
+  which list wins at every stop; the explicit edit is the answer.
+
+Save and hash: only the LIVING lines travel, with their ids, and the store
+reuses the LOWEST dead slot rather than a first-freed queue - that makes the
+next id a pure function of the alive bitmap, so a reloaded world allocates
+exactly the id the unsaved one would have without serialising a free list.
+(The vehicle store's FIFO free list does not have this property; its holes
+are not reconstructed on load either, which is a pre-existing latent hazard
+noted here and left alone.) Every new field is hashed - the line section,
+`lineId` per vehicle, and the D-134 audit holds all of it via a synthetic
+line representative. The hash change re-recorded the canonical cross-OS pin
+under the D-137 protocol (v24, seed 424,242, tick 10,000:
+`9e282ad7b7244c75`) and the corpus manifest under D-130 - the regeneration
+proving again that the v22, v23 and v24 fixtures decode to ONE identical
+hash (`7abe526eb9e027f8`), i.e. the extended migration stays defaults-only
+for a lineless save. Determinism fixture `line-commands.json` replays all
+five line commands through the shared parser, edits the list mid-drive and
+releases a vehicle, across a mid-run save/load.
+
+### D-146 Auto-renewal moved onto the line, and the old command still parses
+
+D-093 parked section 11.3's per-line renewal switch on the company because
+lines did not exist; M11 stage B ends the loan. `CompanyState.autoRenew` is
+gone - from the type, the save, the hash and the finance report - and the
+flag lives on the line, where `renewFleet` reads it: a vehicle that runs no
+line is never renewed automatically, because there is no flag anywhere that
+could say so. Still zero randomness, still the total-order successor.
+
+`SetAutoRenew` keeps its command KIND and gains a `lineId`, absent on the
+wire in every pre-M11 log. Absent parses to -1, and -1 means "every line the
+acting company owns" - a bulk setter that is a quiet success even with zero
+lines. That reading is what keeps two constitutional promises at once: an
+old save's command log still PARSES (a deleted kind would make the file
+unloadable), and the recorded road-line fixture still replays its
+`SetAutoRenew` without a rejection. The migration maps the old company flag
+onto the lines it migrates for that company (an AI's, see D-147); a PLAYER's
+flag lapses, because a player could not have lines and there is nothing to
+attach it to - stated here as the honest reading rather than hidden: the
+switch reappears per line the moment vehicles run one.
+
+Rewriting `renewFleet` surfaced a real bug worth its own sentence: the old
+code addressed the replacement as `vehicles.count - 1`, but the store reuses
+freed slots FIFO, so the fresh vehicle usually lands exactly in the slot the
+sold one vacated - `count - 1` was only ever right for the newest vehicle of
+a company, which the single-vehicle renewal test happened to be. In a
+multi-vehicle fleet the orders and refit went to an unrelated vehicle. The
+replacement is now found as the vehicle BUILT THIS TICK at that shed, and it
+inherits the line assignment, anchored at the depot it stands in.
+
+### D-147 The AI runs real lines now, and remembers only its judgement
+
+E-06 executed: `AiState.lines` is deleted - the acceptance grep finds zero
+hits - and a competitor's line is the Line entity of section 12.2, opened
+with `CreateLine`, scheduled with `SetLineOrders`, crewed with
+`AssignVehicleToLine` and closed with `DeleteLine`: the exact commands the
+player's panel sends, through the same queue, refused for the same reasons.
+
+The project machinery gained one cycle (four instead of D-108's three): the
+line id a `CreateLine` will produce cannot be known while the command is
+queued, so the cycle after the vehicles arrive opens the line, and the cycle
+after that OBSERVES it - the one empty line this company owns, lowest id -
+and gives it the schedule and the crew. Reinforcements and reviews read the
+line's composition back off the fleet that runs it (first vehicle's consist,
+cargo and home depot - the M6 rule applied to the AI's own memory), so the
+old `AiLine` fields describing the fleet are simply gone.
+
+What could NOT be recomputed is the review baseline - "what had this line
+earned when I last looked" is a historical input to a sim decision and
+therefore save state (Z4). It survives as `AiState.reviews`, a list of
+`{lineId, reviewTick, earnedAtReviewCt}` referencing the entity by id
+(law #9). That is deliberately not a second line entity: it describes the
+AI's opinion, not the line. The migration turns each old `AiLine` into a
+real entity (order list taken from its first vehicle, vehicles assigned,
+review carried over, a reinforcement project's index translated to the
+entity id) so a mid-project old save resumes exactly where it was.
+
+Measured on the M8 acceptance run (25 years, seed 4,711): the suite stays
+green end to end - the road personality finishes with 3 lines, 5 vehicles
+and about 522,000 company value. That is below the 973,000 D-122 recorded,
+and the difference predates this stage only in part: stage A's D-143 (depot
+orders run on) and this stage's honest per-vehicle upkeep in the line
+review both moved it. The number is stage C's problem by design - E-06's
+fleet-sizing formula is what makes scenario 5 reachable, and it lands there.
+
+### D-148 L opens the line list, the station list moves to H, and an estimate says so
+
+Section 17.2 always gave L to the lines; D-114 lent it to the station list
+"because lines do not exist". They do now, so L opens the line list (the
+generic ListPanel with utilisation, profit per year and mean round time as
+sortable columns) and the station list moves to H - the nearest free letter
+with a mnemonic in German ("Haltestellen"), recorded in the one keymap table
+both the handler and the options screen read.
+
+The line detail shows stops with waiting cargo, the crew, the per-line
+renewal switch, and the shared order editor - the SAME editor component the
+fleet panel uses for private schedules, so the two grammars cannot drift; a
+vehicle on a line shows its membership instead of an editor, because its
+schedule is the line's. The mean round time is the sum of the D-077 leg
+means around the cycle - THE single round-time source, no second
+measurement - and while any leg is still the straight-line 54 km/h seed the
+figure is prefixed `~` with a sentence naming it an estimate: a guess
+wearing a measurement's face would be the panel lying about the one number
+takt planning (stage C) will hang off. The snapshot gained `lineId` per
+vehicle - M11's one layout bump (version 6) - so map-side highlighting of a
+line's vehicles never needs a marker round trip.

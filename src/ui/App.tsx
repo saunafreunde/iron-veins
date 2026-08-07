@@ -8,6 +8,7 @@ import { CrashDialog } from './CrashDialog';
 import { IndustryList, StationList, TownList, VehicleList } from './EntityLists';
 import { FinancePanel } from './FinancePanel';
 import { FleetPanel } from './FleetPanel';
+import { LinePanel } from './LinePanel';
 import { CompanyList } from './CompanyList';
 import { ContractPanel } from './ContractPanel';
 import { HandbookPanel } from './HandbookPanel';
@@ -144,14 +145,20 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
           event.preventDefault();
           toggleDebug();
           return;
-        // The list keys of section 17.2. Four lists cannot all be on screen at
-        // once, so each key toggles its own and closes whatever was open.
+        // The list keys of section 17.2. Five lists cannot all be on screen at
+        // once, so each key toggles its own and closes whatever was open. L is
+        // the LINE list, as the section says; the station list sits on H (see
+        // keymap.ts).
         case 'v':
         case 'V':
           toggleList('vehicles');
           return;
         case 'l':
         case 'L':
+          toggleList('lines');
+          return;
+        case 'h':
+        case 'H':
           toggleList('stations');
           return;
         case 't':
@@ -248,10 +255,11 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
           <MapCanvas client={client} />
           <Minimap />
           <aside className="sidebar">
-            {/* One list at a time, opened with V, B, T or I (section 17.2).
-                Four always-visible lists would not fit beside the map, and the
+            {/* One list at a time, opened with V, L, H, T or I (section 17.2).
+                Five always-visible lists would not fit beside the map, and the
                 spec puts them behind keys for exactly that reason. */}
             {openList === 'vehicles' && <VehicleList />}
+            {openList === 'lines' && <LinePanel client={client} />}
             {openList === 'stations' && <StationList />}
             {openList === 'towns' && <TownList />}
             {openList === 'industries' && <IndustryList />}
