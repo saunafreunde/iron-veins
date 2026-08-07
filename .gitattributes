@@ -1,8 +1,8 @@
 # Line-ending policy (D-168): the repository is LF everywhere - committed
 # blobs AND working tree. `text=auto` normalises anything git detects as text
 # at commit time; the explicit `eol=lf` rules below make checkout produce LF
-# regardless of a machine's `core.autocrlf`, so `npm run format:check`
-# (prettier, endOfLine "lf") is green on every OS without per-machine config.
+# regardless of a machine's `core.autocrlf`, so line endings can never turn
+# `npm run format:check` (prettier, endOfLine "lf") red on any OS.
 * text=auto
 
 # Every source and config extension tracked in the index, pinned to LF.

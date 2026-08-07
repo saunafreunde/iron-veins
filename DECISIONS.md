@@ -4116,3 +4116,13 @@ plain `git checkout` considers the CRLF files up to date and rewrites
 nothing. The same recipe lives in CLAUDE.md's environment note. New
 files need no care: the attributes clean them at commit and prettier
 writes them LF in the working tree.
+
+One honest limit, discovered while verifying: with the endings fixed,
+`format:check` is STILL red on 52 files - genuine style drift older
+than this entry (CI never gated formatting), not an EOL artefact. It is
+deliberately not swept here: strict scope aside, prettier's own
+markdown emphasis handling would CORRUPT prose - it rewrites
+`**ships get plain A*, ...**` in CLAUDE.md into broken `_*`-emphasis,
+because of the literal `A*` - so the cleanup needs a decision about
+exempting the prose documents first, and that is its own change, not a
+side effect of line endings.
