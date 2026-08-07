@@ -7,14 +7,17 @@ import {
   CELL_HEADROOM_STEPS,
   CELL_SKIRT_STEPS,
   DETAIL_ATLAS_SCALE,
+  emissiveBuildingFrame,
+  emissiveIndustryFrame,
   foamAtlasFrame,
   MAX_ATLAS_PX,
   planDetailAtlas,
   waterAtlasFrame,
 } from '../../src/render/TerrainAtlas';
+import { INDUSTRY_EMISSIVE_TYPES } from '../../src/render/industryArt';
 import { FOAM_VARIANT_COUNT, WATER_FRAME_COUNT } from '../../src/render/water';
 import { HEIGHT_PX, TILE_H } from '../../src/render/projection';
-import { INDUSTRY_TYPE_COUNT } from '../../src/sim/industry/types';
+import { INDUSTRY_TYPE_COUNT, IndustryType } from '../../src/sim/industry/types';
 import { SLOPE_COUNT, TERRAIN_COUNT } from '../../src/sim/map/terrain';
 
 /**
@@ -55,34 +58,36 @@ describe('the base page layout guard', () => {
     expect(size.height).toBeLessThanOrEqual(MAX_ATLAS_PX);
   });
 
-  it('matches the ledger booking of SPEC2 6.2 (2176x3456)', () => {
+  it('matches the ledger booking of SPEC2 6.2 (2176x3648)', () => {
     // Growing the page is fine - but it is a BOOKING, made consciously in
     // SPEC2 6.2 and re-pinned here, never an accident (Fehlerkatalog 40).
-    // 3456 is the original 2688 plus M12's four booked water rows (three
-    // animation rows and the coastline foam row, D-164).
-    expect(baseAtlasSize()).toEqual({ width: 2176, height: 3456 });
+    // 3648 is the original 2688 plus M12's four booked water rows (three
+    // animation rows and the coastline foam row, D-164) plus M13's one
+    // booked emissive row (window-only twins, D-172).
+    expect(baseAtlasSize()).toEqual({ width: 2176, height: 3648 });
   });
 });
 
 describe('the water rows of the base page (D-164)', () => {
   const size = baseAtlasSize();
   const cellH = TILE_H * ATLAS_SCALE + 16 * ATLAS_SCALE * (CELL_HEADROOM_STEPS + CELL_SKIRT_STEPS);
-  /** First row that did not exist before M12: everything above is Bestand. */
-  const bookedTop = size.height - 4 * cellH;
+  /** First M12 row; everything above is Bestand, the M13 emissive row below. */
+  const bookedTop = size.height - 5 * cellH;
+  const bookedBottom = size.height - cellH;
 
   it('spends exactly the four booked rows, inside the page', () => {
     for (let frame = 0; frame < WATER_FRAME_COUNT; frame++) {
       for (let slope = 0; slope < SLOPE_COUNT; slope++) {
         const cell = waterAtlasFrame(frame, slope);
         expect(cell.y, `w${frame}:${slope}`).toBeGreaterThanOrEqual(bookedTop);
-        expect(cell.y + cell.height, `w${frame}:${slope}`).toBeLessThanOrEqual(size.height);
+        expect(cell.y + cell.height, `w${frame}:${slope}`).toBeLessThanOrEqual(bookedBottom);
         expect(cell.x + cell.width, `w${frame}:${slope}`).toBeLessThanOrEqual(size.width);
       }
     }
     for (let variant = 0; variant < FOAM_VARIANT_COUNT; variant++) {
       const cell = foamAtlasFrame(variant);
       expect(cell.y, `f${variant}`).toBeGreaterThanOrEqual(bookedTop);
-      expect(cell.y + cell.height, `f${variant}`).toBeLessThanOrEqual(size.height);
+      expect(cell.y + cell.height, `f${variant}`).toBeLessThanOrEqual(bookedBottom);
       expect(cell.x + cell.width, `f${variant}`).toBeLessThanOrEqual(size.width);
     }
     expect(WATER_FRAME_COUNT + 1).toBe(4);
@@ -119,6 +124,75 @@ describe('the water rows of the base page (D-164)', () => {
       }
     }
     expect(foamAtlasFrame(0).anchorY).toBe(reference.anchorY);
+  });
+});
+
+describe('the emissive row of the base page (M13, D-172)', () => {
+  const size = baseAtlasSize();
+  const cellH = TILE_H * ATLAS_SCALE + 16 * ATLAS_SCALE * (CELL_HEADROOM_STEPS + CELL_SKIRT_STEPS);
+  /** The one booked M13 row: the last row of the page. */
+  const bookedTop = size.height - cellH;
+
+  it('spends exactly the one booked row, inside the page, without overlap', () => {
+    const seen = new Set<string>();
+    for (const kind of [1, 2, 3]) {
+      for (const level of [1, 2]) {
+        const cell = emissiveBuildingFrame(kind, level);
+        expect(cell.y, `eb${kind}:${level}`).toBeGreaterThanOrEqual(bookedTop);
+        expect(cell.y + cell.height, `eb${kind}:${level}`).toBeLessThanOrEqual(size.height);
+        expect(cell.x + cell.width, `eb${kind}:${level}`).toBeLessThanOrEqual(size.width);
+        seen.add(`${cell.x}:${cell.y}`);
+      }
+    }
+    for (const type of INDUSTRY_EMISSIVE_TYPES) {
+      const cell = emissiveIndustryFrame(type)!;
+      expect(cell, `ei${type}`).not.toBeNull();
+      expect(cell.y, `ei${type}`).toBeGreaterThanOrEqual(bookedTop);
+      expect(cell.x + cell.width, `ei${type}`).toBeLessThanOrEqual(size.width);
+      seen.add(`${cell.x}:${cell.y}`);
+    }
+    // Six building twins plus one cell per glazed industry, each on its own
+    // grid slot - a duplicate would collapse here.
+    expect(seen.size).toBe(6 + INDUSTRY_EMISSIVE_TYPES.length);
+  });
+
+  it('gives every twin the geometry of the cell it glows over', () => {
+    // The twin composites ADDITIVELY over its base cell at the same world
+    // position, so width, height and anchor must be the base cell's own -
+    // any drift would slide the lit windows off the dark ones.
+    const reference = waterAtlasFrame(0, 0); // the shared base cell geometry
+    for (const kind of [1, 2, 3]) {
+      for (const level of [1, 3]) {
+        const cell = emissiveBuildingFrame(kind, level);
+        expect(cell.width).toBe(reference.width);
+        expect(cell.height).toBe(reference.height);
+        expect(cell.anchorY).toBe(reference.anchorY);
+      }
+    }
+    for (const type of INDUSTRY_EMISSIVE_TYPES) {
+      const cell = emissiveIndustryFrame(type)!;
+      expect(cell.width).toBe(reference.width);
+      expect(cell.anchorY).toBe(reference.anchorY);
+    }
+  });
+
+  it('mirrors the building-frame column formula, level threshold included', () => {
+    for (const kind of [1, 2, 3]) {
+      // Levels 1 and 2 split exactly where buildingFrame splits (>= 2).
+      expect(emissiveBuildingFrame(kind, 1).x).not.toBe(emissiveBuildingFrame(kind, 2).x);
+      expect(emissiveBuildingFrame(kind, 2).x).toBe(emissiveBuildingFrame(kind, 3).x);
+    }
+  });
+
+  it('answers null for the unglazed industries - no glow is the honest cell', () => {
+    expect(emissiveIndustryFrame(IndustryType.CoalMine)).toBeNull();
+    expect(INDUSTRY_EMISSIVE_TYPES).toContain(IndustryType.FurnitureFactory);
+    expect(INDUSTRY_EMISSIVE_TYPES).toContain(IndustryType.ElectronicsFactory);
+    expect(INDUSTRY_EMISSIVE_TYPES).toContain(IndustryType.FoodFactory);
+    for (const type of INDUSTRY_EMISSIVE_TYPES) {
+      expect(type).toBeGreaterThanOrEqual(0);
+      expect(type).toBeLessThan(INDUSTRY_TYPE_COUNT);
+    }
   });
 });
 

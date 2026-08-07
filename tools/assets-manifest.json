@@ -32,8 +32,16 @@
     "kit), the coal-mine headframe and oil derrick, the Farm (no farmstead",
     "model in any pinned kit), and every dev build without a cache. The",
     "watercraft ship-large galleon and the Pirate Kit ships stay filed for",
-    "the pre-1920 eras (M23) - no current catalogue entry predates 1950."
+    "the pre-1920 eras (M23) - no current catalogue entry predates 1950.",
+    "Glazing (`emissive`, M13): ONE kit-wide convention - window glass in",
+    "every pinned kit is the same sky-blue colormap ramp (measured hue",
+    "212-216 at HSL saturation 0.62-0.83), so one root-level hue band",
+    "classifies windows across all models. The bake writes a lit-only",
+    "emissive twin cell (own page set, SPEC2 6.2 page 2) for every facing",
+    "whose glazing survives occlusion; tint wins over glazing, so a livery",
+    "in glass-blue paint (the two blue hulls) stays a livery."
   ],
+  "emissive": { "hues": [{ "min": 205, "max": 225, "minSaturation": 0.55 }] },
   "version": 1,
   "license": "CC0-1.0",
   "credits": "All 3D models by Kenney (kenney.nl), CC0. Credited in README and the credits screen although CC0 requires none.",

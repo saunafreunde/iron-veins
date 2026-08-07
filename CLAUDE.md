@@ -606,9 +606,9 @@ Measured (reference machine, in the ledger 6.1.1): tick p50/p99 unchanged
 chunk bake p99 1.57 ms against the 4 ms acceptance budget, sprite-pool
 rebuild p99 4.17 ms / draw-prep p99 1.58 ms against 25/5 ms tripwires,
 both atlas pages under 20 ms of the 250 ms startup slice.
-Atlas ledger: page 0 at 2176x3456 of 4096 (the four water rows), page
-0-detail booked 4096x3840 (D-163) - every further cell needs a 6.2
-booking first (Fehlerkatalog 40).
+Atlas ledger: page 0 at 2176x3648 of 4096 (M12's four water rows plus
+M13's emissive row, D-172), page 0-detail booked 4096x3840 (D-163) -
+every further cell needs a 6.2 booking first (Fehlerkatalog 40).
 
 ## Still outstanding
 

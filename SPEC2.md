@@ -443,10 +443,10 @@ hash-relevanten Migration und wird dort re-recorded (M10-Erstwert war
 
 | Seite | Inhalt | Budget |
 |---|---|---|
-| 0 | Terrain/Statik (Bestand 2176×2688) + 4 Wasser-Zeilen (M12 eingelöst: 3 Animations- + 1 Küstensaum-Zeile, D-164) — Stand 2176×3456 von 4096 | Restfläche; KEINE Fahrzeug-Zellen hier |
+| 0 | Terrain/Statik (Bestand 2176×2688) + 4 Wasser-Zeilen (M12 eingelöst: 3 Animations- + 1 Küstensaum-Zeile, D-164) + 1 Emissive-Zeile (M13 B4 eingelöst: 6 Fenster-Zwillinge der Stadtgebäude + 3 verglaste Industrien, D-172) — Stand 2176×3648 von 4096 | Restfläche; KEINE Fahrzeug-Zellen hier |
 | 0-detail | 4×-Zwilling von Seite 0 für die oberste Zoomstufe (prozedural, M12): kurze Zeilen für Terrain/Straße/Gleis, hohe für Gebäude/Industrie/Statik | gebucht 4096×3840 von 4096 (D-163); wächst nur mit neuer Buchung hier |
 | 1 | Fahrzeuge + gebackene Objekte (Kenney-Bake, Build-Artefakt, D-160/D-169): 95 Fahrzeuge × 8 Facings + 50 Statik-Zellen (Stadt/Industrie/Bäume), jede Zelle ein Basis+Masken-Paar | ~600 Zellen, eigene 4096²-Seite — **M13 B1 gemessen und ehrlich überbucht (Fehlerkatalog 40): 810 Zellen je Zoomstufe; z1 = 1 Seite 4096×1067, z2 = 1 Seite 4092×3606, z4 = 4 Seiten ≤ 4096². Zur Laufzeit sind nur die Seiten EINER Zoomstufe GPU-resident; der ~600er-Plan stammt aus der Vor-Kenney-Schätzung (D-169). B2: Kontaktschatten IN die Zellrechtecke gebacken (Clip + Randblende) — Seitenmaße byte-identisch zur B1-Buchung; die ungeclippte Fassung hätte z2 auf 2 und z4 auf 6 Seiten getrieben und wurde verworfen (D-170)** |
-| 2 | Emissive-Zwillinge (Fenster/Lampen/Signale) + Ären-/Klima-Varianten | ~150 + Emissive, eigene Seite |
+| 2 | Emissive-Zwillinge (Fenster/Lampen/Signale) + Ären-/Klima-Varianten | ~150 + Emissive, eigene Seite — **M13 B4 gemessen: 548 Emissive-Zwillinge je Zoomstufe (Verglasung, die die Occlusion überlebt — Pixel-Entscheid je Facing, D-172); z1 = 4090×568, z2 = 4088×1498, z4 = 4095×4040 + 3826×1396, ~235 KiB; wie bei Seite 1 nur die Seiten EINER Zoomstufe GPU-resident. Lampen-/Scheinwerfer-Glühen sind prozedurale Laufzeit-Texturen (kein Seitenverbrauch); Signal-Emissive folgt im Signal-Bundle, Ären-/Klima-Varianten buchen weiterhin hier (M23)** |
 
 Saison-/Ären-Wechsel belegen KEINE zusätzlichen Zellen — Regeneration
 (≤ 30 ms async, debounced auf max. 1 Rebuild/Realsekunde bei 20×) ist der

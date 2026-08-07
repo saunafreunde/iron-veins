@@ -84,6 +84,88 @@ function makeShadowTexture(): Texture {
   return Texture.from(canvas);
 }
 
+/**
+ * The M13 emissive layer's procedural glow textures: a street-lamp pool and
+ * eight headlight cones, drawn once at attach - procedural, no binary asset
+ * (E-14), the makeShadowTexture pattern. Both are drawn in the warm
+ * lit-window light and composited ADDITIVELY at night, scaled by
+ * `emissiveIntensity` - the same D-127-derived ramp the window cells use.
+ */
+
+/** Lamp glow texture size; the ellipse is iso-foreshortened 2:1. [px] */
+const LAMP_TEX_W = 44;
+const LAMP_TEX_H = 22;
+
+/** The warm glow used by lamp pool and headlight cones. [CSS rgb] */
+const GLOW_WARM_RGB = '255,225,160';
+
+function makeLampTexture(): Texture {
+  const canvas = document.createElement('canvas');
+  canvas.width = LAMP_TEX_W;
+  canvas.height = LAMP_TEX_H;
+  const ctx = canvas.getContext('2d')!;
+  ctx.translate(LAMP_TEX_W / 2, LAMP_TEX_H / 2);
+  ctx.scale(1, LAMP_TEX_H / LAMP_TEX_W);
+  const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, LAMP_TEX_W / 2);
+  gradient.addColorStop(0, `rgba(${GLOW_WARM_RGB},0.95)`);
+  gradient.addColorStop(0.35, `rgba(${GLOW_WARM_RGB},0.4)`);
+  gradient.addColorStop(1, `rgba(${GLOW_WARM_RGB},0)`);
+  ctx.fillStyle = gradient;
+  ctx.fillRect(-LAMP_TEX_W / 2, -LAMP_TEX_W / 2, LAMP_TEX_W, LAMP_TEX_W);
+  return Texture.from(canvas);
+}
+
+/** One pre-baked headlight cone: its texture plus where the vehicle's ground
+ * anchor sits inside it, so placement is one subtraction per axis. */
+interface HeadlightCone {
+  readonly texture: Texture;
+  readonly originX: number;
+  readonly originY: number;
+}
+
+/**
+ * Rasterise the eight headlight cones (SPEC2 M13: "kleiner vorgebackener
+ * Leuchtkegel je Facing"). The geometry comes from `headlightGroundPoints` -
+ * a GROUND-plane cone in tile space, projected here with the 16.1
+ * projection, so a cone pointing up the screen is foreshortened exactly
+ * like the road it lights.
+ */
+function makeHeadlightCones(): HeadlightCone[] {
+  const cones: HeadlightCone[] = [];
+  for (let facing = 0; facing < 8; facing++) {
+    const points = headlightGroundPoints(facing);
+    const screen: number[] = [];
+    for (let corner = 0; corner < 3; corner++) {
+      const u = points[corner * 2]!;
+      const v = points[corner * 2 + 1]!;
+      screen.push(((u - v) * TILE_W) / 2, ((u + v) * TILE_H) / 2);
+    }
+    const pad = 3;
+    const minX = Math.floor(Math.min(screen[0]!, screen[2]!, screen[4]!)) - pad;
+    const minY = Math.floor(Math.min(screen[1]!, screen[3]!, screen[5]!)) - pad;
+    const maxX = Math.ceil(Math.max(screen[0]!, screen[2]!, screen[4]!)) + pad;
+    const maxY = Math.ceil(Math.max(screen[1]!, screen[3]!, screen[5]!)) + pad;
+    const canvas = document.createElement('canvas');
+    canvas.width = maxX - minX;
+    canvas.height = maxY - minY;
+    const ctx = canvas.getContext('2d')!;
+    const tipX = (screen[2]! + screen[4]!) / 2 - minX;
+    const tipY = (screen[3]! + screen[5]!) / 2 - minY;
+    const gradient = ctx.createLinearGradient(screen[0]! - minX, screen[1]! - minY, tipX, tipY);
+    gradient.addColorStop(0, `rgba(${GLOW_WARM_RGB},0.85)`);
+    gradient.addColorStop(1, `rgba(${GLOW_WARM_RGB},0)`);
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    ctx.moveTo(screen[0]! - minX, screen[1]! - minY);
+    ctx.lineTo(screen[2]! - minX, screen[3]! - minY);
+    ctx.lineTo(screen[4]! - minX, screen[5]! - minY);
+    ctx.closePath();
+    ctx.fill();
+    cones.push({ texture: Texture.from(canvas), originX: -minX, originY: -minY });
+  }
+  return cones;
+}
+
 /** One vehicle as the audio engine wants it; reused between frames. */
 export interface VehicleAudioInput {
   id: number;
@@ -99,11 +181,19 @@ import {
   buildDetailAtlas,
   buildTerrainAtlas,
   DETAIL_ATLAS_SCALE,
+  emissiveBuildingFrame,
+  emissiveIndustryFrame,
   foamAtlasFrame,
   waterAtlasFrame,
   type AtlasFrame,
   type TerrainAtlas,
 } from './TerrainAtlas';
+import {
+  EMISSIVE_MAX_ALPHA,
+  headlightGroundPoints,
+  headlightsOn,
+  lampOffsetForRoadTile,
+} from './emissive';
 import {
   coastEdgeMask,
   FOAM_EDGE_COUNT,
@@ -124,7 +214,7 @@ import {
   visibleChunks,
   type NetSegment,
 } from './chunks';
-import { DAY_TINT_NEUTRAL, dayNightTint } from './dayNight';
+import { DAY_TINT_NEUTRAL, dayNightTint, emissiveIntensity } from './dayNight';
 import { sampleWorldX, sampleWorldY, shouldSnap, SnapshotInterpolator } from './interpolation';
 import { loadBakedAtlas } from './bakedAtlas';
 import {
@@ -349,6 +439,12 @@ interface BakedVehicleHandle {
   readonly base: Texture;
   /** The livery: grey-shaded tint zones, multiplied by the company colour. */
   readonly mask: Texture;
+  /**
+   * The lit windows (M13 emissive pass): the cell's emissive twin, drawn
+   * additively above the mask at night - or null when the model has no
+   * glazing or the manifest predates the pass.
+   */
+  readonly glow: Texture | null;
   /** Ground-pivot position inside the cell. [world px] */
   readonly anchorXPx: number;
   readonly anchorYPx: number;
@@ -387,6 +483,14 @@ interface ChunkEntry {
   readonly hasWater: boolean;
   /** Water animation row the bake drew, so a phase swap knows who is stale. */
   readonly waterRow: number;
+  /**
+   * The chunk's emissive twin (M13): window and lamp glows baked into a
+   * second texture, drawn additively above the chunk with the ramp as its
+   * alpha - or null when the chunk holds nothing that glows, the profile
+   * is abstract, or day/night is off. The twin is content, not lighting:
+   * it rebakes with the chunk and survives the water-row rebakes unchanged.
+   */
+  readonly emissive: RenderTexture | null;
 }
 
 /** Cached network polylines of one chunk, for the abstract mode. */
@@ -413,15 +517,22 @@ export class MapView {
   /** The baked-chunk layer of the hybrid renderer (E-04), under the sprites. */
   private readonly chunkLayer = new Container();
   private readonly chunkSprites: Sprite[] = [];
+  /** Additive twin sprites over the chunks - the M13 emissive layer at 0.5x. */
+  private readonly chunkEmissiveSprites: Sprite[] = [];
   private readonly fullChunks = new Map<number, ChunkEntry>();
   private readonly terrainChunks = new Map<number, ChunkEntry>();
   private readonly segmentCache = new Map<number, SegmentEntry>();
   /** Evicted RenderTextures per profile, recycled instead of reallocated. */
   private readonly freeFullTextures: RenderTexture[] = [];
   private readonly freeTerrainTextures: RenderTexture[] = [];
+  private readonly freeEmissiveTextures: RenderTexture[] = [];
   /** Off-stage container the chunk bake renders through. */
   private readonly bakeRoot = new Container();
   private readonly bakePool: Sprite[] = [];
+  /** Second bake tree for a chunk's emissive twin (M13); own pool, so a
+   * twin render never disturbs the base bake's sprite reuse. */
+  private readonly emissiveBakeRoot = new Container();
+  private readonly emissiveBakePool: Sprite[] = [];
   private readonly visibleChunkScratch: number[] = [];
   private readonly dirtyChunkScratch: number[] = [];
   /** Map revision the chunk caches were last diffed against. */
@@ -543,6 +654,21 @@ export class MapView {
   private tickSource: (() => number) | null = null;
   /** Last world tint applied, so an unchanged frame does not dirty the tree. */
   private appliedTint = DAY_TINT_NEUTRAL;
+  /**
+   * This frame's emissive intensity (M13): `emissiveIntensity` of the same
+   * interpolated phase the tint reads, or 0 with the day/night setting off.
+   * Every glow - window cells, lamps, headlights, chunk twins - takes its
+   * additive alpha from this one number.
+   */
+  private emissiveNow = 0;
+  /** Alpha last written to the recorded glow sprites; -1 forces a pass. */
+  private appliedEmissiveAlpha = -1;
+  /** Pool slots of the glow sprites the last rebuild placed (M13). */
+  private readonly emissiveSlots: number[] = [];
+  /** The street-lamp glow texture, drawn once at attach (M13). */
+  private lampTexture: Texture | null = null;
+  /** The eight pre-baked headlight cones, indexed by facing (M13). */
+  private headlightCones: HeadlightCone[] | null = null;
   /** Where the renderer fetches the tagged per-tick vehicle frame from. */
   private vehicleSource: (() => VehicleFrame) | null = null;
   /**
@@ -563,6 +689,14 @@ export class MapView {
    */
   private readonly vehicleMaskSprites: Sprite[] = [];
   private readonly vehicleShadowSprites: Sprite[] = [];
+  /**
+   * The M13 night pair, parallel slot for slot: the baked cell's lit
+   * windows (additive, above the mask) and the headlight cone of a lead
+   * unit underway. Per slot the insertion order is shadow, base, mask,
+   * glow, light - one zIndex, stable sort.
+   */
+  private readonly vehicleGlowSprites: Sprite[] = [];
+  private readonly vehicleLightSprites: Sprite[] = [];
   /** Gradient ellipse the shadows share; built once at attach. */
   private shadowTexture: Texture | null = null;
   /**
@@ -660,6 +794,8 @@ export class MapView {
     this.basePage = makeAtlasPage(baseAtlas, ATLAS_SCALE, 'b');
     this.detailPage = makeAtlasPage(detailAtlas, DETAIL_ATLAS_SCALE, 'd');
     this.shadowTexture = makeShadowTexture();
+    this.lampTexture = makeLampTexture();
+    this.headlightCones = makeHeadlightCones();
 
     // The baked Kenney pages load in the background (M13): the game is
     // already running on procedural art, swaps to the baked cells the frame
@@ -677,6 +813,7 @@ export class MapView {
     // pixel-identical to what the sprite pool would have drawn.
     this.chunkLayer.sortableChildren = true;
     this.bakeRoot.sortableChildren = true;
+    this.emissiveBakeRoot.sortableChildren = true;
     this.art.addChild(this.chunkLayer);
     this.art.addChild(this.net);
     this.art.addChild(this.tiles);
@@ -771,7 +908,14 @@ export class MapView {
 
   /** Turn the day/night modulation on or off (options screen, D-110). */
   setDayNight(on: boolean): void {
+    if (this.dayNight === on) return;
     this.dayNight = on;
+    // The emissive layer (M13) is placed at rebuild/bake time: re-place the
+    // world and drop the chunk twins, so that "off" truly places no glow
+    // sprite and bakes no twin - when the setting is off, no emissive work
+    // runs at all, not even invisible sprites.
+    this.builtRevision = -1;
+    this.clearChunkCaches();
   }
 
   /** Turn the block overlay on or off (F3). */
@@ -888,6 +1032,18 @@ export class MapView {
     const pageTexture = this.bakedVehiclePages?.get(entry.page);
     if (pageTexture === undefined) return null;
     const cell = entry.cell;
+    // The emissive twin (M13): a third sub-texture on the cell's own
+    // emissive page, when the model has glazing the depth pass let through.
+    let glow: Texture | null = null;
+    if (cell.emissivePage !== undefined) {
+      const emissivePageTexture = this.bakedVehiclePages?.get(cell.emissivePage);
+      if (emissivePageTexture !== undefined) {
+        glow = new Texture({
+          source: emissivePageTexture.source,
+          frame: new Rectangle(cell.emissiveX!, cell.emissiveY!, cell.width, cell.height),
+        });
+      }
+    }
     const handle: BakedVehicleHandle = {
       base: new Texture({
         source: pageTexture.source,
@@ -897,6 +1053,7 @@ export class MapView {
         source: pageTexture.source,
         frame: new Rectangle(cell.maskX, cell.maskY, cell.width, cell.height),
       }),
+      glow,
       anchorXPx: cell.anchorX * invScale,
       anchorYPx: cell.anchorY * invScale,
       widthPx: cell.width * invScale,
@@ -925,15 +1082,20 @@ export class MapView {
     this.app.ticker.remove(this.update);
     // Chunk RenderTextures live in the caches, not in the stage tree, so the
     // app's own destroy would leak them on the GPU.
-    for (const entry of this.fullChunks.values()) entry.texture.destroy(true);
+    for (const entry of this.fullChunks.values()) {
+      entry.texture.destroy(true);
+      entry.emissive?.destroy(true);
+    }
     for (const entry of this.terrainChunks.values()) entry.texture.destroy(true);
     for (const texture of this.freeFullTextures) texture.destroy(true);
     for (const texture of this.freeTerrainTextures) texture.destroy(true);
+    for (const texture of this.freeEmissiveTextures) texture.destroy(true);
     this.fullChunks.clear();
     this.terrainChunks.clear();
     this.segmentCache.clear();
     this.freeFullTextures.length = 0;
     this.freeTerrainTextures.length = 0;
+    this.freeEmissiveTextures.length = 0;
     this.app.destroy(true, { children: true });
     this.frameCache.clear();
     // The baked pages and the shadow gradient own their texture sources
@@ -946,6 +1108,12 @@ export class MapView {
     this.bakedVehicleFrameCache.clear();
     this.shadowTexture?.destroy(true);
     this.shadowTexture = null;
+    this.lampTexture?.destroy(true);
+    this.lampTexture = null;
+    if (this.headlightCones !== null) {
+      for (const cone of this.headlightCones) cone.texture.destroy(true);
+    }
+    this.headlightCones = null;
     // The BitmapText objects died with the stage; the pool must not hand
     // out corpses to a later attach. The FONT stays installed: it is
     // page-global by design (see LABEL_FONT_NAME).
@@ -1108,6 +1276,11 @@ export class MapView {
       this.appliedTint = tint;
       this.art.tint = tint;
     }
+    // The emissive ramp (M13) reads the SAME phase the tint reads - the one
+    // source of truth SPEC2 M13 orders: lights come on exactly as fast as
+    // the world darkens, sub-tick and all. With the setting off this is a
+    // constant 0 and every emissive branch below is skipped.
+    this.emissiveNow = this.dayNight ? emissiveIntensity(phase) : 0;
 
     // The hybrid renderer of E-04: at and below 0.5x the static world comes
     // from baked 32x32-tile chunks and only markers and vehicles stay live
@@ -1147,6 +1320,7 @@ export class MapView {
       this.builtBounds = bounds;
     }
     this.animateWater(map, chunked, abstract);
+    this.applyEmissive();
     this.drawVehicles(map, abstract);
     this.drawOverlay(map);
 
@@ -1310,6 +1484,9 @@ export class MapView {
       const key = this.visibleChunkScratch[i]!;
       const entry = this.fullChunks.get(key);
       if (entry === undefined || !entry.hasWater || entry.waterRow === row) continue;
+      // The twin is carried through unchanged (M13): a water phase swap
+      // moves ripples, never windows, so re-rendering the glow would be
+      // a second GPU pass for identical pixels.
       const fresh = this.bakeChunk(
         map,
         entry.chunkX,
@@ -1317,11 +1494,48 @@ export class MapView {
         false,
         entry.texture,
         CHUNK_ZOOM_MAX,
+        entry.emissive,
       );
       fresh.lastUsed = entry.lastUsed;
       this.fullChunks.set(key, fresh);
       rebaked++;
     }
+  }
+
+  /**
+   * Drive every placed glow with this frame's intensity (M13). The recorded
+   * detail-path slots are touched only when the alpha actually moved - a
+   * night plateau and the whole day cost one float compare - while the
+   * handful of chunk twin sprites (<= 32) take the write every frame.
+   */
+  private applyEmissive(): void {
+    const alpha = this.emissiveNow * EMISSIVE_MAX_ALPHA;
+    if (alpha !== this.appliedEmissiveAlpha) {
+      this.appliedEmissiveAlpha = alpha;
+      for (let i = 0; i < this.emissiveSlots.length; i++) {
+        const sprite = this.pool[this.emissiveSlots[i]!]!;
+        sprite.alpha = alpha;
+        sprite.visible = alpha > 0;
+      }
+    }
+    for (let i = 0; i < this.chunkEmissiveSprites.length; i++) {
+      const sprite = this.chunkEmissiveSprites[i]!;
+      if (sprite.visible) sprite.alpha = alpha;
+    }
+  }
+
+  /**
+   * Mark a just-placed pool sprite as an emissive glow: additive, ramped by
+   * the current intensity, recorded for {@link applyEmissive}. `place`
+   * resets blend and alpha on every placement, so a pool sprite that was a
+   * glow last rebuild draws as ordinary world art the moment it is reused.
+   */
+  private markEmissive(sprite: Sprite, slot: number): void {
+    const alpha = this.emissiveNow * EMISSIVE_MAX_ALPHA;
+    sprite.blendMode = 'add';
+    sprite.alpha = alpha;
+    sprite.visible = alpha > 0;
+    this.emissiveSlots.push(slot);
   }
 
   private clampCentre(size: number): void {
@@ -1430,6 +1644,11 @@ export class MapView {
     // dirties nothing here.
     sprite.scale.set(handle.invScale);
     sprite.tint = 0xffffff;
+    // Reset the emissive marks (M13): pool sprites are reused for whatever
+    // placement lands in their slot, and a glow's additive blend or ramped
+    // alpha must never leak onto ordinary world art.
+    sprite.blendMode = 'normal';
+    sprite.alpha = 1;
     // The drawOrder key of section 16.1. Insertion already runs along the
     // diagonals, but only the key orders heights within a diagonal and sorts
     // the vehicles in - and Pixi's zIndex setter is change-detected, so a
@@ -1458,6 +1677,11 @@ export class MapView {
     this.waterSlots.length = 0;
     this.waterSlopes.length = 0;
     this.builtWaterRow = this.waterRow;
+
+    // Fresh emissive bookkeeping (M13): every glow this rebuild places is
+    // stamped with the current ramp value, so applyEmissive owes nothing.
+    this.emissiveSlots.length = 0;
+    this.appliedEmissiveAlpha = this.emissiveNow * EMISSIVE_MAX_ALPHA;
 
     // Painter's order for an isometric grid runs along the diagonals: every
     // tile with a smaller (x + y) is further away and has to go down first.
@@ -1581,6 +1805,15 @@ export class MapView {
             world.y,
             drawOrder(x, y, height, DrawLayer.Road),
           );
+          // Street lamp (M13): a warm additive pool on every second town
+          // road tile, ramped by the night intensity. Country roads stay
+          // dark - lit streets are what make a town a town at night.
+          if (this.dayNight && this.lampTexture !== null && map.townId[index]! >= 0) {
+            const lamp = lampOffsetForRoadTile(x, y, roadBits);
+            if (lamp !== null) {
+              used = this.placeLamp(used, lamp, world.x, world.y, x, y, height);
+            }
+          }
         }
 
         // Track is composited from one half segment per connected direction.
@@ -1622,6 +1855,25 @@ export class MapView {
             world.y,
             drawOrder(x, y, height, DrawLayer.Building),
           );
+          // The window twin (M13): the emissive cell drawn ADDITIVELY over
+          // its building, same zIndex, placed right after it so the stable
+          // sort keeps the glow on its own facade. Always from the BASE
+          // page - the emissive row exists there only, like the water rows.
+          if (this.dayNight) {
+            const glow = this.take(used++);
+            this.place(
+              glow,
+              this.frameTexture(
+                this.basePage!,
+                `eb${buildingKind}:${level}`,
+                emissiveBuildingFrame(buildingKind, level),
+              ),
+              world.x,
+              world.y,
+              drawOrder(x, y, height, DrawLayer.Building),
+            );
+            this.markEmissive(glow, used - 1);
+          }
         }
       }
     }
@@ -1630,6 +1882,33 @@ export class MapView {
     used = this.placeStations(map, bounds, used);
 
     for (let i = used; i < this.pool.length; i++) this.pool[i]!.visible = false;
+  }
+
+  /**
+   * Place one street-lamp glow (M13): the shared warm pool texture at the
+   * lamp's tile-space offset, additive, above the road surface. Returns the
+   * next free pool slot, like every placement helper here.
+   */
+  private placeLamp(
+    used: number,
+    lamp: readonly [number, number],
+    worldX: number,
+    worldY: number,
+    x: number,
+    y: number,
+    height: number,
+  ): number {
+    const sprite = this.take(used++);
+    sprite.texture = this.lampTexture!;
+    sprite.scale.set(1);
+    sprite.tint = 0xffffff;
+    sprite.zIndex = drawOrder(x, y, height, DrawLayer.Signal);
+    sprite.position.set(
+      worldX + ((lamp[0] - lamp[1]) * TILE_W) / 2 - LAMP_TEX_W / 2,
+      worldY + ((lamp[0] + lamp[1]) * TILE_H) / 2 - LAMP_TEX_H / 2,
+    );
+    this.markEmissive(sprite, used - 1);
+    return used;
   }
 
   /**
@@ -1660,6 +1939,12 @@ export class MapView {
       const world = tileToWorld(industry.x, industry.y, map.baseHeight(industry.x, industry.y));
       const sprite = this.take(used++);
       const footprint = INDUSTRY_SPECS[industry.type]?.footprint ?? 1;
+      const zIndex = drawOrder(
+        industry.x + footprint - 1,
+        industry.y + footprint - 1,
+        map.baseHeight(industry.x, industry.y),
+        DrawLayer.Building,
+      );
       // No tint. The industry is drawn in its own colours now - a tint
       // multiplies, and it flattened a coal heap and a chimney to the same
       // shade of whatever the tint was.
@@ -1668,13 +1953,25 @@ export class MapView {
         this.frameTexture(page, `i${industry.type}`, atlas.industryFrame(industry.type)),
         world.x,
         world.y,
-        drawOrder(
-          industry.x + footprint - 1,
-          industry.y + footprint - 1,
-          map.baseHeight(industry.x, industry.y),
-          DrawLayer.Building,
-        ),
+        zIndex,
       );
+      // The glazed industries get their window twin (M13), additively over
+      // the block - live like the block itself, on BOTH render paths, since
+      // industries never enter a chunk (D-161).
+      if (this.dayNight) {
+        const frame = emissiveIndustryFrame(industry.type);
+        if (frame !== null) {
+          const glow = this.take(used++);
+          this.place(
+            glow,
+            this.frameTexture(this.basePage!, `ei${industry.type}`, frame),
+            world.x,
+            world.y,
+            zIndex,
+          );
+          this.markEmissive(glow, used - 1);
+        }
+      }
     }
     return used;
   }
@@ -1730,6 +2027,11 @@ export class MapView {
     bounds: { minX: number; minY: number; maxX: number; maxY: number },
     abstract: boolean,
   ): void {
+    // The chunk path's live emissive sprites are the industry twins the
+    // placement below records; buildings and lamps glow from the chunk's
+    // baked twin instead (M13).
+    this.emissiveSlots.length = 0;
+    this.appliedEmissiveAlpha = this.emissiveNow * EMISSIVE_MAX_ALPHA;
     let used = 0;
     if (!abstract) {
       used = this.placeIndustries(map, bounds, used);
@@ -1742,7 +2044,10 @@ export class MapView {
 
   /** Drop every baked chunk - a new world invalidates all of them at once. */
   private clearChunkCaches(): void {
-    for (const entry of this.fullChunks.values()) this.freeFullTextures.push(entry.texture);
+    for (const entry of this.fullChunks.values()) {
+      this.freeFullTextures.push(entry.texture);
+      if (entry.emissive !== null) this.freeEmissiveTextures.push(entry.emissive);
+    }
     for (const entry of this.terrainChunks.values()) this.freeTerrainTextures.push(entry.texture);
     this.fullChunks.clear();
     this.terrainChunks.clear();
@@ -1833,9 +2138,34 @@ export class MapView {
       // chunk, earlier diagonal - is always two or more columns apart, so
       // the two never touch the same pixel (the argument is in D-161).
       sprite.zIndex = chunkX + chunkY;
+
+      // The emissive twin over the chunk (M13): one additive sprite whose
+      // alpha IS the night ramp, half a diagonal above its own chunk so the
+      // next diagonal's ground still wins - the D-161 argument holds, since
+      // the twin never paints outside its chunk's columns either.
+      let glow = this.chunkEmissiveSprites[i];
+      if (glow === undefined) {
+        glow = new Sprite();
+        glow.blendMode = 'add';
+        this.chunkEmissiveSprites.push(glow);
+        this.chunkLayer.addChild(glow);
+      }
+      if (entry.emissive !== null) {
+        glow.texture = entry.emissive;
+        glow.visible = true;
+        glow.alpha = this.emissiveNow * EMISSIVE_MAX_ALPHA;
+        glow.position.set(aabb.minX, aabb.minY);
+        glow.scale.set(1 / scale);
+        glow.zIndex = chunkX + chunkY + 0.5;
+      } else {
+        glow.visible = false;
+      }
     }
     for (let i = visible; i < this.chunkSprites.length; i++) {
       this.chunkSprites[i]!.visible = false;
+    }
+    for (let i = visible; i < this.chunkEmissiveSprites.length; i++) {
+      this.chunkEmissiveSprites[i]!.visible = false;
     }
 
     if (setHash !== this.chunkSetHash) {
@@ -1863,7 +2193,9 @@ export class MapView {
     const stale = computeDirtySet(map, cache, full, this.dirtyChunkScratch);
     for (let i = 0; i < stale; i++) {
       const key = this.dirtyChunkScratch[i]!;
-      freelist.push(cache.get(key)!.texture);
+      const entry = cache.get(key)!;
+      freelist.push(entry.texture);
+      if (entry.emissive !== null) this.freeEmissiveTextures.push(entry.emissive);
       cache.delete(key);
     }
     return stale;
@@ -1887,7 +2219,9 @@ export class MapView {
         }
       }
       if (oldestKey < 0) return; // everything left is on screen right now
-      freelist.push(cache.get(oldestKey)!.texture);
+      const evicted = cache.get(oldestKey)!;
+      freelist.push(evicted.texture);
+      if (evicted.emissive !== null) this.freeEmissiveTextures.push(evicted.emissive);
       cache.delete(oldestKey);
     }
   }
@@ -1909,21 +2243,28 @@ export class MapView {
     abstract: boolean,
     recycled: RenderTexture | undefined,
     scale: number,
+    carryEmissive?: RenderTexture | null,
   ): ChunkEntry {
     // Always the BASE page: chunks exist only at zooms the base page serves,
     // and pinning it here keeps a bake from ever depending on the live zoom.
     const page = this.basePage!;
     const atlas = page.atlas;
     const aabb = chunkAabb(chunkX, chunkY);
+    const textureWidth = Math.round((aabb.maxX - aabb.minX) * scale);
+    const textureHeight = Math.round((aabb.maxY - aabb.minY) * scale);
     const texture =
-      recycled ??
-      RenderTexture.create({
-        width: Math.round((aabb.maxX - aabb.minX) * scale),
-        height: Math.round((aabb.maxY - aabb.minY) * scale),
-      });
+      recycled ?? RenderTexture.create({ width: textureWidth, height: textureHeight });
 
     this.bakeRoot.scale.set(scale);
     this.bakeRoot.position.set(-aabb.minX * scale, -aabb.minY * scale);
+
+    // The emissive twin (M13): window and lamp glows collected into a second
+    // bake tree during the SAME walk and rendered into a second texture. A
+    // water-row rebake (D-164) passes the existing twin through instead -
+    // glazing does not shimmer, so re-rendering it would be pure waste. With
+    // the day/night setting off no twin is collected or rendered at all.
+    const bakeEmissive = !abstract && this.dayNight && carryEmissive === undefined;
+    let emissiveUsed = 0;
 
     const size = map.size;
     const x0 = chunkX * CHUNK_TILES;
@@ -2042,6 +2383,20 @@ export class MapView {
             world.y,
             drawOrder(x, y, height, DrawLayer.Road),
           );
+          if (bakeEmissive && this.lampTexture !== null && map.townId[index]! >= 0) {
+            const lamp = lampOffsetForRoadTile(x, y, roadBits);
+            if (lamp !== null) {
+              const sprite = this.emissiveBakeTake(emissiveUsed++);
+              sprite.texture = this.lampTexture;
+              sprite.scale.set(1);
+              sprite.tint = 0xffffff;
+              sprite.zIndex = drawOrder(x, y, height, DrawLayer.Signal);
+              sprite.position.set(
+                world.x + ((lamp[0] - lamp[1]) * TILE_W) / 2 - LAMP_TEX_W / 2,
+                world.y + ((lamp[0] + lamp[1]) * TILE_H) / 2 - LAMP_TEX_H / 2,
+              );
+            }
+          }
         }
 
         const trackBits = map.trackBits[index]!;
@@ -2082,12 +2437,50 @@ export class MapView {
             world.y,
             drawOrder(x, y, height, DrawLayer.Building),
           );
+          if (bakeEmissive) {
+            this.place(
+              this.emissiveBakeTake(emissiveUsed++),
+              this.frameTexture(
+                this.basePage!,
+                `eb${buildingKind}:${level}`,
+                emissiveBuildingFrame(buildingKind, level),
+              ),
+              world.x,
+              world.y,
+              drawOrder(x, y, height, DrawLayer.Building),
+            );
+          }
         }
       }
     }
 
     for (let i = used; i < this.bakePool.length; i++) this.bakePool[i]!.visible = false;
     this.app.renderer.render({ container: this.bakeRoot, target: texture, clear: true });
+
+    // Render the twin when the walk collected any glow. The cells composite
+    // NORMALLY inside the twin - it is content on a transparent texture;
+    // the ONE additive draw with the ramped alpha happens where the twin
+    // sprite meets the frame, so a dawn ramp costs an alpha write per
+    // visible chunk instead of a rebake (the decision D-172 argues against
+    // the live-sprite alternative, with both measured).
+    let emissive: RenderTexture | null = carryEmissive ?? null;
+    if (bakeEmissive) {
+      for (let i = emissiveUsed; i < this.emissiveBakePool.length; i++) {
+        this.emissiveBakePool[i]!.visible = false;
+      }
+      if (emissiveUsed > 0) {
+        this.emissiveBakeRoot.scale.set(scale);
+        this.emissiveBakeRoot.position.set(-aabb.minX * scale, -aabb.minY * scale);
+        emissive =
+          this.freeEmissiveTextures.pop() ??
+          RenderTexture.create({ width: textureWidth, height: textureHeight });
+        this.app.renderer.render({
+          container: this.emissiveBakeRoot,
+          target: emissive,
+          clear: true,
+        });
+      }
+    }
 
     return {
       texture,
@@ -2097,6 +2490,7 @@ export class MapView {
       lastUsed: 0,
       hasWater,
       waterRow,
+      emissive,
     };
   }
 
@@ -2107,6 +2501,18 @@ export class MapView {
       sprite = new Sprite();
       this.bakePool.push(sprite);
       this.bakeRoot.addChild(sprite);
+    }
+    sprite.visible = true;
+    return sprite;
+  }
+
+  /** The emissive twin's own pool, mirroring {@link bakeTake} (M13). */
+  private emissiveBakeTake(index: number): Sprite {
+    let sprite = this.emissiveBakePool[index];
+    if (sprite === undefined) {
+      sprite = new Sprite();
+      this.emissiveBakePool.push(sprite);
+      this.emissiveBakeRoot.addChild(sprite);
     }
     sprite.visible = true;
     return sprite;
@@ -2254,6 +2660,8 @@ export class MapView {
       for (const sprite of this.vehicleSprites) sprite.visible = false;
       for (const sprite of this.vehicleMaskSprites) sprite.visible = false;
       for (const sprite of this.vehicleShadowSprites) sprite.visible = false;
+      for (const sprite of this.vehicleGlowSprites) sprite.visible = false;
+      for (const sprite of this.vehicleLightSprites) sprite.visible = false;
       this.vehicleSpritesHidden = true;
     }
     if (!abstract) this.vehicleSpritesHidden = false;
@@ -2377,7 +2785,9 @@ export class MapView {
         const specId =
           vehicleId >= 0 && vehicleId < MAX_VEHICLES ? this.vehicleSpecIds[vehicleId]! : -1;
 
-        // The lead unit, exactly where the single sprite always drew.
+        // The lead unit, exactly where the single sprite always drew. Only
+        // the head carries headlights (M13), and only underway - a parked
+        // or loading vehicle stands dark.
         spriteSlot = this.placeVehicleUnit(
           spriteSlot,
           specId,
@@ -2391,6 +2801,7 @@ export class MapView {
           page,
           bakedIndex,
           bakedInvScale,
+          this.emissiveNow > 0 && headlightsOn(state),
         );
 
         // The trailing units of a multi-unit train (SPEC2 M13, E-05): each
@@ -2442,6 +2853,7 @@ export class MapView {
               page,
               bakedIndex,
               bakedInvScale,
+              false,
             );
           }
         }
@@ -2463,6 +2875,8 @@ export class MapView {
         this.vehicleSprites[i]!.visible = false;
         this.vehicleMaskSprites[i]!.visible = false;
         this.vehicleShadowSprites[i]!.visible = false;
+        this.vehicleGlowSprites[i]!.visible = false;
+        this.vehicleLightSprites[i]!.visible = false;
       }
     }
   }
@@ -2489,16 +2903,26 @@ export class MapView {
     page: AtlasPage,
     bakedIndex: VehicleZoomIndex | null,
     bakedInvScale: number,
+    lightsOn: boolean,
   ): number {
     let sprite = this.vehicleSprites[slot];
     let maskSprite = this.vehicleMaskSprites[slot];
     let shadowSprite = this.vehicleShadowSprites[slot];
-    if (sprite === undefined || maskSprite === undefined || shadowSprite === undefined) {
+    let glowSprite = this.vehicleGlowSprites[slot];
+    let lightSprite = this.vehicleLightSprites[slot];
+    if (
+      sprite === undefined ||
+      maskSprite === undefined ||
+      shadowSprite === undefined ||
+      glowSprite === undefined ||
+      lightSprite === undefined
+    ) {
       // Into the SAME sorted container as the tiles: the drawOrder key is
       // what lets a hill in front of a train draw over it (section 16.1).
-      // Per slot the insertion order is shadow, body, mask - the three
-      // share one zIndex and Pixi's stable sort keeps the ellipse under
-      // the body and the company colour over it.
+      // Per slot the insertion order is shadow, body, mask, glow, light -
+      // the five share one zIndex and Pixi's stable sort keeps the ellipse
+      // under the body, the company colour over it and the night pair on
+      // top (M13).
       shadowSprite = new Sprite();
       this.vehicleShadowSprites.push(shadowSprite);
       this.tiles.addChild(shadowSprite);
@@ -2508,6 +2932,14 @@ export class MapView {
       maskSprite = new Sprite();
       this.vehicleMaskSprites.push(maskSprite);
       this.tiles.addChild(maskSprite);
+      glowSprite = new Sprite();
+      glowSprite.blendMode = 'add';
+      this.vehicleGlowSprites.push(glowSprite);
+      this.tiles.addChild(glowSprite);
+      lightSprite = new Sprite();
+      lightSprite.blendMode = 'add';
+      this.vehicleLightSprites.push(lightSprite);
+      this.tiles.addChild(lightSprite);
     }
 
     // A sprite is reused for whatever unit lands in its slot, so the
@@ -2532,6 +2964,20 @@ export class MapView {
       maskSprite.position.set(worldX - baked.anchorXPx, worldY - baked.anchorYPx);
       maskSprite.zIndex = zIndex;
       maskSprite.visible = true;
+      // Lit windows (M13): the cell's emissive twin, additive, ramped by
+      // the same intensity as every other glow - a night train shows its
+      // coach windows, a day train none, and a cell without glazing has
+      // no twin to draw.
+      if (baked.glow !== null && this.emissiveNow > 0) {
+        glowSprite.texture = baked.glow;
+        glowSprite.scale.set(baked.invScale);
+        glowSprite.alpha = this.emissiveNow * EMISSIVE_MAX_ALPHA;
+        glowSprite.position.set(worldX - baked.anchorXPx, worldY - baked.anchorYPx);
+        glowSprite.zIndex = zIndex;
+        glowSprite.visible = true;
+      } else {
+        glowSprite.visible = false;
+      }
       shadowW = baked.widthPx * VEHICLE_SHADOW_WIDTH_SHARE;
     } else {
       // The M10 white box retires from the live path but stays the
@@ -2550,10 +2996,27 @@ export class MapView {
       // the base page's by construction (tests/unit/terrainAtlas.spec.ts).
       sprite.position.set(worldX - TILE_W / 2, worldY - HEIGHT_PX);
       maskSprite.visible = false;
+      glowSprite.visible = false;
       shadowW = kind === TRAIN_KIND ? FALLBACK_SHADOW_TRAIN_PX : FALLBACK_SHADOW_ROAD_PX;
     }
     sprite.visible = true;
     sprite.zIndex = zIndex;
+
+    // The headlight cone (M13): pre-baked per facing, additive, at the
+    // interpolated ground anchor - it follows the glide because it is
+    // placed from the same worldX/worldY every frame. Works on the
+    // white-box fallback too: the facing is known either way.
+    const cone = this.headlightCones !== null ? this.headlightCones[facing & 7] : undefined;
+    if (lightsOn && cone !== undefined) {
+      lightSprite.texture = cone.texture;
+      lightSprite.scale.set(1);
+      lightSprite.alpha = this.emissiveNow * EMISSIVE_MAX_ALPHA;
+      lightSprite.position.set(worldX - cone.originX, worldY - cone.originY);
+      lightSprite.zIndex = zIndex;
+      lightSprite.visible = true;
+    } else {
+      lightSprite.visible = false;
+    }
 
     // The soft ellipse under the unit (M13), at the ground point the
     // sprite is anchored to.

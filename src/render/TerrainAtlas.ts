@@ -1,7 +1,8 @@
 import { TERRAIN_COLORS } from '../shared/palette';
 import { INDUSTRY_TYPE_COUNT } from '../sim/industry/types';
 import { SlopeBit, SLOPE_COUNT, Terrain, TERRAIN_COUNT } from '../sim/map/terrain';
-import { drawIndustry } from './industryArt';
+import { EMISSIVE_WINDOW_HEX } from './emissive';
+import { drawIndustry, drawIndustryEmissive, INDUSTRY_EMISSIVE_TYPES } from './industryArt';
 import { box, gableRoof, sawtoothRoof, shade, windows, type IsoView } from './shapes';
 import { FOAM_VARIANT_COUNT, WATER_FRAME_COUNT } from './water';
 
@@ -97,6 +98,20 @@ const INDUSTRY_ROW = TERRAIN_COUNT + 3;
  */
 const WATER_ROW = TERRAIN_COUNT + 4;
 const FOAM_ROW = WATER_ROW + WATER_FRAME_COUNT;
+/**
+ * The emissive row of M13 (SPEC2 6.2, page 0 booking "+1 Emissive-Zeile"):
+ * window-only twins of the six town-building cells, then one cell per glazed
+ * industry - drawn by the SAME code as the full cells with everything but
+ * the glazing skipped, so the lit windows sit exactly on the dark ones. On
+ * the BASE page only, like the water rows: the detail page stands at
+ * 4096x3840 of 4096 (D-163) and has no room for another tall row, so every
+ * zoom composites its glow from here - a glow is low-frequency, and the 4x
+ * upscale is invisible where a wall texture's would not be (the D-164
+ * argument, restated).
+ */
+const EMISSIVE_ROW = FOAM_ROW + 1;
+/** Columns of the glazed-industry twins start after the six building cells. */
+const EMISSIVE_INDUSTRY_COLUMN = 6;
 
 /** Three zones times two expansion stages, plus one generic industry block. */
 const BUILDING_VARIANTS = 6;
@@ -110,7 +125,7 @@ const BRIDGE_COLUMN = BUILDING_VARIANTS + 6;
 const SIGNAL_COLUMN = BUILDING_VARIANTS + 7;
 
 const ATLAS_COLUMNS = Math.max(SLOPE_COUNT, SIGNAL_COLUMN + 1, INDUSTRY_TYPE_COUNT);
-const ATLAS_ROWS = FOAM_ROW + 1;
+const ATLAS_ROWS = EMISSIVE_ROW + 1;
 
 /**
  * Largest texture the weakest GPU this game targets is guaranteed to accept.
@@ -478,6 +493,12 @@ function drawRoadCell(
  * The three zones get three different SHAPES rather than three colours of the
  * same box - a pitched roof, a flat glazed block and a shed - because at the
  * zoom the game is played at, shape survives and colour does not.
+ *
+ * `emissiveOnly` (M13, SPEC2: "window/lamp-only cells via windows()") draws
+ * ONLY the glazing - the windows() calls and the shed's north-light glass -
+ * in the lit colour, everything else transparent: the emissive twin of the
+ * cell, from the SAME specs and the same call sites, so the lit windows can
+ * never drift off the dark ones.
  */
 function drawTownBuilding(
   ctx: CanvasRenderingContext2D,
@@ -485,6 +506,7 @@ function drawTownBuilding(
   originY: number,
   kind: number,
   level: number,
+  emissiveOnly = false,
 ): void {
   const view: IsoView = {
     cx: originX + TILE_W / 2,
@@ -499,15 +521,16 @@ function drawTownBuilding(
     // Residential: a house, taller and with more windows as the town grows.
     const height = (9 + grow * 7) * px;
     const w = 0.5 + grow * 0.06;
-    box(ctx, view, { u: w, v: w * 0.78, height, colour: '#c9b79c' });
+    if (!emissiveOnly) box(ctx, view, { u: w, v: w * 0.78, height, colour: '#c9b79c' });
     windows(ctx, view, {
       u: w,
       v: w * 0.78,
       height,
       rows: 1 + grow,
       columns: 2,
-      colour: '#5d7f92',
+      colour: emissiveOnly ? EMISSIVE_WINDOW_HEX : '#5d7f92',
     });
+    if (emissiveOnly) return;
     gableRoof(ctx, view, {
       u: w,
       v: w * 0.78,
@@ -522,15 +545,16 @@ function drawTownBuilding(
     // Commercial: a flat block, all glass, and the tallest thing in a town.
     const height = (15 + grow * 12) * px;
     const w = 0.54 + grow * 0.05;
-    box(ctx, view, { u: w, v: w * 0.86, height, colour: '#cfd4d8' });
+    if (!emissiveOnly) box(ctx, view, { u: w, v: w * 0.86, height, colour: '#cfd4d8' });
     windows(ctx, view, {
       u: w,
       v: w * 0.86,
       height,
       rows: 3 + grow,
       columns: 3,
-      colour: '#3f6f88',
+      colour: emissiveOnly ? EMISSIVE_WINDOW_HEX : '#3f6f88',
     });
+    if (emissiveOnly) return;
     box(ctx, view, { u: w * 0.4, v: w * 0.34, height: 3 * px, colour: '#9aa1a8', base: height });
     return;
   }
@@ -538,7 +562,7 @@ function drawTownBuilding(
   // Industrial: a low shed with a north-light roof.
   const height = (8 + grow * 4) * px;
   const w = 0.62 + grow * 0.06;
-  box(ctx, view, { u: w, v: w * 0.7, height, colour: '#9b968c' });
+  if (!emissiveOnly) box(ctx, view, { u: w, v: w * 0.7, height, colour: '#9b968c' });
   sawtoothRoof(ctx, view, {
     u: w,
     v: w * 0.7,
@@ -546,7 +570,8 @@ function drawTownBuilding(
     rise: 3 * px,
     teeth: 2,
     colour: '#5c6068',
-    glass: '#82aebf',
+    glass: emissiveOnly ? EMISSIVE_WINDOW_HEX : '#82aebf',
+    glassOnly: emissiveOnly,
   });
 }
 
@@ -686,9 +711,9 @@ function drawTrackCell(
 
 /**
  * Dimensions of the base page, as a pure function so the guard test can hold
- * them against MAX_ATLAS_PX (and against the ledger's booked 2176x3456 -
- * the original 2176x2688 plus M12's four water rows, SPEC2 6.2) without a
- * canvas.
+ * them against MAX_ATLAS_PX (and against the ledger's booked 2176x3648 -
+ * the original 2176x2688 plus M12's four water rows plus M13's emissive row,
+ * SPEC2 6.2) without a canvas.
  */
 export function baseAtlasSize(): { width: number; height: number } {
   return { width: ATLAS_COLUMNS * CELL_W, height: ATLAS_ROWS * CELL_H };
@@ -719,6 +744,40 @@ export function foamAtlasFrame(variant: number): AtlasFrame {
   return {
     x: (variant % FOAM_VARIANT_COUNT) * CELL_W,
     y: FOAM_ROW * CELL_H,
+    width: CELL_W,
+    height: CELL_H,
+    anchorY: CELL_TOP,
+  };
+}
+
+/**
+ * Frame of one town-building emissive twin on the BASE page (M13): the
+ * window-only cell that draws additively over `buildingFrame(kind, level)`
+ * at night. Same column formula as buildingFrame, same cell geometry, so
+ * the twin lands pixel-exact on its building at every zoom - a standalone
+ * function like the water frames, because the row exists on one page only.
+ */
+export function emissiveBuildingFrame(kind: number, level: number): AtlasFrame {
+  return {
+    x: (Math.min(2, Math.max(0, kind - 1)) + (level >= 2 ? 3 : 0)) * CELL_W,
+    y: EMISSIVE_ROW * CELL_H,
+    width: CELL_W,
+    height: CELL_H,
+    anchorY: CELL_TOP,
+  };
+}
+
+/**
+ * Frame of one glazed industry's emissive twin on the BASE page (M13), or
+ * null for the unglazed types - the caller draws no glow then, which is the
+ * honest answer for a coal heap at night.
+ */
+export function emissiveIndustryFrame(type: number): AtlasFrame | null {
+  const slot = INDUSTRY_EMISSIVE_TYPES.indexOf(type);
+  if (slot < 0) return null;
+  return {
+    x: (EMISSIVE_INDUSTRY_COLUMN + slot) * CELL_W,
+    y: EMISSIVE_ROW * CELL_H,
     width: CELL_W,
     height: CELL_H,
     anchorY: CELL_TOP,
@@ -803,6 +862,29 @@ export function buildTerrainAtlas(): TerrainAtlas {
   }
   for (let variant = 0; variant < FOAM_VARIANT_COUNT; variant++) {
     drawFoamCell(ctx, variant * CELL_W, FOAM_ROW * CELL_H, variant);
+  }
+
+  // The emissive row of M13: window-only twins of the building cells (same
+  // draw code, everything but the glazing skipped) and of the glazed
+  // industries. Composited additively over their base cells at night.
+  for (let variant = 0; variant < BUILDING_VARIANTS; variant++) {
+    const kind = variant % 3;
+    const level = (variant / 3) | 0;
+    drawTownBuilding(ctx, variant * CELL_W, EMISSIVE_ROW * CELL_H, kind, level, true);
+  }
+  for (let slot = 0; slot < INDUSTRY_EMISSIVE_TYPES.length; slot++) {
+    drawIndustryEmissive(
+      ctx,
+      {
+        cx: (EMISSIVE_INDUSTRY_COLUMN + slot) * CELL_W + TILE_W / 2,
+        cy: EMISSIVE_ROW * CELL_H + CELL_TOP + TILE_H / 2,
+        halfW: TILE_W / 2,
+        halfH: TILE_H / 2,
+      },
+      INDUSTRY_EMISSIVE_TYPES[slot]!,
+      { px: ATLAS_SCALE },
+      EMISSIVE_WINDOW_HEX,
+    );
   }
 
   const frame = (column: number, row: number): AtlasFrame => ({

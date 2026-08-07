@@ -42,13 +42,13 @@ no entry below. A number may appear under several topics.
   D-122, D-147, D-152, D-153, D-154, D-155, D-156, D-158
 - **Rendering & art:** D-013, D-014, D-033, D-035, D-112, D-117, D-125, D-127,
   D-136, D-140, D-160, D-161, D-162, D-163, D-164, D-165, D-166, D-169, D-170,
-  D-171
+  D-171, D-172
 - **UI & input:** D-011, D-013, D-015, D-035, D-110, D-113, D-114, D-119,
   D-126, D-148, D-165, D-166
 - **Performance & measurement:** D-002, D-120, D-135, D-136, D-161, D-162,
-  D-163, D-164, D-167, D-170, D-171
+  D-163, D-164, D-167, D-170, D-171, D-172
 - **Platform, tooling & build:** D-012, D-014, D-015, D-016, D-017, D-029,
-  D-030, D-031, D-160, D-168, D-169, D-170
+  D-030, D-031, D-160, D-168, D-169, D-170, D-172
 - **Crash safety:** D-132, D-139
 - **Testing method & fixtures:** D-010, D-038, D-072, D-074, D-084, D-133,
   D-167
@@ -4441,3 +4441,155 @@ magnitude over clean p99, the rebuild backstop's own ratio). Render-only
 throughout: zero sim bytes, zero save bumps, zero snapshot changes - the
 one permitted M13 layout bump (`IndustryMarker.level`) belongs to the
 particle bundle, not this one.
+
+## M13 - living trains, bundle 4: the emissive layer (2026-08-07)
+
+### D-172 Light is the tint curve read backwards, glazing is one kit-wide convention, and the chunk glows through a baked twin
+
+SPEC2 M13 orders the full day/night of SPEC.md 16.3: an emissive atlas page
+for the baked cells, window-only regenerations for the procedural ones,
+street lamps, headlights, additive compositing ramped by the D-127 curve,
+luminance-based modulation tested against both palettes. This entry records
+the shape it took and the seven choices inside it.
+
+**The ramp IS the tint curve, read as missing luminance.**
+`emissiveIntensity` (dayNight.ts, beside the curve it derives from) is the
+tint's missing Rec.-709 luminance normalised so the night plateau reads
+exactly 1 - not a second keyframe list that could drift against the first.
+One source of truth, literally: lights come on precisely as fast as the
+world darkens, 0 through the whole day plateau, ~0.42 in the dusk glow, 1
+through deep night, and the caller feeds it the same interpolated phase the
+tint reads (D-162), so both ramps share every frame's sub-tick position.
+That derivation is also what "luminanz-basiert" means here, and the test
+holds the other half of that sentence against BOTH company palettes: every
+lightness distinction the colour-blind palette promises (17.4) survives
+every tint of the curve with at least 60 % of its luminance gap and its
+order intact - checked pair by pair, because two of its eight entries are
+deliberately hue-separated, not lightness-separated, and a test that
+demanded a total luminance order would be asserting a promise the palette
+never made.
+
+**Every glow sits INSIDE the tinted world container, and the night dims it
+a little - stated, measured, accepted.** The alternative - an emissive
+layer beside `art`, exempt from the D-127 tint - would glow at full warmth
+but float above the painter order: a hill in front of a lit house would
+occlude the house and not its windows. So the glow sprites are pool
+sprites with additive blending, interleaved by the same drawOrder keys as
+the cells they sit on (placed right after their building, so the stable
+sort keeps the glow on its own facade), and the night tint multiplies the
+addition. The cost is measured in the dayNight suite: the lit-window
+colour under the deep-night tint still ADDS 0.56 of luminance at full ramp
+(alpha 0.85) and stays warm (r 184 over b 128) - a window reads as a lit
+window through the cool cast, and occlusion stays exact. EMISSIVE_MAX_ALPHA
+is deliberately under 1: full addition clips warm pixels to white.
+
+**Glazing in the bake is ONE manifest-level hue band, because the kits
+agree.** A scan over all 145 mapped models found window glass to be the
+same sky-blue colormap ramp in every pinned kit - hue 212-216 at HSL
+saturation 0.62-0.83 - and the only saturated-blue non-windows to be two
+livery hulls, which the tint-wins precedence already protects (paint does
+not glow; classification reads AUTHORED colours, before any D-169
+recolour). So `tools/assets-manifest.json` declares one root-level band
+(205-225, min saturation 0.55) instead of 145 per-model blocks, models can
+still override per entry if a kit ever disagrees, and the emissive pass
+renders matching faces UNSHADED in one fixed warm lit colour
+(EMISSIVE_LIT_RGB = #ffd98c, restated from emissive.ts under the D-160
+coupling test) - the daylight glass tone is a sky reflection, and a window
+that glows sky-blue at night reads as a monitor wall. The pass mirrors the
+mask pass exactly: the depth WINNER decides, so glazing behind a wall
+stays dark, and whether a facing gets a twin cell at all is decided on the
+PIXELS - glazing that never survived occlusion books no page area. Baked:
+548 twin cells per zoom out of 810 (coach windows, cab glazing, bridge
+windows, building and industry facades), packed as their own page set per
+zoom - z1 4090x568, z2 4088x1498, z4 4095x4040 plus 3826x1396, ~235 KiB,
+booked in SPEC2 6.2 page 2 - with the trio (page, x, y) stamped on the
+base cell so the render side never matches anything up. The manifest
+version moved to 2 in bake-lib AND loader (coupling test): a stale
+version-1 bake is refused whole and the game runs procedural until the
+next `npm run assets:bake`, which is D-160's unknown-version rule doing
+its job rather than a compatibility break. The double bake on the twelve
+kits was re-verified bit-identical over all ten pages.
+
+**The procedural twins are the same drawing code with everything but the
+glazing skipped.** SPEC2 says "windows() kennt die Positionen", and that
+stays true only while ONE place says where the windows are: the six
+town-building cells and the three glazed industries regenerate through
+their own draw routines under an emissive-only flag (`drawTownBuilding`,
+`sawtoothRoof glassOnly`, the extracted WINDOW_SPECS of industryArt), so
+the lit windows sit pixel-exact on the dark ones by construction. They
+spend one new row on the BASE page - booked in SPEC2 6.2, page 0 now
+2176x3648 of 4096, the layout test re-pinned - and exist there ONLY: the
+detail page stands at 4096x3840 (D-163) and has no room for another tall
+row, so the 4x zoom upscales its glow exactly as it upscales its water
+(D-164's argument; a glow is low-frequency and the upscale is invisible
+where a wall texture's would not be). The unglazed industries have no twin
+and draw no glow: a coal heap at night is dark, and that is the honest
+cell.
+
+**Street lamps are a parity rule on town road tiles, and the light is the
+glow, not a mast.** `lampOffsetForRoadTile` (emissive.ts, pure, tested):
+road bits plus (x + y) parity - along ANY straight street the parity
+alternates, so every second tile carries a lamp and an avenue is a chain
+of pools rather than a wall of light. A straight road is lit down one
+FIXED side (east-west on the northern verge, north-south on the western),
+junctions take the centre island; only tiles with `townId >= 0` qualify,
+so the country stays dark and a town reads as a town from a distance. The
+lamp itself is a procedural radial glow texture (the makeShadowTexture
+pattern, no atlas booking) - deliberately no lamp POST: a mast is daytime
+world art that would change every chunk checksum and belongs to the
+static-building bundle if it ever earns its pixels.
+
+**Headlights are eight pre-baked ground cones on the interpolated
+position.** `headlightGroundPoints` opens a symmetric cone in TILE space
+around each facing's travel direction (length 0.85 tiles, half-angle 0.42
+rad, pure and tested); attach projects the three corners through the 16.1
+projection into eight little gradient textures, so a cone pointing up the
+screen is foreshortened exactly like the road it lights. The cone follows
+the vehicle because it is placed from the same interpolated worldX/worldY
+as the body sprite, every frame; only the LEAD unit of a consist carries
+one, and only underway - `headlightsOn` is Driving and Braking, pinned
+against VehicleState in the test, so a loading lorry, a broken-down train
+and a depot sleeper stand dark. The cones work on the white-box fallback
+too: the facing is known either way (E-14's floor keeps its lights).
+Baked vehicle cells additionally draw their emissive twin as a fourth
+sprite in the slot (shadow, body, mask, glow, light - one zIndex,
+insertion order under Pixi's stable sort): a night passenger train shows
+its coach windows, which is the M13 headline sentence made visible.
+
+**At 0.5x the chunk glows through a baked twin, measured against the live
+alternative - the D-164 pattern, and the same winner.** A full-profile
+chunk bake collects its window and lamp placements into a second bake tree
+during the SAME tile walk and renders them into a second RenderTexture;
+the visible chunk then carries one additive sprite whose alpha IS the
+ramp, half a diagonal above its own chunk (the D-161 painter argument
+covers the twin, since it never paints outside its chunk's columns). The
+CPU proxy prices the walk at p50 0.052 ms / p99 0.25 ms per busy chunk
+(183 glows); the rejected alternative - live glow sprites above the
+chunks, the rebuildMarkers pattern - would pay that walk for every visible
+chunk on every pan-rebuild (~0.94 ms for a 0.5x viewport's 18 chunks) AND
+keep ~3,300 additive sprites in the per-frame draw, which is exactly the
+per-frame bill chunking exists to delete (D-164 measured the same shape
+for water and refused it). A dawn ramp costs one alpha write per visible
+chunk per frame; a water-row rebake CARRIES the twin through unchanged
+(ripples move, windows do not); eviction and invalidation recycle twin
+textures through their own freelist. The 0.25x abstract mode draws no
+emissive at all - 16.1 strips detail there by design.
+
+**Off means off, and the toggle re-places the world.** With the D-127
+setting off, `emissiveNow` is a constant 0, the rebuild places no glow
+sprite, the chunk bake collects no twin, the vehicle path skips glow and
+cone - no emissive work runs, not even invisible sprites. Toggling the
+setting invalidates the sprite pool AND the chunk caches (a settings flip
+is rare; a stale un-glowing chunk texture surviving into the night is a
+visible bug on a timer). While the setting is ON at noon the twins are
+still baked with their chunks - intensity gates the DRAW, not the bake,
+because a bake happens on the chunk cadence and dusk arriving must not
+trigger a rebake storm of every visible chunk.
+
+The perf suite gained the emissive-walk tripwire (median 2 ms over the
+0.05 ms clean measurement, backstop 20 ms - D-167 generosity); rebuild,
+draw-prep and chunk-bake proxies are unchanged and stay green. Render-only
+throughout: zero sim bytes, zero save bumps, zero snapshot changes - the
+one permitted M13 layout bump (`IndustryMarker.level`) still belongs to
+the particle bundle. i18n untouched: the feature ships behind the existing
+day/night setting and adds no user-visible string.

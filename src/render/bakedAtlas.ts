@@ -26,6 +26,14 @@ export interface BakedCell {
   readonly anchorY: number;
   readonly maskX: number;
   readonly maskY: number;
+  /**
+   * The lit-only emissive twin of this cell (M13), when the model has
+   * glazing: same width/height/anchor, on its own emissive page. All three
+   * fields exist together or not at all - parseCell enforces the trio.
+   */
+  readonly emissivePage?: string;
+  readonly emissiveX?: number;
+  readonly emissiveY?: number;
   readonly points?: Readonly<Record<string, readonly [number, number]>>;
 }
 
@@ -34,6 +42,8 @@ export interface BakedPage {
   readonly zoom: number;
   readonly width: number;
   readonly height: number;
+  /** 'emissive' for the lit-twin pages of M13; absent for sprite pages. */
+  readonly kind?: 'emissive';
   readonly cells: readonly BakedCell[];
 }
 
@@ -43,8 +53,14 @@ export interface BakedAtlasManifest {
   readonly pages: readonly BakedPage[];
 }
 
-/** The manifest version this loader understands. */
-export const BAKED_MANIFEST_VERSION = 1;
+/**
+ * The manifest version this loader understands. 2 since M13's emissive pass
+ * (tools/bake-lib.ts BAKE_MANIFEST_VERSION, asserted equal by the coupling
+ * test): a version-1 bake predates the emissive fields and is refused whole
+ * - stale output means procedural art plus a warning until `npm run
+ * assets:bake` runs again, never a half-understood atlas (D-160).
+ */
+export const BAKED_MANIFEST_VERSION = 2;
 
 /** Where the bake step publishes, relative to the served root. */
 export const BAKED_ATLAS_BASE = 'assets-baked';
@@ -59,6 +75,16 @@ function parseCell(value: unknown): BakedCell | null {
   if (typeof cell.target !== 'string') return null;
   for (const key of ['facing', 'x', 'y', 'width', 'height', 'anchorX', 'anchorY', 'maskX', 'maskY']) {
     if (!isFiniteNumber(cell[key])) return null;
+  }
+  // The emissive trio (M13) is all-or-none: a cell naming a page without
+  // coordinates - or the reverse - is a damaged manifest, and damage means
+  // procedural fallback, never a guess.
+  const emissiveFields = [cell.emissivePage, cell.emissiveX, cell.emissiveY];
+  const present = emissiveFields.filter((field) => field !== undefined).length;
+  if (present !== 0) {
+    if (present !== 3) return null;
+    if (typeof cell.emissivePage !== 'string') return null;
+    if (!isFiniteNumber(cell.emissiveX) || !isFiniteNumber(cell.emissiveY)) return null;
   }
   return cell as unknown as BakedCell;
 }

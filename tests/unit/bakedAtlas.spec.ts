@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   atlasSourceFor,
+  BAKED_MANIFEST_VERSION,
   loadBakedAtlas,
   parseBakedManifest,
   type BakedAtlasManifest,
@@ -28,7 +29,7 @@ const validCell = {
 };
 
 const validManifest = {
-  version: 1,
+  version: BAKED_MANIFEST_VERSION,
   zooms: [1, 2, 4],
   pages: [{ file: 'atlas-z1-p0.png', zoom: 1, width: 64, height: 24, cells: [validCell] }],
 };
@@ -53,14 +54,52 @@ describe('parseBakedManifest', () => {
     expect(manifest).not.toBeNull();
   });
 
-  it('rejects an unknown version outright', () => {
-    expect(parseBakedManifest({ ...validManifest, version: 2 })).toBeNull();
+  it('accepts the emissive trio of M13 and an emissive page without cells', () => {
+    const manifest = parseBakedManifest({
+      ...validManifest,
+      pages: [
+        {
+          ...validManifest.pages[0]!,
+          cells: [{ ...validCell, emissivePage: 'atlas-z1-e0.png', emissiveX: 0, emissiveY: 0 }],
+        },
+        { file: 'atlas-z1-e0.png', zoom: 1, width: 32, height: 24, kind: 'emissive', cells: [] },
+      ],
+    });
+    expect(manifest).not.toBeNull();
+    expect(manifest!.pages[0]!.cells[0]!.emissivePage).toBe('atlas-z1-e0.png');
+  });
+
+  it('rejects a partial emissive trio - all three fields or none', () => {
+    for (const partial of [
+      { emissivePage: 'atlas-z1-e0.png' },
+      { emissiveX: 0, emissiveY: 0 },
+      { emissivePage: 'atlas-z1-e0.png', emissiveX: 4 },
+      { emissivePage: 7, emissiveX: 0, emissiveY: 0 },
+    ]) {
+      expect(
+        parseBakedManifest({
+          ...validManifest,
+          pages: [{ ...validManifest.pages[0]!, cells: [{ ...validCell, ...partial }] }],
+        }),
+        JSON.stringify(partial),
+      ).toBeNull();
+    }
+  });
+
+  it('rejects an unknown version outright - a stale version-1 bake included', () => {
+    // A bake from before the M13 emissive pass says version 1; the loader
+    // must refuse it whole so the game falls back to procedural art until
+    // `npm run assets:bake` runs again - never half-read stale pages.
+    expect(parseBakedManifest({ ...validManifest, version: 1 })).toBeNull();
+    expect(
+      parseBakedManifest({ ...validManifest, version: BAKED_MANIFEST_VERSION + 1 }),
+    ).toBeNull();
   });
 
   it('rejects structural damage instead of half-loading', () => {
     expect(parseBakedManifest(null)).toBeNull();
     expect(parseBakedManifest('atlas')).toBeNull();
-    expect(parseBakedManifest({ version: 1 })).toBeNull();
+    expect(parseBakedManifest({ version: BAKED_MANIFEST_VERSION })).toBeNull();
     expect(parseBakedManifest({ ...validManifest, zooms: ['one'] })).toBeNull();
     expect(
       parseBakedManifest({
@@ -92,9 +131,13 @@ describe('the fallback decision', () => {
 
   it('falls back to procedural art when the bake is absent or empty', () => {
     expect(atlasSourceFor(null)).toBe('procedural');
-    expect(atlasSourceFor({ version: 1, zooms: [], pages: [] } as BakedAtlasManifest)).toBe(
-      'procedural',
-    );
+    expect(
+      atlasSourceFor({
+        version: BAKED_MANIFEST_VERSION,
+        zooms: [],
+        pages: [],
+      } as BakedAtlasManifest),
+    ).toBe('procedural');
   });
 });
 

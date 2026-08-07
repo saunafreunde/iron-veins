@@ -6,10 +6,12 @@ import { describe, expect, it } from 'vitest';
 import {
   BAKE_HEIGHT_PX,
   BAKE_HEIGHT_STEP_M,
+  BAKE_MANIFEST_VERSION,
   BAKE_TILE_H,
   BAKE_TILE_M,
   BAKE_TILE_W,
   BAKE_ZOOMS,
+  EMISSIVE_LIT_RGB,
   FACING_DELTAS,
   SHADE_BASE,
   SHADE_UP,
@@ -29,6 +31,8 @@ import {
   syntheticTexturedGlb,
   syntheticWagonGlb,
 } from '../../tools/bake-lib.ts';
+import { BAKED_MANIFEST_VERSION } from '../../src/render/bakedAtlas';
+import { EMISSIVE_WINDOW_HEX } from '../../src/render/emissive';
 import { HEIGHT_PX, TILE_H, TILE_W } from '../../src/render/projection';
 import { FACE_LEFT, FACE_RIGHT, FACE_TOP } from '../../src/render/shapes';
 import { HEIGHT_STEP_M, MapClimate, TILE_SIZE_M } from '../../src/sim/constants';
@@ -300,6 +304,134 @@ describe('the reused-model variants of D-169: recolor and stretch', () => {
   });
 });
 
+describe('the emissive pass of M13 (D-172)', () => {
+  it('classifies glazing by material name, colour and hue band - and tint wins', () => {
+    const byMaterial = extractTriangles(parseGlb(syntheticWagonGlb()), {
+      emissiveMaterials: ['livery'],
+    });
+    expect(byMaterial.filter((tri) => tri.emissive)).toHaveLength(12);
+    expect(byMaterial.filter((tri) => tri.tint)).toHaveLength(0);
+
+    // The same faces claimed as company colour FIRST stay tint: paint does
+    // not glow, and the blue-livery hulls of the water catalogue depend on
+    // exactly this precedence.
+    const tintWins = extractTriangles(parseGlb(syntheticWagonGlb()), {
+      tintMaterials: ['livery'],
+      emissiveMaterials: ['livery'],
+    });
+    expect(tintWins.filter((tri) => tri.tint)).toHaveLength(12);
+    expect(tintWins.filter((tri) => tri.emissive)).toHaveLength(0);
+
+    // Hue band on the colormap fixture (green texel, hue ~132).
+    const byHue = extractTriangles(parseGlb(syntheticTexturedGlb()), {
+      emissiveHues: [{ min: 120, max: 145, minSaturation: 0.3 }],
+    });
+    expect(byHue.every((tri) => tri.emissive)).toBe(true);
+    const outside = extractTriangles(parseGlb(syntheticTexturedGlb()), {
+      emissiveHues: [{ min: 200, max: 260, minSaturation: 0.3 }],
+    });
+    expect(outside.some((tri) => tri.emissive)).toBe(false);
+  });
+
+  it('renders glazing lit-only: EMISSIVE_LIT_RGB, unshaded, under the depth rule', () => {
+    const triangles = extractTriangles(parseGlb(syntheticWagonGlb()), {
+      emissiveMaterials: ['livery'],
+    });
+    const sprite = renderSprite(triangles, { scale: 10, facing: 0, zoom: 2 });
+    expect(sprite.hasEmissive).toBe(true);
+    let lit = 0;
+    for (let i = 0; i < sprite.emissive.length; i += 4) {
+      if (sprite.emissive[i + 3] === 0) continue;
+      lit++;
+      // UNSHADED: the exact lit colour on every glowing pixel, whatever
+      // face factor the NW light gave the same pixel in the base cell.
+      expect(sprite.emissive[i]).toBe(EMISSIVE_LIT_RGB[0]);
+      expect(sprite.emissive[i + 1]).toBe(EMISSIVE_LIT_RGB[1]);
+      expect(sprite.emissive[i + 2]).toBe(EMISSIVE_LIT_RGB[2]);
+      // The depth rule: a glowing pixel is a pixel the MODEL owns - the
+      // emissive twin can never glow outside the silhouette.
+      expect(sprite.base[i + 3]).toBe(255);
+    }
+    expect(lit).toBeGreaterThan(0);
+    // And strictly fewer lit pixels than model pixels: the hull is dark.
+    let opaque = 0;
+    for (let i = 3; i < sprite.base.length; i += 4) {
+      if (sprite.base[i] === 255) opaque++;
+    }
+    expect(lit).toBeLessThan(opaque);
+  });
+
+  it('leaves the base and mask cells byte-identical to a bake without glazing', () => {
+    const plain = renderSprite(extractTriangles(parseGlb(syntheticWagonGlb())), {
+      scale: 10,
+      facing: 2,
+      zoom: 1,
+    });
+    const glazed = renderSprite(
+      extractTriangles(parseGlb(syntheticWagonGlb()), { emissiveMaterials: ['livery'] }),
+      { scale: 10, facing: 2, zoom: 1 },
+    );
+    expect(sha256(glazed.base)).toBe(sha256(plain.base));
+    expect(sha256(glazed.mask)).toBe(sha256(plain.mask));
+    expect(plain.hasEmissive).toBe(false);
+    expect(glazed.hasEmissive).toBe(true);
+  });
+
+  it('packs emissive twins onto their own pages and stamps the trio on the cell', () => {
+    const models = [
+      {
+        target: 'vehicle:9001',
+        triangles: extractTriangles(parseGlb(syntheticWagonGlb()), {
+          emissiveMaterials: ['livery'],
+        }),
+        scale: 10,
+        facings: 8,
+      },
+      {
+        target: 'vehicle:9002',
+        triangles: extractTriangles(parseGlb(syntheticCubeGlb())),
+        scale: 10,
+        facings: 8,
+      },
+    ];
+    const { manifest, files } = bakeAtlases(models, [1]);
+    expect(manifest.version).toBe(BAKE_MANIFEST_VERSION);
+
+    const emissivePages = manifest.pages.filter((page) => page.kind === 'emissive');
+    expect(emissivePages).toHaveLength(1);
+    expect(emissivePages[0]!.file).toBe('atlas-z1-e0.png');
+    expect(emissivePages[0]!.cells).toHaveLength(0);
+    const decoded = decodePng(files.get('atlas-z1-e0.png')!);
+    expect(decoded.width).toBe(emissivePages[0]!.width);
+    expect(decoded.height).toBe(emissivePages[0]!.height);
+
+    const cells = manifest.pages.flatMap((page) => page.cells);
+    const glazed = cells.filter((cell) => cell.target === 'vehicle:9001');
+    const plain = cells.filter((cell) => cell.target === 'vehicle:9002');
+    expect(glazed).toHaveLength(8);
+    expect(plain).toHaveLength(8);
+    for (const cell of glazed) {
+      // All eight facings show glass (the livery box is visible all round),
+      // and every twin rectangle lies inside its emissive page.
+      expect(cell.emissivePage).toBe('atlas-z1-e0.png');
+      expect(cell.emissiveX! + cell.width).toBeLessThanOrEqual(emissivePages[0]!.width);
+      expect(cell.emissiveY! + cell.height).toBeLessThanOrEqual(emissivePages[0]!.height);
+    }
+    for (const cell of plain) {
+      // No glazing, no trio - the absence IS the "this does not glow" flag.
+      expect(cell.emissivePage).toBeUndefined();
+      expect(cell.emissiveX).toBeUndefined();
+      expect(cell.emissiveY).toBeUndefined();
+    }
+  });
+
+  it('restates the game-side constants exactly (the D-160 coupling device)', () => {
+    expect(BAKE_MANIFEST_VERSION).toBe(BAKED_MANIFEST_VERSION);
+    const value = Number.parseInt(EMISSIVE_WINDOW_HEX.slice(1), 16);
+    expect(EMISSIVE_LIT_RGB).toEqual([(value >> 16) & 0xff, (value >> 8) & 0xff, value & 0xff]);
+  });
+});
+
 describe('PNG codec', () => {
   it('round-trips RGBA pixels bit-exactly', () => {
     const pixels = Uint8Array.from(
@@ -440,6 +572,25 @@ describe('tools/assets-manifest.json', () => {
       expect(pack.sha256, pack.id).toMatch(/^[0-9a-f]{64}$/);
       expect(pack.page, pack.id).toMatch(/^https:\/\/kenney\.nl\/assets\//);
     }
+  });
+
+  it('declares the kit-wide glazing convention of M13 (D-172)', () => {
+    // One root-level hue band, because window glass is one sky-blue ramp
+    // across every pinned kit (measured hue 212-216, HSL sat 0.62-0.83);
+    // the band must bracket that measurement with honest margins.
+    const emissive = (
+      manifest as unknown as {
+        emissive?: { hues?: Array<{ min: number; max: number; minSaturation: number }> };
+      }
+    ).emissive;
+    expect(emissive?.hues).toHaveLength(1);
+    const band = emissive!.hues![0]!;
+    expect(band.min).toBeLessThanOrEqual(212);
+    expect(band.min).toBeGreaterThan(180);
+    expect(band.max).toBeGreaterThanOrEqual(216);
+    expect(band.max).toBeLessThan(240);
+    expect(band.minSaturation).toBeGreaterThan(0.4);
+    expect(band.minSaturation).toBeLessThanOrEqual(0.62);
   });
 
   it('maps every model onto a listed pack with sane bake parameters', () => {

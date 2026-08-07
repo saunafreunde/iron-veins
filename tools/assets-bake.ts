@@ -48,6 +48,19 @@ interface ManifestModel {
 interface Manifest {
   readonly version: number;
   readonly packs: ReadonlyArray<{ readonly id: string }>;
+  /**
+   * The kit-wide glazing convention (M13 emissive pass): window glass in
+   * every pinned Kenney kit is one sky-blue colormap ramp, so ONE hue band
+   * at manifest level classifies windows across all 145 models - measured,
+   * not guessed (hue 212-216, HSL saturation 0.62-0.83 on every kit; the
+   * only saturated-blue non-windows are two livery hulls, and tint wins
+   * over glazing by rule).
+   */
+  readonly emissive?: {
+    readonly materials?: readonly string[];
+    readonly colors?: readonly string[];
+    readonly hues?: readonly TintHueRange[];
+  };
   readonly models: readonly ManifestModel[];
 }
 
@@ -56,7 +69,7 @@ const MANIFEST_PATH = join(REPO_ROOT, 'tools', 'assets-manifest.json');
 const PACKS_DIR = join(REPO_ROOT, 'assets-cache', 'packs');
 const OUT_DIR = join(REPO_ROOT, 'public', 'assets-baked');
 
-function loadModel(entry: ManifestModel): BakeModelInput | null {
+function loadModel(entry: ManifestModel, emissive: Manifest['emissive']): BakeModelInput | null {
   const modelPath = join(PACKS_DIR, entry.pack, entry.file);
   if (!existsSync(modelPath)) {
     console.warn(`assets:bake ${entry.target}: missing ${entry.pack}/${entry.file}, skipped`);
@@ -79,6 +92,9 @@ function loadModel(entry: ManifestModel): BakeModelInput | null {
     tintMaterials: entry.tint?.materials,
     tintColors: entry.tint?.colors,
     tintHues: entry.tint?.hues,
+    emissiveMaterials: emissive?.materials,
+    emissiveColors: emissive?.colors,
+    emissiveHues: emissive?.hues,
     recolor: entry.recolor,
   });
   return {
@@ -104,7 +120,7 @@ function main(): void {
 
   const models: BakeModelInput[] = [];
   for (const entry of manifest.models) {
-    const model = loadModel(entry);
+    const model = loadModel(entry, manifest.emissive);
     if (model) models.push(model);
   }
   if (models.length === 0) {

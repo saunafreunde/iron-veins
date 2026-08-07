@@ -40,6 +40,71 @@ const RUST = '#8a5a3c';
 const DARK_ROOF = '#4b5058';
 const GLASS = '#7fb2c8';
 
+/**
+ * The window layouts of the three glazed industries, extracted so the FULL
+ * drawing and the M13 emissive pass read one spec: "windows() knows the
+ * positions" (SPEC2 M13) only stays true while there is exactly one place
+ * that says where they are. Keyed by IndustryType; the emissive pass
+ * replaces only the colour.
+ */
+const WINDOW_SPECS: Partial<
+  Record<
+    number,
+    {
+      u: number;
+      v: number;
+      height: number;
+      rows: number;
+      columns: number;
+      colour: string;
+      offsetU?: number;
+      offsetV?: number;
+    }
+  >
+> = {
+  [IndustryType.FurnitureFactory]: { u: 0.7, v: 0.5, height: 11, rows: 2, columns: 3, colour: GLASS },
+  [IndustryType.ElectronicsFactory]: {
+    u: 0.8,
+    v: 0.56,
+    height: 16,
+    rows: 3,
+    columns: 4,
+    colour: '#4f7f96',
+  },
+  [IndustryType.FoodFactory]: {
+    u: 0.62,
+    v: 0.5,
+    height: 13,
+    rows: 2,
+    columns: 3,
+    colour: '#6f95a6',
+    offsetU: -0.1,
+    offsetV: 0.08,
+  },
+};
+
+/** Draw one industry's windows; `colour` overrides the daytime glass. */
+function industryWindows(
+  ctx: CanvasRenderingContext2D,
+  view: IsoView,
+  s: ArtScale,
+  type: number,
+  colour?: string,
+): void {
+  const spec = WINDOW_SPECS[type];
+  if (spec === undefined) return;
+  windows(ctx, view, {
+    u: spec.u,
+    v: spec.v,
+    height: spec.height * s.px,
+    rows: spec.rows,
+    columns: spec.columns,
+    colour: colour ?? spec.colour,
+    offsetU: spec.offsetU,
+    offsetV: spec.offsetV,
+  });
+}
+
 /** A low works building with a saw-tooth roof; the generic factory hall. */
 function hall(
   ctx: CanvasRenderingContext2D,
@@ -224,7 +289,7 @@ const ART: readonly Draw[] = [
   (ctx, view, s) => {
     box(ctx, view, { u: 0.7, v: 0.5, height: 11 * s.px, colour: '#9d7a55' });
     gableRoof(ctx, view, { u: 0.7, v: 0.5, base: 11 * s.px, rise: 5 * s.px, colour: '#63483a' });
-    windows(ctx, view, { u: 0.7, v: 0.5, height: 11 * s.px, rows: 2, columns: 3, colour: GLASS });
+    industryWindows(ctx, view, s, IndustryType.FurnitureFactory);
     chimney(ctx, view, s, { u: 0.28, v: -0.3, height: 15, radius: 0.06 });
   },
 
@@ -237,23 +302,14 @@ const ART: readonly Draw[] = [
   // 11 ElectronicsFactory - the clean one: a flat glazed block.
   (ctx, view, s) => {
     box(ctx, view, { u: 0.8, v: 0.56, height: 16 * s.px, colour: '#d3d7db' });
-    windows(ctx, view, { u: 0.8, v: 0.56, height: 16 * s.px, rows: 3, columns: 4, colour: '#4f7f96' });
+    industryWindows(ctx, view, s, IndustryType.ElectronicsFactory);
     box(ctx, view, { u: 0.3, v: 0.24, height: 3 * s.px, colour: '#9aa2aa', base: 16 * s.px });
   },
 
   // 12 FoodFactory - a block with a pair of silos beside it.
   (ctx, view, s) => {
     box(ctx, view, { u: 0.62, v: 0.5, height: 13 * s.px, colour: '#e0dbcd', offsetU: -0.1, offsetV: 0.08 });
-    windows(ctx, view, {
-      u: 0.62,
-      v: 0.5,
-      height: 13 * s.px,
-      rows: 2,
-      columns: 3,
-      colour: '#6f95a6',
-      offsetU: -0.1,
-      offsetV: 0.08,
-    });
+    industryWindows(ctx, view, s, IndustryType.FoodFactory);
     cylinder(ctx, view, { radius: 0.13, height: 18 * s.px, colour: '#cdc6b2', offsetU: 0.3, offsetV: -0.2 });
     cylinder(ctx, view, { radius: 0.13, height: 16 * s.px, colour: '#c4bda9', offsetU: 0.34, offsetV: 0.06 });
   },
@@ -312,6 +368,33 @@ export function drawIndustry(
 ): void {
   const draw = ART[type] ?? ART[IndustryType.MachineFactory]!;
   draw(ctx, view, scale);
+}
+
+/**
+ * The industries whose procedural cell has an emissive twin (M13): exactly
+ * the glazed ones - the types with a WINDOW_SPECS entry. Sorted ascending
+ * so the atlas column of a type is stable whatever order the record's keys
+ * enumerate in.
+ */
+export const INDUSTRY_EMISSIVE_TYPES: readonly number[] = Object.keys(WINDOW_SPECS)
+  .map(Number)
+  .sort((a, b) => a - b);
+
+/**
+ * The emissive twin of a glazed industry cell (SPEC2 M13: window-only cells
+ * regenerated from the known positions): only its windows, in the lit
+ * colour, everything else transparent. Same view, same specs, same code
+ * path as the full drawing - the positions cannot drift. Callers must gate
+ * on {@link INDUSTRY_EMISSIVE_TYPES}; an unglazed type draws nothing.
+ */
+export function drawIndustryEmissive(
+  ctx: CanvasRenderingContext2D,
+  view: IsoView,
+  type: number,
+  scale: ArtScale,
+  litColour: string,
+): void {
+  industryWindows(ctx, view, scale, type, litColour);
 }
 
 /** Sanity: the table has to cover every type the simulation can produce. */

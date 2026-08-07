@@ -1,13 +1,17 @@
 import { TICKS_PER_DAY } from '../sim/constants';
 
 /**
- * The day/night colour curve of section 16.3, in its M10 minimal form (D-127).
+ * The day/night colour curve of section 16.3 (D-127), and - since M13 - the
+ * emissive ramp derived from it (D-172).
  *
  * One tint for the whole world container, computed from the snapshot tick and
  * nothing else - a pure function, so the same tick always produces the same
  * colour and the simulation is not involved at all. The renderer multiplies it
  * over the tile/vehicle container once per frame; no sprite is ever touched
- * individually. Emissive windows and lamps follow in M13.
+ * individually. The emissive layer (windows, lamps, headlights) reads
+ * `emissiveIntensity` below, which is this curve's own luminance turned
+ * upside down - one source of truth for how dark the world is and how
+ * brightly it answers.
  *
  * The curve is anchored so that TICK ZERO OF A DAY IS MORNING: a new game
  * (tick 0) opens on a daylit map rather than a mysteriously dark one, dusk
@@ -76,4 +80,48 @@ export function dayNightTint(tick: number): number {
     return (r << 16) | (g << 8) | b;
   }
   return DAY_TINT_NEUTRAL;
+}
+
+/**
+ * Relative luminance of a 0xRRGGBB tint, 0..1, with the Rec. 709 channel
+ * weights on the stored (gamma) channel values. This is the render side's
+ * brightness proxy - good enough to order and ramp colours, deliberately not
+ * a colorimetric linear-light computation, and stated as such.
+ */
+export function relativeLuminance(tint: number): number {
+  const r = ((tint >> 16) & 0xff) / 255;
+  const g = ((tint >> 8) & 0xff) / 255;
+  const b = (tint & 0xff) / 255;
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+/**
+ * Luminance of the night plateau, the denominator of the emissive ramp.
+ * Derived from NIGHT_COLOR at module load rather than restated, so the ramp
+ * can never drift against the curve it is defined by.
+ */
+const NIGHT_LUMINANCE = relativeLuminance(
+  (NIGHT_COLOR[0] << 16) | (NIGHT_COLOR[1] << 8) | NIGHT_COLOR[2],
+);
+
+/**
+ * How strongly the emissive layer (windows, street lamps, headlights - the
+ * M13 full form of section 16.3) glows at a given tick, 0..1.
+ *
+ * ONE source of truth (SPEC2 M13): the intensity is DERIVED from the D-127
+ * tint curve itself - it is the tint's missing luminance, normalised so the
+ * night plateau reads exactly 1 - rather than a second keyframe list that
+ * could drift against the first. Lights therefore come on exactly as fast
+ * as the world darkens: 0 through the whole day plateau, a partial glow in
+ * the dusk and dawn warmth, 1 through deep night. The caller feeds it the
+ * same interpolated phase that feeds the tint (D-162), so the two ramps
+ * share every frame's sub-tick position too. Luminance-based by
+ * construction, which is what the M13 order ("Modulation luminanz-basiert")
+ * names.
+ */
+export function emissiveIntensity(tick: number): number {
+  const missing = (1 - relativeLuminance(dayNightTint(tick))) / (1 - NIGHT_LUMINANCE);
+  if (missing <= 0) return 0;
+  if (missing >= 1) return 1;
+  return missing;
 }

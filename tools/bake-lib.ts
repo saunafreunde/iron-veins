@@ -58,6 +58,19 @@ export const SHADE_UP = 0.62;
 export const TINT_NEUTRAL_GREY = 190;
 
 /**
+ * The lit-window colour of the emissive pass (M13, SPEC2: "Fenster-/Lampen-
+ * Materialien" render lit-only variants): every emissive face bakes to this
+ * warm interior light, UNSHADED - lit is lit, whatever the NW light thinks.
+ * A fixed colour rather than the authored glass tone, because the kits'
+ * daylight glass is a sky-blue reflection and a window that glows sky-blue
+ * at night reads as a monitor wall. Restates src/render/emissive.ts
+ * EMISSIVE_WINDOW_HEX (#ffd98c) because Node cannot resolve src imports at
+ * bake time; the coupling test in tests/unit/assetsBake.spec.ts asserts the
+ * two equal (the D-160 device). [RGB 0-255]
+ */
+export const EMISSIVE_LIT_RGB: readonly [number, number, number] = [255, 217, 140];
+
+/**
  * The baked contact shadow (SPEC2 M13: "Kontaktschatten (NW-Licht) je
  * Zelle"): every cell carries a soft dark patch at its ground line, so a
  * baked object sits ON the terrain instead of floating over it. Baked
@@ -405,6 +418,8 @@ export interface BakeTriangle {
   readonly b: number;
   /** True when this face belongs to a company-colour zone. */
   readonly tint: boolean;
+  /** True when this face is window/lamp glazing - the M13 emissive pass. */
+  readonly emissive: boolean;
 }
 
 const COMPONENT_SIZE: Readonly<Record<number, number>> = {
@@ -573,6 +588,20 @@ export interface ExtractOptions {
    * a band catches the whole livery where an exact list would fray.
    */
   readonly tintHues?: readonly TintHueRange[];
+  /**
+   * Material names whose faces are window/lamp glazing (M13 emissive pass).
+   * A face already claimed as a company-colour zone stays tint: a livery is
+   * paint, and paint does not glow.
+   */
+  readonly emissiveMaterials?: readonly string[];
+  /** Exact palette colours (lower-case "#rrggbb") that are glazing. */
+  readonly emissiveColors?: readonly string[];
+  /**
+   * Hue bands that are glazing - the working convention for the colormap
+   * kits, where window glass is one sky-blue ramp shared across packs
+   * (measured hue 212-216 at HSL saturation 0.62-0.83 on every mapped kit).
+   */
+  readonly emissiveHues?: readonly TintHueRange[];
   /** Deterministic recolour of the non-tint faces (generation variants). */
   readonly recolor?: RecolorSpec;
 }
@@ -698,6 +727,8 @@ export function extractTriangles(model: GlbModel, options: ExtractOptions = {}):
   const imageCache = new Map<number, DecodedImage>();
   const tintMaterials = new Set(options.tintMaterials ?? []);
   const tintColors = new Set((options.tintColors ?? []).map((c) => c.toLowerCase()));
+  const emissiveMaterials = new Set(options.emissiveMaterials ?? []);
+  const emissiveColors = new Set((options.emissiveColors ?? []).map((c) => c.toLowerCase()));
 
   const visit = (nodeIndex: number, parent: Matrix): void => {
     const node = model.json.nodes?.[nodeIndex];
@@ -746,6 +777,7 @@ export function extractTriangles(model: GlbModel, options: ExtractOptions = {}):
       }
     }
     const materialTinted = material?.name != null && tintMaterials.has(material.name);
+    const materialEmissive = material?.name != null && emissiveMaterials.has(material.name);
 
     for (let t = 0; t + 2 < indices.length; t += 3) {
       const out = new Float64Array(9);
@@ -795,10 +827,18 @@ export function extractTriangles(model: GlbModel, options: ExtractOptions = {}):
         materialTinted ||
         tintColors.has(hexOf(r8, g8, b8)) ||
         inHueRanges(r8, g8, b8, options.tintHues ?? []);
+      // Glazing too reads the AUTHORED colour, and tint wins: a livery in a
+      // glass-blue paint is somebody's colours, not a window (the two blue
+      // hulls of the water catalogue are exactly this case).
+      const emissive =
+        !tint &&
+        (materialEmissive ||
+          emissiveColors.has(hexOf(r8, g8, b8)) ||
+          inHueRanges(r8, g8, b8, options.emissiveHues ?? []));
       if (!tint && options.recolor) {
         [r8, g8, b8] = applyRecolor(r8, g8, b8, options.recolor);
       }
-      triangles.push({ positions: out, r: r8, g: g8, b: b8, tint });
+      triangles.push({ positions: out, r: r8, g: g8, b: b8, tint, emissive });
     }
   };
 
@@ -818,6 +858,15 @@ export interface SpriteRender {
   readonly base: Uint8Array;
   /** Mask pass: company zones only, shading in the grey value (D-160). */
   readonly mask: Uint8Array;
+  /**
+   * Emissive pass (M13): glazing only, in EMISSIVE_LIT_RGB, UNSHADED -
+   * transparent everywhere else. Same cell rectangle as the base pass, so
+   * the lit twin lands on its cell with the same anchor. All-transparent
+   * when the model has no glazing; the packer skips it then.
+   */
+  readonly emissive: Uint8Array;
+  /** True when at least one emissive pixel survived the depth pass. */
+  readonly hasEmissive: boolean;
   /** Named anchor points (chimneys, emitters) projected into cell pixels. */
   readonly points: Readonly<Record<string, readonly [number, number]>>;
 }
@@ -952,6 +1001,7 @@ export function renderSprite(triangles: readonly BakeTriangle[], options: Render
   const height = Math.ceil(screenMaxY) - originY + pad;
   const base = new Uint8Array(width * height * 4);
   const mask = new Uint8Array(width * height * 4);
+  const emissive = new Uint8Array(width * height * 4);
   const depthBuffer = new Float64Array(width * height).fill(-Infinity);
 
   for (let t = 0; t < projected.length; t++) {
@@ -1032,6 +1082,20 @@ export function renderSprite(triangles: readonly BakeTriangle[], options: Render
           mask[at + 2] = 0;
           mask[at + 3] = 0;
         }
+        // The emissive pass mirrors the mask pass: the depth WINNER decides,
+        // so a window behind a wall stays dark and a wall in front of a
+        // window overwrites a glow an earlier triangle left there.
+        if (tri.emissive) {
+          emissive[at] = EMISSIVE_LIT_RGB[0];
+          emissive[at + 1] = EMISSIVE_LIT_RGB[1];
+          emissive[at + 2] = EMISSIVE_LIT_RGB[2];
+          emissive[at + 3] = 255;
+        } else {
+          emissive[at] = 0;
+          emissive[at + 1] = 0;
+          emissive[at + 2] = 0;
+          emissive[at + 3] = 0;
+        }
       }
     }
   }
@@ -1081,7 +1145,18 @@ export function renderSprite(triangles: readonly BakeTriangle[], options: Render
     ];
   }
 
-  return { width, height, anchorX: -originX, anchorY: -originY, base, mask, points };
+  // Whether any glazing survived occlusion is decided per FACING on the
+  // pixels, not per model on the triangle list: a window the depth pass
+  // never let through must not book an empty atlas cell.
+  let hasEmissive = false;
+  for (let i = 3; i < emissive.length; i += 4) {
+    if (emissive[i] !== 0) {
+      hasEmissive = true;
+      break;
+    }
+  }
+
+  return { width, height, anchorX: -originX, anchorY: -originY, base, mask, emissive, hasEmissive, points };
 }
 
 // -------------------------------------------------------------- atlas layout
@@ -1162,6 +1237,15 @@ export interface BakedCell {
   readonly anchorY: number;
   readonly maskX: number;
   readonly maskY: number;
+  /**
+   * The emissive twin of this cell (M13), when the model has glazing: the
+   * lit-only rectangle on its own emissive page (SPEC2 6.2 page 2), same
+   * width/height/anchor as the base cell. Either all three fields exist or
+   * none - the loader validates the trio.
+   */
+  readonly emissivePage?: string;
+  readonly emissiveX?: number;
+  readonly emissiveY?: number;
   /** Named anchor points in cell pixels, present when the model declares any. */
   readonly points?: Readonly<Record<string, readonly [number, number]>>;
 }
@@ -1171,6 +1255,8 @@ export interface BakedPageManifest {
   readonly zoom: number;
   readonly width: number;
   readonly height: number;
+  /** 'emissive' for the lit-twin pages of M13; absent for sprite pages. */
+  readonly kind?: 'emissive';
   readonly cells: readonly BakedCell[];
 }
 
@@ -1187,6 +1273,16 @@ export interface BakeResult {
 }
 
 export const BAKED_MANIFEST_NAME = 'baked-manifest.json';
+
+/**
+ * Version of the baked-manifest format this library writes. Bumped to 2 by
+ * M13 (emissive fields + emissive pages); src/render/bakedAtlas.ts restates
+ * it as BAKED_MANIFEST_VERSION and refuses anything else, so a stale bake
+ * from before the bump falls back to procedural art with a warning instead
+ * of being half-read (D-160's unknown-version rule). The coupling test in
+ * tests/unit/assetsBake.spec.ts asserts the two constants equal.
+ */
+export const BAKE_MANIFEST_VERSION = 2;
 
 /** The zoom levels baked per model (SPEC.md 16.2: atlases per zoom level). */
 export const BAKE_ZOOMS: readonly number[] = [1, 2, 4];
@@ -1227,8 +1323,27 @@ export function bakeAtlases(models: readonly BakeModelInput[], zooms = BAKE_ZOOM
       width: render.width * 2,
       height: render.height,
     }));
+    // The emissive twins (M13) pack as their OWN page set per zoom - the
+    // SPEC2 6.2 page-2 booking - in render order, single-width cells: only
+    // renders whose depth pass actually let glazing through take a cell.
+    const emissiveIndices: number[] = [];
+    for (let i = 0; i < renders.length; i++) {
+      if (renders[i]!.hasEmissive) emissiveIndices.push(i);
+    }
+    const emissiveLayout = layoutCells(
+      emissiveIndices.map((i) => ({ width: renders[i]!.width, height: renders[i]!.height })),
+    );
+    const emissivePlaceByRender = new Map<number, CellPlacement>();
+    for (let e = 0; e < emissiveIndices.length; e++) {
+      emissivePlaceByRender.set(emissiveIndices[e]!, emissiveLayout.placements[e]!);
+    }
+    const emissivePageName = (p: number): string => `atlas-z${zoom}-e${p}.png`;
+
     const { placements, pages } = layoutCells(sizes);
     const pixelPages = pages.map((page) => new Uint8Array(page.width * page.height * 4));
+    const emissivePixelPages = emissiveLayout.pages.map(
+      (page) => new Uint8Array(page.width * page.height * 4),
+    );
     const cellsPerPage: BakedCell[][] = pages.map(() => []);
     for (let i = 0; i < renders.length; i++) {
       const render = renders[i]!;
@@ -1237,6 +1352,16 @@ export function bakeAtlases(models: readonly BakeModelInput[], zooms = BAKE_ZOOM
       const maskPlace = { page: pairPlace.page, x: pairPlace.x + render.width, y: pairPlace.y };
       blit(pixelPages[basePlace.page]!, pages[basePlace.page]!.width, render.base, render, basePlace);
       blit(pixelPages[maskPlace.page]!, pages[maskPlace.page]!.width, render.mask, render, maskPlace);
+      const emissivePlace = emissivePlaceByRender.get(i);
+      if (emissivePlace !== undefined) {
+        blit(
+          emissivePixelPages[emissivePlace.page]!,
+          emissiveLayout.pages[emissivePlace.page]!.width,
+          render.emissive,
+          render,
+          emissivePlace,
+        );
+      }
       const cell: BakedCell = {
         target: owners[i]!.target,
         facing: owners[i]!.facing,
@@ -1248,6 +1373,13 @@ export function bakeAtlases(models: readonly BakeModelInput[], zooms = BAKE_ZOOM
         anchorY: render.anchorY,
         maskX: maskPlace.x,
         maskY: maskPlace.y,
+        ...(emissivePlace !== undefined
+          ? {
+              emissivePage: emissivePageName(emissivePlace.page),
+              emissiveX: emissivePlace.x,
+              emissiveY: emissivePlace.y,
+            }
+          : {}),
         ...(Object.keys(render.points).length > 0 ? { points: render.points } : {}),
       };
       cellsPerPage[basePlace.page]!.push(cell);
@@ -1263,9 +1395,27 @@ export function bakeAtlases(models: readonly BakeModelInput[], zooms = BAKE_ZOOM
         cells: cellsPerPage[p]!,
       });
     }
+    for (let p = 0; p < emissiveLayout.pages.length; p++) {
+      const name = emissivePageName(p);
+      files.set(
+        name,
+        encodePng(emissiveLayout.pages[p]!.width, emissiveLayout.pages[p]!.height, emissivePixelPages[p]!),
+      );
+      // Emissive pages carry no cells of their own: the base cell's
+      // emissive trio points into them, so a page here is texture plus
+      // dimensions and nothing else.
+      pageManifests.push({
+        file: name,
+        zoom,
+        width: emissiveLayout.pages[p]!.width,
+        height: emissiveLayout.pages[p]!.height,
+        kind: 'emissive',
+        cells: [],
+      });
+    }
   }
   const manifest = {
-    version: 1,
+    version: BAKE_MANIFEST_VERSION,
     tint: 'two-pass: base holds company zones in neutral grey; the mask cell holds those pixels with the NW shading in its grey value, so tinting the mask with a company colour multiplies to a shaded livery',
     facingDeltas: FACING_DELTAS,
     zooms: [...zooms],

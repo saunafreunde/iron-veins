@@ -183,6 +183,13 @@ export function sawtoothRoof(
     readonly glass: string;
     readonly offsetU?: number;
     readonly offsetV?: number;
+    /**
+     * Draw ONLY the glazed faces, skipping the sloping halves - the
+     * emissive pass of M13 (SPEC2: window/lamp-only cells): the glass
+     * positions are exactly the ones the full draw uses, because they are
+     * the same code.
+     */
+    readonly glassOnly?: boolean;
   },
 ): void {
   const ou = spec.offsetU ?? 0;
@@ -197,11 +204,13 @@ export function sawtoothRoof(
       project(view, ou + u, ov + v, up);
 
     // The sloping half.
-    fill(
-      ctx,
-      [p(-hu, v0, spec.base), p(hu, v0, spec.base), p(hu, v1, spec.base + spec.rise), p(-hu, v1, spec.base + spec.rise)],
-      shade(spec.colour, FACE_TOP),
-    );
+    if (spec.glassOnly !== true) {
+      fill(
+        ctx,
+        [p(-hu, v0, spec.base), p(hu, v0, spec.base), p(hu, v1, spec.base + spec.rise), p(-hu, v1, spec.base + spec.rise)],
+        shade(spec.colour, FACE_TOP),
+      );
+    }
     // The glazed face looking north, which is why the roof has this shape.
     fill(
       ctx,

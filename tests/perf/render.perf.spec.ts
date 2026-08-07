@@ -35,6 +35,7 @@ import {
   type ConsistPlacement,
 } from '../../src/render/consistArt';
 import { coastEdgeMask, FOAM_EDGE_COUNT, foamVariant, isDeepWater } from '../../src/render/water';
+import { lampOffsetForRoadTile } from '../../src/render/emissive';
 
 /**
  * The render CPU tripwire of SPEC2 6.3: Sprite-Pool-Rebuild-ms, Draw-Prep-ms
@@ -122,6 +123,20 @@ const CHUNK_BAKE_P50_TRIPWIRE_MS = 3;
 const CHUNK_BAKE_P99_BACKSTOP_MS = 30;
 
 /**
+ * Median tripwire: the CPU half of one chunk's emissive-twin walk (M13,
+ * D-172) - the building-and-lamp placement pass that fills the twin texture.
+ * Measured clean ~0.05 ms per chunk; the gate is a very generous multiple
+ * (D-167). The same walk also prices the REJECTED alternative: emissive as
+ * live sprites above the chunks would run this per visible chunk on every
+ * pan-rebuild AND keep those sprites in the per-frame draw - the D-164
+ * option-B shape, argued with these numbers in D-172. [ms]
+ */
+const EMISSIVE_WALK_P50_TRIPWIRE_MS = 2;
+
+/** p99 backstop for the emissive walk, the usual order of magnitude. [ms] */
+const EMISSIVE_WALK_P99_BACKSTOP_MS = 20;
+
+/**
  * The measured window: 64x64 tiles is roughly what a 4K screen shows at zoom
  * 1 - deliberately larger than the common case, never smaller.
  */
@@ -172,6 +187,8 @@ function buildBusyMap(): TileMap {
       } else if (y % 4 === 1) {
         map.roadBits[index] = RoadBit.East | RoadBit.West;
         map.terrain[index] = Terrain.TownGround;
+        // Town streets, so the M13 lamp rule fires in the emissive proxy.
+        map.townId[index] = 1;
       } else if ((x + y) % 5 === 0) {
         map.buildingKind[index] = BuildingKind.Residential + ((x + y) % 3);
         map.buildingLevel[index] = 1 + (x % 3);
@@ -617,6 +634,77 @@ function chunkBakeProxy(
   return used + segments.length + (checksum === 0 ? 1 : 0) + (deepFold === -1 ? 1 : 0);
 }
 
+/**
+ * The CPU of one chunk's emissive-twin walk (M13, D-172): the diagonal
+ * iteration confined to the glowing content - the window twin per building,
+ * the lamp rule per town road tile - exactly the placements
+ * `MapView.bakeChunk` adds to its emissive bake tree. The GPU pass that
+ * renders the twin texture is outside what a proxy can see (D-136), and it
+ * is at most one extra RenderTexture pass per chunk bake.
+ */
+function emissiveWalkProxy(
+  map: TileMap,
+  chunkX: number,
+  chunkY: number,
+  out: DrawList,
+  frames: Map<string, number>,
+): number {
+  let used = 0;
+  const place = (key: string, worldX: number, worldY: number, zIndex: number): void => {
+    let frame = frames.get(key);
+    if (frame === undefined) {
+      frame = frames.size;
+      frames.set(key, frame);
+    }
+    out.key[used] = zIndex;
+    out.frame[used] = frame;
+    out.x[used] = worldX - TILE_W / 2;
+    out.y[used] = worldY - HEIGHT_PX;
+    used++;
+  };
+
+  const x0 = chunkX * CHUNK_TILES;
+  const y0 = chunkY * CHUNK_TILES;
+  const xMax = Math.min(x0 + CHUNK_TILES - 1, map.size - 1);
+  const yMax = Math.min(y0 + CHUNK_TILES - 1, map.size - 1);
+
+  for (let sum = x0 + y0; sum <= xMax + yMax; sum++) {
+    const xStart = Math.max(x0, sum - yMax);
+    const xEnd = Math.min(xMax, sum - y0);
+    for (let x = xStart; x <= xEnd; x++) {
+      const y = sum - x;
+      const index = map.tileIndex(x, y);
+      if (map.structure[index] !== 0) continue;
+      const roadBits = map.roadBits[index]!;
+      if (roadBits !== 0 && map.townId[index]! >= 0) {
+        const lamp = lampOffsetForRoadTile(x, y, roadBits);
+        if (lamp !== null) {
+          const height = map.baseHeight(x, y);
+          const world = tileToWorld(x, y, height);
+          place(
+            'lamp',
+            world.x + lamp[0],
+            world.y + lamp[1],
+            drawOrder(x, y, height, DrawLayer.Signal),
+          );
+        }
+      }
+      const buildingKind = map.buildingKind[index]!;
+      if (buildingKind !== 0) {
+        const height = map.baseHeight(x, y);
+        const world = tileToWorld(x, y, height);
+        place(
+          `eb${buildingKind}:${map.buildingLevel[index]!}`,
+          world.x,
+          world.y,
+          drawOrder(x, y, height, DrawLayer.Building),
+        );
+      }
+    }
+  }
+  return used;
+}
+
 function percentile(samples: Float64Array, share: number): number {
   const sorted = Array.from(samples).sort((a, b) => a - b);
   return sorted[Math.floor(sorted.length * share)]!;
@@ -734,6 +822,44 @@ describe('render CPU tripwire (SPEC2 6.3)', () => {
     expect(drawn).toBe(expectedUnits);
     expect(p50).toBeLessThan(DRAW_PREP_P50_TRIPWIRE_MS);
     expect(p99).toBeLessThan(DRAW_PREP_P99_BACKSTOP_MS);
+  });
+
+  it('walks one chunk emissive twin inside the tripwire (M13, D-172)', () => {
+    const out: DrawList = {
+      key: new Float64Array(2_048),
+      frame: new Int32Array(2_048),
+      x: new Float64Array(2_048),
+      y: new Float64Array(2_048),
+    };
+    const frames = new Map<string, number>();
+    const placed = emissiveWalkProxy(map, 1, 1, out, frames);
+
+    const samples = new Float64Array(REBUILD_SAMPLES);
+    for (let i = 0; i < REBUILD_SAMPLES; i++) {
+      const started = performance.now();
+      emissiveWalkProxy(map, 1, 1, out, frames);
+      samples[i] = performance.now() - started;
+    }
+
+    const p50 = percentile(samples, 0.5);
+    const p99 = percentile(samples, 0.99);
+    // The rejected live-sprite alternative would pay this walk for EVERY
+    // visible chunk on every pan-rebuild plus the per-frame draw of all the
+    // placed sprites; a 0.5x viewport shows ~18 full chunks, so the derived
+    // comparison is printed alongside (the D-164 measurement pattern).
+    console.log(
+      `emissive twin walk: ${placed} glows over one chunk, ` +
+        `p50 ${p50.toFixed(4)} ms, p99 ${p99.toFixed(4)} ms ` +
+        `(live-above alternative: ~${(p50 * 18).toFixed(3)} ms per pan-rebuild for 18 chunks ` +
+        `plus ~${placed * 18} additive sprites per frame; ` +
+        `median tripwire ${EMISSIVE_WALK_P50_TRIPWIRE_MS} ms, backstop ${EMISSIVE_WALK_P99_BACKSTOP_MS} ms)`,
+    );
+
+    // The busy chunk carries both glow kinds - lamps on the town streets,
+    // window twins on the buildings - so the walk prices real work.
+    expect(placed).toBeGreaterThan(100);
+    expect(p50).toBeLessThan(EMISSIVE_WALK_P50_TRIPWIRE_MS);
+    expect(p99).toBeLessThan(EMISSIVE_WALK_P99_BACKSTOP_MS);
   });
 
   it('rebakes one 32x32 chunk inside the tripwire', () => {
