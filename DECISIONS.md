@@ -15,7 +15,7 @@ no entry below. A number may appear under several topics.
 - **Commands, snapshot & worker boundary:** D-004, D-005, D-006, D-011, D-032,
   D-100, D-111, D-145, D-146, D-148
 - **Lines & timetables:** D-145, D-146, D-147, D-148, D-149, D-150, D-151,
-  D-152, D-155
+  D-152, D-155, D-159
 - **Map generation & terrain:** D-018, D-019, D-020, D-021, D-022, D-023,
   D-025, D-027
 - **Terraforming & structures:** D-028, D-034, D-050, D-051, D-052, D-124,
@@ -26,7 +26,7 @@ no entry below. A number may appear under several topics.
   D-153, D-157
 - **Signals & reservations:** D-054, D-055, D-056, D-057, D-058, D-059, D-060,
   D-061, D-073, D-080, D-081, D-082, D-083, D-157
-- **Stations & catchment:** D-049, D-080, D-095, D-150
+- **Stations & catchment:** D-049, D-080, D-095, D-150, D-159
 - **Cargo, payment & routing:** D-036, D-037, D-065, D-067, D-075, D-077,
   D-078, D-118, D-142, D-151
 - **Industry & production:** D-022, D-062, D-063, D-064, D-069, D-071, D-079,
@@ -34,12 +34,12 @@ no entry below. A number may appear under several topics.
 - **Towns, council & ownership:** D-101, D-102, D-103, D-104
 - **Economy, finance & emissions:** D-008, D-090, D-091, D-092, D-105, D-154
 - **Balancing & scenarios:** D-038, D-039, D-040, D-041, D-066, D-087, D-088,
-  D-116, D-151, D-152, D-156
+  D-116, D-151, D-152, D-156, D-158, D-159
 - **Vehicles & fleet:** D-043, D-044, D-045, D-068, D-076, D-089, D-093,
   D-096, D-142, D-143, D-145, D-146, D-155, D-157
 - **Water & air:** D-094, D-095, D-096, D-097, D-098, D-099
 - **Competitors, AI & tenders:** D-107, D-108, D-109, D-115, D-116, D-121,
-  D-122, D-147, D-152, D-153, D-154, D-155, D-156
+  D-122, D-147, D-152, D-153, D-154, D-155, D-156, D-158
 - **Rendering & art:** D-013, D-014, D-033, D-035, D-112, D-117, D-125, D-127,
   D-136, D-140
 - **UI & input:** D-011, D-013, D-015, D-035, D-110, D-113, D-114, D-119,
@@ -3393,3 +3393,144 @@ four of the five fail on the unfixed code. This closes the FIRST of
 D-156's two named walls; the second (a passenger pile a fleet merely
 matches pays the decay floor for ever) stands, and scenario 5 stays out
 of the suite until the AI runs are measured again against the band.
+
+## M11 - closure: scenario 5 on the measured band, the takt's variance floor (2026-08-07)
+
+### D-158 Scenario 5 enters the suite on the band the economy pays, because five million was never on the map
+
+The mandate after D-157: re-measure the twenty-five-year 512-map runs,
+establish by construction what the map physically pays, and settle the
+band on that evidence. Three measurements, in order.
+
+**The AI, re-measured** (the D-156 setup, month by month, post-D-157):
+
+* **Road (seed 4711): 1,119,720 EUR, solvent, compounding** - the same
+  figure as before the freeze fix, because the road personality never
+  froze. The trace confirms D-155 end to end on the big map: the
+  year-twenty-one renewal dips the value 439,000 in one month (614,780
+  at month 252) and the renewed fleet then grows the company at about
+  +130,000 EUR a year - its best pace of the whole run, on a station
+  rated 86.
+* **Rail (seed 3): alive at 90,230 EUR** - where D-156 measured it wound
+  up in 1959. Its 26-tile line now RUNS: two and a half years of rising
+  value (+9,000 EUR a year net of everything), then the line's economics
+  sag, its own review honestly closes it in year three, and the
+  personality never recovers: twenty years of backoff against a thin
+  offer, then a retry at month 281 that borrowed 300,000, built its two
+  stations - and could not afford the train, leaving the loan's interest
+  to drain the company.
+* **Expansive (seed 2): alive at 121,328 EUR** - was wound up in 1967.
+  It holds one one-vehicle line for twenty-four years while the 300,000
+  loan it never repays eats about 15,000 a year.
+
+The D-157 fix turned "wound up" into "alive but stagnant" for both rail
+personalities; it did not - could not - make the map pay more.
+
+**The achievability probe** (a hand-built competent-player network on
+the seed-4711 offer, mirrored flat at the real distances and
+populations, built the way the balancing scenarios build worlds). What
+the offer IS was measured first: 40 towns, 34 industries, 13
+source-to-sink pairs in the AI's range - and almost all of it dead on
+arrival, because steel, planks, chemicals and plastics have NO acceptor
+anywhere on this map (no machine, furniture or electronics works
+exists), and cement is uncarriable before 1966 while a
+fed-but-uncollected works closes in 24 months, so the gravel chain can
+never exist on the 1950 timeline. What survives: ONE coal haul to the
+map's one power plant (nearest mine 183 tiles - beyond the AI's
+120-tile cap, inside a player's), the farm-to-food chain, and eight
+town pairs within 15-40 tiles. The probe built all of it with SIX
+MILLION of free capital - D-082 ovals, a three-platform food line, a
+four-train coal line, sized bus fleets plus mail vans, auto-renewal
+everywhere; capex 3,248,885. Measured over twenty-five years:
+
+* Peak value +837,738 over the post-build start (month 171); final
+  3,616,598 after the rail fleet's design-life renewal took back 2.4
+  million across months 279-291. The renewal tax is real for every
+  twenty-five-year company.
+* The coal line is the map's ONE earner: 1,812,825 lifetime revenue on
+  four trains. The eight bus-and-mail lines together grossed 717,200 -
+  roughly their own upkeep: every town of 2,500 and up pins its pile at
+  the 2,000-unit station cap and pays the decay floor (D-156's second
+  wall, re-measured; ratings 51-67), and the 400-population towns stay
+  drained but produce next to nothing.
+* The farm-to-food chain is a measured TRAP, not an opportunity: over
+  the 100-tile haul livestock (grace 6 days, 5.5 %/day decay) arrives
+  at the floor, the factory cannot batch without it, the grain leg's
+  deliveries jam against a full input store, and four trains earned
+  24,853 EUR in twenty-five years. The AI's own candidate list contains
+  this pair; its arrival gate checks the cargo it SCORES (grain), and
+  the chain's co-input is what kills it - a bottleneck for a later
+  stage, named here.
+
+The probe covers the genesis offer; industries spawned at runtime add
+pairs of the same classes, and the road AI - which rescans monthly and
+therefore does chase spawns - compounds at the same order (+110,000 to
++130,000 a year) as the probe's best years. Nothing on this economy
+turns 500,000 into five million in twenty-five years; the SPEC.md 19.4
+figure describes an economy this game does not have (the rates are what
+scenarios 1-4 recalibrated them to be - D-039, D-066, D-087 - and those
+scenarios own them).
+
+**The band, recalibrated** (`tests/balance/aiCompany.spec.ts`, closes
+D-116; SPEC.md stays untouched per D-123, SPEC2's M11 text carries the
+bracketed amendment): per personality, because the evidence is.
+
+* Road, seed 4711: company value in **0.8 - 3.2 million** after
+  twenty-five years, PLUS value at year 25 above value at year 15 - the
+  compounding-through-renewal assertion. The floor is the stall
+  detector (the pre-C2 stall states measured 433,000 and 580,000); the
+  ceiling is the economy-breakage detector, anchored above the probe's
+  free-capital growth so only a broken tariff or gate can reach it.
+* Rail seed 3 and Expansive seed 2: ALIVE with standing networks and
+  positive value - the D-157 gain, asserted so it cannot regress. Their
+  stagnation is deliberately NOT blessed with a growth band: it is the
+  named open bottleneck - the rail review closes a line whose decline
+  is real but whose company then never rebuilds (thin offer, the
+  graveyard rule, and a retry that could not afford its train), and the
+  pax-pile wall stands for every large pair. Those are the next stage's
+  targets, with this trace as the baseline.
+
+### D-159 The takt cannot halve the delivery-rating variance, and the floor has two mechanisms - neither is a knob
+
+D-151 measured 0.57 against the SPEC2 sentence's 0.5 and banded at 0.6.
+The mandate was to genuinely attempt the half and settle where the
+residue lives. The rating inputs were decomposed - daily samples of
+every term of `stationRating` at the delivery station, takted and
+untakted:
+
+* The delivery station's variance IS its frequency term: 11.05 of 11.38
+  untakted, 6.31 of 6.49 takted. The wait term is constant (no cargo
+  waits at a delivery-only station) and reliability contributes 0.20.
+* The frequency term counts visits inside `RATING_FREQUENCY_WINDOW_DAYS`
+  = 20 days, and a two-train line's service period is 23-27 days (half
+  its ~42-day round plus the slack the phase lock needs, D-151). The
+  window therefore holds 0 OR 1 visits (mean 0.73-0.86 measured) - a
+  square wave whose variance is ALIASING of period against window, not
+  irregularity: a mathematically perfect 24-day grid still measures
+  25 * (5/6) * (1/6) = 3.5, which is 0.31 of the untakted variance on
+  its own.
+* The rest of the takted variance (6.31 against the 3.5 floor) is the
+  round's own breakdown-and-loading jitter arriving at the plant - the
+  takt grids DEPARTURES at the anchor, the rating counts ARRIVALS - plus
+  the doubled slots the D-149 slip rule produces when a slow round
+  misses its slot (7 of 52 measured gaps at the fixture's slack).
+
+The genuine attempt, a slack sweep at 2/3/4/5/6 days: variance ratios
+0.690 / 0.571 / 0.652 / 0.695 / 0.615, earnings drift -9.2 / -8.3 /
+-9.3 / -10.3 / -7.1 %. No setting reaches 0.5; slack 5 breaks the
++-10 % earnings band outright; the fixture's slack 3 IS the measured
+optimum. More slack trades slip-doubling against window duty and
+cadence, and the two effects cross - there is no takt parameter left to
+turn.
+
+The floor is structural for a two-train line: its takt cannot go below
+half its round, so its service period is pinned ABOVE the 20-day rating
+window by the shape of the line itself, and the aliasing plus arrival
+jitter cannot be removed by anything that only times departures. What
+COULD reach 0.5 is known and out of scope by earlier verdicts: per-stop
+offsets or load-at-departure (the 11.4/12.1 redesigns D-151 already
+declined to smuggle in), or widening the rating's frequency window -
+a section-10.1 constant that every station on the map reads and
+scenarios 1-4 own, not a knob a takt band may turn. The 0.6 band stands
+with this entry as its justification; SPEC2's "halbierte Varianz"
+carries the bracketed amendment.

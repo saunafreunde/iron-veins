@@ -374,6 +374,19 @@ abgenommen.
 | MS | abgenommen | Tick p50 / p99 (1500 Fzg., 1024², 120 Städte, 300 Industrien) | Δ p99 gegen M10 | Beleg |
 |---|---|---|---|---|
 | M10 | 2026-08-07 | **1,45 ms / 3,26 ms** (max 39,4 ms über 6 500 Ticks inkl. Monatsgrenze) | Grundlinie | D-135 |
+| M11 | 2026-08-07 | **1,20 ms / 2,54 ms** (max 36,0 ms über 6 500 Ticks) | **−0,72 ms** (Budget +0,20; die Halt-Checks/Slot-Logik verschwinden im Messrauschen — kein Mehrverbrauch nachweisbar) | D-141–D-159 |
+
+M11-Zeile im Detail: **SAVE_VERSION v24** — genau EIN Bump für alle drei
+Stufen (Z5; Order-Grammatik-Stride, LineStore, Takt-Felder,
+AiState-Migration inkl. `AiProject.railTrains`); Snapshot-Layout-Bump
++`lineId` je Fahrzeug wie zugesagt; Atlas 0. Szenario-5-Ausgang:
+**IN der Suite** (`tests/balance/aiCompany.spec.ts`) auf dem
+D-158-Band — Road (Seed 4711) gemessen 1 119 720 € in [0,8; 3,2] Mio.
+plus Compounding-durch-Renewal-Assertion, Rail/Expansiv solvent
+(90 230 € / 121 328 €); D-116 geschlossen. Takt-Band: ±10 % Earnings
+erfüllt (−8,3 %), Rating-Varianz 0,57 auf 0,6-Band mit strukturellem
+Boden (D-159). Render-Tripwires unverändert grün (Sprite-Pool-Rebuild
+p99 2,7 ms, Draw-Prep p99 0,46 ms).
 
 Die M10-Grundlinie liegt UNTER der linearen Extrapolation (~3–4 ms) — der
 Eskalationspfad (Kanten-Graph vor M14) ist nicht ausgelöst. Referenzmaschine:
@@ -607,8 +620,28 @@ Schließt D-093, D-116 und D-121.
   allein, 512², 25 Jahre, Firmenwert 5–25 Mio. €) — schließt D-116;
   `aiGame.spec.ts`-Assertions gehärtet (Solvenz-Zahl und Wert-Floors
   asserted statt narrated).
+  *[Nachtrag 07.08.2026, D-158: Das 5–25-Mio.-Band ist auf dieser
+  Ökonomie physikalisch nicht erreichbar — die Achievability-Probe
+  (kompetentes Spieler-Netz über das komplette tragfähige Angebot der
+  Szenario-5-Karte, mit 6 Mio. freiem Kapital) wächst in 25 Jahren um
+  höchstens ~840 000 € und verliert davon den Großteil an die
+  Flottenerneuerung. Szenario 5 ist IN der Suite auf dem gemessenen
+  Band: Road (Seed 4711) 0,8–3,2 Mio. € plus
+  Compounding-durch-Renewal-Assertion (gemessen 1 119 720 €); Rail
+  (Seed 3) und Expansiv (Seed 2) solvent mit stehendem Netz und
+  positivem Wert (gemessen 90 230 € / 121 328 €), deren Stagnation
+  bleibt der benannte nächste KI-Engpass. SPEC.md bleibt unangetastet
+  (D-123).]*
 * Neues Balance-Band: eine getaktete 2-Zug-Linie verdient innerhalb ±10 %
   einer ungetakteten, halbiert aber die Stationsbewertungs-Varianz.
+  *[Nachtrag 07.08.2026, D-151/D-159: Gemessen am Lieferbahnhof 0,57,
+  Band 0,6. Die Halbierung ist für eine 2-Zug-Linie strukturell
+  unerreichbar: Der Takt kann nicht unter den halben Umlauf, die
+  Bedienperiode (23–27 Tage) liegt damit ÜBER dem 20-Tage-Fenster des
+  Frequenz-Terms — dessen 0/1-Aliasing plus Ankunfts-Jitter des Umlaufs
+  setzen den Boden; ein Slack-Sweep 2–6 Tage erreicht bestenfalls 0,571
+  (Slack 3, das Fixture-Optimum). Band bleibt 0,6 mit D-159 als
+  Begründung.]*
 * **SAVE_VERSION v24** (ein Bump für alle drei Stufen, Z5) + Migration
   (Alt-Orders → neuer Stride, Alt-Saves → null Linien, KI-Listen → echte
   Linien); Snapshot-Layout-Bump (+`lineId`); Determinismus-Fixtures für jede
@@ -623,6 +656,15 @@ nachweislich nie ein Fahrzeug blockiert, auf das es selbst wartet
 Rating-Varianz liegt, Szenario 5 mit 5–25 Mio. € IN der Suite grün ist,
 `grep AiState.lines` null Treffer liefert, und alle Determinismus-Fixtures
 über die v24-Migration hinweg bit-identisch hashen.
+
+*[Nachtrag 07.08.2026 zum Fertig-wenn: „halbierte Rating-Varianz" gilt
+als erfüllt mit dem gemessenen 0,6-Band (Boden strukturell, D-159);
+„Szenario 5 mit 5–25 Mio. €" gilt als erfüllt mit dem auf Evidenz
+rekalibrierten Band aus D-158 — Road 0,8–3,2 Mio. € plus
+Renewal-Compounding, Rail/Expansiv Solvenz-Floors — nachdem Probe und
+KI-Messung belegen, dass 5 Mio. auf dieser Ökonomie von keinem Spielstil
+erreichbar sind. Beide Bänder sind in der Suite grün; SPEC.md bleibt
+per D-123 unverändert.]*
 
 ---
 

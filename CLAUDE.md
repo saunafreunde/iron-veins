@@ -162,8 +162,12 @@ install - prepend `%USERPROFILE%\.cargo\bin` to PATH.
 
   M6's acceptance criterion is exactly this table being in band, and it is.
 
-  Scenario 5 (an AI company alone on a 512 map) belongs to M8, which is where AI
-  companies arrive.
+  Scenario 5 (an AI company alone on a 512 map, 25 years) is in the suite
+  since M11 as `tests/balance/aiCompany.spec.ts`, on the band the economy
+  actually pays (D-158): road personality 0.8-3.2 M plus a
+  compounding-through-renewal assertion, rail and expansive solvency
+  floors. SPEC.md's 5-25 M was measured against the map's physical offer
+  and is not real - read D-158 before touching that band.
 
 - **An industry is judged on what left ON A VEHICLE**, never on what a station
   took (D-085). Crediting the deposit makes the growth signal meaningless: a
@@ -455,57 +459,77 @@ AND ubuntu, and `npm run test:determinism:cross` is the same comparison
 locally. A legitimate sim change re-records the pin (corpus protocol); a
 divergence between platforms is a law-#3 break and is never re-pinned.
 
+## M11 - the line backbone: order grammar, lines, takt, AI adoption
+
+The merged core milestone of the expansion: SPEC.md 12.1 + 12.2 + 12.3
+complete, plus an AI that runs all of it through the player's own commands.
+ONE save bump for all three stages (v24, Z5); snapshot layout +`lineId`.
+Closed D-093, D-121 and D-116 (the last on a recalibrated band, D-158).
+
+- **A waypoint is a tile layer, not an entity** (D-141), and conditional
+  jumps guard the order they SIT on, evaluated at stops only, never per
+  tick (D-142). A depot order is a service call, not a terminus (D-143).
+- **`LineStore` is the ONE line entity** (D-145, E-06). Vehicles point at
+  it via `lineId` and read the order list live through
+  `lines/LineStore.scheduleOf` - the ONLY correct way to read a vehicle's
+  schedule anywhere in the sim; a released vehicle keeps a private copy.
+  `AiState.lines` was migrated and DELETED in the same milestone.
+  Auto-renewal is per line (D-146), still drawing zero randomness; L opens
+  the line list (D-148).
+- **ONE takt point per line - its first station order** (D-149): a grid
+  enforced at every stop quantises every leg up to a whole takt and makes
+  regularity WORSE. A vehicle past its slot slips to the NEXT one - an
+  off-grid departure churns the phase lock permanently. Anchor the takt at
+  the DELIVERY terminus: slack spent at the loading end rides aboard as
+  cargo age (measured -14.5 %) (D-151). Transfer nodes: the waiting graph
+  is derived, cycle-checked BEFORE a wait starts, hard-capped (D-150).
+- **The takt band and its floor** (D-151, D-159): earnings within +-10 %
+  holds (-8.3 %); the delivery-rating variance reaches 0.57 of untakted,
+  banded 0.6, and the missing half is STRUCTURAL - the 20-day rating
+  frequency window aliases 0/1 visits against the 23-27-day service period
+  no two-train takt can go below, plus the round's own jitter arriving at
+  the plant. A slack sweep 2-6 days measured 0.571 as the optimum; do not
+  hunt the 0.5 with fixture knobs.
+- **The AI sizes its fleet with the 12.3 advisor** (D-152) - fleet from
+  the demand interval, takt = the fleet's own spacing, and ONLY on
+  two-train railways: on roads the slot idle costs more than the bunching
+  it removes, at every fleet size. Its railway is the D-082 oval where
+  flat straight ground exists, else the assistant-planned single line with
+  exactly ONE train (`AiProject.railTrains` is save state, Z4) (D-153).
+  A borrower enqueues loan and build in ONE command batch (the loan-churn
+  standstill is dead), and every road is FOUND by BFS before it is
+  ordered (D-154). A renewed fleet is not a failing line: the successor
+  finder takes each replacement once, and a negative review gain reliably
+  means turnover, so the review re-anchors instead of closing the best
+  line of the run (D-155).
+- **The arrival-gate freeze** (D-157): the Float32 `routeRemainingM`
+  accumulator drifts a few ulps below the freshly recomputed float64 step
+  of the LAST path node; a dead stop in that sliver held Braking at speed
+  zero for ever. The final crossing threshold is now `routeRemainingM`
+  itself - brake target and arrival gate are one number, D-043's own rule
+  one storage class down. The deadlock clock sees a standing train
+  whatever it holds (D-083's arc finished). `finalApproach.spec.ts` pins
+  train, aircraft, bus and clock; the v24 pins did not move.
+- **Scenario 5 is in the suite on the band the economy pays** (D-158,
+  closes D-116): `tests/balance/aiCompany.spec.ts` asserts road (seed
+  4711) at 0.8-3.2 M - measured 1 119 720 - plus growth THROUGH the
+  year-twenty-one renewal, and rail/expansive alive with standing
+  networks where D-156 measured both wound up. Five million was never
+  physical: the achievability probe (a competent hand-built network over
+  the map's complete sustainable offer, with 6 M free capital) peaked at
+  +840 000 over 25 years - one long coal haul is the map's real earner,
+  the big-town pax piles pin at the station cap, and the farm-to-food
+  chain is a measured trap (livestock dies over the 100-tile haul).
+
 ## Still outstanding
 
-- **The arrival-gate freeze is FIXED (D-157).** D-156's bottleneck - a
-  vehicle forced to a dead stop on its final approach never arrived - was
-  the Float32 `routeRemainingM` accumulator drifting a few ulps below the
-  freshly recomputed float64 step of the LAST path node: the brake curve
-  targets the accumulator, the tile advance compared against the recomputed
-  step, and a dead stop in the sliver between them (`remaining <= 0`,
-  `pathIndex` two short of `pathLength`) held Braking at speed zero for
-  ever. The final crossing threshold is now `routeRemainingM` itself - the
-  brake target and the arrival gate are one number, per D-043's own rule.
-  The deadlock clock also sees a standing train now WHATEVER it holds
-  (D-083's test was blind to a train holding its whole approach).
-  `tests/unit/finalApproach.spec.ts` pins train, aircraft, bus and clock;
-  the v24 pins did not move (road-only canonical fixture, verified green).
-- **Balancing scenario 5** of section 19.4 is still not met, and the test is
-  still NOT in the suite (D-116's reasoning, extended by D-156). Stage C2's
-  measured state on the 512 map: the road personality compounds to
-  1 120 000 - from 433 000 and stalled - and survives its year-twenty fleet
-  renewal; the rail personalities build and run profitable first lines (on
-  pace for the band) until the braking freeze - now fixed, D-157 - killed
-  their trains; the AI runs have not been re-measured against the band
-  since. The second measured wall stands: a passenger pile a fleet merely
-  MATCHES pays the decay floor for ever (oldest first), which holds even
-  healthy bus lines an order of magnitude below what the band assumes.
-- **What the AI does since stage C2** (D-152 to D-155): fleets sized with
-  the 12.3 advisor from the demand interval; a takt ONLY on two-train
-  railways (the fleet's own spacing - on roads the slot idle costs more than
-  the bunching); railways are the D-082 oval where flat straight ground
-  exists and the assistant-planned single line with ONE train everywhere
-  else (`AiProject.railTrains`, saved); roads are found by BFS before they
-  are ordered; a borrower takes the loan and builds in the same command
-  batch (the loan-churn deadlock is dead); per-line auto-renewal is ON for
-  every AI line, whole fleets renew in one tick without orphaning
-  successors, and the review re-anchors on fleet turnover instead of
-  reading a renewal as a loss.
-- **The timetable of 12.3 exists since M11 stage C1**: per-line takt with ONE
-  takt point (the first station order - D-149 says why not every stop),
-  slip-to-next-slot on a missed departure, the per-station transfer nodes of
-  the Anschlusssicherung (derived waiting graph, hard cap, never-blocks
-  proof - D-150), and the fleet advisor `adviseFleet` in `lines/metrics.ts` -
-  the ONE formula stage C2's AI must call too (E-06). Lines themselves exist
-  since stage B: `LineStore` is the ONE line entity, vehicles point at it via
-  `lineId` and read its order list live through `lines/LineStore.scheduleOf` -
-  the ONLY correct way to read a vehicle's schedule anywhere in the sim.
-  Auto-renewal is per line (D-146), the AI runs real lines through the
-  player's own commands (D-147), L opens the line list (D-148). Stage C2
-  delivered the AI fleet sizing, railways and renewal (D-152 to D-155);
-  scenario 5 stays out of the suite with its verdict measured and written
-  down (D-156). Read D-151 before touching the takt balance fixture - it
-  records why the band is measured the way it is.
+- **The two named walls of D-158.** A passenger pile a fleet merely
+  MATCHES pays the decay floor for ever - every town of 2,500+ pins its
+  pile at the 2,000-unit cap even under the probe's sized fleets. And the
+  rail/expansive personalities are solvent but stagnant: the rail review
+  honestly closes a line whose economics sag in year three, and the
+  company never rebuilds (thin offer, graveyard rule, a retry that could
+  not afford its train). Both have their baseline traces in D-158.
 - **Undo and redo** (section 17.2). See D-114.
 - The installer BUILDS: `npm run build:desktop` produced both bundles in about
   eight minutes, and Tauri fetched WiX and NSIS itself. Neither is signed, so
