@@ -371,6 +371,15 @@ Referenzmaschine und Rohwerte stehen im jeweils zitierten
 nach — eine Budget-Zeile in 6.1 ohne Zeile in dieser Tabelle ist nicht
 abgenommen.
 
+**Abnahmezahl ≠ Tripwire-Schwelle (D-167).** Die hier protokollierten Werte
+sind Einmal-Messungen auf der sauberen Referenzmaschine und stehen als
+Historie. Die CI-Tripwires der Perf-Suite gaten seit M13 den **Median** mit
+großzügigen Vielfachen plus sehr großzügigem p99-Backstop: Hintergrundlast
+bläht den p99-Tail um Vielfache auf (Chunk-Bake gemessen 2,8 → 11,1 ms unter
+Sättigung), den Median aber höchstens ~1,6×. Eine Abnahmezahl wird nie
+wieder als Testschwelle eingesetzt — sie hätte per Konstruktion null
+Headroom und lehrt, ein rotes Gate zu ignorieren (D-136).
+
 | MS | abgenommen | Tick p50 / p99 (1500 Fzg., 1024², 120 Städte, 300 Industrien) | Δ p99 gegen M10 | Beleg |
 |---|---|---|---|---|
 | M10 | 2026-08-07 | **1,45 ms / 3,26 ms** (max 39,4 ms über 6 500 Ticks inkl. Monatsgrenze) | Grundlinie | D-135 |
@@ -395,7 +404,8 @@ Stationslabels lesen Name+Position aus den Marker-Kanälen, die beide seit
 M1/M2 tragen); die Determinismus-Suite sieht nie ein Pixel.
 Abnahme-Messwerte (Referenzmaschine, `npm run test:perf` 2026-08-07):
 **Chunk-Rebake p50 0,41 / p99 1,57 ms gegen das 4-ms-Akzeptanzbudget**
-(die Tripwire-Schwelle IST hier die Abnahmezahl, D-161; 2 656 Placements
+(die Tripwire-Schwelle WAR hier zur M12-Abnahme die Abnahmezahl selbst,
+D-161 — seit M13 entkoppelt, D-167; 2 656 Placements
 + Segmente pro Bake, Wasser-Fixture inklusive); Sprite-Pool-Rebuild
 8 017 Sprites p50 1,30 / p99 4,17 ms (Tripwire 25); Vehicle-Draw-Prep
 inkl. E-05-Lerp 1 500 Fahrzeuge p50 0,73 / p99 1,58 ms (Tripwire 5);

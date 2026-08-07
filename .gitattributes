@@ -1,2 +1,30 @@
+# Line-ending policy (D-168): the repository is LF everywhere - committed
+# blobs AND working tree. `text=auto` normalises anything git detects as text
+# at commit time; the explicit `eol=lf` rules below make checkout produce LF
+# regardless of a machine's `core.autocrlf`, so `npm run format:check`
+# (prettier, endOfLine "lf") is green on every OS without per-machine config.
+* text=auto
+
+# Every source and config extension tracked in the index, pinned to LF.
+*.ts text eol=lf
+*.tsx text eol=lf
+*.js text eol=lf
+*.mjs text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.css text eol=lf
+*.html text eol=lf
+*.yml text eol=lf
+*.toml text eol=lf
+*.rs text eol=lf
+*.lock text eol=lf
+.gitignore text eol=lf
+.gitattributes text eol=lf
+.prettierignore text eol=lf
+
 # Save fixtures are compressed binary; a CRLF conversion would corrupt them.
 *.ironsave binary
+
+# The Tauri icons: the one committed binary the repoAssets allowlist permits.
+*.png binary
+*.ico binary

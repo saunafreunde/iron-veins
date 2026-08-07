@@ -45,11 +45,12 @@ no entry below. A number may appear under several topics.
 - **UI & input:** D-011, D-013, D-015, D-035, D-110, D-113, D-114, D-119,
   D-126, D-148, D-165, D-166
 - **Performance & measurement:** D-002, D-120, D-135, D-136, D-161, D-162,
-  D-163, D-164
+  D-163, D-164, D-167
 - **Platform, tooling & build:** D-012, D-014, D-015, D-016, D-017, D-029,
-  D-030, D-031, D-160
+  D-030, D-031, D-160, D-168
 - **Crash safety:** D-132, D-139
-- **Testing method & fixtures:** D-010, D-038, D-072, D-074, D-084, D-133
+- **Testing method & fixtures:** D-010, D-038, D-072, D-074, D-084, D-133,
+  D-167
 - **Process & specification:** D-070, D-123, D-129, D-133, D-138, D-140
 
 ---
@@ -4028,3 +4029,90 @@ panel pins the camera to the edge instead of freezing mid-gesture. The N
 key and the mode buttons still drive one store value (D-126), and the
 interactive element carries the accessible name the bitmap canvas used
 to.
+
+## M13 - living trains, bundle 0: the verifier's non-blocking debts (2026-08-07)
+
+### D-167 The tripwire gates the median, the p99 is a generous backstop, and an acceptance number is history, never a threshold
+
+The M12 verifier caught the tripwires doing what D-136 says a tripwire
+must never do: flake on a busy box. The chunk-bake gate sat at exactly
+4 ms - the M12 ACCEPTANCE number doing double duty as a CI threshold,
+zero headroom by construction - and the draw-prep gate at 5 ms had been
+eroded from twelve times its baseline to barely three times the clean
+p99 once M12's E-05 lerp raised the honest cost of the frame. Under
+ordinary desktop background load both measured 5-7 ms against 1.3-3 ms
+clean, and a proxy that fails on a busy box teaches people to ignore it
+(D-136, the D-120 lesson).
+
+The remeasurement that decided the fix (reference machine, four
+busy-loop node processes saturating the 4C/8T box, five runs of the
+suite): contention inflates the p99 TAIL by multiples - chunk bake
+2.8 -> 3.2-11.1 ms, draw-prep 1.6 -> 4.3-8.1 ms, rebuild
+3.9 -> 10.6-39.3 ms, the last overrunning even its old 25 ms wire - but
+moves the MEDIAN at most ~1.6x (chunk 0.51 -> 0.74-0.84 ms, draw-prep
+0.75 -> 1.08-1.20 ms, rebuild 1.63 -> 2.43-2.75 ms). Scheduler noise
+lives in the tail; a real regression - an accidental per-frame rebuild,
+a quadratic layer scan - multiplies EVERY sample and takes the median
+with it. So the median is both the stabler statistic under load AND
+just as sensitive to the regressions-of-multiples the wire exists to
+catch. The two suggested alternatives were measured and rejected:
+median-of-batch-p99s keeps the tail in every batch (the per-run
+contended chunk p99s 3.2/6.9/7.4/10.0/11.1 have a median of 7.4 -
+still 1.9x over the old budget), and a warm-up discard adds nothing the
+median does not already give (early JIT samples are tail, not median;
+one warm call already exists).
+
+The gates are therefore: the MEDIAN under a generous multiple - rebuild
+10 ms (6x clean), draw-prep 5 ms (6.7x clean), chunk bake 3 ms (6x
+clean), each also >= 3.6x the fully-saturated-box median - plus a very
+generous p99 BACKSTOP (60/30/30 ms, each above the worst observation a
+saturated box ever produced) for the one regression shape a median
+cannot see: a tail-only storm such as periodic cache eviction. The p99
+stays in the console line for the record.
+
+The acceptance numbers do not move. SPEC2 6.1.1 keeps the clean-machine
+measurements (chunk bake p99 1.57 ms against the 4 ms acceptance
+budget) as recorded history, and its preamble now states the rule this
+entry is the reason for: an acceptance number is a measurement taken
+once on a clean reference machine; a tripwire is a gate that must hold
+on a loaded one. Verified after the change: five of five runs green
+under the same four-way saturation that flaked four of five before -
+the validation tails reached 12.5/9.3/34.0 ms and stayed under their
+backstops with >= 1.8x headroom, while every median stayed under a
+third of its gate.
+
+### D-168 The repository is LF everywhere, and a CRLF checkout is repaired once, not fought forever
+
+Every committed blob was already LF - `git ls-files --eol` reports 207
+text files `i/lf`, zero `i/crlf`, zero mixed - but the M10
+`.gitattributes` marked only the save fixtures binary and left line
+endings to each machine's `core.autocrlf`. On a Windows checkout with
+`core.autocrlf=true` the working tree materialises as CRLF (58 files on
+the reference machine) and `npm run format:check` (prettier,
+`endOfLine: "lf"`) turns red repo-wide on files nobody touched -
+hygiene noise that trains people to ignore a red gate, the same erosion
+D-167 just paid for in the perf suite.
+
+`.gitattributes` now states the policy instead of inheriting it:
+`* text=auto` normalises anything git detects as text at commit time;
+every source and config extension in the index carries an explicit
+`text eol=lf`, so checkout produces LF REGARDLESS of `core.autocrlf`;
+and the binary marks are explicit - `*.ironsave` (compressed corpus
+fixtures, the M10 rule: a CRLF conversion would corrupt them) plus
+`*.png`/`*.ico` (the Tauri icons, the one committed binary the
+repoAssets allowlist permits). `git add --renormalize .` was run before
+committing and produced ZERO content changes - the blobs were already
+clean, so no corpus fixture and no canonical hash moved and history
+stays untouched.
+
+A machine whose checkout predates this entry repairs itself ONCE, with
+a clean tree:
+
+    git config core.autocrlf false
+    git rm -r --cached -q . && git reset --hard
+
+The cached-rm forces the re-checkout that applies the new attributes; a
+plain `git checkout` considers the CRLF files up to date and rewrites
+nothing. The same recipe lives in CLAUDE.md's environment note. New
+files need no care: the attributes clean them at commit and prettier
+writes them LF in the working tree.

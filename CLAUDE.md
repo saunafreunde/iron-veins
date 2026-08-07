@@ -123,6 +123,15 @@ tools. Both are installed (Rust 1.97.1, VS 2022 Build Tools, Windows SDK
 10.0.26100). If a shell reports `cargo` missing, its environment predates the
 install - prepend `%USERPROFILE%\.cargo\bin` to PATH.
 
+Line endings are LF everywhere - committed blobs AND working tree.
+`.gitattributes` pins `eol=lf` per source extension (D-168), so fresh
+checkouts are LF regardless of `core.autocrlf`. A checkout that predates
+D-168 on a `core.autocrlf=true` machine has a CRLF working tree and a
+red `npm run format:check`; repair it ONCE, with a clean tree:
+`git config core.autocrlf false`, then
+`git rm -r --cached -q . && git reset --hard`. A plain `git checkout`
+rewrites nothing - the cached-rm is what forces the re-checkout.
+
 ## Rendering
 
 - The tile layers live in a SharedArrayBuffer the worker owns; `src/render`
@@ -447,7 +456,12 @@ Measured baseline, M10 (D-135): p50 1.45 ms, p99 3.26 ms against a budget of
 SPEC2 section 6.1.1. The same suite reads the big save back and holds a
 render CPU tripwire (D-136): the sprite-rebuild and draw-prep cost of
 `MapView`, measured without Pixi, with generous thresholds that catch
-regressions of multiples before the M12/M13 art milestones.
+regressions of multiples before the M12/M13 art milestones. Since M13 the
+tripwires gate the MEDIAN of the samples with a very generous p99 backstop
+(D-167): background load inflates the p99 tail by multiples but moves the
+median at most ~1.6x, so the gate holds on a loaded box while an
+acceptance number stays what it is - a clean-machine measurement recorded
+in 6.1.1, never a CI threshold.
 
 The two frame-rate budgets need a GPU and a compositor. The procedure for
 measuring them by hand is in README.md. There is deliberately no browser test

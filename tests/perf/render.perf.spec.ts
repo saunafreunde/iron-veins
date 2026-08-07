@@ -42,24 +42,57 @@ import { coastEdgeMask, FOAM_EDGE_COUNT, foamVariant, isDeepWater } from '../../
  * inside Pixi, so its thresholds are GENEROUS - a tripwire for regressions of
  * multiples (an accidental per-frame rebuild, a quadratic layer scan), not a
  * frame-time promise.
+ *
+ * The gate is the MEDIAN of the samples; the p99 is printed for the record
+ * and held only by a very generous backstop (D-167). Measured on the
+ * reference machine with four busy-loop processes saturating the 4C/8T box:
+ * contention inflates the p99 tail by multiples (chunk bake 2.8 -> 11.1 ms,
+ * rebuild 3.9 -> 39.3 ms - past even the old 25 ms wire) but moves the
+ * median at most ~1.6x (0.51 -> 0.84 ms, 1.63 -> 2.75 ms). Scheduler noise
+ * lives in the tail; a real regression multiplies every sample and takes the
+ * median with it, so the median gate is both stabler under load AND as
+ * sensitive to the regressions-of-multiples D-136 exists to catch. The
+ * backstop covers the one shape a median cannot see: a tail-only storm such
+ * as periodic cache eviction.
  */
 
-/** Tripwire: one full sprite-pool rebuild of a big viewport. [ms] */
-const REBUILD_P99_BUDGET_MS = 25;
-
-/** Tripwire: one frame of vehicle draw preparation at the snapshot cap. [ms] */
-const DRAW_PREP_P99_BUDGET_MS = 5;
+/**
+ * Median tripwire: one full sprite-pool rebuild of a big viewport. [ms]
+ * 6x the clean median (1.63 ms), 3.6x the saturated-box median (D-167).
+ */
+const REBUILD_P50_TRIPWIRE_MS = 10;
 
 /**
- * Tripwire: the CPU half of one 32x32 chunk rebake. [ms]
- *
- * NOT a generous D-136 multiple: 4 ms is the M12 acceptance number itself
- * ("Chunk-Rebake gemessen <= 4 ms", SPEC2), so this measurement doubles as
- * the Fertig-wenn evidence. The proxy replays the checksum that decides the
+ * p99 backstop for the rebuild: above the worst observation ever taken on a
+ * fully saturated box (39.3 ms), an order of magnitude over clean. [ms]
+ */
+const REBUILD_P99_BACKSTOP_MS = 60;
+
+/**
+ * Median tripwire: one frame of vehicle draw preparation at the snapshot
+ * cap. [ms] 6.7x the clean median (0.75 ms), 4x the saturated median.
+ */
+const DRAW_PREP_P50_TRIPWIRE_MS = 5;
+
+/** p99 backstop for draw prep: worst saturated observations 8-9 ms. [ms] */
+const DRAW_PREP_P99_BACKSTOP_MS = 30;
+
+/**
+ * Median tripwire: the CPU half of one 32x32 chunk rebake. [ms]
+ * 6x the clean median (0.51 ms), 3.6x the saturated median. The 4 ms M12
+ * ACCEPTANCE number ("Chunk-Rebake gemessen <= 4 ms") is deliberately NOT
+ * the gate any more: it was a clean-machine p99 measurement doing double
+ * duty as a CI threshold with zero headroom, and it flaked under ordinary
+ * desktop load (D-167). The acceptance evidence - clean p99 1.57 ms -
+ * stands recorded in SPEC2 6.1.1; an acceptance number is history, a
+ * tripwire is a gate. The proxy still replays the checksum that decides the
  * rebake, the full-profile placement loop and the abstract-profile polyline
  * extraction - a superset of what either profile pays per chunk.
  */
-const CHUNK_BAKE_P99_BUDGET_MS = 4;
+const CHUNK_BAKE_P50_TRIPWIRE_MS = 3;
+
+/** p99 backstop for the chunk bake: worst saturated observations 11-13 ms. [ms] */
+const CHUNK_BAKE_P99_BACKSTOP_MS = 30;
 
 /**
  * The measured window: 64x64 tiles is roughly what a 4K screen shows at zoom
@@ -475,11 +508,12 @@ describe('render CPU tripwire (SPEC2 6.3)', () => {
     console.log(
       `sprite pool rebuild: ${placed} sprites over 64x64 tiles, ` +
         `p50 ${p50.toFixed(3)} ms, p99 ${p99.toFixed(3)} ms ` +
-        `(tripwire ${REBUILD_P99_BUDGET_MS} ms)`,
+        `(median tripwire ${REBUILD_P50_TRIPWIRE_MS} ms, backstop ${REBUILD_P99_BACKSTOP_MS} ms)`,
     );
 
     expect(placed).toBeGreaterThan(4_096);
-    expect(p99).toBeLessThan(REBUILD_P99_BUDGET_MS);
+    expect(p50).toBeLessThan(REBUILD_P50_TRIPWIRE_MS);
+    expect(p99).toBeLessThan(REBUILD_P99_BACKSTOP_MS);
   });
 
   it('prepares a full vehicle block for drawing inside the tripwire', () => {
@@ -507,14 +541,15 @@ describe('render CPU tripwire (SPEC2 6.3)', () => {
     console.log(
       `vehicle draw prep: ${drawn} vehicles per frame, ` +
         `p50 ${p50.toFixed(4)} ms, p99 ${p99.toFixed(4)} ms ` +
-        `(tripwire ${DRAW_PREP_P99_BUDGET_MS} ms)`,
+        `(median tripwire ${DRAW_PREP_P50_TRIPWIRE_MS} ms, backstop ${DRAW_PREP_P99_BACKSTOP_MS} ms)`,
     );
 
     expect(drawn).toBe(SNAPSHOT_MAX_VEHICLES);
-    expect(p99).toBeLessThan(DRAW_PREP_P99_BUDGET_MS);
+    expect(p50).toBeLessThan(DRAW_PREP_P50_TRIPWIRE_MS);
+    expect(p99).toBeLessThan(DRAW_PREP_P99_BACKSTOP_MS);
   });
 
-  it('rebakes one 32x32 chunk inside the M12 acceptance budget', () => {
+  it('rebakes one 32x32 chunk inside the tripwire', () => {
     const out: DrawList = {
       key: new Float64Array(8_192),
       frame: new Int32Array(8_192),
@@ -537,10 +572,11 @@ describe('render CPU tripwire (SPEC2 6.3)', () => {
     console.log(
       `chunk bake: ${placed} placements+segments over one ${CHUNK_TILES}x${CHUNK_TILES} chunk, ` +
         `p50 ${p50.toFixed(3)} ms, p99 ${p99.toFixed(3)} ms ` +
-        `(budget ${CHUNK_BAKE_P99_BUDGET_MS} ms)`,
+        `(median tripwire ${CHUNK_BAKE_P50_TRIPWIRE_MS} ms, backstop ${CHUNK_BAKE_P99_BACKSTOP_MS} ms)`,
     );
 
     expect(placed).toBeGreaterThan(CHUNK_TILES * CHUNK_TILES);
-    expect(p99).toBeLessThan(CHUNK_BAKE_P99_BUDGET_MS);
+    expect(p50).toBeLessThan(CHUNK_BAKE_P50_TRIPWIRE_MS);
+    expect(p99).toBeLessThan(CHUNK_BAKE_P99_BACKSTOP_MS);
   });
 });
