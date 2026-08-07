@@ -84,6 +84,11 @@ export function pickTile(map: TileMap, x: number, y: number): TilePoint | null {
  * A vehicle sits above the track, the platform and the canopy of its OWN tile
  * - a train standing at a station has to be visible - and below the ground of
  * any nearer diagonal, which is what makes it vanish behind a hill.
+ *
+ * Catenary is the one layer ABOVE the vehicles (M13): the wire hangs over
+ * the train, and a mast beside the track stands on the viewer's side of it
+ * (catenary.ts flips the offset there), so drawing both after the vehicle
+ * of the same tile is the honest order, not a compromise.
  */
 export const DrawLayer = {
   Ground: 0,
@@ -93,6 +98,7 @@ export const DrawLayer = {
   Building: 4,
   Station: 5,
   Vehicle: 6,
+  Catenary: 7,
 } as const;
 export type DrawLayer = (typeof DrawLayer)[keyof typeof DrawLayer];
 

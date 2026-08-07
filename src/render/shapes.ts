@@ -348,6 +348,58 @@ export function lattice(
   }
 }
 
+/**
+ * A catenary mast: a pole with a cross-bar and two insulator droppers - the
+ * M13 primitive for electrified track (SPEC2 M13). Strokes rather than
+ * solids, the lattice argument at a smaller scale: a mast drawn as a box is
+ * just a post, and the bar with its droppers is the whole silhouette.
+ *
+ * The cross-bar runs screen-horizontal on purpose: the one cell serves
+ * every track orientation (the placement offset beside the track comes from
+ * catenary.ts), and a bar that tried to follow the track would need eight
+ * cells for a detail no 64-pixel tile can show.
+ */
+export function catenaryMast(
+  ctx: CanvasRenderingContext2D,
+  view: IsoView,
+  spec: {
+    /** Pole height. [cell px] */
+    readonly height: number;
+    /** Half-span of the cross-bar, screen-horizontal. [cell px] */
+    readonly armPx: number;
+    readonly colour: string;
+    readonly lineWidth: number;
+  },
+): void {
+  const foot = project(view, 0, 0, 0);
+  const top = project(view, 0, 0, spec.height);
+  const barY = top[1] + spec.height * 0.12;
+
+  ctx.strokeStyle = spec.colour;
+  ctx.lineWidth = spec.lineWidth;
+  ctx.lineCap = 'round';
+
+  // The pole.
+  ctx.beginPath();
+  ctx.moveTo(foot[0], foot[1]);
+  ctx.lineTo(top[0], top[1]);
+  ctx.stroke();
+
+  // The cross-bar, just under the pole top.
+  ctx.beginPath();
+  ctx.moveTo(top[0] - spec.armPx, barY);
+  ctx.lineTo(top[0] + spec.armPx, barY);
+  ctx.stroke();
+
+  // Two short droppers at the bar ends - the insulators the wire hangs from.
+  for (const side of [-1, 1]) {
+    ctx.beginPath();
+    ctx.moveTo(top[0] + side * spec.armPx, barY);
+    ctx.lineTo(top[0] + side * spec.armPx, barY + spec.height * 0.14);
+    ctx.stroke();
+  }
+}
+
 /** A conifer: a cone on a short trunk. Forestry, and nothing else. */
 export function conifer(
   ctx: CanvasRenderingContext2D,

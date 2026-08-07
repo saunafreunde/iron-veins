@@ -4,6 +4,8 @@ import {
   ATLAS_SCALE,
   atlasPageForZoom,
   baseAtlasSize,
+  catenaryMastAtlasFrame,
+  catenaryWireAtlasFrame,
   CELL_HEADROOM_STEPS,
   CELL_SKIRT_STEPS,
   DETAIL_ATLAS_SCALE,
@@ -12,12 +14,16 @@ import {
   foamAtlasFrame,
   MAX_ATLAS_PX,
   planDetailAtlas,
+  signalAspectAtlasFrame,
+  signalPostAtlasFrame,
   waterAtlasFrame,
 } from '../../src/render/TerrainAtlas';
 import { INDUSTRY_EMISSIVE_TYPES } from '../../src/render/industryArt';
+import { SIGNAL_ASPECT_COUNT, SignalAspect } from '../../src/render/signalAspects';
 import { FOAM_VARIANT_COUNT, WATER_FRAME_COUNT } from '../../src/render/water';
 import { HEIGHT_PX, TILE_H } from '../../src/render/projection';
 import { INDUSTRY_TYPE_COUNT, IndustryType } from '../../src/sim/industry/types';
+import { SIGNAL_KIND_COUNT, SignalKind } from '../../src/sim/map/signals';
 import { SLOPE_COUNT, TERRAIN_COUNT } from '../../src/sim/map/terrain';
 
 /**
@@ -58,22 +64,23 @@ describe('the base page layout guard', () => {
     expect(size.height).toBeLessThanOrEqual(MAX_ATLAS_PX);
   });
 
-  it('matches the ledger booking of SPEC2 6.2 (2176x3648)', () => {
+  it('matches the ledger booking of SPEC2 6.2 (2176x3840)', () => {
     // Growing the page is fine - but it is a BOOKING, made consciously in
     // SPEC2 6.2 and re-pinned here, never an accident (Fehlerkatalog 40).
-    // 3648 is the original 2688 plus M12's four booked water rows (three
-    // animation rows and the coastline foam row, D-164) plus M13's one
-    // booked emissive row (window-only twins, D-172).
-    expect(baseAtlasSize()).toEqual({ width: 2176, height: 3648 });
+    // 3840 is the original 2688 plus M12's four booked water rows (three
+    // animation rows and the coastline foam row, D-164) plus M13's booked
+    // emissive row (window-only twins, D-172) and rail-furniture row
+    // (signal posts, aspect lamps, catenary - M13 B5).
+    expect(baseAtlasSize()).toEqual({ width: 2176, height: 3840 });
   });
 });
 
 describe('the water rows of the base page (D-164)', () => {
   const size = baseAtlasSize();
   const cellH = TILE_H * ATLAS_SCALE + 16 * ATLAS_SCALE * (CELL_HEADROOM_STEPS + CELL_SKIRT_STEPS);
-  /** First M12 row; everything above is Bestand, the M13 emissive row below. */
-  const bookedTop = size.height - 5 * cellH;
-  const bookedBottom = size.height - cellH;
+  /** First M12 row; Bestand above, the M13 emissive + rail rows below. */
+  const bookedTop = size.height - 6 * cellH;
+  const bookedBottom = size.height - 2 * cellH;
 
   it('spends exactly the four booked rows, inside the page', () => {
     for (let frame = 0; frame < WATER_FRAME_COUNT; frame++) {
@@ -130,8 +137,9 @@ describe('the water rows of the base page (D-164)', () => {
 describe('the emissive row of the base page (M13, D-172)', () => {
   const size = baseAtlasSize();
   const cellH = TILE_H * ATLAS_SCALE + 16 * ATLAS_SCALE * (CELL_HEADROOM_STEPS + CELL_SKIRT_STEPS);
-  /** The one booked M13 row: the last row of the page. */
-  const bookedTop = size.height - cellH;
+  /** The booked emissive row: second to last since the B5 rail row landed. */
+  const bookedTop = size.height - 2 * cellH;
+  const bookedBottom = size.height - cellH;
 
   it('spends exactly the one booked row, inside the page, without overlap', () => {
     const seen = new Set<string>();
@@ -139,7 +147,7 @@ describe('the emissive row of the base page (M13, D-172)', () => {
       for (const level of [1, 2]) {
         const cell = emissiveBuildingFrame(kind, level);
         expect(cell.y, `eb${kind}:${level}`).toBeGreaterThanOrEqual(bookedTop);
-        expect(cell.y + cell.height, `eb${kind}:${level}`).toBeLessThanOrEqual(size.height);
+        expect(cell.y + cell.height, `eb${kind}:${level}`).toBeLessThanOrEqual(bookedBottom);
         expect(cell.x + cell.width, `eb${kind}:${level}`).toBeLessThanOrEqual(size.width);
         seen.add(`${cell.x}:${cell.y}`);
       }
@@ -148,6 +156,7 @@ describe('the emissive row of the base page (M13, D-172)', () => {
       const cell = emissiveIndustryFrame(type)!;
       expect(cell, `ei${type}`).not.toBeNull();
       expect(cell.y, `ei${type}`).toBeGreaterThanOrEqual(bookedTop);
+      expect(cell.y + cell.height, `ei${type}`).toBeLessThanOrEqual(bookedBottom);
       expect(cell.x + cell.width, `ei${type}`).toBeLessThanOrEqual(size.width);
       seen.add(`${cell.x}:${cell.y}`);
     }
@@ -196,22 +205,88 @@ describe('the emissive row of the base page (M13, D-172)', () => {
   });
 });
 
+describe('the rail-furniture row of the base page (M13 B5)', () => {
+  const size = baseAtlasSize();
+  const cellH = TILE_H * ATLAS_SCALE + 16 * ATLAS_SCALE * (CELL_HEADROOM_STEPS + CELL_SKIRT_STEPS);
+  /** The booked B5 row: the last row of the page. */
+  const bookedTop = size.height - cellH;
+
+  function allFrames(): [string, ReturnType<typeof signalPostAtlasFrame>][] {
+    const cells: [string, ReturnType<typeof signalPostAtlasFrame>][] = [];
+    for (let kind = 1; kind < SIGNAL_KIND_COUNT; kind++) {
+      cells.push([`sg${kind}`, signalPostAtlasFrame(kind)]);
+    }
+    for (let aspect = 0; aspect < SIGNAL_ASPECT_COUNT; aspect++) {
+      cells.push([`sa${aspect}`, signalAspectAtlasFrame(aspect)]);
+    }
+    cells.push(['cm', catenaryMastAtlasFrame()]);
+    for (let direction = 0; direction < 8; direction++) {
+      cells.push([`cw${direction}`, catenaryWireAtlasFrame(direction)]);
+    }
+    return cells;
+  }
+
+  it('spends exactly the one booked row, inside the page, without overlap', () => {
+    const seen = new Set<string>();
+    for (const [key, cell] of allFrames()) {
+      expect(cell.y, key).toBeGreaterThanOrEqual(bookedTop);
+      expect(cell.y + cell.height, key).toBeLessThanOrEqual(size.height);
+      expect(cell.x + cell.width, key).toBeLessThanOrEqual(size.width);
+      seen.add(`${cell.x}:${cell.y}`);
+    }
+    // Four posts, two lamps, one mast, eight wires - each on its own slot.
+    expect(seen.size).toBe(SIGNAL_KIND_COUNT - 1 + SIGNAL_ASPECT_COUNT + 1 + 8);
+  });
+
+  it('gives every cell the base geometry, so lamp composites over post', () => {
+    // The aspect cell draws ADDITIONALLY over the post cell at the same
+    // world position (the emissive-twin device, D-172): equality of the
+    // cell geometry IS the alignment.
+    const reference = waterAtlasFrame(0, 0);
+    for (const [key, cell] of allFrames()) {
+      expect(cell.width, key).toBe(reference.width);
+      expect(cell.height, key).toBe(reference.height);
+      expect(cell.anchorY, key).toBe(reference.anchorY);
+    }
+  });
+
+  it('maps every signal kind to its own post, and clamps strays to Block', () => {
+    const seen = new Set<number>();
+    for (let kind = 1; kind < SIGNAL_KIND_COUNT; kind++) {
+      seen.add(signalPostAtlasFrame(kind).x);
+    }
+    expect(seen.size).toBe(SIGNAL_KIND_COUNT - 1);
+    expect(signalPostAtlasFrame(0).x).toBe(signalPostAtlasFrame(SignalKind.Block).x);
+    expect(signalPostAtlasFrame(99).x).toBe(signalPostAtlasFrame(SignalKind.Block).x);
+  });
+
+  it('keeps the two aspects apart', () => {
+    expect(signalAspectAtlasFrame(SignalAspect.Green).x).not.toBe(
+      signalAspectAtlasFrame(SignalAspect.Red).x,
+    );
+  });
+});
+
 describe('the 4x detail page layout', () => {
   const plan = planDetailAtlas();
   const frames = [...plan.frames.entries()];
 
-  /** Terrain, road and track cells - a digit follows the class letter, which
-   * is what tells `t3:7` from `train` and `r5` from `railDepot`. */
-  const isShortKey = (key: string): boolean => /^[trk]\d/.test(key);
+  /** Terrain, road, track and the B5 rail furniture are the short rows - a
+   * digit follows the class prefix, which is what tells `t3:7` from `train`
+   * and `sg1` from `signal`; the mast cell is the one literal. */
+  const isShortKey = (key: string): boolean => /^([trk]|sg|sa|cw)\d/.test(key) || key === 'cm';
 
   it('stays inside the 4096 px GPU guarantee', () => {
     expect(plan.width).toBeLessThanOrEqual(MAX_ATLAS_PX);
     expect(plan.height).toBeLessThanOrEqual(MAX_ATLAS_PX);
   });
 
-  it('matches its ledger booking in SPEC2 6.2 (4096x3840)', () => {
+  it('matches its ledger booking in SPEC2 6.2 (4096x4096)', () => {
+    // The B5 rail furniture filled the track row's eight free columns and
+    // the page's last 256 px short row - the page is spent to the byte now,
+    // and any further cell needs a new page (SPEC2 6.2).
     expect(plan.width).toBe(4096);
-    expect(plan.height).toBe(3840);
+    expect(plan.height).toBe(4096);
   });
 
   it('holds every frame the base page serves', () => {
@@ -221,6 +296,10 @@ describe('the 4x detail page layout', () => {
     }
     for (let bits = 0; bits < 16; bits++) expected.push(`r${bits}`);
     for (let direction = 0; direction < 8; direction++) expected.push(`k${direction}`);
+    for (let kind = 1; kind < SIGNAL_KIND_COUNT; kind++) expected.push(`sg${kind}`);
+    for (let aspect = 0; aspect < SIGNAL_ASPECT_COUNT; aspect++) expected.push(`sa${aspect}`);
+    expected.push('cm');
+    for (let direction = 0; direction < 8; direction++) expected.push(`cw${direction}`);
     for (let type = 0; type < INDUSTRY_TYPE_COUNT; type++) expected.push(`i${type}`);
     for (let variant = 0; variant < 6; variant++) expected.push(`b${variant}`);
     expected.push(

@@ -1,9 +1,11 @@
 import { TERRAIN_COLORS } from '../shared/palette';
 import { INDUSTRY_TYPE_COUNT } from '../sim/industry/types';
+import { SIGNAL_KIND_COUNT, SignalKind } from '../sim/map/signals';
 import { SlopeBit, SLOPE_COUNT, Terrain, TERRAIN_COUNT } from '../sim/map/terrain';
 import { EMISSIVE_WINDOW_HEX } from './emissive';
 import { drawIndustry, drawIndustryEmissive, INDUSTRY_EMISSIVE_TYPES } from './industryArt';
-import { box, gableRoof, sawtoothRoof, shade, windows, type IsoView } from './shapes';
+import { box, catenaryMast, gableRoof, sawtoothRoof, shade, windows, type IsoView } from './shapes';
+import { SIGNAL_ASPECT_COUNT, SIGNAL_ASPECT_TINTS, SignalAspect } from './signalAspects';
 import { FOAM_VARIANT_COUNT, WATER_FRAME_COUNT } from './water';
 
 /**
@@ -112,6 +114,23 @@ const FOAM_ROW = WATER_ROW + WATER_FRAME_COUNT;
 const EMISSIVE_ROW = FOAM_ROW + 1;
 /** Columns of the glazed-industry twins start after the six building cells. */
 const EMISSIVE_INDUSTRY_COLUMN = 6;
+/**
+ * The rail-furniture row of M13 bundle 5 (SPEC2 6.2, page 0 booking "+1
+ * Signal/Fahrleitungs-Zeile"): one post silhouette per signal KIND (the four
+ * kinds of section 9.1, readable apart at last - D-117's shape-not-tint
+ * applied to signalling), the two aspect-lamp cells that light one lamp of
+ * the shared housing (red above, green below - position carries the aspect
+ * for any colour vision, the palette hue is redundant), the catenary mast
+ * and the eight wire half-segments for electrified track. On BOTH pages:
+ * unlike the water and emissive rows these cells also exist on the detail
+ * page (it had exactly one short row of headroom left, and thin poles and
+ * wires are what an upscale would smear).
+ */
+const RAIL_ROW = EMISSIVE_ROW + 1;
+const SIGNAL_POST_COLUMN = 0;
+const SIGNAL_ASPECT_COLUMN = SIGNAL_POST_COLUMN + SIGNAL_KIND_COUNT - 1;
+const CATENARY_MAST_COLUMN = SIGNAL_ASPECT_COLUMN + SIGNAL_ASPECT_COUNT;
+const CATENARY_WIRE_COLUMN = CATENARY_MAST_COLUMN + 1;
 
 /** Three zones times two expansion stages, plus one generic industry block. */
 const BUILDING_VARIANTS = 6;
@@ -125,7 +144,7 @@ const BRIDGE_COLUMN = BUILDING_VARIANTS + 6;
 const SIGNAL_COLUMN = BUILDING_VARIANTS + 7;
 
 const ATLAS_COLUMNS = Math.max(SLOPE_COUNT, SIGNAL_COLUMN + 1, INDUSTRY_TYPE_COUNT);
-const ATLAS_ROWS = EMISSIVE_ROW + 1;
+const ATLAS_ROWS = RAIL_ROW + 1;
 
 /**
  * Largest texture the weakest GPU this game targets is guaranteed to accept.
@@ -185,8 +204,16 @@ export interface TerrainAtlas {
   trainFrame(): AtlasFrame;
   /** Deck slab of a bridge, drawn at the deck's height rather than the ground's. */
   bridgeFrame(): AtlasFrame;
-  /** Signal post beside the track. */
+  /** The plain white post: kept for the waypoint markers (D-141). */
   signalFrame(): AtlasFrame;
+  /** Signal post silhouetted by kind (M13 B5; SignalKind 1..4). */
+  signalPostFrame(kind: number): AtlasFrame;
+  /** The lit lamp of one aspect, composited over the post (SignalAspect). */
+  signalAspectFrame(aspect: number): AtlasFrame;
+  /** Catenary mast beside electrified track (M13 B5). */
+  catenaryMastFrame(): AtlasFrame;
+  /** Half a catenary wire over the track's own half segment (M13 B5). */
+  catenaryWireFrame(direction: number): AtlasFrame;
   /** Half a track segment leaving the tile centre in one of the 8 directions. */
   trackFrame(direction: number): AtlasFrame;
 }
@@ -710,10 +737,219 @@ function drawTrackCell(
 }
 
 /**
+ * Signal-furniture geometry, in DESIGN pixels above the tile-centre ground
+ * line (world px at zoom 1; the drawing multiplies by the page scale). One
+ * table shared by the post cells, the aspect cells and MapView's night
+ * glow, so the dark lamp, its lit twin and the glow align by construction -
+ * the emissive-twin lesson (D-172) applied to a two-cell overlay.
+ */
+/** Pole height of every signal post. [design px; the M4 white post's scale] */
+const SIGNAL_POST_HEIGHT_PX = 12.5;
+/** Lamp housing extent on the pole. [design px] */
+const SIGNAL_HOUSING_TOP_PX = 11.2;
+const SIGNAL_HOUSING_BOTTOM_PX = 5.4;
+/** Centre of the upper (red) and lower (green) lamp. [design px] */
+const SIGNAL_LAMP_RED_PX = 9.7;
+const SIGNAL_LAMP_GREEN_PX = 6.9;
+const SIGNAL_LAMP_RADIUS_PX = 1.5;
+/**
+ * Where the lamp housing's centre sits above the tile-centre ground -
+ * MapView anchors the additive night glow here. [world px]
+ */
+export const SIGNAL_LAMP_LIFT_PX = 8.3;
+/** Centre of the kind marker (disc or blade) above the housing. [design px] */
+const SIGNAL_HEAD_CENTRE_PX = 13.5;
+/**
+ * Contact-wire height above the rail head, and the mast that carries it.
+ * The wire sits below the mast's cross-bar, as hung wire does. [design px]
+ */
+const CATENARY_WIRE_LIFT_PX = 11.5;
+const CATENARY_MAST_HEIGHT_PX = 13;
+
+/** The post's own grey-white - the M4 signal colour, kept. [CSS hex] */
+const SIGNAL_POST_COLOUR = '#d8d4cc';
+const SIGNAL_HOUSING_COLOUR = '#2b2f33';
+const SIGNAL_LAMP_OFF_COLOUR = '#181b1e';
+/** Galvanised steel for the mast, near-black for the wire hint. [CSS hex] */
+const CATENARY_COLOUR = '#6b7076';
+const CATENARY_WIRE_COLOUR = '#3d4148';
+
+/** The aspect palette as CSS hex, derived from the ONE tint table. */
+function signalAspectHex(aspect: number): string {
+  return `#${SIGNAL_ASPECT_TINTS[aspect]!.toString(16).padStart(6, '0')}`;
+}
+
+/**
+ * One signal post, silhouetted by KIND (SPEC2 M13: "vier Signaltypen per
+ * Mast-Silhouette unterscheidbar"): block signals wear a disc head, path
+ * signals a diamond blade, and the one-way kinds add an arm. The arm is
+ * deliberately generic, never a compass - the passable direction stays the
+ * tile panel's business (D-126); the silhouette only says WHAT stands here.
+ * Both lamps are drawn dark: the aspect cell lights exactly one of them.
+ */
+function drawSignalPostCell(
+  ctx: CanvasRenderingContext2D,
+  originX: number,
+  originY: number,
+  kind: number,
+): void {
+  const px = ATLAS_SCALE;
+  const cx = originX + TILE_W / 2;
+  const gy = originY + CELL_TOP + TILE_H / 2;
+
+  // Base plate, so the post reads as standing rather than floating.
+  ctx.fillStyle = shade(SIGNAL_POST_COLOUR, 0.66);
+  ctx.fillRect(cx - 2 * px, gy - 1 * px, 4 * px, 1.6 * px);
+
+  // The pole, with a darker sliver down the right for depth.
+  ctx.fillStyle = SIGNAL_POST_COLOUR;
+  ctx.fillRect(
+    cx - 0.7 * px,
+    gy - SIGNAL_POST_HEIGHT_PX * px,
+    1.4 * px,
+    SIGNAL_POST_HEIGHT_PX * px,
+  );
+  ctx.fillStyle = shade(SIGNAL_POST_COLOUR, 0.6);
+  ctx.fillRect(
+    cx + 0.1 * px,
+    gy - SIGNAL_POST_HEIGHT_PX * px,
+    0.6 * px,
+    SIGNAL_POST_HEIGHT_PX * px,
+  );
+
+  // The housing with both lamps unlit.
+  ctx.fillStyle = SIGNAL_HOUSING_COLOUR;
+  ctx.fillRect(
+    cx - 2.1 * px,
+    gy - SIGNAL_HOUSING_TOP_PX * px,
+    4.2 * px,
+    (SIGNAL_HOUSING_TOP_PX - SIGNAL_HOUSING_BOTTOM_PX) * px,
+  );
+  ctx.fillStyle = SIGNAL_LAMP_OFF_COLOUR;
+  for (const lamp of [SIGNAL_LAMP_RED_PX, SIGNAL_LAMP_GREEN_PX]) {
+    ctx.beginPath();
+    ctx.arc(cx, gy - lamp * px, SIGNAL_LAMP_RADIUS_PX * px, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // The kind marker - the SHAPE is the information (D-117).
+  const headY = gy - SIGNAL_HEAD_CENTRE_PX * px;
+  if (kind === SignalKind.Block || kind === SignalKind.BlockOneWay) {
+    ctx.fillStyle = SIGNAL_POST_COLOUR;
+    ctx.beginPath();
+    ctx.arc(cx, headY, 2.2 * px, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = SIGNAL_HOUSING_COLOUR;
+    ctx.beginPath();
+    ctx.arc(cx, headY, 1 * px, 0, Math.PI * 2);
+    ctx.fill();
+  } else {
+    ctx.fillStyle = SIGNAL_POST_COLOUR;
+    ctx.beginPath();
+    ctx.moveTo(cx, headY - 2.4 * px);
+    ctx.lineTo(cx + 2.4 * px, headY);
+    ctx.lineTo(cx, headY + 2.4 * px);
+    ctx.lineTo(cx - 2.4 * px, headY);
+    ctx.closePath();
+    ctx.fill();
+  }
+  if (kind === SignalKind.BlockOneWay || kind === SignalKind.PathEntry) {
+    ctx.fillStyle = SIGNAL_POST_COLOUR;
+    ctx.fillRect(cx + 0.7 * px, gy - 4.6 * px, 4 * px, 1.2 * px);
+    ctx.beginPath();
+    ctx.moveTo(cx + 4.7 * px, gy - 5.4 * px);
+    ctx.lineTo(cx + 6.6 * px, gy - 4 * px);
+    ctx.lineTo(cx + 4.7 * px, gy - 2.6 * px);
+    ctx.closePath();
+    ctx.fill();
+  }
+}
+
+/**
+ * One aspect cell: a transparent cell whose only content is the LIT lamp,
+ * composited over the post's dark housing. Red lights the upper lamp,
+ * green the lower - the aspect is a position first and a colour second, so
+ * it survives any colour vision; the hues are the colour-blind safe pair
+ * of the shared palette (signalAspects.ts, one tint table).
+ */
+function drawSignalAspectCell(
+  ctx: CanvasRenderingContext2D,
+  originX: number,
+  originY: number,
+  aspect: number,
+): void {
+  const px = ATLAS_SCALE;
+  const cx = originX + TILE_W / 2;
+  const gy = originY + CELL_TOP + TILE_H / 2;
+  const lampY = gy - (aspect === SignalAspect.Red ? SIGNAL_LAMP_RED_PX : SIGNAL_LAMP_GREEN_PX) * px;
+  const hex = signalAspectHex(aspect);
+
+  ctx.fillStyle = hex;
+  ctx.beginPath();
+  ctx.arc(cx, lampY, (SIGNAL_LAMP_RADIUS_PX + 0.2) * px, 0, Math.PI * 2);
+  ctx.fill();
+  // A brighter core, so the lamp reads as lit rather than painted.
+  ctx.fillStyle = shade(hex, 1.7);
+  ctx.beginPath();
+  ctx.arc(cx, lampY, 0.7 * px, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+/** The catenary mast cell: the shapes.ts primitive at cell scale. */
+function drawCatenaryMastCell(
+  ctx: CanvasRenderingContext2D,
+  originX: number,
+  originY: number,
+): void {
+  catenaryMast(
+    ctx,
+    {
+      cx: originX + TILE_W / 2,
+      cy: originY + CELL_TOP + TILE_H / 2,
+      halfW: TILE_W / 2,
+      halfH: TILE_H / 2,
+    },
+    {
+      height: CATENARY_MAST_HEIGHT_PX * ATLAS_SCALE,
+      armPx: 2.6 * ATLAS_SCALE,
+      colour: CATENARY_COLOUR,
+      lineWidth: 1 * ATLAS_SCALE,
+    },
+  );
+}
+
+/**
+ * Half a catenary wire: the track cell's own half-segment geometry lifted
+ * to wire height, so two halves meet over the rail joint exactly as the
+ * rails beneath them do - one cell per direction, no combination atlas.
+ */
+function drawCatenaryWireCell(
+  ctx: CanvasRenderingContext2D,
+  originX: number,
+  originY: number,
+  direction: number,
+): void {
+  const [dx, dy] = TRACK_DELTA[direction]!;
+  const cx = originX + TILE_W / 2;
+  const cy = originY + CELL_TOP + TILE_H / 2;
+  const ex = cx + ((dx - dy) * TILE_W) / 4;
+  const ey = cy + ((dx + dy) * TILE_H) / 4;
+  const lift = CATENARY_WIRE_LIFT_PX * ATLAS_SCALE;
+
+  ctx.strokeStyle = CATENARY_WIRE_COLOUR;
+  ctx.lineWidth = 0.9 * ATLAS_SCALE;
+  ctx.lineCap = 'butt';
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - lift);
+  ctx.lineTo(ex, ey - lift);
+  ctx.stroke();
+}
+
+/**
  * Dimensions of the base page, as a pure function so the guard test can hold
- * them against MAX_ATLAS_PX (and against the ledger's booked 2176x3648 -
- * the original 2176x2688 plus M12's four water rows plus M13's emissive row,
- * SPEC2 6.2) without a canvas.
+ * them against MAX_ATLAS_PX (and against the ledger's booked 2176x3840 -
+ * the original 2176x2688 plus M12's four water rows plus M13's emissive row
+ * and rail-furniture row, SPEC2 6.2) without a canvas.
  */
 export function baseAtlasSize(): { width: number; height: number } {
   return { width: ATLAS_COLUMNS * CELL_W, height: ATLAS_ROWS * CELL_H };
@@ -778,6 +1014,57 @@ export function emissiveIndustryFrame(type: number): AtlasFrame | null {
   return {
     x: (EMISSIVE_INDUSTRY_COLUMN + slot) * CELL_W,
     y: EMISSIVE_ROW * CELL_H,
+    width: CELL_W,
+    height: CELL_H,
+    anchorY: CELL_TOP,
+  };
+}
+
+/**
+ * Frames of the M13 B5 rail-furniture row on the BASE page, standalone pure
+ * functions like the water frames so the layout guard test holds the real
+ * placement without a canvas. All four share the base cell's geometry and
+ * ground line - the aspect cell composites over the post cell at the same
+ * world position, so equality here IS the alignment.
+ */
+export function signalPostAtlasFrame(kind: number): AtlasFrame {
+  const clamped = kind >= 1 && kind < SIGNAL_KIND_COUNT ? kind : SignalKind.Block;
+  return {
+    x: (SIGNAL_POST_COLUMN + clamped - 1) * CELL_W,
+    y: RAIL_ROW * CELL_H,
+    width: CELL_W,
+    height: CELL_H,
+    anchorY: CELL_TOP,
+  };
+}
+
+/** Frame of one aspect-lamp cell (SignalAspect) on the BASE page. */
+export function signalAspectAtlasFrame(aspect: number): AtlasFrame {
+  return {
+    x: (SIGNAL_ASPECT_COLUMN + (aspect & 1)) * CELL_W,
+    y: RAIL_ROW * CELL_H,
+    width: CELL_W,
+    height: CELL_H,
+    anchorY: CELL_TOP,
+  };
+}
+
+/** Frame of the catenary mast cell on the BASE page. */
+export function catenaryMastAtlasFrame(): AtlasFrame {
+  return {
+    x: CATENARY_MAST_COLUMN * CELL_W,
+    y: RAIL_ROW * CELL_H,
+    width: CELL_W,
+    height: CELL_H,
+    anchorY: CELL_TOP,
+  };
+}
+
+/** Frame of one catenary wire half-segment on the BASE page. */
+export function catenaryWireAtlasFrame(direction: number): AtlasFrame {
+  return {
+    x: (CATENARY_WIRE_COLUMN + (direction & 7)) * CELL_W,
+    y: RAIL_ROW * CELL_H,
     width: CELL_W,
     height: CELL_H,
     anchorY: CELL_TOP,
@@ -887,6 +1174,24 @@ export function buildTerrainAtlas(): TerrainAtlas {
     );
   }
 
+  // The rail-furniture row of M13 B5: the four signal-kind posts, the two
+  // aspect lamps, the catenary mast and the eight wire half-segments.
+  for (let kind = 1; kind < SIGNAL_KIND_COUNT; kind++) {
+    drawSignalPostCell(ctx, (SIGNAL_POST_COLUMN + kind - 1) * CELL_W, RAIL_ROW * CELL_H, kind);
+  }
+  for (let aspect = 0; aspect < SIGNAL_ASPECT_COUNT; aspect++) {
+    drawSignalAspectCell(ctx, (SIGNAL_ASPECT_COLUMN + aspect) * CELL_W, RAIL_ROW * CELL_H, aspect);
+  }
+  drawCatenaryMastCell(ctx, CATENARY_MAST_COLUMN * CELL_W, RAIL_ROW * CELL_H);
+  for (let direction = 0; direction < 8; direction++) {
+    drawCatenaryWireCell(
+      ctx,
+      (CATENARY_WIRE_COLUMN + direction) * CELL_W,
+      RAIL_ROW * CELL_H,
+      direction,
+    );
+  }
+
   const frame = (column: number, row: number): AtlasFrame => ({
     x: column * CELL_W,
     y: row * CELL_H,
@@ -911,6 +1216,10 @@ export function buildTerrainAtlas(): TerrainAtlas {
     trainFrame: () => frame(TRAIN_COLUMN, BUILDING_ROW),
     bridgeFrame: () => frame(BRIDGE_COLUMN, BUILDING_ROW),
     signalFrame: () => frame(SIGNAL_COLUMN, BUILDING_ROW),
+    signalPostFrame: (kind) => signalPostAtlasFrame(kind),
+    signalAspectFrame: (aspect) => signalAspectAtlasFrame(aspect),
+    catenaryMastFrame: () => catenaryMastAtlasFrame(),
+    catenaryWireFrame: (direction) => catenaryWireAtlasFrame(direction),
     trackFrame: (direction) => frame(direction & 7, TRACK_ROW),
   };
 }
@@ -997,6 +1306,33 @@ function detailCellSpecs(): readonly DetailCellSpec[] {
       key: `k${direction}`,
       tall: false,
       draw: (ctx) => drawTrackCell(ctx, 0, 0, direction),
+    });
+  }
+
+  // The rail furniture of M13 B5, SHORT cells all: nothing here rises past
+  // the one-step headroom above the north corner. They fill the track row's
+  // eight free columns and one further short row - the page's last 256 px,
+  // booked in SPEC2 6.2 (4096x4096 of 4096).
+  for (let kind = 1; kind < SIGNAL_KIND_COUNT; kind++) {
+    specs.push({
+      key: `sg${kind}`,
+      tall: false,
+      draw: (ctx) => drawSignalPostCell(ctx, 0, 0, kind),
+    });
+  }
+  for (let aspect = 0; aspect < SIGNAL_ASPECT_COUNT; aspect++) {
+    specs.push({
+      key: `sa${aspect}`,
+      tall: false,
+      draw: (ctx) => drawSignalAspectCell(ctx, 0, 0, aspect),
+    });
+  }
+  specs.push({ key: 'cm', tall: false, draw: (ctx) => drawCatenaryMastCell(ctx, 0, 0) });
+  for (let direction = 0; direction < 8; direction++) {
+    specs.push({
+      key: `cw${direction}`,
+      tall: false,
+      draw: (ctx) => drawCatenaryWireCell(ctx, 0, 0, direction),
     });
   }
 
@@ -1141,6 +1477,11 @@ export function buildDetailAtlas(): TerrainAtlas {
     trainFrame: () => lookup('train'),
     bridgeFrame: () => lookup('bridge'),
     signalFrame: () => lookup('signal'),
+    signalPostFrame: (kind) =>
+      lookup(`sg${kind >= 1 && kind < SIGNAL_KIND_COUNT ? kind : SignalKind.Block}`),
+    signalAspectFrame: (aspect) => lookup(`sa${aspect & 1}`),
+    catenaryMastFrame: () => lookup('cm'),
+    catenaryWireFrame: (direction) => lookup(`cw${direction & 7}`),
     trackFrame: (direction) => lookup(`k${direction & 7}`),
   };
 }

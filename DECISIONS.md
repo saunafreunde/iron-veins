@@ -25,7 +25,7 @@ no entry below. A number may appear under several topics.
 - **Rail & track:** D-042, D-043, D-044, D-045, D-046, D-047, D-053, D-141,
   D-153, D-157
 - **Signals & reservations:** D-054, D-055, D-056, D-057, D-058, D-059, D-060,
-  D-061, D-073, D-080, D-081, D-082, D-083, D-157
+  D-061, D-073, D-080, D-081, D-082, D-083, D-157, D-173
 - **Stations & catchment:** D-049, D-080, D-095, D-150, D-159
 - **Cargo, payment & routing:** D-036, D-037, D-065, D-067, D-075, D-077,
   D-078, D-118, D-142, D-151
@@ -42,11 +42,11 @@ no entry below. A number may appear under several topics.
   D-122, D-147, D-152, D-153, D-154, D-155, D-156, D-158
 - **Rendering & art:** D-013, D-014, D-033, D-035, D-112, D-117, D-125, D-127,
   D-136, D-140, D-160, D-161, D-162, D-163, D-164, D-165, D-166, D-169, D-170,
-  D-171, D-172
+  D-171, D-172, D-173
 - **UI & input:** D-011, D-013, D-015, D-035, D-110, D-113, D-114, D-119,
   D-126, D-148, D-165, D-166
 - **Performance & measurement:** D-002, D-120, D-135, D-136, D-161, D-162,
-  D-163, D-164, D-167, D-170, D-171, D-172
+  D-163, D-164, D-167, D-170, D-171, D-172, D-173
 - **Platform, tooling & build:** D-012, D-014, D-015, D-016, D-017, D-029,
   D-030, D-031, D-160, D-168, D-169, D-170, D-172
 - **Crash safety:** D-132, D-139
@@ -4593,3 +4593,119 @@ throughout: zero sim bytes, zero save bumps, zero snapshot changes - the
 one permitted M13 layout bump (`IndustryMarker.level`) still belongs to
 the particle bundle. i18n untouched: the feature ships behind the existing
 day/night setting and adds no user-visible string.
+
+## M13 - living trains, bundle 5: signal aspects and catenary (2026-08-07)
+
+### D-173 The aspect is the F3 claim read at the lamp, the four kinds wear four silhouettes, and the wire hangs one layer above the trains
+
+SPEC2 M13 orders signal aspects red/green from the reserved-tile block plus
+the render-side BlockIndex, the four signal kinds readable apart by post
+silhouette, and catenary masts on electrified track. This entry records the
+shape it took and the eight choices inside it.
+
+**The aspect is a pure derivation over exactly the two inputs F3 draws, so
+the world art cannot disagree with the debug overlay.** `signalAspect`
+(src/render/signalAspects.ts) reads the published reserved block - the
+16 KiB the section-9.3 overlay has always drawn - bucketed into a
+claimed-block set by the SAME BlockIndex instance MapView colours F3 with.
+A signal shows RED when its own tile's block is claimed (a signal tile is a
+block of its own, blocks.ts, so a train granted passage reddens the lamp
+while still approaching) or when the block behind a guarded entry holds a
+claim; a one-way signal guards only the side it is passable towards - a
+claim behind its back is somebody leaving and changes nothing it promised.
+Everything else is green. The agreement is a TEST, not an intention:
+`signalAspects.spec.ts` re-derives the expectation tile-by-tile from the
+raw reserved list (the exact tiles F3 fills) over empty, partial, full and
+renumbered claim tables. The set rebuilds on the 20 Hz publish edge and on
+a map revision (a BlockIndex rebuild renumbers, so a set keyed by block id
+dies with it), never per frame; per visible signal an aspect change is one
+texture swap and one glow tint - the waterSlots device.
+
+**Found and fixed while wiring it: the render-side BlockIndex was
+zero-sized since M4.** `MapView` constructed `new BlockIndex(0)` and
+nothing ever resized it, so `blockAt` answered `undefined` for every tile
+and F3's per-block colouring silently collapsed (undefined survives the
+`< 0` guard and indexes the palette with NaN). A defect under the
+project's own first rule - never written down, now fixed: `setMap`
+allocates the index at the map's tile count, and the aspects inherit a
+BlockIndex that actually segments. The overlay's occupancy fill and the
+deadlock blink never read `blockAt` and were correct throughout.
+
+**The four kinds are silhouettes, not tints (D-117 applied to
+signalling).** Block signals wear a disc head, path signals a diamond
+blade, and the one-way kinds add an arm - drawn procedurally into one new
+base-page row, because no pinned Kenney kit carries a signal (checked
+against the Train Kit's model list; E-14's gap rule says procedural). The
+arm is deliberately GENERIC, never a compass: eight direction variants
+would cost eight cells per one-way kind for a detail the tile panel
+already answers with a screen-oriented arrow (D-126); the silhouette says
+WHAT stands here, the panel says which way. The waypoint marker keeps the
+old plain white post (D-141) - a mode tint over a kind silhouette would
+mix two alphabets.
+
+**The lamp is a position first and a colour second.** The post cell draws
+the housing with BOTH lamps dark; the aspect cell lights exactly one - red
+above, green below, the real-signal convention - so the aspect survives
+any colour vision, and the hues are the colour-blind safe pair of the
+shared palette (bluish green 0x009e73, vermilion 0xd55e00, section 17.4),
+one tint table in signalAspects.ts that the atlas drawing derives its hex
+strings from. At night the LIT aspect joins the emissive pass exactly as
+D-172 built it: a small NEUTRAL radial glow texture (the lamp-pool
+pattern, no atlas booking), tinted by the aspect, additive, alpha driven
+by the shared ramp - and re-tinted in the same pass that swaps the lamp.
+
+**Aspects exist where the posts are readable sprites - 1x and above.** The
+chunk bake (0.5x) draws the kind silhouette but no lamp: claims are
+per-tick truth and a baked copy would lie within seconds, a live lamp
+would be under two pixels, and the F3 overlay stays the overview's truth -
+the D-165 argument (station labels vanish exactly where their modules do).
+The chunked path clears the aspect records so the per-frame pass never
+touches pool sprites that now belong to the markers.
+
+**Catenary is a wire one layer above the trains, and the mast yields.**
+`DrawLayer` grew its last free slot (Catenary = 7, above Vehicle): the
+wire hangs OVER the train, so drawing it after the vehicles of its own
+tile is the honest painter order, and the mast stands on the viewer's side
+of the track by construction - `catenaryMastOffset` (catenary.ts) flips
+the perpendicular so its screen depth is never negative. Masts stand on
+every second plain-line tile (junctions refused - a portal in a throat
+would straddle the crossing; the D-055 measure reused), and the
+alternating axis follows the run: no single parity alternates along all
+eight directions (the diagonal steps defeat any linear form - measured in
+the test, not assumed), so x-moving runs alternate on x and pure
+north-south runs on y. A signal or waypoint tile keeps its post and drops
+the mast; bridges carry the wire at deck height and no mast - a deck has
+no verge. The wire cells are the track cells' own half-segment geometry
+lifted to wire height (eight cells, meeting over the rail joint by
+construction); the mast is a new shapes.ts primitive (`catenaryMast`),
+strokes not solids, with a screen-horizontal cross-bar because one cell
+serves every orientation. Electrified-only, keyed on the sim's own
+`RailType.Electrified` (restated once as `CATENARY_RAIL_TYPE`); rail type
+has been in the chunk checksums since D-161 for exactly this day, so an
+electrification dirties precisely the chunks it touched and nothing else
+moved.
+
+**The atlas bookings are spent and recorded (Fehlerkatalog 40).** One new
+base-page row (4 posts, 2 aspect lamps, 1 mast, 8 wires - 15 cells) takes
+page 0 to 2176x3840 of 4096; on the detail page the same 15 cells are
+SHORT rows and fill the track row's eight free columns plus the last
+256 px row - 4096x4096, the page is full to the byte, and SPEC2 6.2 now
+says so: any further detail cell needs a new page booking. Unlike the
+water and emissive rows these cells exist on BOTH pages, because thin
+poles and one-pixel wires are exactly what a 2x upscale smears where a
+low-frequency glow forgives it.
+
+**The tripwires were re-measured with the new work priced in.** The
+rebuild proxy now replays the catenary branch and the aspect decision per
+placed lamp on an all-electrified fixture: median 1.9 ms against the
+unchanged 10 ms gate (was 1.63 clean pre-B5 - the furniture costs ~0.25 ms
+of median on a scene denser than any real one). The chunk-bake proxy
+gained the same furniture minus the lamps (3,046 placements, median
+0.55 ms against 3). A new aspect-refresh tripwire prices the per-publish
+pass - the claimed-set collect over 704 reserved tiles plus the decision
+for 99 signals, all red (the branch that walks every guarded entry):
+median 0.03 ms, gated at 2 ms with a 20 ms backstop (D-167 generosity).
+Render-only throughout: zero sim bytes, zero save bumps, zero snapshot
+changes - the one permitted M13 layout bump (`IndustryMarker.level`)
+still belongs to the particle bundle. i18n untouched: no new user-visible
+string.

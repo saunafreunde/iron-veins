@@ -1,13 +1,16 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import {
   SNAPSHOT_MAX_VEHICLES,
+  SNAPSHOT_RESERVED_STRIDE,
   SNAPSHOT_VEHICLE_STRIDE,
+  SnapshotReserved,
   SnapshotVehicle,
 } from '../../src/shared/snapshot';
 import { TileMap } from '../../src/sim/map/TileMap';
-import { packSignal, SignalKind } from '../../src/sim/map/signals';
+import { packSignal, signalKind, SignalKind } from '../../src/sim/map/signals';
 import { Terrain } from '../../src/sim/map/terrain';
 import { trackBit, TrackDir } from '../../src/sim/map/track';
+import { BlockIndex } from '../../src/sim/signals/blocks';
 import { BuildingKind, RoadBit } from '../../src/sim/town/types';
 import {
   DrawLayer,
@@ -36,6 +39,8 @@ import {
 } from '../../src/render/consistArt';
 import { coastEdgeMask, FOAM_EDGE_COUNT, foamVariant, isDeepWater } from '../../src/render/water';
 import { lampOffsetForRoadTile } from '../../src/render/emissive';
+import { CATENARY_RAIL_TYPE, catenaryMastOffset } from '../../src/render/catenary';
+import { collectClaimedBlocks, signalAspect } from '../../src/render/signalAspects';
 
 /**
  * The render CPU tripwire of SPEC2 6.3: Sprite-Pool-Rebuild-ms, Draw-Prep-ms
@@ -123,6 +128,18 @@ const CHUNK_BAKE_P50_TRIPWIRE_MS = 3;
 const CHUNK_BAKE_P99_BACKSTOP_MS = 30;
 
 /**
+ * Median tripwire: one signal-aspect refresh on the claim edge (M13 B5) -
+ * the collectClaimedBlocks pass over a busy reserved table plus the aspect
+ * decision per visible signal, exactly what MapView pays per 20 Hz publish
+ * (never per frame). Measured clean well under 0.1 ms; the gate is the
+ * usual very generous multiple (D-167). [ms]
+ */
+const ASPECT_REFRESH_P50_TRIPWIRE_MS = 2;
+
+/** p99 backstop for the aspect refresh, the usual order of magnitude. [ms] */
+const ASPECT_REFRESH_P99_BACKSTOP_MS = 20;
+
+/**
  * Median tripwire: the CPU half of one chunk's emissive-twin walk (M13,
  * D-172) - the building-and-lamp placement pass that fills the twin texture.
  * Measured clean ~0.05 ms per chunk; the gate is a very generous multiple
@@ -183,6 +200,9 @@ function buildBusyMap(): TileMap {
         map.oceanMask[index] = 1;
       } else if (y % 6 === 0) {
         map.trackBits[index] = eastWest;
+        // Electrified, so the M13 B5 catenary branch - wires per direction,
+        // the mast parity - fires on every track tile of the proxy.
+        map.railType[index] = CATENARY_RAIL_TYPE;
         if (x % 7 === 0) map.signal[index] = packSignal(SignalKind.Block, TrackDir.East);
       } else if (y % 4 === 1) {
         map.roadBits[index] = RoadBit.East | RoadBit.West;
@@ -232,11 +252,56 @@ function waterProxy(
 }
 
 /**
+ * The track furniture of M13 B5, shared by the rebuild and chunk-bake
+ * proxies exactly as `placeCatenary` is shared by the real paths: catenary
+ * wires per connected direction and the mast-parity decision on an
+ * electrified tile, and the kind-silhouetted signal post. The rebuild proxy
+ * additionally prices the aspect decision; the bake proxy does not, because
+ * the real bake places no lamp (claims are per-tick truth).
+ */
+function trackFurnitureProxy(
+  map: TileMap,
+  index: number,
+  x: number,
+  y: number,
+  world: { x: number; y: number },
+  height: number,
+  trackBits: number,
+  place: (key: string, worldX: number, worldY: number, zIndex: number) => void,
+): void {
+  if (map.railType[index] !== CATENARY_RAIL_TYPE) return;
+  const order = drawOrder(x, y, height, DrawLayer.Catenary);
+  for (let direction = 0; direction < 8; direction++) {
+    if ((trackBits & (1 << direction)) === 0) continue;
+    place(`cw${direction}`, world.x, world.y, order);
+  }
+  if (map.signal[index] === 0 && map.waypoint[index] === 0) {
+    const mast = catenaryMastOffset(trackBits, x, y);
+    if (mast !== null) {
+      place(
+        'cm',
+        world.x + ((mast[0] - mast[1]) * TILE_W) / 2,
+        world.y + ((mast[0] + mast[1]) * TILE_H) / 2,
+        order,
+      );
+    }
+  }
+}
+
+/**
  * The CPU of `MapView.rebuild`, sprite for sprite: diagonal iteration, height
  * and slope reads, `tileToWorld`, the string frame key and its cache lookup,
- * the `drawOrder` zIndex - everything except handing the result to Pixi.
+ * the `drawOrder` zIndex - and, since M13 B5, the catenary branch and the
+ * signal-aspect decision per placed lamp - everything except handing the
+ * result to Pixi.
  */
-function rebuildProxy(map: TileMap, out: DrawList, frames: Map<string, number>): number {
+function rebuildProxy(
+  map: TileMap,
+  blocks: BlockIndex,
+  claimed: ReadonlySet<number>,
+  out: DrawList,
+  frames: Map<string, number>,
+): number {
   let used = 0;
   let deepFold = 0;
   const place = (key: string, worldX: number, worldY: number, zIndex: number): void => {
@@ -283,10 +348,16 @@ function rebuildProxy(map: TileMap, out: DrawList, frames: Map<string, number>):
           if ((trackBits & (1 << direction)) === 0) continue;
           place(`k${direction}`, world.x, world.y, drawOrder(x, y, height, DrawLayer.Track));
         }
+        trackFurnitureProxy(map, index, x, y, world, height, trackBits, place);
       }
 
-      if (map.signal[index] !== 0) {
-        place('signal', world.x, world.y, drawOrder(x, y, height, DrawLayer.Signal));
+      const packedSignal = map.signal[index]!;
+      if (packedSignal !== 0) {
+        const order = drawOrder(x, y, height, DrawLayer.Signal);
+        place(`sg${signalKind(packedSignal)}`, world.x, world.y, order);
+        // The aspect lamp of M13 B5, decided exactly as MapView decides it.
+        const aspect = signalAspect(map, blocks, claimed, index);
+        place(`sa${aspect}`, world.x, world.y, order);
       }
 
       const buildingKind = map.buildingKind[index]!;
@@ -609,10 +680,19 @@ function chunkBakeProxy(
           if ((trackBits & (1 << direction)) === 0) continue;
           place(`k${direction}`, world.x, world.y, drawOrder(x, y, height, DrawLayer.Track));
         }
+        trackFurnitureProxy(map, index, x, y, world, height, trackBits, place);
       }
 
-      if (map.signal[index] !== 0) {
-        place('signal', world.x, world.y, drawOrder(x, y, height, DrawLayer.Signal));
+      const packedSignal = map.signal[index]!;
+      if (packedSignal !== 0) {
+        // The kind post bakes; the aspect lamp does not (M13 B5) - the real
+        // bake path draws no per-tick truth into a cached texture.
+        place(
+          `sg${signalKind(packedSignal)}`,
+          world.x,
+          world.y,
+          drawOrder(x, y, height, DrawLayer.Signal),
+        );
       }
 
       const buildingKind = map.buildingKind[index]!;
@@ -711,9 +791,32 @@ function percentile(samples: Float64Array, share: number): number {
 }
 
 let map: TileMap;
+/** The render-side BlockIndex and a busy claim table (M13 B5): the SAME
+ * inputs the F3 overlay and the aspect pass share in MapView. */
+let blocks: BlockIndex;
+let reservedData: Int32Array;
+let reservedCount = 0;
+let claimed: Set<number>;
 
 beforeAll(() => {
   map = buildBusyMap();
+  blocks = new BlockIndex(map.tileCount);
+  blocks.refresh(map);
+  // Every track tile of the window claimed - a fuller table than any real
+  // scene, so the collect pass and the red branch are priced, not skipped.
+  const tiles: number[] = [];
+  for (let y = WINDOW_MIN; y <= WINDOW_MAX; y++) {
+    if (y % 6 !== 0) continue;
+    for (let x = WINDOW_MIN; x <= WINDOW_MAX; x++) tiles.push(map.tileIndex(x, y));
+  }
+  reservedCount = tiles.length;
+  reservedData = new Int32Array(reservedCount * SNAPSHOT_RESERVED_STRIDE);
+  for (let i = 0; i < reservedCount; i++) {
+    reservedData[i * SNAPSHOT_RESERVED_STRIDE + SnapshotReserved.Tile] = tiles[i]!;
+    reservedData[i * SNAPSHOT_RESERVED_STRIDE + SnapshotReserved.VehicleId] = i % 40;
+  }
+  claimed = new Set<number>();
+  collectClaimedBlocks(blocks, reservedData, reservedCount, claimed);
 });
 
 describe('render CPU tripwire (SPEC2 6.3)', () => {
@@ -727,12 +830,12 @@ describe('render CPU tripwire (SPEC2 6.3)', () => {
     const frames = new Map<string, number>();
     // Warm run: the first rebuild pays the frame-cache misses, exactly as the
     // real MapView does once per texture - not what the steady state costs.
-    const placed = rebuildProxy(map, out, frames);
+    const placed = rebuildProxy(map, blocks, claimed, out, frames);
 
     const samples = new Float64Array(REBUILD_SAMPLES);
     for (let i = 0; i < REBUILD_SAMPLES; i++) {
       const started = performance.now();
-      rebuildProxy(map, out, frames);
+      rebuildProxy(map, blocks, claimed, out, frames);
       samples[i] = performance.now() - started;
     }
 
@@ -822,6 +925,50 @@ describe('render CPU tripwire (SPEC2 6.3)', () => {
     expect(drawn).toBe(expectedUnits);
     expect(p50).toBeLessThan(DRAW_PREP_P50_TRIPWIRE_MS);
     expect(p99).toBeLessThan(DRAW_PREP_P99_BACKSTOP_MS);
+  });
+
+  it('refreshes the signal aspects on a claim edge inside the tripwire (M13 B5)', () => {
+    // The signals the rebuild would have recorded over the busy window.
+    const signalTiles: number[] = [];
+    for (let y = WINDOW_MIN; y <= WINDOW_MAX; y++) {
+      for (let x = WINDOW_MIN; x <= WINDOW_MAX; x++) {
+        const tile = map.tileIndex(x, y);
+        if (map.signal[tile] !== 0) signalTiles.push(tile);
+      }
+    }
+    const set = new Set<number>();
+    const pass = (): number => {
+      collectClaimedBlocks(blocks, reservedData, reservedCount, set);
+      let red = 0;
+      for (let i = 0; i < signalTiles.length; i++) {
+        red += signalAspect(map, blocks, set, signalTiles[i]!);
+      }
+      return red;
+    };
+    const redSignals = pass();
+
+    const samples = new Float64Array(REBUILD_SAMPLES);
+    for (let i = 0; i < REBUILD_SAMPLES; i++) {
+      const started = performance.now();
+      pass();
+      samples[i] = performance.now() - started;
+    }
+
+    const p50 = percentile(samples, 0.5);
+    const p99 = percentile(samples, 0.99);
+    console.log(
+      `signal aspect refresh: ${signalTiles.length} signals against ` +
+        `${reservedCount} claimed tiles (${redSignals} red), ` +
+        `p50 ${p50.toFixed(4)} ms, p99 ${p99.toFixed(4)} ms ` +
+        `(median tripwire ${ASPECT_REFRESH_P50_TRIPWIRE_MS} ms, ` +
+        `backstop ${ASPECT_REFRESH_P99_BACKSTOP_MS} ms)`,
+    );
+
+    // The scene must exercise the red branch, or the pass prices skips.
+    expect(signalTiles.length).toBeGreaterThan(50);
+    expect(redSignals).toBeGreaterThan(0);
+    expect(p50).toBeLessThan(ASPECT_REFRESH_P50_TRIPWIRE_MS);
+    expect(p99).toBeLessThan(ASPECT_REFRESH_P99_BACKSTOP_MS);
   });
 
   it('walks one chunk emissive twin inside the tripwire (M13, D-172)', () => {

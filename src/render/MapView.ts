@@ -18,6 +18,7 @@ import {
   type VehicleFrame,
 } from '../shared/snapshot';
 import { MAX_HEIGHT, MAX_VEHICLES } from '../sim/constants';
+import { signalKind } from '../sim/map/signals';
 import type { TileMap } from '../sim/map/TileMap';
 import { SLOPE_COUNT, Terrain } from '../sim/map/terrain';
 import { BlockIndex } from '../sim/signals/blocks';
@@ -115,6 +116,36 @@ function makeLampTexture(): Texture {
   return Texture.from(canvas);
 }
 
+/**
+ * The signal-lamp night glow (M13 B5): a small NEUTRAL radial pool, tinted
+ * per aspect at placement - red or green from the one tint table
+ * (signalAspects.ts) - and composited additively with the emissive ramp,
+ * exactly the street-lamp mechanism with the colour left to the aspect.
+ */
+const SIGNAL_GLOW_TEX_W = 22;
+const SIGNAL_GLOW_TEX_H = 18;
+
+function makeSignalGlowTexture(): Texture {
+  const canvas = document.createElement('canvas');
+  canvas.width = SIGNAL_GLOW_TEX_W;
+  canvas.height = SIGNAL_GLOW_TEX_H;
+  const ctx = canvas.getContext('2d')!;
+  ctx.translate(SIGNAL_GLOW_TEX_W / 2, SIGNAL_GLOW_TEX_H / 2);
+  ctx.scale(1, SIGNAL_GLOW_TEX_H / SIGNAL_GLOW_TEX_W);
+  const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, SIGNAL_GLOW_TEX_W / 2);
+  gradient.addColorStop(0, 'rgba(255,255,255,0.9)');
+  gradient.addColorStop(0.4, 'rgba(255,255,255,0.35)');
+  gradient.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = gradient;
+  ctx.fillRect(
+    -SIGNAL_GLOW_TEX_W / 2,
+    -SIGNAL_GLOW_TEX_W / 2,
+    SIGNAL_GLOW_TEX_W,
+    SIGNAL_GLOW_TEX_W,
+  );
+  return Texture.from(canvas);
+}
+
 /** One pre-baked headlight cone: its texture plus where the vehicle's ground
  * anchor sits inside it, so placement is one subtraction per axis. */
 interface HeadlightCone {
@@ -184,10 +215,13 @@ import {
   emissiveBuildingFrame,
   emissiveIndustryFrame,
   foamAtlasFrame,
+  SIGNAL_LAMP_LIFT_PX,
   waterAtlasFrame,
   type AtlasFrame,
   type TerrainAtlas,
 } from './TerrainAtlas';
+import { CATENARY_RAIL_TYPE, catenaryMastOffset } from './catenary';
+import { collectClaimedBlocks, SIGNAL_ASPECT_TINTS, signalAspect } from './signalAspects';
 import {
   EMISSIVE_MAX_ALPHA,
   headlightGroundPoints,
@@ -622,8 +656,37 @@ export class MapView {
   /** F3: the block and reservation overlay of section 9.3. */
   private blockOverlay = false;
   private reservedSource: (() => { data: Int32Array; count: number }) | null = null;
-  private readonly blocks = new BlockIndex(0);
+  /**
+   * The ONE render-side BlockIndex - F3's block colouring and the M13
+   * signal aspects both read it, which is what makes the world art and the
+   * debug overlay structurally unable to disagree. Re-allocated per map in
+   * `setMap`: the zero-sized index it started life with in M4 answered
+   * `undefined` for every tile, which the aspects would have read as
+   * "never claimed" and F3's per-block colours silently collapsed on -
+   * a defect by the project's own first rule, fixed with this bundle.
+   */
+  private blocks = new BlockIndex(0);
   private deadlockTiles: readonly number[] = [];
+  /**
+   * The signal aspects of M13 B5 (SPEC2: "Signalaspekte rot/gruen aus dem
+   * Reserved-Tile-Block"). `claimedBlocks` is rebuilt on the publish edge
+   * (claims move with ticks, never between them) from the same reserved
+   * block F3 fills its diamonds from; the parallel slot arrays record the
+   * lamp sprites the last rebuild placed - the waterSlots pattern - so an
+   * aspect change re-textures exactly those sprites and re-tints their
+   * glows, and an unchanged claim table costs one boolean per frame.
+   */
+  private readonly claimedBlocks = new Set<number>();
+  private claimsBuilt = false;
+  private claimsRevision = -1;
+  private claimsMoved = false;
+  private readonly signalSlots: number[] = [];
+  private readonly signalTiles: number[] = [];
+  private readonly signalShownAspects: number[] = [];
+  /** Glow-sprite slot per signal, -1 when the night glow was not placed. */
+  private readonly signalGlowSlots: number[] = [];
+  /** The neutral lamp-glow texture, tinted per aspect (M13 B5). */
+  private signalGlowTexture: Texture | null = null;
   /** Frame counter, so the deadlock marker blinks without a wall clock. */
   private blink = 0;
 
@@ -795,6 +858,7 @@ export class MapView {
     this.detailPage = makeAtlasPage(detailAtlas, DETAIL_ATLAS_SCALE, 'd');
     this.shadowTexture = makeShadowTexture();
     this.lampTexture = makeLampTexture();
+    this.signalGlowTexture = makeSignalGlowTexture();
     this.headlightCones = makeHeadlightCones();
 
     // The baked Kenney pages load in the background (M13): the game is
@@ -864,6 +928,13 @@ export class MapView {
     this.industries = industries;
     this.builtRevision = -1;
     this.clearChunkCaches();
+    // The shared BlockIndex is sized to ITS map (see the field's note); the
+    // claim set starts empty and rebuilds on the first publish edge.
+    this.blocks = new BlockIndex(map.tileCount);
+    this.claimedBlocks.clear();
+    this.claimsBuilt = false;
+    this.claimsRevision = -1;
+    this.claimsMoved = false;
 
     const start = towns[0];
     if (start !== undefined) this.centreOnTile(start.x, start.y);
@@ -1110,6 +1181,8 @@ export class MapView {
     this.shadowTexture = null;
     this.lampTexture?.destroy(true);
     this.lampTexture = null;
+    this.signalGlowTexture?.destroy(true);
+    this.signalGlowTexture = null;
     if (this.headlightCones !== null) {
       for (const cone of this.headlightCones) cone.texture.destroy(true);
     }
@@ -1299,6 +1372,10 @@ export class MapView {
     // a chunk bake in this frame already draws the current row.
     this.waterRow = waterRowForCounter(this.blink);
 
+    // The claimed-block set of the M13 signal aspects, refreshed BEFORE any
+    // rebuild so freshly placed lamps read current truth (B5).
+    this.maintainSignalClaims(map, generationMoved);
+
     const bounds = this.visibleTileBounds(map.size);
     const changed =
       map.revision !== this.builtRevision ||
@@ -1321,6 +1398,7 @@ export class MapView {
     }
     this.animateWater(map, chunked, abstract);
     this.applyEmissive();
+    this.updateSignalAspects(map);
     this.drawVehicles(map, abstract);
     this.drawOverlay(map);
 
@@ -1525,6 +1603,54 @@ export class MapView {
   }
 
   /**
+   * Rebuild the claimed-block set of the signal aspects (M13 B5) when the
+   * claims can actually have moved: on the publish edge - reservations
+   * change with ticks, never between them - and on a map revision, because
+   * a BlockIndex rebuild renumbers every block and the set is keyed by
+   * block id. Reads the SAME reserved block and the SAME BlockIndex the F3
+   * overlay draws with; a frame inside one tick costs three compares.
+   */
+  private maintainSignalClaims(map: TileMap, generationMoved: boolean): void {
+    if (this.claimsBuilt && !generationMoved && map.revision === this.claimsRevision) return;
+    this.blocks.refresh(map);
+    const reserved = this.reservedSource?.() ?? null;
+    if (reserved === null) return;
+    collectClaimedBlocks(this.blocks, reserved.data, reserved.count, this.claimedBlocks);
+    this.claimsBuilt = true;
+    this.claimsRevision = map.revision;
+    this.claimsMoved = true;
+  }
+
+  /**
+   * Drive the recorded aspect lamps with the current claim truth (M13 B5):
+   * when the claim set moved, every visible signal re-derives its aspect
+   * and - only if it changed - swaps the lamp texture and re-tints its
+   * night glow. The waterSlots device: position, draw order and the post
+   * itself never move, so an aspect change is a texture write and nothing
+   * else.
+   */
+  private updateSignalAspects(map: TileMap): void {
+    if (!this.claimsMoved) return;
+    this.claimsMoved = false;
+    if (this.signalSlots.length === 0) return;
+
+    const page = this.activePage();
+    const atlas = page.atlas;
+    for (let i = 0; i < this.signalSlots.length; i++) {
+      const aspect = signalAspect(map, this.blocks, this.claimedBlocks, this.signalTiles[i]!);
+      if (aspect === this.signalShownAspects[i]) continue;
+      this.signalShownAspects[i] = aspect;
+      this.pool[this.signalSlots[i]!]!.texture = this.frameTexture(
+        page,
+        `sa${aspect}`,
+        atlas.signalAspectFrame(aspect),
+      ).texture;
+      const glowSlot = this.signalGlowSlots[i]!;
+      if (glowSlot >= 0) this.pool[glowSlot]!.tint = SIGNAL_ASPECT_TINTS[aspect]!;
+    }
+  }
+
+  /**
    * Mark a just-placed pool sprite as an emissive glow: additive, ramped by
    * the current intensity, recorded for {@link applyEmissive}. `place`
    * resets blend and alpha on every placement, so a pool sprite that was a
@@ -1683,6 +1809,13 @@ export class MapView {
     this.emissiveSlots.length = 0;
     this.appliedEmissiveAlpha = this.emissiveNow * EMISSIVE_MAX_ALPHA;
 
+    // Fresh signal-aspect bookkeeping (M13 B5): the lamps this rebuild
+    // places are recorded with the aspect they were placed showing.
+    this.signalSlots.length = 0;
+    this.signalTiles.length = 0;
+    this.signalShownAspects.length = 0;
+    this.signalGlowSlots.length = 0;
+
     // Painter's order for an isometric grid runs along the diagonals: every
     // tile with a smaller (x + y) is further away and has to go down first.
     for (let sum = bounds.minX + bounds.minY; sum <= bounds.maxX + bounds.maxY; sum++) {
@@ -1755,6 +1888,20 @@ export class MapView {
                 deck.y,
                 drawOrder(x, y, deckHeight, DrawLayer.Track),
               );
+            }
+            // The wire follows the deck (M13 B5); masts stay off bridges -
+            // a deck has no verge to stand a pole on.
+            if (map.railType[index] === CATENARY_RAIL_TYPE) {
+              for (let direction = 0; direction < 8; direction++) {
+                if ((bits & (1 << direction)) === 0) continue;
+                this.place(
+                  this.take(used++),
+                  this.frameTexture(page, `cw${direction}`, atlas.catenaryWireFrame(direction)),
+                  deck.x,
+                  deck.y,
+                  drawOrder(x, y, deckHeight, DrawLayer.Catenary),
+                );
+              }
             }
           }
           continue;
@@ -1829,16 +1976,61 @@ export class MapView {
               drawOrder(x, y, height, DrawLayer.Track),
             );
           }
+          // Catenary (M13 B5): wire hints over every connected direction
+          // and a mast on every second plain-line tile - electrified rail
+          // only (railType joined the chunk checksum in D-161 for exactly
+          // this art). The mast yields its tile to a signal or waypoint
+          // post: two poles on one tile read as clutter, and the wire says
+          // "electrified" on its own.
+          if (map.railType[index] === CATENARY_RAIL_TYPE) {
+            used = this.placeCatenary(map, index, x, y, world.x, world.y, height, trackBits, used);
+          }
         }
 
-        if (map.signal[index] !== 0) {
+        const packedSignal = map.signal[index]!;
+        if (packedSignal !== 0) {
+          const kind = signalKind(packedSignal);
+          const signalOrder = drawOrder(x, y, height, DrawLayer.Signal);
           this.place(
             this.take(used++),
-            this.frameTexture(page, 'signal', atlas.signalFrame()),
+            this.frameTexture(page, `sg${kind}`, atlas.signalPostFrame(kind)),
             world.x,
             world.y,
-            drawOrder(x, y, height, DrawLayer.Signal),
+            signalOrder,
           );
+          // The aspect lamp (M13 B5): red or green from the claimed-block
+          // set the F3 overlay's own BlockIndex feeds - world art and debug
+          // truth agree by construction. Recorded like the water slots, so
+          // a claim change re-textures exactly these sprites.
+          const aspect = signalAspect(map, this.blocks, this.claimedBlocks, index);
+          this.place(
+            this.take(used++),
+            this.frameTexture(page, `sa${aspect}`, atlas.signalAspectFrame(aspect)),
+            world.x,
+            world.y,
+            signalOrder,
+          );
+          this.signalSlots.push(used - 1);
+          this.signalTiles.push(index);
+          this.signalShownAspects.push(aspect);
+          // At night the LIT aspect joins the emissive pass (the D-172
+          // mechanism): an additive glow over the lit lamp, tinted by the
+          // aspect, alpha driven by the shared ramp.
+          if (this.dayNight && this.signalGlowTexture !== null) {
+            const glow = this.take(used++);
+            glow.texture = this.signalGlowTexture;
+            glow.scale.set(1);
+            glow.tint = SIGNAL_ASPECT_TINTS[aspect]!;
+            glow.zIndex = signalOrder;
+            glow.position.set(
+              world.x - SIGNAL_GLOW_TEX_W / 2,
+              world.y + TILE_H / 2 - SIGNAL_LAMP_LIFT_PX - SIGNAL_GLOW_TEX_H / 2,
+            );
+            this.markEmissive(glow, used - 1);
+            this.signalGlowSlots.push(used - 1);
+          } else {
+            this.signalGlowSlots.push(-1);
+          }
         }
 
         const buildingKind = map.buildingKind[index]!;
@@ -1882,6 +2074,52 @@ export class MapView {
     used = this.placeStations(map, bounds, used);
 
     for (let i = used; i < this.pool.length; i++) this.pool[i]!.visible = false;
+  }
+
+  /**
+   * Catenary over one electrified track tile (M13 B5): a wire hint per
+   * connected direction at the Catenary layer - the one layer above the
+   * vehicles, because the wire hangs over the train - and, where
+   * catenary.ts says so, a mast beside the track. Returns the next free
+   * pool slot, like every placement helper here.
+   */
+  private placeCatenary(
+    map: TileMap,
+    index: number,
+    x: number,
+    y: number,
+    worldX: number,
+    worldY: number,
+    height: number,
+    trackBits: number,
+    used: number,
+  ): number {
+    const page = this.activePage();
+    const atlas = page.atlas;
+    const order = drawOrder(x, y, height, DrawLayer.Catenary);
+    for (let direction = 0; direction < 8; direction++) {
+      if ((trackBits & (1 << direction)) === 0) continue;
+      this.place(
+        this.take(used++),
+        this.frameTexture(page, `cw${direction}`, atlas.catenaryWireFrame(direction)),
+        worldX,
+        worldY,
+        order,
+      );
+    }
+    if (map.signal[index] === 0 && map.waypoint[index] === 0) {
+      const mast = catenaryMastOffset(trackBits, x, y);
+      if (mast !== null) {
+        this.place(
+          this.take(used++),
+          this.frameTexture(page, 'cm', atlas.catenaryMastFrame()),
+          worldX + ((mast[0] - mast[1]) * TILE_W) / 2,
+          worldY + ((mast[0] + mast[1]) * TILE_H) / 2,
+          order,
+        );
+      }
+    }
+    return used;
   }
 
   /**
@@ -2032,6 +2270,14 @@ export class MapView {
     // baked twin instead (M13).
     this.emissiveSlots.length = 0;
     this.appliedEmissiveAlpha = this.emissiveNow * EMISSIVE_MAX_ALPHA;
+    // No aspect lamps at the chunked zooms (M13 B5): the D-165 argument -
+    // a two-pixel lamp on a baked post is noise, and the F3 overlay stays
+    // available. Clearing the records keeps updateSignalAspects off pool
+    // sprites that now belong to the markers below.
+    this.signalSlots.length = 0;
+    this.signalTiles.length = 0;
+    this.signalShownAspects.length = 0;
+    this.signalGlowSlots.length = 0;
     let used = 0;
     if (!abstract) {
       used = this.placeIndustries(map, bounds, used);
@@ -2338,6 +2584,19 @@ export class MapView {
                 drawOrder(x, y, deckHeight, DrawLayer.Track),
               );
             }
+            // The wire follows the deck (M13 B5), exactly as on the live path.
+            if (map.railType[index] === CATENARY_RAIL_TYPE) {
+              for (let direction = 0; direction < 8; direction++) {
+                if ((bits & (1 << direction)) === 0) continue;
+                this.place(
+                  this.bakeTake(used++),
+                  this.frameTexture(page, `cw${direction}`, atlas.catenaryWireFrame(direction)),
+                  deck.x,
+                  deck.y,
+                  drawOrder(x, y, deckHeight, DrawLayer.Catenary),
+                );
+              }
+            }
           }
           continue;
         }
@@ -2411,12 +2670,46 @@ export class MapView {
               drawOrder(x, y, height, DrawLayer.Track),
             );
           }
+          // Catenary in the bake (M13 B5): the same wires and masts as the
+          // live path - rail type is in this chunk's checksum (D-161), so
+          // an electrification dirties exactly the chunks it touched.
+          if (map.railType[index] === CATENARY_RAIL_TYPE) {
+            const catenaryOrder = drawOrder(x, y, height, DrawLayer.Catenary);
+            for (let direction = 0; direction < 8; direction++) {
+              if ((trackBits & (1 << direction)) === 0) continue;
+              this.place(
+                this.bakeTake(used++),
+                this.frameTexture(page, `cw${direction}`, atlas.catenaryWireFrame(direction)),
+                world.x,
+                world.y,
+                catenaryOrder,
+              );
+            }
+            if (map.signal[index] === 0 && map.waypoint[index] === 0) {
+              const mast = catenaryMastOffset(trackBits, x, y);
+              if (mast !== null) {
+                this.place(
+                  this.bakeTake(used++),
+                  this.frameTexture(page, 'cm', atlas.catenaryMastFrame()),
+                  world.x + ((mast[0] - mast[1]) * TILE_W) / 2,
+                  world.y + ((mast[0] + mast[1]) * TILE_H) / 2,
+                  catenaryOrder,
+                );
+              }
+            }
+          }
         }
 
-        if (map.signal[index] !== 0) {
+        const packedSignal = map.signal[index]!;
+        if (packedSignal !== 0) {
+          // The kind silhouette bakes; the aspect lamp does not - claims
+          // are per-tick truth and a baked copy would lie within seconds.
+          // At these zooms a lamp is under two pixels (the D-165 argument);
+          // the F3 overlay stays the overview's truth.
+          const kind = signalKind(packedSignal);
           this.place(
             this.bakeTake(used++),
-            this.frameTexture(page, 'signal', atlas.signalFrame()),
+            this.frameTexture(page, `sg${kind}`, atlas.signalPostFrame(kind)),
             world.x,
             world.y,
             drawOrder(x, y, height, DrawLayer.Signal),
