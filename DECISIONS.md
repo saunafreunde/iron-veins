@@ -41,10 +41,11 @@ no entry below. A number may appear under several topics.
 - **Competitors, AI & tenders:** D-107, D-108, D-109, D-115, D-116, D-121,
   D-122, D-147, D-152, D-153, D-154, D-155, D-156, D-158
 - **Rendering & art:** D-013, D-014, D-033, D-035, D-112, D-117, D-125, D-127,
-  D-136, D-140, D-160, D-161, D-162
+  D-136, D-140, D-160, D-161, D-162, D-163
 - **UI & input:** D-011, D-013, D-015, D-035, D-110, D-113, D-114, D-119,
   D-126, D-148
-- **Performance & measurement:** D-002, D-120, D-135, D-136, D-161, D-162
+- **Performance & measurement:** D-002, D-120, D-135, D-136, D-161, D-162,
+  D-163
 - **Platform, tooling & build:** D-012, D-014, D-015, D-016, D-017, D-029,
   D-030, D-031, D-160
 - **Crash safety:** D-132, D-139
@@ -3778,3 +3779,62 @@ wholesale. Measured p99 1.26 ms for the full 1,500-vehicle block against
 the unchanged 5 ms tripwire (was 0.41 ms before the lerp; the cost is the
 second sample and the pairing, roughly threefold, still a quarter of the
 budget).
+
+## M12 - the stage, stage 3: the 4x detail atlas page (2026-08-07)
+
+### D-163 The top zoom gets its own atlas page, packed by headroom, and every frame carries its own ground line
+
+Zoom 4x was a nearest-neighbour upscale of the 2x atlas - the one zoom
+level 16.2's per-zoom atlases exist for drew at a quarter of its own
+resolution. M12 orders the missing page; this entry records the shape it
+took and the three choices inside it.
+
+**The page cannot repeat the base grid, so it packs by headroom.** The base
+page's uniform cell (one tile wide, three height steps of D-117 headroom,
+one of skirt) redrawn at 4x makes 17 columns of 256 px and 14 rows of
+384 px - 4352 x 5376, over the 4096 px GPU guarantee in BOTH directions,
+and over it by area, so no reflow of uniform cells fits either. What fits
+is the observation that most of the atlas never uses the headroom: terrain
+rises at most one step above its ground line (a raised corner), roads and
+track none at all. The detail page therefore packs SHORT rows (one step of
+headroom) for terrain, road and track, and TALL rows (the full D-117
+headroom) for buildings, industries and the statics - 4096 x 3840 of 4096,
+booked in SPEC2 6.2, with the layout maths pure under
+`tests/unit/terrainAtlas.spec.ts` so the guard that used to be a runtime
+throw on somebody else's machine is a headless test on this one.
+
+**Two row heights mean two ground lines, so `anchorY` moved onto the
+frame.** The page-level anchor was the D-117 fix for one unwritten
+agreement; a packed page would have re-created the same agreement one
+level down ("short rows sit one step under their edge, tall rows three"),
+so every `AtlasFrame` now states where its own ground line is and
+`MapView.place` reads nothing else. The one consumer with a FIXED offset -
+the vehicle path, calibrated against the base cell's geometry - is served
+by construction instead: the tall cells are world-identical to the base
+page's cells (same tile width, same headroom and skirt in world pixels),
+and the test pins that equality, so the vehicle draw code still does not
+know which page it holds. The bake path is pinned to the BASE page
+explicitly: chunks exist only at zooms the base page serves, and a bake
+must not depend on the live zoom.
+
+**The cells are the base drawing code under a 2x transform, which IS a
+native 4x render.** Every coordinate and line width in the atlas drawing
+routines is linear in the page scale, so scaling the canvas context by
+DETAIL_ATLAS_SCALE / ATLAS_SCALE and replaying the same vector calls
+rasterises the identical artwork at the detail resolution - no second
+drawing to keep in sync, no resampling anywhere. Each cell is clipped to
+its frame, because anything painted past a packed frame's edge lands in
+ANOTHER frame's texture. Which page a zoom reads is one pure function,
+`atlasPageForZoom` - detail exactly when the zoom exceeds the base page's
+own resolution - and the two pages share one frame cache under distinct
+key prefixes, with the sprite scale set per placement (change-detected)
+because a zoom flip reuses every pooled sprite for the other page.
+
+The startup cost is measured and guarded: `MapView.attach` times both
+builds and warns on the console past `ATLAS_BUILD_BUDGET_MS` (250 ms, the
+atlas's slice of section 21's 3 s cold start - a generous D-136 multiple).
+Measured 2026-08-07 (Chromium on the reference machine, Ryzen 5 7520U):
+base page 3.3-8.9 ms, detail page 8.5-10.3 ms per build, under 20 ms
+together - the slice is spent to a tenth. Render-only throughout: no sim
+contact, no save bump, no snapshot change; the baked-asset loader stub
+(D-160) and its per-zoom manifest are untouched and stay the M13 door.

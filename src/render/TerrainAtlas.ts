@@ -11,16 +11,28 @@ import { box, gableRoof, sawtoothRoof, shade, windows, type IsoView } from './sh
  * binary art enters the repository. It proposes a build-time bake into PNG
  * atlases; this builds the same artwork at startup into one canvas instead.
  * Same procedural source, but no PNG encoder, no atlas manifest and no build
- * step to keep in sync - and the whole set costs about twenty milliseconds.
+ * step to keep in sync - and the whole set costs tens of milliseconds
+ * (measured and guarded against ATLAS_BUILD_BUDGET_MS at startup).
  * If load time ever matters the identical function can move to build time.
  *
- * The atlas is drawn at twice the zoom-1 size: upscaling looks soft, so the
- * reference is the larger of the two common zoom levels and everything below it
- * is a downscale.
+ * TWO pages, per 16.2's per-zoom atlases: the base page is drawn at twice the
+ * zoom-1 size and serves every zoom up to 2x as a downscale; the detail page
+ * is the same artwork drawn at four times zoom 1, so the top zoom level is a
+ * native rendering rather than a nearest-neighbour upscale. Which page a zoom
+ * reads is `atlasPageForZoom` - a pure function, tested as one.
  */
 
-/** Atlas resolution relative to zoom 1. */
+/** Atlas resolution of the base page relative to zoom 1. */
 export const ATLAS_SCALE = 2;
+
+/**
+ * Atlas resolution of the 4x detail page relative to zoom 1.
+ *
+ * Equal to the top ZOOM_LEVELS step, so at zoom 4 one atlas pixel is one
+ * screen pixel and nothing is resampled - the same rule the chunk textures
+ * follow (D-161).
+ */
+export const DETAIL_ATLAS_SCALE = 4;
 
 const TILE_W = 64 * ATLAS_SCALE;
 const TILE_H = 32 * ATLAS_SCALE;
@@ -94,23 +106,41 @@ const ATLAS_ROWS = TERRAIN_COUNT + 4;
  *
  * The atlas grows whenever a row or a column is added and nothing used to
  * notice; a texture over the limit does not fail loudly, it fails as a blank
- * map on somebody else's machine.
+ * map on somebody else's machine. Exported so the layout guard test holds
+ * BOTH pages against it without needing a canvas.
  */
-const MAX_ATLAS_PX = 4096;
+export const MAX_ATLAS_PX = 4096;
+
+/**
+ * The startup slice the two procedural atlas pages may spend, together.
+ *
+ * SPEC.md section 21 gives the whole cold start 3 s; the atlas is one slice
+ * of that. Measured 2026-08-07 (Ryzen 5 7520U, Chromium): base page ~20 ms,
+ * detail page ~50 ms - the budget is a generous multiple in the D-136 sense,
+ * a tripwire for regressions of multiples, not a promise. `MapView.attach`
+ * measures against it and warns on the console when it is crossed. [ms]
+ */
+export const ATLAS_BUILD_BUDGET_MS = 250;
 
 export interface AtlasFrame {
   readonly x: number;
   readonly y: number;
   readonly width: number;
   readonly height: number;
+  /**
+   * Where the base diamond's north corner sits inside THIS frame, in atlas
+   * pixels from the frame's top edge.
+   *
+   * Per frame rather than per page since the detail page packs rows of two
+   * different heights - a short terrain row and a tall building row do not
+   * share a ground line. The D-117 lesson, one level further down: where the
+   * ground sits is the atlas's business, and it says so on every frame.
+   */
+  readonly anchorY: number;
 }
 
 export interface TerrainAtlas {
   readonly canvas: HTMLCanvasElement;
-  readonly cellWidth: number;
-  readonly cellHeight: number;
-  /** Where the base diamond's north corner sits inside a cell. */
-  readonly anchorY: number;
   terrainFrame(terrain: number, slope: number): AtlasFrame;
   roadFrame(roadBits: number): AtlasFrame;
   buildingFrame(kind: number, level: number): AtlasFrame;
@@ -405,6 +435,25 @@ function drawBox(
   ctx.fill();
 }
 
+/**
+ * The eight generic statics, one table for BOTH pages so they cannot drift:
+ * the base page places them by column, the detail page by key. Heights are
+ * design pixels (multiplied by the page scale); the white ones take the
+ * company colour as a sprite tint, which is why they are drawn white.
+ */
+const BOX_SPRITES = [
+  { key: 'station', column: STATION_COLUMN, widthTiles: 0.8, heightPx: 9, colour: '#ffffff' },
+  { key: 'depot', column: DEPOT_COLUMN, widthTiles: 0.8, heightPx: 16, colour: '#ffffff' },
+  { key: 'vehicle', column: VEHICLE_COLUMN, widthTiles: 0.3, heightPx: 7, colour: '#ffffff' },
+  { key: 'platform', column: PLATFORM_COLUMN, widthTiles: 0.9, heightPx: 5, colour: '#ffffff' },
+  { key: 'railDepot', column: RAIL_DEPOT_COLUMN, widthTiles: 0.9, heightPx: 20, colour: '#ffffff' },
+  { key: 'train', column: TRAIN_COLUMN, widthTiles: 0.55, heightPx: 6, colour: '#ffffff' },
+  // The deck is a wide, very shallow slab; the ground it spans shows around it.
+  { key: 'bridge', column: BRIDGE_COLUMN, widthTiles: 0.98, heightPx: 3, colour: '#8e8a84' },
+  // A thin, tall post: narrow enough not to hide the track it stands on.
+  { key: 'signal', column: SIGNAL_COLUMN, widthTiles: 0.12, heightPx: 14, colour: '#d8d4cc' },
+] as const;
+
 /** Tile-space offsets of the eight track directions, clockwise from east. */
 const TRACK_DELTA: ReadonlyArray<readonly [number, number]> = [
   [1, 0],
@@ -474,11 +523,21 @@ function drawTrackCell(
   }
 }
 
-/** Build the whole atlas. Call once at startup. */
+/**
+ * Dimensions of the base page, as a pure function so the guard test can hold
+ * them against MAX_ATLAS_PX (and against the ledger's booked 2176x2688,
+ * SPEC2 6.2) without a canvas.
+ */
+export function baseAtlasSize(): { width: number; height: number } {
+  return { width: ATLAS_COLUMNS * CELL_W, height: ATLAS_ROWS * CELL_H };
+}
+
+/** Build the base atlas page. Call once at startup. */
 export function buildTerrainAtlas(): TerrainAtlas {
   const canvas = document.createElement('canvas');
-  canvas.width = ATLAS_COLUMNS * CELL_W;
-  canvas.height = ATLAS_ROWS * CELL_H;
+  const size = baseAtlasSize();
+  canvas.width = size.width;
+  canvas.height = size.height;
 
   // A texture over the limit does not fail loudly - it fails as a blank map on
   // somebody else's machine, months later.
@@ -525,18 +584,16 @@ export function buildTerrainAtlas(): TerrainAtlas {
       { px: ATLAS_SCALE },
     );
   }
-  // Generic blocks; the concrete colour is applied as a sprite tint, which is
-  // why they are drawn white.
-  drawBox(ctx, STATION_COLUMN * CELL_W, BUILDING_ROW * CELL_H, 0.8, 9 * ATLAS_SCALE, '#ffffff');
-  drawBox(ctx, DEPOT_COLUMN * CELL_W, BUILDING_ROW * CELL_H, 0.8, 16 * ATLAS_SCALE, '#ffffff');
-  drawBox(ctx, VEHICLE_COLUMN * CELL_W, BUILDING_ROW * CELL_H, 0.3, 7 * ATLAS_SCALE, '#ffffff');
-  drawBox(ctx, PLATFORM_COLUMN * CELL_W, BUILDING_ROW * CELL_H, 0.9, 5 * ATLAS_SCALE, '#ffffff');
-  drawBox(ctx, RAIL_DEPOT_COLUMN * CELL_W, BUILDING_ROW * CELL_H, 0.9, 20 * ATLAS_SCALE, '#ffffff');
-  drawBox(ctx, TRAIN_COLUMN * CELL_W, BUILDING_ROW * CELL_H, 0.55, 6 * ATLAS_SCALE, '#ffffff');
-  // The deck is a wide, very shallow slab; the ground it spans shows around it.
-  drawBox(ctx, BRIDGE_COLUMN * CELL_W, BUILDING_ROW * CELL_H, 0.98, 3 * ATLAS_SCALE, '#8e8a84');
-  // A thin, tall post: narrow enough not to hide the track it stands on.
-  drawBox(ctx, SIGNAL_COLUMN * CELL_W, BUILDING_ROW * CELL_H, 0.12, 14 * ATLAS_SCALE, '#d8d4cc');
+  for (const spec of BOX_SPRITES) {
+    drawBox(
+      ctx,
+      spec.column * CELL_W,
+      BUILDING_ROW * CELL_H,
+      spec.widthTiles,
+      spec.heightPx * ATLAS_SCALE,
+      spec.colour,
+    );
+  }
 
   for (let direction = 0; direction < 8; direction++) {
     drawTrackCell(ctx, direction * CELL_W, TRACK_ROW * CELL_H, direction);
@@ -547,13 +604,11 @@ export function buildTerrainAtlas(): TerrainAtlas {
     y: row * CELL_H,
     width: CELL_W,
     height: CELL_H,
+    anchorY: CELL_TOP,
   });
 
   return {
     canvas,
-    cellWidth: CELL_W,
-    cellHeight: CELL_H,
-    anchorY: CELL_TOP,
     terrainFrame: (terrain, slope) => frame(slope, terrain),
     roadFrame: (roadBits) => frame(roadBits & 0x0f, ROAD_ROW),
     buildingFrame: (kind, level) =>
@@ -569,5 +624,236 @@ export function buildTerrainAtlas(): TerrainAtlas {
     bridgeFrame: () => frame(BRIDGE_COLUMN, BUILDING_ROW),
     signalFrame: () => frame(SIGNAL_COLUMN, BUILDING_ROW),
     trackFrame: (direction) => frame(direction & 7, TRACK_ROW),
+  };
+}
+
+// ------------------------------------------------------------ the 4x page
+
+/**
+ * Which atlas page a zoom level reads (SPEC.md 16.2 per-zoom atlases).
+ *
+ * Any zoom past the base page's own resolution would be a nearest-neighbour
+ * upscale, which is exactly what the detail page exists to replace; every
+ * other zoom is a downscale of the base page. Pure, so the selection is a
+ * unit test rather than a screenshot.
+ */
+export type AtlasPageId = 'base' | 'detail';
+
+export function atlasPageForZoom(zoom: number): AtlasPageId {
+  return zoom > ATLAS_SCALE ? 'detail' : 'base';
+}
+
+const DETAIL_TILE_W = 64 * DETAIL_ATLAS_SCALE;
+const DETAIL_TILE_H = 32 * DETAIL_ATLAS_SCALE;
+const DETAIL_STEP = 16 * DETAIL_ATLAS_SCALE;
+
+/**
+ * The detail page cannot repeat the base page's uniform grid: 17 columns of
+ * 256 px are 4352 px and 14 rows of 384 px are 5376 - both over MAX_ATLAS_PX.
+ * It packs by headroom instead. SHORT rows hold what never rises more than
+ * one height step above the ground line (terrain's raised corners, roads,
+ * track); TALL rows keep the full D-117 headroom for buildings, industries
+ * and the statics. Both keep the one-step skirt.
+ *
+ * The tall cells are deliberately WORLD-IDENTICAL to the base page's cells
+ * (3 + 1 height steps around the diamond, one tile wide), so every consumer
+ * that placed a base cell - the vehicle path's fixed offset above all -
+ * places a detail cell without knowing which page it holds. A test pins
+ * that equality.
+ */
+const DETAIL_SHORT_ANCHOR = DETAIL_STEP;
+const DETAIL_SHORT_H = DETAIL_TILE_H + 2 * DETAIL_STEP;
+const DETAIL_TALL_ANCHOR = DETAIL_STEP * CELL_HEADROOM_STEPS;
+const DETAIL_TALL_H = DETAIL_TILE_H + DETAIL_STEP * (CELL_HEADROOM_STEPS + CELL_SKIRT_STEPS);
+const DETAIL_COLUMNS = Math.floor(MAX_ATLAS_PX / DETAIL_TILE_W);
+
+/** One cell of the detail page: its frame key, row class and how to draw it. */
+interface DetailCellSpec {
+  readonly key: string;
+  readonly tall: boolean;
+  /**
+   * Draws the cell in BASE-PAGE cell space (origin at the cell's top-left,
+   * ground anchor at CELL_TOP): the builder scales the context by
+   * DETAIL_ATLAS_SCALE / ATLAS_SCALE, and because every coordinate and line
+   * width in the drawing code is linear in the scale, the result is exactly
+   * what redrawing at the larger scale would produce - rasterised at the
+   * detail resolution, not resampled.
+   */
+  readonly draw: (ctx: CanvasRenderingContext2D) => void;
+}
+
+/** Every cell of the detail page, in layout order. Pure until drawn. */
+function detailCellSpecs(): readonly DetailCellSpec[] {
+  const specs: DetailCellSpec[] = [];
+
+  for (let terrain = 0; terrain < TERRAIN_COUNT; terrain++) {
+    for (let slope = 0; slope < SLOPE_COUNT; slope++) {
+      specs.push({
+        key: `t${terrain}:${slope}`,
+        tall: false,
+        draw: (ctx) => drawTerrainCell(ctx, 0, 0, terrain, slope),
+      });
+    }
+  }
+
+  for (let roadBits = 0; roadBits < 16; roadBits++) {
+    specs.push({
+      key: `r${roadBits}`,
+      tall: false,
+      draw: (ctx) => drawRoadCell(ctx, 0, 0, roadBits),
+    });
+  }
+
+  for (let direction = 0; direction < 8; direction++) {
+    specs.push({
+      key: `k${direction}`,
+      tall: false,
+      draw: (ctx) => drawTrackCell(ctx, 0, 0, direction),
+    });
+  }
+
+  for (let type = 0; type < INDUSTRY_TYPE_COUNT; type++) {
+    specs.push({
+      key: `i${type}`,
+      tall: true,
+      draw: (ctx) =>
+        drawIndustry(
+          ctx,
+          {
+            cx: TILE_W / 2,
+            cy: CELL_TOP + TILE_H / 2,
+            halfW: TILE_W / 2,
+            halfH: TILE_H / 2,
+          },
+          type,
+          { px: ATLAS_SCALE },
+        ),
+    });
+  }
+
+  for (let variant = 0; variant < BUILDING_VARIANTS; variant++) {
+    const kind = variant % 3;
+    const level = (variant / 3) | 0;
+    specs.push({
+      key: `b${variant}`,
+      tall: true,
+      draw: (ctx) => drawTownBuilding(ctx, 0, 0, kind, level),
+    });
+  }
+
+  for (const spec of BOX_SPRITES) {
+    specs.push({
+      key: spec.key,
+      tall: true,
+      draw: (ctx) =>
+        drawBox(ctx, 0, 0, spec.widthTiles, spec.heightPx * ATLAS_SCALE, spec.colour),
+    });
+  }
+
+  return specs;
+}
+
+export interface DetailAtlasPlan {
+  readonly width: number;
+  readonly height: number;
+  readonly frames: ReadonlyMap<string, AtlasFrame>;
+}
+
+/**
+ * Lay the detail cells out into rows, flowing left to right and wrapping at
+ * DETAIL_COLUMNS; a change of row class (short/tall) always starts a new row,
+ * so a row has exactly one height and one ground line. Pure and cheap, so
+ * the layout guard test holds the real placement, not a copy of its maths.
+ */
+export function planDetailAtlas(): DetailAtlasPlan {
+  const frames = new Map<string, AtlasFrame>();
+  let x = 0;
+  let y = 0;
+  let width = 0;
+  let rowTall: boolean | null = null;
+  let rowHeight = 0;
+
+  for (const spec of detailCellSpecs()) {
+    if (rowTall === null || spec.tall !== rowTall || x >= DETAIL_COLUMNS * DETAIL_TILE_W) {
+      if (rowTall !== null) y += rowHeight;
+      x = 0;
+      rowTall = spec.tall;
+      rowHeight = spec.tall ? DETAIL_TALL_H : DETAIL_SHORT_H;
+    }
+    frames.set(spec.key, {
+      x,
+      y,
+      width: DETAIL_TILE_W,
+      height: rowHeight,
+      anchorY: spec.tall ? DETAIL_TALL_ANCHOR : DETAIL_SHORT_ANCHOR,
+    });
+    x += DETAIL_TILE_W;
+    if (x > width) width = x;
+  }
+  if (rowTall !== null) y += rowHeight;
+
+  return { width, height: y, frames };
+}
+
+/** Build the 4x detail page. Call once at startup, after the base page. */
+export function buildDetailAtlas(): TerrainAtlas {
+  const plan = planDetailAtlas();
+
+  const canvas = document.createElement('canvas');
+  canvas.width = plan.width;
+  canvas.height = plan.height;
+
+  if (canvas.width > MAX_ATLAS_PX || canvas.height > MAX_ATLAS_PX) {
+    throw new Error(
+      `Detail atlas is ${canvas.width}x${canvas.height}, over the ${MAX_ATLAS_PX} px ` +
+        'a low-end GPU is guaranteed to accept. Split a row or lower DETAIL_ATLAS_SCALE.',
+    );
+  }
+
+  const ctx = canvas.getContext('2d');
+  if (ctx === null) {
+    throw new Error('2D canvas context unavailable - cannot build the detail atlas.');
+  }
+  ctx.imageSmoothingEnabled = false;
+
+  const factor = DETAIL_ATLAS_SCALE / ATLAS_SCALE;
+  for (const spec of detailCellSpecs()) {
+    const cell = plan.frames.get(spec.key)!;
+    ctx.save();
+    // Clip to the frame: anything a cell painted past its edge would land in
+    // ANOTHER frame's texture, which is corruption, not decoration.
+    ctx.beginPath();
+    ctx.rect(cell.x, cell.y, cell.width, cell.height);
+    ctx.clip();
+    // The draw routines place the ground anchor at CELL_TOP in base cell
+    // space; shift so it lands on THIS row's anchor after scaling.
+    ctx.translate(cell.x, cell.y + cell.anchorY - factor * CELL_TOP);
+    ctx.scale(factor, factor);
+    spec.draw(ctx);
+    ctx.restore();
+  }
+
+  const lookup = (key: string): AtlasFrame => {
+    const cell = plan.frames.get(key);
+    if (cell === undefined) throw new Error(`detail atlas has no frame '${key}'`);
+    return cell;
+  };
+
+  return {
+    canvas,
+    terrainFrame: (terrain, slope) => lookup(`t${terrain}:${slope}`),
+    roadFrame: (roadBits) => lookup(`r${roadBits & 0x0f}`),
+    buildingFrame: (kind, level) =>
+      lookup(`b${Math.min(2, Math.max(0, kind - 1)) + (level >= 2 ? 3 : 0)}`),
+    industryFrame: (type) => lookup(`i${type >= 0 && type < INDUSTRY_TYPE_COUNT ? type : 0}`),
+    stationFrame: () => lookup('station'),
+    depotFrame: () => lookup('depot'),
+    platformFrame: () => lookup('platform'),
+    railDepotFrame: () => lookup('railDepot'),
+    vehicleFrame: () => lookup('vehicle'),
+    trainFrame: () => lookup('train'),
+    bridgeFrame: () => lookup('bridge'),
+    signalFrame: () => lookup('signal'),
+    trackFrame: (direction) => lookup(`k${direction & 7}`),
   };
 }

@@ -48,7 +48,16 @@ export interface VehicleAudioInput {
   throttle: number;
   distance: number;
 }
-import { ATLAS_SCALE, buildTerrainAtlas, type AtlasFrame, type TerrainAtlas } from './TerrainAtlas';
+import {
+  ATLAS_BUILD_BUDGET_MS,
+  ATLAS_SCALE,
+  atlasPageForZoom,
+  buildDetailAtlas,
+  buildTerrainAtlas,
+  DETAIL_ATLAS_SCALE,
+  type AtlasFrame,
+  type TerrainAtlas,
+} from './TerrainAtlas';
 import {
   CHUNK_TILES,
   chunkAabb,
@@ -160,6 +169,13 @@ function moduleFrame(atlas: TerrainAtlas, kind: number): AtlasFrame {
   return atlas.stationFrame();
 }
 
+/** Wrap a built atlas page for the GPU; nearest, because pixels are the look. */
+function makeAtlasPage(atlas: TerrainAtlas, scale: number, keyPrefix: string): AtlasPage {
+  const texture = Texture.from(atlas.canvas);
+  texture.source.scaleMode = 'nearest';
+  return { atlas, texture, invScale: 1 / scale, keyPrefix };
+}
+
 export interface TileInfo {
   readonly x: number;
   readonly y: number;
@@ -179,6 +195,34 @@ export interface TileInfo {
  * atlas budget at the ledger's zero (SPEC2 6.2). Indexed by WaypointKind.
  */
 const WAYPOINT_TINTS: readonly number[] = [0xffffff, 0x4d8fe0, 0xe0564d, 0xe0a34d];
+
+/**
+ * One procedural atlas page (SPEC.md 16.2 per-zoom atlases): its artwork on
+ * the GPU plus the two numbers every placement needs - the sprite scale that
+ * maps its atlas pixels to world pixels, and a cache prefix so the two pages'
+ * frames never collide in the texture cache.
+ */
+interface AtlasPage {
+  readonly atlas: TerrainAtlas;
+  readonly texture: Texture;
+  /** World px per atlas px: 1 / the scale the page is drawn at. */
+  readonly invScale: number;
+  /** Frame-cache key prefix, unique per page. */
+  readonly keyPrefix: string;
+}
+
+/**
+ * A cached atlas frame, ready to place: its texture plus the world-space
+ * placement facts. `anchorPx` is the D-117 ground line of THIS frame - per
+ * frame, because the detail page packs rows of two heights.
+ */
+interface FrameHandle {
+  readonly texture: Texture;
+  /** Ground line inside the frame. [world px] */
+  readonly anchorPx: number;
+  /** Sprite scale mapping the page's atlas px to world px. */
+  readonly invScale: number;
+}
 
 /** One baked chunk: its texture and the checksum of what was baked into it. */
 interface ChunkEntry {
@@ -238,11 +282,11 @@ export class MapView {
   /** Owner per drawn vehicle this frame, parallel to `vehicleScreen`. */
   private readonly vehicleOwners: number[] = [];
 
-  private atlas: TerrainAtlas | null = null;
-  /** Ground line inside an atlas cell, in world pixels. */
-  private atlasAnchorPx = HEIGHT_PX;
-  private atlasTexture: Texture | null = null;
-  private readonly frameCache = new Map<string, Texture>();
+  /** The base page (drawn at 2x, serves zooms up to 2x as a downscale). */
+  private basePage: AtlasPage | null = null;
+  /** The 4x detail page for the top zoom level (16.2 per-zoom atlases). */
+  private detailPage: AtlasPage | null = null;
+  private readonly frameCache = new Map<string, FrameHandle>();
 
   private map: TileMap | null = null;
   private towns: readonly TownMarker[] = [];
@@ -343,12 +387,25 @@ export class MapView {
     this.live = true;
     container.appendChild(this.app.canvas);
 
-    this.atlas = buildTerrainAtlas();
-    // The atlas is drawn at ATLAS_SCALE; its anchor is in atlas pixels and
-    // every sprite is scaled down by the same factor.
-    this.atlasAnchorPx = this.atlas.anchorY / ATLAS_SCALE;
-    this.atlasTexture = Texture.from(this.atlas.canvas);
-    this.atlasTexture.source.scaleMode = 'nearest';
+    // Both procedural pages are built up front - the detail page must not
+    // stall the first zoom to 4x - and timed against their slice of the
+    // section-21 cold-start budget. A wall clock is fine here: this is a
+    // startup measurement, not world animation (Fehlerkatalog 39).
+    const atlasStart = performance.now();
+    const baseAtlas = buildTerrainAtlas();
+    const baseMs = performance.now() - atlasStart;
+    const detailStart = performance.now();
+    const detailAtlas = buildDetailAtlas();
+    const detailMs = performance.now() - detailStart;
+    if (baseMs + detailMs > ATLAS_BUILD_BUDGET_MS) {
+      console.warn(
+        `MapView: procedural atlas pages took ${(baseMs + detailMs).toFixed(1)} ms ` +
+          `(base ${baseMs.toFixed(1)}, detail ${detailMs.toFixed(1)}) - over the ` +
+          `${ATLAS_BUILD_BUDGET_MS} ms startup slice of SPEC.md section 21`,
+      );
+    }
+    this.basePage = makeAtlasPage(baseAtlas, ATLAS_SCALE, 'b');
+    this.detailPage = makeAtlasPage(detailAtlas, DETAIL_ATLAS_SCALE, 'd');
 
     // One sorted container for tiles AND vehicles: correct occlusion needs the
     // vehicle sprites interleaved into the tile sequence by their drawOrder
@@ -710,23 +767,36 @@ export class MapView {
     };
   }
 
-  private frameTexture(key: string, frame: AtlasFrame): Texture {
-    const cached = this.frameCache.get(key);
+  /**
+   * The page the current zoom draws from: the 4x detail page at the top zoom
+   * level, the base page everywhere else - including every chunked zoom, so
+   * the bake path and the live path can never disagree about a frame.
+   */
+  private activePage(): AtlasPage {
+    return atlasPageForZoom(this.zoom) === 'detail' ? this.detailPage! : this.basePage!;
+  }
+
+  private frameTexture(page: AtlasPage, key: string, frame: AtlasFrame): FrameHandle {
+    const cacheKey = page.keyPrefix + key;
+    const cached = this.frameCache.get(cacheKey);
     if (cached !== undefined) return cached;
 
-    const texture = new Texture({
-      source: this.atlasTexture!.source,
-      frame: new Rectangle(frame.x, frame.y, frame.width, frame.height),
-    });
-    this.frameCache.set(key, texture);
-    return texture;
+    const handle: FrameHandle = {
+      texture: new Texture({
+        source: page.texture.source,
+        frame: new Rectangle(frame.x, frame.y, frame.width, frame.height),
+      }),
+      anchorPx: frame.anchorY * page.invScale,
+      invScale: page.invScale,
+    };
+    this.frameCache.set(cacheKey, handle);
+    return handle;
   }
 
   private take(index: number): Sprite {
     let sprite = this.pool[index];
     if (sprite === undefined) {
       sprite = new Sprite();
-      sprite.scale.set(1 / ATLAS_SCALE);
       this.pool.push(sprite);
       this.tiles.addChild(sprite);
     }
@@ -736,12 +806,17 @@ export class MapView {
 
   private place(
     sprite: Sprite,
-    texture: Texture,
+    handle: FrameHandle,
     worldX: number,
     worldY: number,
     zIndex: number,
   ): void {
-    sprite.texture = texture;
+    sprite.texture = handle.texture;
+    // Scale per placement, not per pool: the pages differ (1/2 vs 1/4) and a
+    // zoom flip reuses every pooled sprite for the other page. Pixi's
+    // ObservablePoint setter is change-detected, so a rebuild inside one page
+    // dirties nothing here.
+    sprite.scale.set(handle.invScale);
     sprite.tint = 0xffffff;
     // The drawOrder key of section 16.1. Insertion already runs along the
     // diagonals, but only the key orders heights within a diagonal and sorts
@@ -749,17 +824,19 @@ export class MapView {
     // rebuild that keeps a sprite's key costs no sort.
     sprite.zIndex = zIndex;
     // Where the ground sits inside the cell is the ATLAS's business, and it
-    // says so through `anchorY`. Assuming one height step here was an unwritten
+    // says so through `anchorY` - per FRAME since the detail page packs rows
+    // of two heights. Assuming one height step here was an unwritten
     // agreement between two files, and it broke the moment the atlas grew
     // headroom for a chimney.
-    sprite.position.set(worldX - TILE_W / 2, worldY - this.atlasAnchorPx);
+    sprite.position.set(worldX - TILE_W / 2, worldY - handle.anchorPx);
   }
 
   private rebuild(
     map: TileMap,
     bounds: { minX: number; minY: number; maxX: number; maxY: number },
   ): void {
-    const atlas = this.atlas!;
+    const page = this.activePage();
+    const atlas = page.atlas;
     const detailed = this.zoom >= DETAIL_ZOOM_MIN;
     let used = 0;
 
@@ -779,7 +856,7 @@ export class MapView {
         const slope = map.slopeAt(x, y);
         this.place(
           this.take(used++),
-          this.frameTexture(`t${terrain}:${slope}`, atlas.terrainFrame(terrain, slope)),
+          this.frameTexture(page, `t${terrain}:${slope}`, atlas.terrainFrame(terrain, slope)),
           world.x,
           world.y,
           drawOrder(x, y, height, DrawLayer.Ground),
@@ -795,7 +872,7 @@ export class MapView {
             const deck = tileToWorld(x, y, deckHeight);
             this.place(
               this.take(used++),
-              this.frameTexture('bridge', atlas.bridgeFrame()),
+              this.frameTexture(page, 'bridge', atlas.bridgeFrame()),
               deck.x,
               deck.y,
               // The deck is the ground of its own level, and its track sits on
@@ -808,7 +885,7 @@ export class MapView {
               if ((bits & (1 << direction)) === 0) continue;
               this.place(
                 this.take(used++),
-                this.frameTexture(`k${direction}`, atlas.trackFrame(direction)),
+                this.frameTexture(page, `k${direction}`, atlas.trackFrame(direction)),
                 deck.x,
                 deck.y,
                 drawOrder(x, y, deckHeight, DrawLayer.Track),
@@ -824,7 +901,7 @@ export class MapView {
           const marker = this.take(used++);
           this.place(
             marker,
-            this.frameTexture('signal', atlas.signalFrame()),
+            this.frameTexture(page, 'signal', atlas.signalFrame()),
             world.x,
             world.y,
             drawOrder(x, y, height, DrawLayer.Signal),
@@ -838,7 +915,7 @@ export class MapView {
         if (roadBits !== 0) {
           this.place(
             this.take(used++),
-            this.frameTexture(`r${roadBits}`, atlas.roadFrame(roadBits)),
+            this.frameTexture(page, `r${roadBits}`, atlas.roadFrame(roadBits)),
             world.x,
             world.y,
             drawOrder(x, y, height, DrawLayer.Road),
@@ -852,7 +929,7 @@ export class MapView {
             if ((trackBits & (1 << direction)) === 0) continue;
             this.place(
               this.take(used++),
-              this.frameTexture(`k${direction}`, atlas.trackFrame(direction)),
+              this.frameTexture(page, `k${direction}`, atlas.trackFrame(direction)),
               world.x,
               world.y,
               drawOrder(x, y, height, DrawLayer.Track),
@@ -863,7 +940,7 @@ export class MapView {
         if (map.signal[index] !== 0) {
           this.place(
             this.take(used++),
-            this.frameTexture('signal', atlas.signalFrame()),
+            this.frameTexture(page, 'signal', atlas.signalFrame()),
             world.x,
             world.y,
             drawOrder(x, y, height, DrawLayer.Signal),
@@ -876,6 +953,7 @@ export class MapView {
           this.place(
             this.take(used++),
             this.frameTexture(
+              page,
               `b${buildingKind}:${level}`,
               atlas.buildingFrame(buildingKind, level),
             ),
@@ -907,7 +985,8 @@ export class MapView {
     bounds: { minX: number; minY: number; maxX: number; maxY: number },
     used: number,
   ): number {
-    const atlas = this.atlas!;
+    const page = this.activePage();
+    const atlas = page.atlas;
     for (const industry of this.industries) {
       if (
         industry.x < bounds.minX ||
@@ -925,7 +1004,7 @@ export class MapView {
       // shade of whatever the tint was.
       this.place(
         sprite,
-        this.frameTexture(`i${industry.type}`, atlas.industryFrame(industry.type)),
+        this.frameTexture(page, `i${industry.type}`, atlas.industryFrame(industry.type)),
         world.x,
         world.y,
         drawOrder(
@@ -951,7 +1030,8 @@ export class MapView {
     bounds: { minX: number; minY: number; maxX: number; maxY: number },
     used: number,
   ): number {
-    const atlas = this.atlas!;
+    const page = this.activePage();
+    const atlas = page.atlas;
     for (const station of this.stations) {
       for (const module of station.modules) {
         if (
@@ -967,7 +1047,7 @@ export class MapView {
         const key = MODULE_SPRITE_KEYS[module.kind] ?? 'station';
         this.place(
           sprite,
-          this.frameTexture(key, moduleFrame(atlas, module.kind)),
+          this.frameTexture(page, key, moduleFrame(atlas, module.kind)),
           world.x,
           world.y,
           drawOrder(module.x, module.y, map.baseHeight(module.x, module.y), DrawLayer.Station),
@@ -1164,7 +1244,10 @@ export class MapView {
     recycled: RenderTexture | undefined,
     scale: number,
   ): ChunkEntry {
-    const atlas = this.atlas!;
+    // Always the BASE page: chunks exist only at zooms the base page serves,
+    // and pinning it here keeps a bake from ever depending on the live zoom.
+    const page = this.basePage!;
+    const atlas = page.atlas;
     const aabb = chunkAabb(chunkX, chunkY);
     const texture =
       recycled ??
@@ -1197,7 +1280,7 @@ export class MapView {
         const slope = map.slopeAt(x, y);
         this.place(
           this.bakeTake(used++),
-          this.frameTexture(`t${terrain}:${slope}`, atlas.terrainFrame(terrain, slope)),
+          this.frameTexture(page, `t${terrain}:${slope}`, atlas.terrainFrame(terrain, slope)),
           world.x,
           world.y,
           drawOrder(x, y, height, DrawLayer.Ground),
@@ -1212,7 +1295,7 @@ export class MapView {
             const deck = tileToWorld(x, y, deckHeight);
             this.place(
               this.bakeTake(used++),
-              this.frameTexture('bridge', atlas.bridgeFrame()),
+              this.frameTexture(page, 'bridge', atlas.bridgeFrame()),
               deck.x,
               deck.y,
               drawOrder(x, y, deckHeight, DrawLayer.Ground),
@@ -1222,7 +1305,7 @@ export class MapView {
               if ((bits & (1 << direction)) === 0) continue;
               this.place(
                 this.bakeTake(used++),
-                this.frameTexture(`k${direction}`, atlas.trackFrame(direction)),
+                this.frameTexture(page, `k${direction}`, atlas.trackFrame(direction)),
                 deck.x,
                 deck.y,
                 drawOrder(x, y, deckHeight, DrawLayer.Track),
@@ -1236,7 +1319,7 @@ export class MapView {
           const marker = this.bakeTake(used++);
           this.place(
             marker,
-            this.frameTexture('signal', atlas.signalFrame()),
+            this.frameTexture(page, 'signal', atlas.signalFrame()),
             world.x,
             world.y,
             drawOrder(x, y, height, DrawLayer.Signal),
@@ -1250,7 +1333,7 @@ export class MapView {
         if (roadBits !== 0) {
           this.place(
             this.bakeTake(used++),
-            this.frameTexture(`r${roadBits}`, atlas.roadFrame(roadBits)),
+            this.frameTexture(page, `r${roadBits}`, atlas.roadFrame(roadBits)),
             world.x,
             world.y,
             drawOrder(x, y, height, DrawLayer.Road),
@@ -1263,7 +1346,7 @@ export class MapView {
             if ((trackBits & (1 << direction)) === 0) continue;
             this.place(
               this.bakeTake(used++),
-              this.frameTexture(`k${direction}`, atlas.trackFrame(direction)),
+              this.frameTexture(page, `k${direction}`, atlas.trackFrame(direction)),
               world.x,
               world.y,
               drawOrder(x, y, height, DrawLayer.Track),
@@ -1274,7 +1357,7 @@ export class MapView {
         if (map.signal[index] !== 0) {
           this.place(
             this.bakeTake(used++),
-            this.frameTexture('signal', atlas.signalFrame()),
+            this.frameTexture(page, 'signal', atlas.signalFrame()),
             world.x,
             world.y,
             drawOrder(x, y, height, DrawLayer.Signal),
@@ -1286,7 +1369,7 @@ export class MapView {
           const level = map.buildingLevel[index]!;
           this.place(
             this.bakeTake(used++),
-            this.frameTexture(`b${buildingKind}:${level}`, atlas.buildingFrame(buildingKind, level)),
+            this.frameTexture(page, `b${buildingKind}:${level}`, atlas.buildingFrame(buildingKind, level)),
             world.x,
             world.y,
             drawOrder(x, y, height, DrawLayer.Building),
@@ -1312,7 +1395,6 @@ export class MapView {
     let sprite = this.bakePool[index];
     if (sprite === undefined) {
       sprite = new Sprite();
-      sprite.scale.set(1 / ATLAS_SCALE);
       this.bakePool.push(sprite);
       this.bakeRoot.addChild(sprite);
     }
@@ -1405,9 +1487,10 @@ export class MapView {
    * hit-test arrays, so clicking a dot still selects the vehicle.
    */
   private drawVehicles(map: TileMap, abstract: boolean): void {
-    const atlas = this.atlas;
     const interp = this.interpolator;
-    if (atlas === null || !interp.hasFrame) return;
+    if (this.basePage === null || !interp.hasFrame) return;
+    const page = this.activePage();
+    const atlas = page.atlas;
 
     const data = interp.data;
     const count = interp.count;
@@ -1489,8 +1572,7 @@ export class MapView {
       if (!abstract) {
         let sprite = this.vehicleSprites[i];
         if (sprite === undefined) {
-          sprite = new Sprite(this.frameTexture('vehicle', atlas.vehicleFrame()));
-          sprite.scale.set(1 / ATLAS_SCALE);
+          sprite = new Sprite();
           this.vehicleSprites.push(sprite);
           // Into the SAME sorted container as the tiles: the drawOrder key is
           // what lets a hill in front of a train draw over it (section 16.1).
@@ -1498,17 +1580,24 @@ export class MapView {
         }
 
         // A sprite is reused for whatever vehicle lands in its slot, so the
-        // texture is set every frame rather than once at creation.
-        sprite.texture =
+        // texture is set every frame rather than once at creation - and the
+        // scale with it, because a zoom flip swaps the atlas page under the
+        // same sprite. Both setters are change-detected by Pixi.
+        const handle =
           kind === TRAIN_KIND
-            ? this.frameTexture('train', atlas.trainFrame())
-            : this.frameTexture('vehicle', atlas.vehicleFrame());
+            ? this.frameTexture(page, 'train', atlas.trainFrame())
+            : this.frameTexture(page, 'vehicle', atlas.vehicleFrame());
+        sprite.texture = handle.texture;
+        sprite.scale.set(handle.invScale);
         sprite.visible = true;
         // Every company's own colour, so a competitor's train is recognisable
         // as one at a glance rather than only in a list.
         sprite.tint = owner === 0 ? this.companyTint : (COMPANY_TINTS[owner] ?? this.companyTint);
 
         sprite.zIndex = vehicleDrawOrder(fromX, fromY, fromHeight, toX, toY, toHeight, progress);
+        // The fixed one-step offset assumes the vehicle cell's world geometry;
+        // the detail page's tall cells are world-identical to the base page's
+        // by construction (pinned in tests/unit/terrainAtlas.spec.ts).
         sprite.position.set(worldX - TILE_W / 2, worldY - HEIGHT_PX);
       }
 
