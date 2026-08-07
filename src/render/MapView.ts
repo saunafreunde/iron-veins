@@ -133,10 +133,20 @@ import {
   FACING_NONE,
   facingFromDelta,
   facingFromMovement,
+  VEHICLE_FACING_DELTAS,
   vehicleVariantFor,
   type VehicleFacingCell,
   type VehicleZoomIndex,
 } from './vehicleArt';
+import {
+  BreadcrumbRing,
+  consistFollowerDistances,
+  consistKnown,
+  MAX_CONSIST_FOLLOWERS,
+  placeConsist,
+  sameConsist,
+  type ConsistPlacement,
+} from './consistArt';
 import {
   cullLabels,
   LABEL_FONT_BASE_PX,
@@ -346,6 +356,23 @@ interface BakedVehicleHandle {
   readonly widthPx: number;
   /** Sprite scale mapping the baked page's pixels to world px. */
   readonly invScale: number;
+}
+
+/**
+ * Everything the renderer keeps per multi-unit train (SPEC2 M13, E-05): the
+ * composition from the fleet-marker channel, cached render-side, plus the
+ * breadcrumb ring its wagons are placed along. The ring survives marker
+ * refreshes - it is path history, and the path did not change because the
+ * fleet list was re-sent.
+ */
+interface ConsistRender {
+  /** Catalogue ids in coupling order; [0] is the lead unit. */
+  specIds: readonly number[];
+  /** Follower centre distances behind the head anchor, ascending. [tiles] */
+  distances: Float64Array;
+  /** Trailing units to draw (specIds.length - 1). */
+  followers: number;
+  ring: BreadcrumbRing;
 }
 
 /** One baked chunk: its texture and the checksum of what was baked into it. */
@@ -561,6 +588,22 @@ export class MapView {
    */
   private readonly vehicleFacings = new Uint8Array(MAX_VEHICLES).fill(FACING_NONE);
   /**
+   * Per multi-unit train: composition and breadcrumb ring (SPEC2 M13,
+   * E-05). Keyed by vehicle id, reconciled on the fleet-marker cadence -
+   * entries appear when the markers name a train of two or more units and
+   * vanish with the vehicle, so a ring is allocated once per train's life,
+   * never per frame.
+   */
+  private readonly consists = new Map<number, ConsistRender>();
+  /**
+   * Preallocated slots the consist placement walk writes into, sized by the
+   * sim's own consist cap - the per-frame path allocates nothing.
+   */
+  private readonly consistScratch: readonly ConsistPlacement[] = Array.from(
+    { length: MAX_CONSIST_FOLLOWERS },
+    () => ({ fx: 0, fy: 0, h: 0, dirX: 0, dirY: 0 }),
+  );
+  /**
    * Which vehicle each sprite is drawing, this frame.
    *
    * Parallel to `vehicleSprites` and rebuilt every frame, because the snapshot
@@ -742,16 +785,57 @@ export class MapView {
   }
 
   /**
-   * The fleet markers, read for exactly one fact: which catalogue entry a
-   * vehicle id is (a train's leading unit). Everything else the markers
-   * carry stays the panels' business.
+   * The fleet markers, read for two facts: which catalogue entry a vehicle
+   * id is (a train's leading unit), and - since M13's consist rendering -
+   * the full composition of every multi-unit train, catalogue ids in
+   * coupling order (E-05: compositions travel this low-frequency channel,
+   * never the 20 Hz stride). Everything else the markers carry stays the
+   * panels' business.
+   *
+   * The consist cache is RECONCILED, not rebuilt: a ring is path history,
+   * and the daily fleet refresh must not wipe the curve a train's wagons
+   * are standing on. Only a changed composition re-derives the distances;
+   * only a vanished vehicle drops its entry.
    */
   setFleet(vehicles: readonly VehicleMarker[]): void {
     this.vehicleSpecIds.fill(-1);
+    const seen = new Set<number>();
     for (const vehicle of vehicles) {
-      if (vehicle.id >= 0 && vehicle.id < MAX_VEHICLES) {
-        this.vehicleSpecIds[vehicle.id] = vehicle.specId;
+      if (vehicle.id < 0 || vehicle.id >= MAX_VEHICLES) continue;
+      this.vehicleSpecIds[vehicle.id] = vehicle.specId;
+
+      // Rail only (SPEC2 M13): road, water and air stay single-sprite. A
+      // consist with an id the catalogue cannot resolve falls back whole to
+      // the single-sprite path rather than drawing a train with gaps.
+      if (
+        vehicle.kind !== TRAIN_KIND ||
+        vehicle.consist.length < 2 ||
+        !consistKnown(vehicle.consist)
+      ) {
+        continue;
       }
+      seen.add(vehicle.id);
+      const existing = this.consists.get(vehicle.id);
+      if (existing !== undefined && sameConsist(existing.specIds, vehicle.consist)) continue;
+      const distances = new Float64Array(
+        Math.min(vehicle.consist.length - 1, MAX_CONSIST_FOLLOWERS),
+      );
+      const followers = consistFollowerDistances(vehicle.consist, distances);
+      if (existing !== undefined) {
+        existing.specIds = [...vehicle.consist];
+        existing.distances = distances;
+        existing.followers = followers;
+      } else {
+        this.consists.set(vehicle.id, {
+          specIds: [...vehicle.consist],
+          distances,
+          followers,
+          ring: new BreadcrumbRing(),
+        });
+      }
+    }
+    for (const id of [...this.consists.keys()]) {
+      if (!seen.has(id)) this.consists.delete(id);
     }
   }
 
@@ -995,8 +1079,14 @@ export class MapView {
     // published ticks the frame sits - the sim knows nothing of it, and a
     // pause parks alpha at 1.
     const nowMs = performance.now();
-    if (this.vehicleSource !== null) this.interpolator.observe(this.vehicleSource(), nowMs);
+    const generationMoved =
+      this.vehicleSource !== null && this.interpolator.observe(this.vehicleSource(), nowMs);
     this.frameAlpha = this.interpolator.alpha(nowMs);
+    // Consist breadcrumbs (SPEC2 M13, E-05) advance on the 20 Hz publish
+    // edge, never per rendered frame: the sample recorded is the generation
+    // that just became the PREVIOUS one - the position the interpolated
+    // head has provably passed.
+    if (generationMoved && this.consists.size > 0) this.recordConsistBreadcrumbs(map);
 
     // Day/night (section 16.3): ONE tint on the world-art container -
     // chunks, tiles, network lines and vehicles alike - computed once per
@@ -2106,11 +2196,45 @@ export class MapView {
    * company's colour instead of a sprite - the same positions feed the same
    * hit-test arrays, so clicking a dot still selects the vehicle.
    */
+  /**
+   * Push one breadcrumb per multi-unit train from the generation that just
+   * became the previous one (SPEC2 M13, E-05). Runs once per published
+   * tick, walks only the compacted block, allocates nothing; the ring
+   * itself drops sub-spacing samples and resets on the D-162 teleport
+   * distance, so a standing train records nothing and a relocated one
+   * snaps whole.
+   */
+  private recordConsistBreadcrumbs(map: TileMap): void {
+    const interp = this.interpolator;
+    const prev = interp.prevData;
+    const count = interp.prevCount;
+    const size = map.size;
+    for (let row = 0; row < count; row++) {
+      const base = row * SNAPSHOT_VEHICLE_STRIDE;
+      const entry = this.consists.get(prev[base + SnapshotVehicle.VehicleId]!);
+      if (entry === undefined) continue;
+      const tile = prev[base + SnapshotVehicle.Tile]!;
+      const next = prev[base + SnapshotVehicle.NextTile]!;
+      const progress = prev[base + SnapshotVehicle.ProgressMilli]! / 1000;
+      const fromX = tile % size;
+      const fromY = (tile / size) | 0;
+      const toX = next % size;
+      const toY = (next / size) | 0;
+      if (!map.contains(fromX, fromY) || !map.contains(toX, toY)) continue;
+      const fromHeight = map.railHeight(fromX, fromY);
+      const toHeight = map.railHeight(toX, toY);
+      entry.ring.record(
+        fromX + (toX - fromX) * progress,
+        fromY + (toY - fromY) * progress,
+        fromHeight + (toHeight - fromHeight) * progress,
+      );
+    }
+  }
+
   private drawVehicles(map: TileMap, abstract: boolean): void {
     const interp = this.interpolator;
     if (this.basePage === null || !interp.hasFrame) return;
     const page = this.activePage();
-    const atlas = page.atlas;
 
     const data = interp.data;
     const count = interp.count;
@@ -2134,6 +2258,11 @@ export class MapView {
     }
     if (!abstract) this.vehicleSpritesHidden = false;
 
+    // Sprite triples are taken from the pool by a running cursor rather
+    // than by snapshot row, because since M13 one RAIL row draws its whole
+    // consist - a ten-wagon coal train is eleven triples (SPEC2 M13, E-05).
+    let spriteSlot = 0;
+
     for (let i = 0; i < count; i++) {
       const base = i * SNAPSHOT_VEHICLE_STRIDE;
       const tile = data[base + SnapshotVehicle.Tile]!;
@@ -2155,7 +2284,12 @@ export class MapView {
       const toHeight = map.railHeight(toX, toY);
 
       // The CURRENT generation's sample - allocation-free, the same 16.1
-      // projection tileToWorld computes.
+      // projection tileToWorld computes. The fractional tile position is
+      // carried alongside the world pixels because the consist walk (M13)
+      // runs in tile space, where arc length means metres.
+      const currFx = fromX + (toX - fromX) * progress;
+      const currFy = fromY + (toY - fromY) * progress;
+      const currFh = fromHeight + (toHeight - fromHeight) * progress;
       const currX = sampleWorldX(fromX, fromY, toX, toY, progress);
       const currY = sampleWorldY(fromX, fromY, fromHeight, toX, toY, toHeight, progress);
 
@@ -2165,6 +2299,9 @@ export class MapView {
       // at the current position outright.
       let worldX = currX;
       let worldY = currY;
+      let headFx = currFx;
+      let headFy = currFy;
+      let headFh = currFh;
       // Facing from the INTERPOLATED movement vector between the two
       // generation samples (M13): the direction the sprite actually glides,
       // so a corner blends through the diagonal facing instead of snapping
@@ -2189,49 +2326,32 @@ export class MapView {
             !shouldSnap(fromX - prevFromX, fromY - prevFromY, prevState, state)
           ) {
             const prevProgress = prev[prevBase + SnapshotVehicle.ProgressMilli]! / 1000;
+            const prevFx = prevFromX + (prevToX - prevFromX) * prevProgress;
+            const prevFy = prevFromY + (prevToY - prevFromY) * prevProgress;
+            const prevFromHeight = map.railHeight(prevFromX, prevFromY);
+            const prevToHeight = map.railHeight(prevToX, prevToY);
             const prevX = sampleWorldX(prevFromX, prevFromY, prevToX, prevToY, prevProgress);
             const prevY = sampleWorldY(
               prevFromX,
               prevFromY,
-              map.railHeight(prevFromX, prevFromY),
+              prevFromHeight,
               prevToX,
               prevToY,
-              map.railHeight(prevToX, prevToY),
+              prevToHeight,
               prevProgress,
             );
             worldX = prevX + (currX - prevX) * alpha;
             worldY = prevY + (currY - prevY) * alpha;
-            facing = facingFromMovement(
-              prevFromX + (prevToX - prevFromX) * prevProgress,
-              prevFromY + (prevToY - prevFromY) * prevProgress,
-              fromX + (toX - fromX) * progress,
-              fromY + (toY - fromY) * progress,
-            );
+            headFx = prevFx + (currFx - prevFx) * alpha;
+            headFy = prevFy + (currFy - prevFy) * alpha;
+            const prevFh = prevFromHeight + (prevToHeight - prevFromHeight) * prevProgress;
+            headFh = prevFh + (currFh - prevFh) * alpha;
+            facing = facingFromMovement(prevFx, prevFy, currFx, currFy);
           }
         }
       }
 
       if (!abstract) {
-        let sprite = this.vehicleSprites[i];
-        let maskSprite = this.vehicleMaskSprites[i];
-        let shadowSprite = this.vehicleShadowSprites[i];
-        if (sprite === undefined || maskSprite === undefined || shadowSprite === undefined) {
-          // Into the SAME sorted container as the tiles: the drawOrder key is
-          // what lets a hill in front of a train draw over it (section 16.1).
-          // Per slot the insertion order is shadow, body, mask - the three
-          // share one zIndex and Pixi's stable sort keeps the ellipse under
-          // the body and the company colour over it.
-          shadowSprite = new Sprite();
-          this.vehicleShadowSprites.push(shadowSprite);
-          this.tiles.addChild(shadowSprite);
-          sprite = new Sprite();
-          this.vehicleSprites.push(sprite);
-          this.tiles.addChild(sprite);
-          maskSprite = new Sprite();
-          this.vehicleMaskSprites.push(maskSprite);
-          this.tiles.addChild(maskSprite);
-        }
-
         // Facing: the measured glide direction first; a standing or settled
         // vehicle keeps the facing it last drove with; a vehicle never seen
         // moving reads its current tile step, east as the birth default.
@@ -2254,69 +2374,76 @@ export class MapView {
         const ownerTint =
           owner === 0 ? this.companyTint : (COMPANY_TINTS[owner] ?? this.companyTint);
         const zIndex = vehicleDrawOrder(fromX, fromY, fromHeight, toX, toY, toHeight, progress);
-
-        // A sprite is reused for whatever vehicle lands in its slot, so the
-        // texture is set every frame rather than once at creation - and the
-        // scale with it, because a zoom flip swaps the atlas page under the
-        // same sprite. All setters are change-detected by Pixi.
         const specId =
           vehicleId >= 0 && vehicleId < MAX_VEHICLES ? this.vehicleSpecIds[vehicleId]! : -1;
-        const variant = vehicleVariantFor(bakedIndex, specId, vehicleId);
-        const baked =
-          variant === null ? null : this.bakedVehicleHandle(variant.cells[facing]!, bakedInvScale);
-        let shadowW: number;
-        if (baked !== null) {
-          // The Kenney cell (M13): untinted body plus the company-colour
-          // mask on top - the two-pass tint of D-160. Placed by the cell's
-          // OWN ground pivot; baked cells are tight per-facing rectangles.
-          sprite.texture = baked.base;
-          sprite.scale.set(baked.invScale);
-          sprite.tint = 0xffffff;
-          sprite.position.set(worldX - baked.anchorXPx, worldY - baked.anchorYPx);
-          maskSprite.texture = baked.mask;
-          maskSprite.scale.set(baked.invScale);
-          maskSprite.tint = ownerTint;
-          maskSprite.position.set(worldX - baked.anchorXPx, worldY - baked.anchorYPx);
-          maskSprite.zIndex = zIndex;
-          maskSprite.visible = true;
-          shadowW = baked.widthPx * VEHICLE_SHADOW_WIDTH_SHARE;
-        } else {
-          // The M10 white box retires from the live path but stays the
-          // fallback (E-14): an unmapped id (aircraft stay procedural), an
-          // id the markers have not named yet, every build without a bake.
-          const handle =
-            kind === TRAIN_KIND
-              ? this.frameTexture(page, 'train', atlas.trainFrame())
-              : this.frameTexture(page, 'vehicle', atlas.vehicleFrame());
-          sprite.texture = handle.texture;
-          sprite.scale.set(handle.invScale);
-          sprite.tint = ownerTint;
-          // The fixed one-step offset assumes the vehicle cell's world
-          // geometry; the detail page's tall cells are world-identical to
-          // the base page's by construction (tests/unit/terrainAtlas.spec.ts).
-          sprite.position.set(worldX - TILE_W / 2, worldY - HEIGHT_PX);
-          maskSprite.visible = false;
-          shadowW = kind === TRAIN_KIND ? FALLBACK_SHADOW_TRAIN_PX : FALLBACK_SHADOW_ROAD_PX;
-        }
-        sprite.visible = true;
-        sprite.zIndex = zIndex;
 
-        // The soft ellipse under the vehicle (M13), at the ground point the
-        // sprite is anchored to.
-        if (this.shadowTexture !== null) {
-          shadowSprite.texture = this.shadowTexture;
-          shadowSprite.width = shadowW;
-          shadowSprite.height = shadowW * VEHICLE_SHADOW_RATIO;
-          shadowSprite.alpha = VEHICLE_SHADOW_ALPHA;
-          shadowSprite.tint = 0x000000;
-          shadowSprite.position.set(
-            worldX - shadowW / 2,
-            worldY - (shadowW * VEHICLE_SHADOW_RATIO) / 2,
+        // The lead unit, exactly where the single sprite always drew.
+        spriteSlot = this.placeVehicleUnit(
+          spriteSlot,
+          specId,
+          vehicleId,
+          facing,
+          worldX,
+          worldY,
+          zIndex,
+          ownerTint,
+          kind,
+          page,
+          bakedIndex,
+          bakedInvScale,
+        );
+
+        // The trailing units of a multi-unit train (SPEC2 M13, E-05): each
+        // placed by arc length along the breadcrumb ring, each facing along
+        // its OWN stretch of path, each with its own draw-order key so a
+        // hill occludes the tail before the head. Road, water and air never
+        // have an entry here - they stay single-sprite by construction.
+        const consist = kind === TRAIN_KIND ? this.consists.get(vehicleId) : undefined;
+        if (consist !== undefined && consist.followers > 0) {
+          const fallbackDelta = VEHICLE_FACING_DELTAS[facing]!;
+          placeConsist(
+            consist.ring,
+            headFx,
+            headFy,
+            headFh,
+            fallbackDelta[0],
+            fallbackDelta[1],
+            consist.distances,
+            consist.followers,
+            this.consistScratch,
           );
-          shadowSprite.zIndex = zIndex;
-          shadowSprite.visible = true;
-        } else {
-          shadowSprite.visible = false;
+          for (let unit = 0; unit < consist.followers; unit++) {
+            const placed = this.consistScratch[unit]!;
+            // Wagons inherit the facing of their local breadcrumb segment;
+            // a degenerate direction (never possible past an empty ring,
+            // but total anyway) falls back to the lead's.
+            let wagonFacing = facingFromDelta(placed.dirX, placed.dirY);
+            if (wagonFacing < 0) wagonFacing = facing;
+            const wagonX = (placed.fx - placed.fy) * (TILE_W / 2);
+            const wagonY = (placed.fx + placed.fy) * (TILE_H / 2) - placed.h * HEIGHT_PX;
+            // Rounding IS the handover rule of vehicleDrawOrder: the tile a
+            // unit mostly covers wins its draw-order key.
+            const wagonZ = drawOrder(
+              Math.round(placed.fx),
+              Math.round(placed.fy),
+              Math.round(placed.h),
+              DrawLayer.Vehicle,
+            );
+            spriteSlot = this.placeVehicleUnit(
+              spriteSlot,
+              consist.specIds[unit + 1]!,
+              vehicleId + unit + 1,
+              wagonFacing,
+              wagonX,
+              wagonY,
+              wagonZ,
+              ownerTint,
+              kind,
+              page,
+              bakedIndex,
+              bakedInvScale,
+            );
+          }
         }
       }
 
@@ -2332,12 +2459,120 @@ export class MapView {
     if (abstract) {
       this.drawVehicleDots();
     } else {
-      for (let i = count; i < this.vehicleSprites.length; i++) {
+      for (let i = spriteSlot; i < this.vehicleSprites.length; i++) {
         this.vehicleSprites[i]!.visible = false;
         this.vehicleMaskSprites[i]!.visible = false;
         this.vehicleShadowSprites[i]!.visible = false;
       }
     }
+  }
+
+  /**
+   * Draw ONE unit - a whole road vehicle, ship or aircraft, or one unit of
+   * a rail consist - as its sprite triple (shadow, body, mask) at pool slot
+   * `slot`, returning the next free slot. Extracted verbatim from the M12
+   * single-sprite path so a wagon is placed by exactly the code that places
+   * its locomotive: baked cell with the two-pass tint (D-160) when the
+   * catalogue id has one, the M10 white box otherwise (E-14's per-entry
+   * fallback - a build without a bake still draws ten visible wagons).
+   */
+  private placeVehicleUnit(
+    slot: number,
+    specId: number,
+    variantSeed: number,
+    facing: number,
+    worldX: number,
+    worldY: number,
+    zIndex: number,
+    ownerTint: number,
+    kind: number,
+    page: AtlasPage,
+    bakedIndex: VehicleZoomIndex | null,
+    bakedInvScale: number,
+  ): number {
+    let sprite = this.vehicleSprites[slot];
+    let maskSprite = this.vehicleMaskSprites[slot];
+    let shadowSprite = this.vehicleShadowSprites[slot];
+    if (sprite === undefined || maskSprite === undefined || shadowSprite === undefined) {
+      // Into the SAME sorted container as the tiles: the drawOrder key is
+      // what lets a hill in front of a train draw over it (section 16.1).
+      // Per slot the insertion order is shadow, body, mask - the three
+      // share one zIndex and Pixi's stable sort keeps the ellipse under
+      // the body and the company colour over it.
+      shadowSprite = new Sprite();
+      this.vehicleShadowSprites.push(shadowSprite);
+      this.tiles.addChild(shadowSprite);
+      sprite = new Sprite();
+      this.vehicleSprites.push(sprite);
+      this.tiles.addChild(sprite);
+      maskSprite = new Sprite();
+      this.vehicleMaskSprites.push(maskSprite);
+      this.tiles.addChild(maskSprite);
+    }
+
+    // A sprite is reused for whatever unit lands in its slot, so the
+    // texture is set every frame rather than once at creation - and the
+    // scale with it, because a zoom flip swaps the atlas page under the
+    // same sprite. All setters are change-detected by Pixi.
+    const variant = vehicleVariantFor(bakedIndex, specId, variantSeed);
+    const baked =
+      variant === null ? null : this.bakedVehicleHandle(variant.cells[facing]!, bakedInvScale);
+    let shadowW: number;
+    if (baked !== null) {
+      // The Kenney cell (M13): untinted body plus the company-colour
+      // mask on top - the two-pass tint of D-160. Placed by the cell's
+      // OWN ground pivot; baked cells are tight per-facing rectangles.
+      sprite.texture = baked.base;
+      sprite.scale.set(baked.invScale);
+      sprite.tint = 0xffffff;
+      sprite.position.set(worldX - baked.anchorXPx, worldY - baked.anchorYPx);
+      maskSprite.texture = baked.mask;
+      maskSprite.scale.set(baked.invScale);
+      maskSprite.tint = ownerTint;
+      maskSprite.position.set(worldX - baked.anchorXPx, worldY - baked.anchorYPx);
+      maskSprite.zIndex = zIndex;
+      maskSprite.visible = true;
+      shadowW = baked.widthPx * VEHICLE_SHADOW_WIDTH_SHARE;
+    } else {
+      // The M10 white box retires from the live path but stays the
+      // fallback (E-14): an unmapped id (aircraft stay procedural), an
+      // id the markers have not named yet, every build without a bake.
+      const atlas = page.atlas;
+      const handle =
+        kind === TRAIN_KIND
+          ? this.frameTexture(page, 'train', atlas.trainFrame())
+          : this.frameTexture(page, 'vehicle', atlas.vehicleFrame());
+      sprite.texture = handle.texture;
+      sprite.scale.set(handle.invScale);
+      sprite.tint = ownerTint;
+      // The fixed one-step offset assumes the vehicle cell's world
+      // geometry; the detail page's tall cells are world-identical to
+      // the base page's by construction (tests/unit/terrainAtlas.spec.ts).
+      sprite.position.set(worldX - TILE_W / 2, worldY - HEIGHT_PX);
+      maskSprite.visible = false;
+      shadowW = kind === TRAIN_KIND ? FALLBACK_SHADOW_TRAIN_PX : FALLBACK_SHADOW_ROAD_PX;
+    }
+    sprite.visible = true;
+    sprite.zIndex = zIndex;
+
+    // The soft ellipse under the unit (M13), at the ground point the
+    // sprite is anchored to.
+    if (this.shadowTexture !== null) {
+      shadowSprite.texture = this.shadowTexture;
+      shadowSprite.width = shadowW;
+      shadowSprite.height = shadowW * VEHICLE_SHADOW_RATIO;
+      shadowSprite.alpha = VEHICLE_SHADOW_ALPHA;
+      shadowSprite.tint = 0x000000;
+      shadowSprite.position.set(
+        worldX - shadowW / 2,
+        worldY - (shadowW * VEHICLE_SHADOW_RATIO) / 2,
+      );
+      shadowSprite.zIndex = zIndex;
+      shadowSprite.visible = true;
+    } else {
+      shadowSprite.visible = false;
+    }
+    return slot + 1;
   }
 
   /**

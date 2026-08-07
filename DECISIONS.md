@@ -36,16 +36,17 @@ no entry below. A number may appear under several topics.
 - **Balancing & scenarios:** D-038, D-039, D-040, D-041, D-066, D-087, D-088,
   D-116, D-151, D-152, D-156, D-158, D-159
 - **Vehicles & fleet:** D-043, D-044, D-045, D-068, D-076, D-089, D-093,
-  D-096, D-142, D-143, D-145, D-146, D-155, D-157
+  D-096, D-142, D-143, D-145, D-146, D-155, D-157, D-171
 - **Water & air:** D-094, D-095, D-096, D-097, D-098, D-099
 - **Competitors, AI & tenders:** D-107, D-108, D-109, D-115, D-116, D-121,
   D-122, D-147, D-152, D-153, D-154, D-155, D-156, D-158
 - **Rendering & art:** D-013, D-014, D-033, D-035, D-112, D-117, D-125, D-127,
-  D-136, D-140, D-160, D-161, D-162, D-163, D-164, D-165, D-166, D-169, D-170
+  D-136, D-140, D-160, D-161, D-162, D-163, D-164, D-165, D-166, D-169, D-170,
+  D-171
 - **UI & input:** D-011, D-013, D-015, D-035, D-110, D-113, D-114, D-119,
   D-126, D-148, D-165, D-166
 - **Performance & measurement:** D-002, D-120, D-135, D-136, D-161, D-162,
-  D-163, D-164, D-167, D-170
+  D-163, D-164, D-167, D-170, D-171
 - **Platform, tooling & build:** D-012, D-014, D-015, D-016, D-017, D-029,
   D-030, D-031, D-160, D-168, D-169, D-170
 - **Crash safety:** D-132, D-139
@@ -4338,3 +4339,105 @@ resolves once per frame (`bakedZoomFor` - largest baked zoom not above
 the display zoom, the D-163 no-upscale rule; the chunked zooms
 0.5x/0.25x downscale the z1 pages exactly as the procedural base page
 always has).
+
+## M13 - living trains, bundle 3: consist rendering (2026-08-07)
+
+### D-171 A ten-wagon train is ten wagons on the path the head actually drove, and the ring records only what the sprite has passed
+
+E-05 ordered the mechanism - compositions on the marker channel, positions
+derived render-side from a path-history breadcrumb ring, arc-length spacing
+from the aggregate lengths, D-162's clamps, road/water/air single-sprite -
+and this entry records the shape it took and the six choices inside it.
+
+**The composition already travelled the marker channel, so nothing was
+extended.** SPEC2 M13 orders the consist list onto the fleet markers;
+`VehicleMarker.consist` has carried exactly that - catalogue ids in coupling
+order - since M3, for the fleet panel. Bundle 3 therefore changes zero
+protocol bytes: `MapView.setFleet` now READS the field it always received
+and caches it per vehicle id (the E-05 pattern D-170 established for
+`specId`), and the 20 Hz stride stays eight ints (Fehlerkatalog 37). The
+cache is RECONCILED, not rebuilt: the fleet refresh arrives daily, and a
+refresh that recreated the rings would wipe every train's path history once
+per game day - only a changed composition re-derives the distances, only a
+vanished vehicle drops its entry, and an id the catalogue cannot resolve
+falls back whole to the single sprite rather than drawing a train with
+holes.
+
+**The ring records the generation that just became PREVIOUS, so it never
+holds a point ahead of the drawn sprite.** The interpolated head glides
+BETWEEN the two newest generations (D-162); a ring fed the newest sample
+would start with a segment pointing forwards, and the tail walk would place
+the first wagon in front of the locomotive whenever alpha is small. On each
+generation swap (`observe` now reports the 20 Hz edge; ring maintenance
+never runs per rendered frame) the recorder walks the compacted previous
+block once and offers each consist head its sample: the ring keeps it only
+when it lies a spacing floor (0.25 tiles = 12.5 m, half a short wagon) past
+the newest crumb - a standing train records nothing - and RESETS when it
+lies past the teleport distance, which is deliberately the exported
+`TELEPORT_TILES_SQ` of the head's own snap rule: one threshold, one truth,
+and the whole consist cuts together (D-162's clamp extended to the tail).
+Capacity is derived, not chosen: enough crumbs at the spacing floor to
+cover `MAX_TRAIN_LENGTH_M` - the sim's own consist ceiling - with samples
+recorded at generation cadence only ever SPARSER than the floor, so a full
+ring always spans the longest legal train.
+
+**Wagons sit at catalogue arc lengths, walked in one pass.** The lead unit
+draws at the head anchor - exactly where the single sprite always drew, so
+bundle 2's calibration is undisturbed - and follower k's centre sits half
+the lead's length, every unit between, and half itself behind it
+(`consistFollowerDistances`, from `vehicleSpec().lengthM`, the aggregate
+lengths the composition names). The walk (`placeConsist`) consumes ring
+segments once for the whole consist because the distances are ascending by
+construction; each wagon takes its position AND its facing from its own
+segment - `facingFromDelta` over the segment's forward direction, which is
+what makes a train bend around a curve wagon by wagon instead of pivoting
+whole - and its draw-order key from `drawOrder(round(fx), round(fy),
+round(h), Vehicle)`: rounding IS `vehicleDrawOrder`'s half-way handover
+rule, so a hill occludes the tail before the head exactly as it occludes
+two separate vehicles.
+
+**Where history runs out, the tail is a straight line, stated as the honest
+floor.** A fresh spawn has an empty ring; a loaded world starts every ring
+empty; a teleport reset leaves one crumb. The unplaceable remainder extends
+straight backwards along the last known segment (or the head's facing, or
+east - a total answer), at the last known height, and heals into the real
+curve as crumbs accumulate. The alternative - reconstructing a plausible
+path from the track graph - was rejected: the renderer draws what the
+simulation published (D-162), and a guessed path through a junction is a
+lie precisely where a lie is most visible. Corner cases (empty ring, short
+history, teleport, wrapped ring, degenerate head segment) are pinned in
+`tests/unit/consistArt.spec.ts`; everything in `consistArt.ts` is pure and
+preallocated - the per-frame path allocates nothing, and the placement
+scratch is sized by the sim's own `MAX_CONSIST_UNITS`.
+
+**One placement routine serves every unit, and the fallback draws ten
+boxes.** The sprite pool hands out shadow/body/mask triples by a running
+cursor now (a rail row is its whole consist, so row-indexed slots died),
+and `placeVehicleUnit` is the M12 single-sprite path extracted verbatim: a
+wagon resolves its baked cell, two-pass tint and contact ellipse through
+exactly the code that serves its locomotive, per-unit variance seeded
+`vehicleId + unitIndex`. A build without a bake draws the white train box
+per unit - E-14's floor holds with no special case, and a ten-wagon train
+is ten visible somethings on every machine. Road, water and air never
+enter the consist map (their markers carry empty consists; the map is
+keyed rail-only), and the 0.25x abstract mode stays one dot per TRAIN:
+16.1's overview names vehicles, not wagons, and 750 extra dots would be
+noise at the zoom made for reading networks.
+
+**The tripwire was re-measured against a rail-heavy scene, and the gate was
+re-derived rather than eaten.** The draw-prep proxy now prices the consist
+work per rail vehicle - the breadcrumb record (every frame, though the real
+recorder runs only on the publish edge), the placement walk over a ring
+pre-walked around a corner, per-wagon facing and draw-key writes - in a
+scene of 750 ten-wagon coal trains among 1,500 vehicles: 9,000 placed
+units, six times the rail load of the perf fixture's 150 trains. Measured
+on the reference machine (Ryzen 5 7520U, Node 24): clean median 2.4-2.5 ms
+over three runs, clean p99 4.7-5.4 ms, against the old 5/30 gates that had
+been derived from the 0.75 ms pre-consist median. Leaving a 2.1x gate
+would have re-created exactly the zero-headroom trap D-167 exists to kill,
+so the median gate moved to 10 ms (4x clean, the same generosity the old
+gate had over its own scene) and the backstop to 60 ms (an order of
+magnitude over clean p99, the rebuild backstop's own ratio). Render-only
+throughout: zero sim bytes, zero save bumps, zero snapshot changes - the
+one permitted M13 layout bump (`IndustryMarker.level`) belongs to the
+particle bundle, not this one.

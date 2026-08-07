@@ -13,6 +13,7 @@ import {
   DrawLayer,
   drawOrder,
   HEIGHT_PX,
+  TILE_H,
   TILE_W,
   tileToWorld,
   vehicleDrawOrder,
@@ -23,8 +24,16 @@ import {
   FACING_NONE,
   facingFromDelta,
   facingFromMovement,
+  VEHICLE_FACING_DELTAS,
   variantIndex,
 } from '../../src/render/vehicleArt';
+import {
+  BreadcrumbRing,
+  consistFollowerDistances,
+  MAX_CONSIST_FOLLOWERS,
+  placeConsist,
+  type ConsistPlacement,
+} from '../../src/render/consistArt';
 import { coastEdgeMask, FOAM_EDGE_COUNT, foamVariant, isDeepWater } from '../../src/render/water';
 
 /**
@@ -39,7 +48,8 @@ import { coastEdgeMask, FOAM_EDGE_COUNT, foamVariant, isDeepWater } from '../../
  * decisions, frame-cache lookups, draw-order keys) and the per-frame work of
  * `MapView.drawVehicles` (stride reads, height lookups, the E-05 generation
  * lerp, vehicle draw-order sort keys, and since M13 the facing and variant
- * decisions of the baked vehicle art).
+ * decisions of the baked vehicle art plus the consist rendering's breadcrumb
+ * ring and arc-length placement walk, measured against a rail-heavy scene).
  *
  * This is a PROXY, stated as one: it replays the same reads, the same key
  * arithmetic and the same frame-cache lookups as `MapView`, writing into flat
@@ -77,12 +87,22 @@ const REBUILD_P99_BACKSTOP_MS = 60;
 
 /**
  * Median tripwire: one frame of vehicle draw preparation at the snapshot
- * cap. [ms] 6.7x the clean median (0.75 ms), 4x the saturated median.
+ * cap, in the M13 rail-heavy consist scene - every second vehicle a
+ * ten-wagon coal train, 9,000 placed units per frame (six times the rail
+ * load of the 1500-vehicle fixture's 150 trains). [ms] Re-measured for M13
+ * bundle 3 with the breadcrumb record, the arc-length walk and the
+ * per-wagon facing priced in: clean median 2.4-2.5 ms over three runs on
+ * the reference machine - the gate was re-derived at 4x that, the same
+ * generosity the 5 ms gate had over the pre-consist 0.75 ms (D-167).
  */
-const DRAW_PREP_P50_TRIPWIRE_MS = 5;
+const DRAW_PREP_P50_TRIPWIRE_MS = 10;
 
-/** p99 backstop for draw prep: worst saturated observations 8-9 ms. [ms] */
-const DRAW_PREP_P99_BACKSTOP_MS = 30;
+/**
+ * p99 backstop for draw prep: an order of magnitude over the clean p99
+ * (4.7-5.4 ms measured with the consist scene), the rebuild backstop's own
+ * ratio - the pre-consist saturated observations were ~5x clean. [ms]
+ */
+const DRAW_PREP_P99_BACKSTOP_MS = 60;
 
 /**
  * Median tripwire: the CPU half of one 32x32 chunk rebake. [ms]
@@ -311,12 +331,66 @@ function syntheticPrevBlock(data: Int32Array): { prev: Int32Array; prevRowById: 
 }
 
 /**
+ * One rail vehicle of the M13 consist scene, as the proxy prices it: the
+ * breadcrumb ring MapView keeps per multi-unit train plus the derived
+ * follower distances - built once in setup, exactly like the real
+ * reconciliation on the fleet-marker cadence.
+ */
+interface ProxyConsist {
+  readonly ring: BreadcrumbRing;
+  readonly distances: Float64Array;
+  readonly followers: number;
+}
+
+/** The fixture's own coal-train stock: 18 m steam loco, 10 m open wagons. */
+const CONSIST_LOCO_SPEC = 1_000;
+const CONSIST_WAGON_SPEC = 1_520;
+/** Wagons per proxy train - SPEC2 M13's named scene, the 10-wagon coal train. */
+const CONSIST_WAGONS = 10;
+/**
+ * Every how-many-th vehicle is a consist train. 2 makes 750 ten-wagon
+ * trains - six times the rail load of the 1500-vehicle fixture's 150
+ * trains, which is what "rail-heavy" has to mean for a tripwire that must
+ * catch regressions before a real scene ever shows them.
+ */
+const CONSIST_EVERY = 2;
+
+/**
+ * The consist map of the rail-heavy scene: every {@link CONSIST_EVERY}-th
+ * vehicle a {@link CONSIST_WAGONS}-wagon train, its ring pre-walked along an
+ * L-shaped path ending at the head - so every placement walk crosses a
+ * corner, the most work a real curve can ask of it.
+ */
+function syntheticConsists(): Map<number, ProxyConsist> {
+  const consists = new Map<number, ProxyConsist>();
+  const span = WINDOW_MAX - WINDOW_MIN;
+  const specIds = [CONSIST_LOCO_SPEC];
+  for (let i = 0; i < CONSIST_WAGONS; i++) specIds.push(CONSIST_WAGON_SPEC);
+  for (let i = 0; i < SNAPSHOT_MAX_VEHICLES; i += CONSIST_EVERY) {
+    const x = WINDOW_MIN + ((i * 7) % span);
+    const y = WINDOW_MIN + ((i * 13) % span);
+    const ring = new BreadcrumbRing();
+    // Oldest first: 1.5 tiles along +y, the corner, 1.5 tiles along +x to
+    // the head - over three tiles of history for a ~2.1-tile train.
+    for (let step = 0; step <= 6; step++) ring.record(x - 1.5, y - 1.5 + step * 0.25, GROUND);
+    for (let step = 1; step <= 6; step++) ring.record(x - 1.5 + step * 0.25, y, GROUND);
+    const distances = new Float64Array(MAX_CONSIST_FOLLOWERS);
+    const followers = consistFollowerDistances(specIds, distances);
+    consists.set(i, { ring, distances, followers });
+  }
+  return consists;
+}
+
+/**
  * The CPU of `MapView.drawVehicles` for one frame: stride reads, tile
  * decomposition, `railHeight` at both ends, projection, the E-05 generation
  * lerp (previous-row lookup, snap check, both samples, alpha blend), and -
- * since M13 - the baked-art decisions per vehicle: facing from the
+ * since M13 - the baked-art decisions per vehicle (facing from the
  * interpolated movement vector with the standing-vehicle cache, the
- * hash-picked variant and the specId-to-variants map lookup. Everything
+ * hash-picked variant and the specId-to-variants map lookup) plus the
+ * consist work per rail vehicle: the breadcrumb record (priced every frame,
+ * though the real one runs only on the 20 Hz publish edge), the arc-length
+ * placement walk and the per-wagon facing and draw-key writes. Everything
  * except the sprites it lands on.
  */
 function drawPrepProxy(
@@ -328,6 +402,8 @@ function drawPrepProxy(
   out: DrawList,
   specVariants: ReadonlyMap<number, number>,
   facings: Uint8Array,
+  consists: ReadonlyMap<number, ProxyConsist>,
+  consistScratch: readonly ConsistPlacement[],
 ): number {
   const size = map.size;
   let drawn = 0;
@@ -347,11 +423,15 @@ function drawPrepProxy(
 
     const fromHeight = map.railHeight(fromX, fromY);
     const toHeight = map.railHeight(toX, toY);
+    const currFx = fromX + (toX - fromX) * progress;
+    const currFy = fromY + (toY - fromY) * progress;
     const currX = sampleWorldX(fromX, fromY, toX, toY, progress);
     const currY = sampleWorldY(fromX, fromY, fromHeight, toX, toY, toHeight, progress);
 
     let worldX = currX;
     let worldY = currY;
+    let headFx = currFx;
+    let headFy = currFy;
     let facing = -1;
     const prevRow = vehicleId >= 0 && vehicleId < prevRowById.length ? prevRowById[vehicleId]! : -1;
     if (alpha < 1 && prevRow >= 0) {
@@ -369,6 +449,8 @@ function drawPrepProxy(
         !shouldSnap(fromX - prevFromX, fromY - prevFromY, prevState, state)
       ) {
         const prevProgress = prev[prevBase + SnapshotVehicle.ProgressMilli]! / 1000;
+        const prevFx = prevFromX + (prevToX - prevFromX) * prevProgress;
+        const prevFy = prevFromY + (prevToY - prevFromY) * prevProgress;
         const prevX = sampleWorldX(prevFromX, prevFromY, prevToX, prevToY, prevProgress);
         const prevY = sampleWorldY(
           prevFromX,
@@ -381,12 +463,9 @@ function drawPrepProxy(
         );
         worldX = prevX + (currX - prevX) * alpha;
         worldY = prevY + (currY - prevY) * alpha;
-        facing = facingFromMovement(
-          prevFromX + (prevToX - prevFromX) * prevProgress,
-          prevFromY + (prevToY - prevFromY) * prevProgress,
-          fromX + (toX - fromX) * progress,
-          fromY + (toY - fromY) * progress,
-        );
+        headFx = prevFx + (currFx - prevFx) * alpha;
+        headFy = prevFy + (currFy - prevFy) * alpha;
+        facing = facingFromMovement(prevFx, prevFy, currFx, currFy);
       }
     }
 
@@ -409,6 +488,39 @@ function drawPrepProxy(
     out.x[drawn] = worldX - TILE_W / 2;
     out.y[drawn] = worldY - HEIGHT_PX;
     drawn++;
+
+    // The consist work of M13 bundle 3, exactly as MapView runs it.
+    const consist = consists.get(vehicleId);
+    if (consist !== undefined) {
+      consist.ring.record(currFx, currFy, GROUND);
+      const delta = VEHICLE_FACING_DELTAS[facing]!;
+      placeConsist(
+        consist.ring,
+        headFx,
+        headFy,
+        GROUND,
+        delta[0],
+        delta[1],
+        consist.distances,
+        consist.followers,
+        consistScratch,
+      );
+      for (let unit = 0; unit < consist.followers; unit++) {
+        const placed = consistScratch[unit]!;
+        let wagonFacing = facingFromDelta(placed.dirX, placed.dirY);
+        if (wagonFacing < 0) wagonFacing = facing;
+        out.key[drawn] = drawOrder(
+          Math.round(placed.fx),
+          Math.round(placed.fy),
+          Math.round(placed.h),
+          DrawLayer.Vehicle,
+        );
+        out.frame[drawn] = CONSIST_WAGON_SPEC + wagonFacing * 8;
+        out.x[drawn] = (placed.fx - placed.fy) * (TILE_W / 2);
+        out.y[drawn] = (placed.fx + placed.fy) * (TILE_H / 2) - placed.h * HEIGHT_PX;
+        drawn++;
+      }
+    }
   }
   return drawn;
 }
@@ -549,12 +661,15 @@ describe('render CPU tripwire (SPEC2 6.3)', () => {
     expect(p99).toBeLessThan(REBUILD_P99_BACKSTOP_MS);
   });
 
-  it('prepares a full vehicle block for drawing inside the tripwire', () => {
+  it('prepares a full vehicle block with the rail-heavy consist scene inside the tripwire', () => {
+    // A full block plus 750 ten-wagon consists (SPEC2 M13, E-05).
+    const expectedUnits =
+      SNAPSHOT_MAX_VEHICLES + Math.ceil(SNAPSHOT_MAX_VEHICLES / CONSIST_EVERY) * CONSIST_WAGONS;
     const out: DrawList = {
-      key: new Float64Array(SNAPSHOT_MAX_VEHICLES),
-      frame: new Int32Array(SNAPSHOT_MAX_VEHICLES),
-      x: new Float64Array(SNAPSHOT_MAX_VEHICLES),
-      y: new Float64Array(SNAPSHOT_MAX_VEHICLES),
+      key: new Float64Array(expectedUnits),
+      frame: new Int32Array(expectedUnits),
+      x: new Float64Array(expectedUnits),
+      y: new Float64Array(expectedUnits),
     };
     const data = syntheticVehicleBlock(map);
     // Alpha one half: the E-05 lerp branch runs on EVERY vehicle, which is
@@ -565,24 +680,58 @@ describe('render CPU tripwire (SPEC2 6.3)', () => {
     const specVariants = new Map<number, number>();
     for (let spec = 0; spec < 40; spec++) specVariants.set(1000 + spec, 1 + (spec % 3));
     const facings = new Uint8Array(SNAPSHOT_MAX_VEHICLES).fill(FACING_NONE);
-    const drawn = drawPrepProxy(map, data, prev, prevRowById, 0.5, out, specVariants, facings);
+    const consists = syntheticConsists();
+    const consistScratch: ConsistPlacement[] = Array.from(
+      { length: MAX_CONSIST_FOLLOWERS },
+      () => ({
+        fx: 0,
+        fy: 0,
+        h: 0,
+        dirX: 0,
+        dirY: 0,
+      }),
+    );
+    const drawn = drawPrepProxy(
+      map,
+      data,
+      prev,
+      prevRowById,
+      0.5,
+      out,
+      specVariants,
+      facings,
+      consists,
+      consistScratch,
+    );
 
     const samples = new Float64Array(DRAW_PREP_SAMPLES);
     for (let i = 0; i < DRAW_PREP_SAMPLES; i++) {
       const started = performance.now();
-      drawPrepProxy(map, data, prev, prevRowById, 0.5, out, specVariants, facings);
+      drawPrepProxy(
+        map,
+        data,
+        prev,
+        prevRowById,
+        0.5,
+        out,
+        specVariants,
+        facings,
+        consists,
+        consistScratch,
+      );
       samples[i] = performance.now() - started;
     }
 
     const p50 = percentile(samples, 0.5);
     const p99 = percentile(samples, 0.99);
     console.log(
-      `vehicle draw prep: ${drawn} vehicles per frame, ` +
+      `vehicle draw prep: ${drawn} units per frame ` +
+        `(${SNAPSHOT_MAX_VEHICLES} vehicles, ${consists.size} ten-wagon consists), ` +
         `p50 ${p50.toFixed(4)} ms, p99 ${p99.toFixed(4)} ms ` +
         `(median tripwire ${DRAW_PREP_P50_TRIPWIRE_MS} ms, backstop ${DRAW_PREP_P99_BACKSTOP_MS} ms)`,
     );
 
-    expect(drawn).toBe(SNAPSHOT_MAX_VEHICLES);
+    expect(drawn).toBe(expectedUnits);
     expect(p50).toBeLessThan(DRAW_PREP_P50_TRIPWIRE_MS);
     expect(p99).toBeLessThan(DRAW_PREP_P99_BACKSTOP_MS);
   });

@@ -42,9 +42,12 @@ const INTERVAL_MAX_MS = 250;
  * TILE_SIZE_M = 50 m and no catalogue speed approaches 1000 m/s), so even a
  * doubled generation gap under fast-forward stays within two tiles; three
  * or more is a relocation - depot recall, path reset, a loaded world -
- * which must cut, not glide. [tiles squared]
+ * which must cut, not glide. Exported because the consist breadcrumb ring
+ * (M13, consistArt.ts) resets on exactly the same rule: when the head
+ * snaps, the whole consist snaps with it - one threshold, one truth.
+ * [tiles squared]
  */
-const TELEPORT_TILES_SQ = 9;
+export const TELEPORT_TILES_SQ = 9;
 
 /**
  * VehicleState values whose arrival or departure snaps the sprite: Loading
@@ -172,10 +175,12 @@ export class SnapshotInterpolator {
    * Take note of the published frame. Copies only when the generation moved;
    * re-observing the same generation is free and does not move the arrival
    * stamp. A frame from a channel that has never published (generation 0)
-   * is ignored entirely.
+   * is ignored entirely. Returns true when a new generation was copied -
+   * the 20 Hz edge the consist breadcrumb recorder (M13) keys on, so ring
+   * maintenance runs per published tick, never per rendered frame.
    */
-  observe(frame: VehicleFrame, nowMs: number): void {
-    if (frame.generation <= 0 || frame.generation === this.observedGeneration) return;
+  observe(frame: VehicleFrame, nowMs: number): boolean {
+    if (frame.generation <= 0 || frame.generation === this.observedGeneration) return false;
 
     if (this.observedGeneration > 0) {
       // The newest copy becomes the previous one; index it by vehicle id.
@@ -194,12 +199,15 @@ export class SnapshotInterpolator {
     // Whole-block copy into the preallocated buffer - rows past `count` are
     // dead weight nobody reads. The oversize guard only fires in tests that
     // hand-build blocks; the real channel is exactly SNAPSHOT_MAX_VEHICLES.
-    target.set(frame.data.length > target.length ? frame.data.subarray(0, target.length) : frame.data);
+    target.set(
+      frame.data.length > target.length ? frame.data.subarray(0, target.length) : frame.data,
+    );
     this.counts[this.currentSlot] = Math.min(frame.count, SNAPSHOT_MAX_VEHICLES);
     this.ticks[this.currentSlot] = frame.tick;
     this.observedGeneration = frame.generation;
     this.arrivedMs = nowMs;
     this.intervalMs = tickIntervalMsFor(frame.simRateCentiHz);
+    return true;
   }
 
   /** True once a real generation has been copied and can be drawn. */
@@ -220,6 +228,16 @@ export class SnapshotInterpolator {
   /** The previous generation's vehicle block (reader-side copy). */
   get prevData(): Int32Array {
     return this.blocks[this.currentSlot ^ 1]!;
+  }
+
+  /**
+   * Rows in use in {@link prevData}, or 0 until two generations exist. The
+   * consist breadcrumb recorder (M13) walks the PREVIOUS block after every
+   * swap: those are the positions the interpolated head has provably
+   * passed, so the ring never holds a point ahead of the drawn sprite.
+   */
+  get prevCount(): number {
+    return this.prevValid ? this.counts[this.currentSlot ^ 1]! : 0;
   }
 
   /**

@@ -110,9 +110,15 @@ describe('two generations through the interpolator', () => {
   it('lerps a vehicle to the expected interpolated position', () => {
     const interp = new SnapshotInterpolator();
     // Generation 1: vehicle 7 crossing (10,10) -> (11,10) at 40 %.
-    interp.observe(frame(1, 100, [{ id: 7, tile: at(10, 10), next: at(11, 10), progressMilli: 400 }]), 1_000);
+    interp.observe(
+      frame(1, 100, [{ id: 7, tile: at(10, 10), next: at(11, 10), progressMilli: 400 }]),
+      1_000,
+    );
     // Generation 2, one tick later: the same step at 90 %.
-    interp.observe(frame(2, 101, [{ id: 7, tile: at(10, 10), next: at(11, 10), progressMilli: 900 }]), 1_050);
+    interp.observe(
+      frame(2, 101, [{ id: 7, tile: at(10, 10), next: at(11, 10), progressMilli: 900 }]),
+      1_050,
+    );
 
     expect(interp.hasFrame).toBe(true);
     expect(interp.prevRowOf(7)).toBe(0);
@@ -164,7 +170,9 @@ describe('two generations through the interpolator', () => {
 
   it('copies the block reader-side, so the writer overwriting the slot moves nothing', () => {
     const interp = new SnapshotInterpolator();
-    const published = frame(1, 100, [{ id: 1, tile: at(10, 10), next: at(11, 10), progressMilli: 100 }]);
+    const published = frame(1, 100, [
+      { id: 1, tile: at(10, 10), next: at(11, 10), progressMilli: 100 },
+    ]);
     interp.observe(published, 0);
     // The worker drafting the next tick into the same memory.
     published.data[SnapshotVehicle.ProgressMilli] = 999;
@@ -173,7 +181,10 @@ describe('two generations through the interpolator', () => {
 
   it('ignores an unpublished channel and does not restamp a re-observed generation', () => {
     const interp = new SnapshotInterpolator();
-    interp.observe({ data: new Int32Array(0), count: 0, generation: 0, tick: 0, simRateCentiHz: 0 }, 0);
+    interp.observe(
+      { data: new Int32Array(0), count: 0, generation: 0, tick: 0, simRateCentiHz: 0 },
+      0,
+    );
     expect(interp.hasFrame).toBe(false);
     expect(interp.alpha(1_000)).toBe(1); // no frames: draw whatever is current
 
@@ -186,6 +197,28 @@ describe('two generations through the interpolator', () => {
     // 60 Hz polls the same 20 Hz slot three times.
     interp.observe(frame(2, 101, [row]), 166);
     expect(interp.alpha(175)).toBeCloseTo(0.5, 12);
+  });
+
+  it('reports the 20 Hz edge and the previous count for the consist recorder (M13)', () => {
+    const interp = new SnapshotInterpolator();
+    const rows: Row[] = [
+      { id: 1, tile: at(3, 3), next: at(4, 3), progressMilli: 0 },
+      { id: 2, tile: at(5, 5), next: at(6, 5), progressMilli: 0 },
+    ];
+    expect(
+      interp.observe(
+        { data: new Int32Array(0), count: 0, generation: 0, tick: 0, simRateCentiHz: 0 },
+        0,
+      ),
+    ).toBe(false);
+    expect(interp.prevCount).toBe(0);
+    expect(interp.observe(frame(1, 100, rows), 0)).toBe(true);
+    // One generation: nothing has become "previous" yet, so the breadcrumb
+    // recorder has nothing to walk.
+    expect(interp.prevCount).toBe(0);
+    expect(interp.observe(frame(1, 100, rows), 16)).toBe(false); // re-poll of the same slot
+    expect(interp.observe(frame(2, 101, rows), 50)).toBe(true);
+    expect(interp.prevCount).toBe(2);
   });
 });
 

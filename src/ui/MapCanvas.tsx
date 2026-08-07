@@ -468,9 +468,10 @@ export function MapCanvas({ client }: { readonly client: SimClient }): ReactElem
       .filter((vehicle) => vehicle.waitingTicks >= DEADLOCK_WARN_TICKS)
       .map((vehicle) => vehicle.tileIndex);
     viewRef.current?.setDeadlockTiles(stuck);
-    // The renderer reads exactly one fact per vehicle from these markers:
-    // its catalogue entry, which picks the baked sprite (SPEC2 M13, E-05's
-    // marker channel - never the 20 Hz stride).
+    // The renderer reads two facts per vehicle from these markers: its
+    // catalogue entry, which picks the baked sprite, and - for a train -
+    // its full composition, which the consist rendering places wagon by
+    // wagon (SPEC2 M13, E-05's marker channel - never the 20 Hz stride).
     viewRef.current?.setFleet(fleet);
   }, [fleet]);
 
