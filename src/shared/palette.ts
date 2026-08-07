@@ -42,7 +42,7 @@ export const COMPANY_COLORS_CVD: readonly string[] = [
 
 /** Ground colour per terrain type, indexed by Terrain. Shared by atlas and minimap. */
 export const TERRAIN_COLORS: readonly string[] = [
-  '#4a86a8', // water
+  '#4a86a8', // water (the SHALLOW tone of 16.3; the deep tone is WATER_DEEP)
   '#cbb682', // coast
   '#6f9b58', // grass
   '#b09a4e', // field
@@ -53,6 +53,16 @@ export const TERRAIN_COLORS: readonly string[] = [
   '#5a6b4a', // marsh
   '#b8b4ac', // town ground
 ];
+
+/**
+ * The deep-water tone of section 16.3 ("Wasser tief #2c5a78").
+ *
+ * Not part of TERRAIN_COLORS because depth is not a terrain: which of the two
+ * water tones a tile shows is derived render-side from `oceanMask` and the
+ * corner heights (src/render/water.ts, D-164) - the simulation knows one
+ * Terrain.Water and nothing else.
+ */
+export const WATER_DEEP = '#2c5a78';
 
 /** Interface chrome. */
 export const UI_COLORS = {

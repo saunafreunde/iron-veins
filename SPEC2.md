@@ -403,7 +403,7 @@ hash-relevanten Migration und wird dort re-recorded (M10-Erstwert war
 
 | Seite | Inhalt | Budget |
 |---|---|---|
-| 0 | Terrain/Statik (Bestand, 2176×2688 von 4096) + 4 Wasser-Zeilen | Restfläche; KEINE Fahrzeug-Zellen hier |
+| 0 | Terrain/Statik (Bestand 2176×2688) + 4 Wasser-Zeilen (M12 eingelöst: 3 Animations- + 1 Küstensaum-Zeile, D-164) — Stand 2176×3456 von 4096 | Restfläche; KEINE Fahrzeug-Zellen hier |
 | 0-detail | 4×-Zwilling von Seite 0 für die oberste Zoomstufe (prozedural, M12): kurze Zeilen für Terrain/Straße/Gleis, hohe für Gebäude/Industrie/Statik | gebucht 4096×3840 von 4096 (D-163); wächst nur mit neuer Buchung hier |
 | 1 | Fahrzeuge: ~56+ Typen × 8 Facings, Tint-Zonen-Liveries (nie Per-Firma-Zellen) | ~600 Zellen, eigene 4096²-Seite |
 | 2 | Emissive-Zwillinge (Fenster/Lampen/Signale) + Ären-/Klima-Varianten | ~150 + Emissive, eigene Seite |
@@ -478,9 +478,9 @@ lesen.
 39. **Wanduhr in Welt-Animation.** Wasser-/Partikel-Frames keyen an
     Snapshot-Zählern, nie an `performance.now()` — sonst sind Screenshots und
     Replays nicht reproduzierbar.
-40. **Atlas-Zellen ohne Ledger-Buchung.** Seite 0 steht bei 2176×2688 von
-    4096; eine naive Erweiterung überläuft still. Jede Zelle wird gebucht
-    (6.2).
+40. **Atlas-Zellen ohne Ledger-Buchung.** Seite 0 steht bei 2176×3456 von
+    4096 (seit M12, D-164); eine naive Erweiterung überläuft still. Jede
+    Zelle wird gebucht (6.2).
 
 ---
 

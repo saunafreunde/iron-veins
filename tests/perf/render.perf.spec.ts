@@ -19,6 +19,7 @@ import {
 } from '../../src/render/projection';
 import { CHUNK_TILES, chunkChecksum, extractNetworkSegments } from '../../src/render/chunks';
 import { sampleWorldX, sampleWorldY, shouldSnap } from '../../src/render/interpolation';
+import { coastEdgeMask, FOAM_EDGE_COUNT, foamVariant, isDeepWater } from '../../src/render/water';
 
 /**
  * The render CPU tripwire of SPEC2 6.3: Sprite-Pool-Rebuild-ms, Draw-Prep-ms
@@ -88,7 +89,10 @@ interface DrawList {
 /**
  * A dense synthetic town-and-rail quarter: every branch of the rebuild loop -
  * road, track, signal, building - fires on a realistic share of tiles, so the
- * proxy prices the loop's work, not its skips.
+ * proxy prices the loop's work, not its skips. Since M12 that includes the
+ * living water (D-164): one tile row in six is a canal, so the water branch -
+ * tone lookup, coast-edge mask, foam placements - is priced too, and every
+ * canal tile is a worst case with land on both shores.
  */
 function buildBusyMap(): TileMap {
   const map = new TileMap(MAP_SIZE);
@@ -99,7 +103,10 @@ function buildBusyMap(): TileMap {
   for (let y = WINDOW_MIN; y <= WINDOW_MAX; y++) {
     for (let x = WINDOW_MIN; x <= WINDOW_MAX; x++) {
       const index = map.tileIndex(x, y);
-      if (y % 6 === 0) {
+      if (y % 6 === 3) {
+        map.terrain[index] = Terrain.Water;
+        map.oceanMask[index] = 1;
+      } else if (y % 6 === 0) {
         map.trackBits[index] = eastWest;
         if (x % 7 === 0) map.signal[index] = packSignal(SignalKind.Block, TrackDir.East);
       } else if (y % 4 === 1) {
@@ -116,12 +123,45 @@ function buildBusyMap(): TileMap {
 }
 
 /**
+ * The water branch of `MapView.rebuild` and `MapView.bakeChunk`, shared by
+ * both proxies: tone by depth, the animated ground cell, the coast-edge mask
+ * and one foam placement per land-facing edge (D-164). Returns a fold of the
+ * tone decision so it cannot be dead-code eliminated.
+ */
+function waterProxy(
+  map: TileMap,
+  x: number,
+  y: number,
+  slope: number,
+  world: { x: number; y: number },
+  height: number,
+  place: (key: string, worldX: number, worldY: number, zIndex: number) => void,
+): number {
+  const deep = isDeepWater(map, x, y) ? 1 : 0;
+  place(`w1:${slope}`, world.x, world.y, drawOrder(x, y, height, DrawLayer.Ground));
+  const mask = coastEdgeMask(map, x, y);
+  if (mask !== 0) {
+    for (let edge = 0; edge < FOAM_EDGE_COUNT; edge++) {
+      if ((mask & (1 << edge)) === 0) continue;
+      place(
+        `f${foamVariant(edge, slope)}`,
+        world.x,
+        world.y,
+        drawOrder(x, y, height, DrawLayer.Road),
+      );
+    }
+  }
+  return deep;
+}
+
+/**
  * The CPU of `MapView.rebuild`, sprite for sprite: diagonal iteration, height
  * and slope reads, `tileToWorld`, the string frame key and its cache lookup,
  * the `drawOrder` zIndex - everything except handing the result to Pixi.
  */
 function rebuildProxy(map: TileMap, out: DrawList, frames: Map<string, number>): number {
   let used = 0;
+  let deepFold = 0;
   const place = (key: string, worldX: number, worldY: number, zIndex: number): void => {
     let frame = frames.get(key);
     if (frame === undefined) {
@@ -147,6 +187,10 @@ function rebuildProxy(map: TileMap, out: DrawList, frames: Map<string, number>):
 
       const terrain = map.terrain[index]!;
       const slope = map.slopeAt(x, y);
+      if (terrain === Terrain.Water) {
+        deepFold += waterProxy(map, x, y, slope, world, height, place);
+        continue;
+      }
       place(`t${terrain}:${slope}`, world.x, world.y, drawOrder(x, y, height, DrawLayer.Ground));
 
       if (map.structure[index] !== 0) continue;
@@ -180,7 +224,7 @@ function rebuildProxy(map: TileMap, out: DrawList, frames: Map<string, number>):
       }
     }
   }
-  return used;
+  return used + (deepFold === -1 ? 1 : 0);
 }
 
 /**
@@ -263,8 +307,7 @@ function drawPrepProxy(
 
     let worldX = currX;
     let worldY = currY;
-    const prevRow =
-      vehicleId >= 0 && vehicleId < prevRowById.length ? prevRowById[vehicleId]! : -1;
+    const prevRow = vehicleId >= 0 && vehicleId < prevRowById.length ? prevRowById[vehicleId]! : -1;
     if (alpha < 1 && prevRow >= 0) {
       const prevBase = prevRow * SNAPSHOT_VEHICLE_STRIDE;
       const prevTile = prev[prevBase + SnapshotVehicle.Tile]!;
@@ -321,6 +364,7 @@ function chunkBakeProxy(
 ): number {
   const checksum = chunkChecksum(map, chunkX, chunkY, true);
   let used = 0;
+  let deepFold = 0;
   const place = (key: string, worldX: number, worldY: number, zIndex: number): void => {
     let frame = frames.get(key);
     if (frame === undefined) {
@@ -351,6 +395,10 @@ function chunkBakeProxy(
 
       const terrain = map.terrain[index]!;
       const slope = map.slopeAt(x, y);
+      if (terrain === Terrain.Water) {
+        deepFold += waterProxy(map, x, y, slope, world, height, place);
+        continue;
+      }
       place(`t${terrain}:${slope}`, world.x, world.y, drawOrder(x, y, height, DrawLayer.Ground));
 
       if (map.structure[index] !== 0) continue;
@@ -388,7 +436,7 @@ function chunkBakeProxy(
   const segments = extractNetworkSegments(map, x0, y0, xMax, yMax);
   // Fold the checksum into the result so neither half can be dead-code
   // eliminated out of the measurement.
-  return used + segments.length + (checksum === 0 ? 1 : 0);
+  return used + segments.length + (checksum === 0 ? 1 : 0) + (deepFold === -1 ? 1 : 0);
 }
 
 function percentile(samples: Float64Array, share: number): number {

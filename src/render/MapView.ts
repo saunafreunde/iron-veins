@@ -17,7 +17,7 @@ import {
 } from '../shared/snapshot';
 import { MAX_HEIGHT } from '../sim/constants';
 import type { TileMap } from '../sim/map/TileMap';
-import { Terrain } from '../sim/map/terrain';
+import { SLOPE_COUNT, Terrain } from '../sim/map/terrain';
 import { BlockIndex } from '../sim/signals/blocks';
 import {
   DrawLayer,
@@ -55,9 +55,20 @@ import {
   buildDetailAtlas,
   buildTerrainAtlas,
   DETAIL_ATLAS_SCALE,
+  foamAtlasFrame,
+  waterAtlasFrame,
   type AtlasFrame,
   type TerrainAtlas,
 } from './TerrainAtlas';
+import {
+  coastEdgeMask,
+  FOAM_EDGE_COUNT,
+  foamVariant,
+  isDeepWater,
+  WATER_DEEP_TINT,
+  WATER_SHALLOW_TINT,
+  waterRowForCounter,
+} from './water';
 import {
   CHUNK_TILES,
   chunkAabb,
@@ -127,6 +138,19 @@ const CHUNK_CACHE_MAX_TERRAIN = 96;
 
 /** Cached polyline lists kept before unused chunks are dropped. [chunks] */
 const SEGMENT_CACHE_MAX = 256;
+
+/**
+ * Water-animation chunk rebakes allowed per frame at 0.5x. [chunks]
+ *
+ * The living water swaps its atlas row every WATER_PHASE_FRAMES render
+ * frames; a baked chunk shows the swap by being rebaked (D-164 - measured
+ * against keeping water live, and the rebake won). Rebaking every visible
+ * water chunk in the swap frame would spend ~10 ms in one frame for a
+ * half-second cadence, so the swap is staggered: two chunks a frame drains
+ * a typical 0.5x viewport (six to nine water chunks) in well under a tenth
+ * of the phase window, and a still ocean never pays anything.
+ */
+const WATER_CHUNK_REBAKES_PER_FRAME = 2;
 
 /**
  * Abstract-mode network style. Widths are SCREEN pixels (divided by zoom at
@@ -232,6 +256,10 @@ interface ChunkEntry {
   checksum: number;
   /** Frame stamp of the last frame this chunk was on screen, for the LRU. */
   lastUsed: number;
+  /** True when the bake placed at least one water tile (D-164). */
+  readonly hasWater: boolean;
+  /** Water animation row the bake drew, so a phase swap knows who is stale. */
+  readonly waterRow: number;
 }
 
 /** Cached network polylines of one chunk, for the abstract mode. */
@@ -302,6 +330,24 @@ export class MapView {
 
   private hovered: { x: number; y: number } | null = null;
   private selected: { x: number; y: number } | null = null;
+
+  /**
+   * The living water of D-164, keyed to the blink counter (never the wall
+   * clock - Fehlerkatalog 39). `waterRow` is this frame's animation row;
+   * `builtWaterRow` is what the live water sprites currently show, and
+   * `waterSlots`/`waterSlopes` record which pool sprites they are (parallel
+   * arrays, rebuilt by every `rebuild`), so a phase swap re-textures exactly
+   * those sprites instead of rebuilding the world. `waterSwapHandles` is
+   * per-slope scratch for one swap, resolved once per phase rather than once
+   * per sprite.
+   */
+  private waterRow = 0;
+  private builtWaterRow = 0;
+  private readonly waterSlots: number[] = [];
+  private readonly waterSlopes: number[] = [];
+  private readonly waterSwapHandles: FrameHandle[] = [];
+  /** Chunks of the last full-profile visible set, for the staggered rebake. */
+  private visibleFullChunkCount = 0;
 
   /** F3: the block and reservation overlay of section 9.3. */
   private blockOverlay = false;
@@ -688,6 +734,12 @@ export class MapView {
     this.net.visible = abstract;
     this.dots.visible = abstract;
 
+    // The living water's animation row for this frame (D-164), from the
+    // blink counter - the deterministic frame counter, never the wall clock
+    // (Fehlerkatalog 39). Resolved BEFORE the rebuild paths so a rebuild or
+    // a chunk bake in this frame already draws the current row.
+    this.waterRow = waterRowForCounter(this.blink);
+
     const bounds = this.visibleTileBounds(map.size);
     const changed =
       map.revision !== this.builtRevision ||
@@ -708,9 +760,64 @@ export class MapView {
       this.builtZoom = this.zoom;
       this.builtBounds = bounds;
     }
+    this.animateWater(map, chunked, abstract);
     this.drawVehicles(map, abstract);
     this.drawOverlay(map);
   };
+
+  /**
+   * Advance the living water to this frame's animation row (D-164).
+   *
+   * On the detail path a phase swap re-textures the recorded water sprites -
+   * position, tint and draw order are row-independent, so nothing else moves.
+   * On the 0.5x chunk path the water is baked, and stale water chunks are
+   * REBAKED, at most WATER_CHUNK_REBAKES_PER_FRAME per frame - a phase
+   * therefore rolls across a large viewport over a few frames rather than
+   * spiking one. At 0.25x the water holds still on row 0: the abstract mode
+   * of SPEC.md 16.1 strips detail by design, a two-pixel tile cannot show a
+   * shimmer that reads as anything but noise, and the rebake bill at
+   * overview scale is exactly the pan cost chunking exists to remove.
+   */
+  private animateWater(map: TileMap, chunked: boolean, abstract: boolean): void {
+    const row = this.waterRow;
+    if (!chunked) {
+      if (row === this.builtWaterRow) return;
+      this.builtWaterRow = row;
+      if (this.waterSlots.length === 0) return;
+      for (let slope = 0; slope < SLOPE_COUNT; slope++) {
+        this.waterSwapHandles[slope] = this.frameTexture(
+          this.basePage!,
+          `w${row}:${slope}`,
+          waterAtlasFrame(row, slope),
+        );
+      }
+      for (let i = 0; i < this.waterSlots.length; i++) {
+        const sprite = this.pool[this.waterSlots[i]!]!;
+        sprite.texture = this.waterSwapHandles[this.waterSlopes[i]!]!.texture;
+      }
+      return;
+    }
+    if (abstract) return;
+
+    let rebaked = 0;
+    for (let i = 0; i < this.visibleFullChunkCount; i++) {
+      if (rebaked >= WATER_CHUNK_REBAKES_PER_FRAME) return;
+      const key = this.visibleChunkScratch[i]!;
+      const entry = this.fullChunks.get(key);
+      if (entry === undefined || !entry.hasWater || entry.waterRow === row) continue;
+      const fresh = this.bakeChunk(
+        map,
+        entry.chunkX,
+        entry.chunkY,
+        false,
+        entry.texture,
+        CHUNK_ZOOM_MAX,
+      );
+      fresh.lastUsed = entry.lastUsed;
+      this.fullChunks.set(key, fresh);
+      rebaked++;
+    }
+  }
 
   private clampCentre(size: number): void {
     const halfSpan = size * (TILE_W / 2);
@@ -840,6 +947,13 @@ export class MapView {
     const detailed = this.zoom >= DETAIL_ZOOM_MIN;
     let used = 0;
 
+    // Fresh water bookkeeping for the phase swaps (D-164): this rebuild
+    // places the current row, and the slots it records are the sprites a
+    // later swap re-textures.
+    this.waterSlots.length = 0;
+    this.waterSlopes.length = 0;
+    this.builtWaterRow = this.waterRow;
+
     // Painter's order for an isometric grid runs along the diagonals: every
     // tile with a smaller (x + y) is further away and has to go down first.
     for (let sum = bounds.minX + bounds.minY; sum <= bounds.maxX + bounds.maxY; sum++) {
@@ -854,13 +968,35 @@ export class MapView {
 
         const terrain = map.terrain[index]!;
         const slope = map.slopeAt(x, y);
-        this.place(
-          this.take(used++),
-          this.frameTexture(page, `t${terrain}:${slope}`, atlas.terrainFrame(terrain, slope)),
-          world.x,
-          world.y,
-          drawOrder(x, y, height, DrawLayer.Ground),
-        );
+        if (terrain === Terrain.Water) {
+          // Living water (D-164): a greyscale animation cell from the BASE
+          // page at every zoom - the detail page has no water rows - tinted
+          // with one of the two 16.3 tones. Recorded so a phase swap can
+          // re-texture exactly these sprites.
+          const water = this.take(used++);
+          this.place(
+            water,
+            this.frameTexture(
+              this.basePage!,
+              `w${this.waterRow}:${slope}`,
+              waterAtlasFrame(this.waterRow, slope),
+            ),
+            world.x,
+            world.y,
+            drawOrder(x, y, height, DrawLayer.Ground),
+          );
+          water.tint = isDeepWater(map, x, y) ? WATER_DEEP_TINT : WATER_SHALLOW_TINT;
+          this.waterSlots.push(used - 1);
+          this.waterSlopes.push(slope);
+        } else {
+          this.place(
+            this.take(used++),
+            this.frameTexture(page, `t${terrain}:${slope}`, atlas.terrainFrame(terrain, slope)),
+            world.x,
+            world.y,
+            drawOrder(x, y, height, DrawLayer.Ground),
+          );
+        }
 
         // A bridge deck is drawn at ITS height, not the ground's - that is the
         // whole point of it. A tunnel bore is drawn not at all: the hill above
@@ -909,7 +1045,27 @@ export class MapView {
           marker.tint = WAYPOINT_TINTS[map.waypoint[index]!] ?? 0xffffff;
         }
 
-        if (!detailed || terrain === Terrain.Water) continue;
+        if (!detailed) continue;
+        if (terrain === Terrain.Water) {
+          // Coastline foam (D-164): one static cell per land-facing edge, at
+          // the road layer - a water tile carries neither roads nor rails,
+          // so the slot is free, and foam must cover the ground's edge.
+          const mask = coastEdgeMask(map, x, y);
+          if (mask !== 0) {
+            for (let edge = 0; edge < FOAM_EDGE_COUNT; edge++) {
+              if ((mask & (1 << edge)) === 0) continue;
+              const variant = foamVariant(edge, slope);
+              this.place(
+                this.take(used++),
+                this.frameTexture(this.basePage!, `f${variant}`, foamAtlasFrame(variant)),
+                world.x,
+                world.y,
+                drawOrder(x, y, height, DrawLayer.Road),
+              );
+            }
+          }
+          continue;
+        }
 
         const roadBits = map.roadBits[index]!;
         if (roadBits !== 0) {
@@ -1088,6 +1244,7 @@ export class MapView {
     this.segmentCache.clear();
     this.chunkSeenRevision = -1;
     this.chunkSetHash = -1;
+    this.visibleFullChunkCount = 0;
     this.netDirty = true;
   }
 
@@ -1137,6 +1294,10 @@ export class MapView {
     const per = chunksPerSide(map.size);
     const stamp = this.blink;
     let setHash = 0x811c9dc5 | 0;
+    // The staggered water rebake of D-164 walks the full profile's visible
+    // set on frames where this method does not run; the set only changes
+    // when it does, so recording the count here keeps that walk current.
+    if (!abstract) this.visibleFullChunkCount = visible;
 
     for (let i = 0; i < visible; i++) {
       const key = this.visibleChunkScratch[i]!;
@@ -1266,6 +1427,13 @@ export class MapView {
     const yMax = Math.min(y0 + CHUNK_TILES - 1, size - 1);
     let used = 0;
 
+    // Living water in a bake (D-164): the full profile bakes THIS frame's
+    // animation row and is rebaked by the staggered swap in animateWater;
+    // the abstract profile pins row 0 - it never animates, so every 0.25x
+    // chunk must agree on one row or the ocean would freeze as patchwork.
+    const waterRow = abstract ? 0 : this.waterRow;
+    let hasWater = false;
+
     for (let sum = x0 + y0; sum <= xMax + yMax; sum++) {
       const xStart = Math.max(x0, sum - yMax);
       const xEnd = Math.min(xMax, sum - y0);
@@ -1278,13 +1446,26 @@ export class MapView {
 
         const terrain = map.terrain[index]!;
         const slope = map.slopeAt(x, y);
-        this.place(
-          this.bakeTake(used++),
-          this.frameTexture(page, `t${terrain}:${slope}`, atlas.terrainFrame(terrain, slope)),
-          world.x,
-          world.y,
-          drawOrder(x, y, height, DrawLayer.Ground),
-        );
+        if (terrain === Terrain.Water) {
+          hasWater = true;
+          const water = this.bakeTake(used++);
+          this.place(
+            water,
+            this.frameTexture(page, `w${waterRow}:${slope}`, waterAtlasFrame(waterRow, slope)),
+            world.x,
+            world.y,
+            drawOrder(x, y, height, DrawLayer.Ground),
+          );
+          water.tint = isDeepWater(map, x, y) ? WATER_DEEP_TINT : WATER_SHALLOW_TINT;
+        } else {
+          this.place(
+            this.bakeTake(used++),
+            this.frameTexture(page, `t${terrain}:${slope}`, atlas.terrainFrame(terrain, slope)),
+            world.x,
+            world.y,
+            drawOrder(x, y, height, DrawLayer.Ground),
+          );
+        }
 
         if (abstract) continue;
 
@@ -1327,7 +1508,25 @@ export class MapView {
           marker.tint = WAYPOINT_TINTS[map.waypoint[index]!] ?? 0xffffff;
         }
 
-        if (terrain === Terrain.Water) continue;
+        if (terrain === Terrain.Water) {
+          // Coastline foam, exactly as the detail path places it - static
+          // across the animation rows, so a foam edge never flickers.
+          const mask = coastEdgeMask(map, x, y);
+          if (mask !== 0) {
+            for (let edge = 0; edge < FOAM_EDGE_COUNT; edge++) {
+              if ((mask & (1 << edge)) === 0) continue;
+              const variant = foamVariant(edge, slope);
+              this.place(
+                this.bakeTake(used++),
+                this.frameTexture(page, `f${variant}`, foamAtlasFrame(variant)),
+                world.x,
+                world.y,
+                drawOrder(x, y, height, DrawLayer.Road),
+              );
+            }
+          }
+          continue;
+        }
 
         const roadBits = map.roadBits[index]!;
         if (roadBits !== 0) {
@@ -1369,7 +1568,11 @@ export class MapView {
           const level = map.buildingLevel[index]!;
           this.place(
             this.bakeTake(used++),
-            this.frameTexture(page, `b${buildingKind}:${level}`, atlas.buildingFrame(buildingKind, level)),
+            this.frameTexture(
+              page,
+              `b${buildingKind}:${level}`,
+              atlas.buildingFrame(buildingKind, level),
+            ),
             world.x,
             world.y,
             drawOrder(x, y, height, DrawLayer.Building),
@@ -1387,6 +1590,8 @@ export class MapView {
       chunkY,
       checksum: chunkChecksum(map, chunkX, chunkY, !abstract),
       lastUsed: 0,
+      hasWater,
+      waterRow,
     };
   }
 

@@ -3,6 +3,7 @@ import { INDUSTRY_TYPE_COUNT } from '../sim/industry/types';
 import { SlopeBit, SLOPE_COUNT, Terrain, TERRAIN_COUNT } from '../sim/map/terrain';
 import { drawIndustry } from './industryArt';
 import { box, gableRoof, sawtoothRoof, shade, windows, type IsoView } from './shapes';
+import { FOAM_VARIANT_COUNT, WATER_FRAME_COUNT } from './water';
 
 /**
  * Procedurally generated tile artwork.
@@ -86,6 +87,16 @@ const BUILDING_ROW = TERRAIN_COUNT + 1;
 const TRACK_ROW = TERRAIN_COUNT + 2;
 /** One cell per industry type, so seventeen works do not share one crate. */
 const INDUSTRY_ROW = TERRAIN_COUNT + 3;
+/**
+ * The living water of M12 (D-164): WATER_FRAME_COUNT greyscale animation
+ * rows (16 slope cells each) followed by one row of FOAM_VARIANT_COUNT
+ * coastline cells. These four rows are the M12 booking of SPEC2 6.2
+ * ("+4 Wasser-Zeilen", Seite 0) and exist on the BASE page only - the
+ * detail page's packed layout has 256 px of headroom left (D-163), and four
+ * short rows would need 1024, so every zoom draws its water from here.
+ */
+const WATER_ROW = TERRAIN_COUNT + 4;
+const FOAM_ROW = WATER_ROW + WATER_FRAME_COUNT;
 
 /** Three zones times two expansion stages, plus one generic industry block. */
 const BUILDING_VARIANTS = 6;
@@ -99,7 +110,7 @@ const BRIDGE_COLUMN = BUILDING_VARIANTS + 6;
 const SIGNAL_COLUMN = BUILDING_VARIANTS + 7;
 
 const ATLAS_COLUMNS = Math.max(SLOPE_COUNT, SIGNAL_COLUMN + 1, INDUSTRY_TYPE_COUNT);
-const ATLAS_ROWS = TERRAIN_COUNT + 4;
+const ATLAS_ROWS = FOAM_ROW + 1;
 
 /**
  * Largest texture the weakest GPU this game targets is guaranteed to accept.
@@ -243,6 +254,156 @@ function drawTerrainCell(
     const py = originY + CELL_TOP + v * TILE_H;
     ctx.fillRect(px, py, ATLAS_SCALE, ATLAS_SCALE);
   }
+}
+
+/**
+ * Static grain luminance of a water cell, as greys over the white top face.
+ *
+ * The water cells are drawn in GREYSCALE and tinted per sprite with one of
+ * the two 16.3 tones (D-164): white multiplies to the exact hex, and every
+ * feature darker than white survives the tint as the same feature in that
+ * tone. The speckle grey reproduces the old #3f7896-on-#4a86a8 grain (a
+ * ratio of ~0.87); the ripple grey is deliberately closer to white, because
+ * the ripples are the part that MOVES and a subtle shimmer is the brief -
+ * not a strobe (SPEC2 M12).
+ */
+const WATER_SPECKLE_GREY = '#dedede';
+const WATER_RIPPLE_GREY = '#efefef';
+
+/** Ripple dashes per water cell and animation frame. */
+const WATER_RIPPLE_COUNT = 9;
+
+/**
+ * One greyscale water cell: the drawTerrainCell geometry - same corners, same
+ * skirt, same north-west light - with the terrain palette replaced by white,
+ * plus a per-frame set of ripple dashes. The static speckles use a salt
+ * WITHOUT the frame in it, so the grain holds still while the ripples drift:
+ * a frame swap changes only what is meant to move.
+ */
+function drawWaterCell(
+  ctx: CanvasRenderingContext2D,
+  originX: number,
+  originY: number,
+  slope: number,
+  frame: number,
+): void {
+  const base = '#ffffff';
+
+  const points = CORNERS.map(([cx, cy], index) => {
+    const raised = (slope & CORNER_BITS[index]!) !== 0;
+    return [originX + cx, originY + cy - (raised ? STEP : 0)] as const;
+  });
+
+  const lift = (index: number): number => ((slope & CORNER_BITS[index]!) !== 0 ? 1 : 0);
+  const tilt = lift(3) + lift(0) - lift(1) - lift(2);
+  const topFactor = 1 + tilt * 0.07;
+
+  ctx.fillStyle = shade(base, 0.62);
+  ctx.beginPath();
+  ctx.moveTo(points[1]![0], points[1]![1]);
+  ctx.lineTo(points[2]![0], points[2]![1]);
+  ctx.lineTo(points[2]![0], points[2]![1] + STEP);
+  ctx.lineTo(points[1]![0], points[1]![1] + STEP);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = shade(base, 0.76);
+  ctx.beginPath();
+  ctx.moveTo(points[2]![0], points[2]![1]);
+  ctx.lineTo(points[3]![0], points[3]![1]);
+  ctx.lineTo(points[3]![0], points[3]![1] + STEP);
+  ctx.lineTo(points[2]![0], points[2]![1] + STEP);
+  ctx.closePath();
+  ctx.fill();
+
+  // `shade` clamps at white, so an up-tilted face stays exactly white and
+  // the tint reproduces the 16.3 hex; a down-tilted face darkens as every
+  // terrain cell does.
+  ctx.fillStyle = shade(base, topFactor);
+  ctx.beginPath();
+  ctx.moveTo(points[0]![0], points[0]![1]);
+  for (let i = 1; i < 4; i++) ctx.lineTo(points[i]![0], points[i]![1]);
+  ctx.closePath();
+  ctx.fill();
+
+  // The still grain: same count and placement scheme as the terrain cells,
+  // identical across the three frames.
+  ctx.fillStyle = WATER_SPECKLE_GREY;
+  for (let i = 0; i < 6; i++) {
+    const u = speckleHash(slope, i, 1);
+    const v = speckleHash(slope, i, 2);
+    const px = originX + TILE_W / 2 + (u - 0.5) * TILE_W * (1 - Math.abs(v - 0.5) * 2) * 0.9;
+    const py = originY + CELL_TOP + v * TILE_H;
+    ctx.fillRect(px, py, ATLAS_SCALE, ATLAS_SCALE);
+  }
+
+  // The moving part: short horizontal dashes whose positions depend on the
+  // FRAME, so a row swap reads as light wandering over the surface.
+  ctx.fillStyle = WATER_RIPPLE_GREY;
+  for (let i = 0; i < WATER_RIPPLE_COUNT; i++) {
+    const u = speckleHash(slope * WATER_FRAME_COUNT + frame, i, 3);
+    const v = speckleHash(slope * WATER_FRAME_COUNT + frame, i, 4);
+    const width = (4 + 4 * speckleHash(frame, i, 5)) * ATLAS_SCALE;
+    const px =
+      originX + TILE_W / 2 + (u - 0.5) * (TILE_W - width * 2) * (1 - Math.abs(v - 0.5) * 2) * 0.9;
+    const py = originY + CELL_TOP + v * TILE_H;
+    ctx.fillRect(px - width / 2, py, width, ATLAS_SCALE);
+  }
+}
+
+/**
+ * The two diamond corners either end of each foam edge, as CORNERS indices:
+ * edge 0 runs N-E, 1 E-S, 2 S-W, 3 W-N - the water.ts EDGE_CORNER_BITS
+ * order, which foamVariant packs the lift flags in.
+ */
+const FOAM_EDGE_CORNERS: readonly (readonly [number, number])[] = [
+  [0, 1],
+  [1, 2],
+  [2, 3],
+  [3, 0],
+];
+
+/**
+ * One coastline cell (D-164): a band of foam along one edge of the water
+ * diamond, its endpoints lifted with the slope corners so the foam follows
+ * the shoreline over all sixteen slopes. Drawn in its own near-white - foam
+ * sprites are NOT tinted with a water tone; whiteness is what foam is.
+ */
+function drawFoamCell(
+  ctx: CanvasRenderingContext2D,
+  originX: number,
+  originY: number,
+  variant: number,
+): void {
+  const edge = (variant / 4) | 0;
+  const [cornerA, cornerB] = FOAM_EDGE_CORNERS[edge]!;
+  const liftA = (variant & 1) !== 0 ? STEP : 0;
+  const liftB = (variant & 2) !== 0 ? STEP : 0;
+
+  const ax = originX + CORNERS[cornerA]![0];
+  const ay = originY + CORNERS[cornerA]![1] - liftA;
+  const bx = originX + CORNERS[cornerB]![0];
+  const by = originY + CORNERS[cornerB]![1] - liftB;
+  // The tile centre, for nudging the band onto the water side of the edge.
+  const cx = originX + TILE_W / 2;
+  const cy = originY + CELL_TOP + TILE_H / 2;
+
+  const stroke = (inset: number, width: number, alpha: number): void => {
+    ctx.globalAlpha = alpha;
+    ctx.lineWidth = width;
+    ctx.beginPath();
+    ctx.moveTo(ax + (cx - ax) * inset, ay + (cy - ay) * inset);
+    ctx.lineTo(bx + (cx - bx) * inset, by + (cy - by) * inset);
+    ctx.stroke();
+  };
+
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineCap = 'round';
+  // A wash fading into the water, a body, and a bright line at the shore.
+  stroke(0.16, 4.5 * ATLAS_SCALE, 0.22);
+  stroke(0.08, 2.4 * ATLAS_SCALE, 0.5);
+  stroke(0.02, 1.1 * ATLAS_SCALE, 0.85);
+  ctx.globalAlpha = 1;
 }
 
 /**
@@ -525,11 +686,43 @@ function drawTrackCell(
 
 /**
  * Dimensions of the base page, as a pure function so the guard test can hold
- * them against MAX_ATLAS_PX (and against the ledger's booked 2176x2688,
- * SPEC2 6.2) without a canvas.
+ * them against MAX_ATLAS_PX (and against the ledger's booked 2176x3456 -
+ * the original 2176x2688 plus M12's four water rows, SPEC2 6.2) without a
+ * canvas.
  */
 export function baseAtlasSize(): { width: number; height: number } {
   return { width: ATLAS_COLUMNS * CELL_W, height: ATLAS_ROWS * CELL_H };
+}
+
+/**
+ * Frame of one water animation cell on the BASE page (D-164). A standalone
+ * function rather than a TerrainAtlas method because the water rows exist on
+ * one page only: MapView reads them from the base page at EVERY zoom,
+ * including the chunked ones and the 4x detail level (where this is a 2x
+ * upscale, stated in D-164 - the detail page has no room for four more
+ * rows). All water frames share the base cell's geometry and ground line,
+ * which is what lets a frame swap change a sprite's texture and nothing
+ * else.
+ */
+export function waterAtlasFrame(frame: number, slope: number): AtlasFrame {
+  return {
+    x: (slope & (SLOPE_COUNT - 1)) * CELL_W,
+    y: (WATER_ROW + (frame % WATER_FRAME_COUNT)) * CELL_H,
+    width: CELL_W,
+    height: CELL_H,
+    anchorY: CELL_TOP,
+  };
+}
+
+/** Frame of one coastline foam cell on the BASE page (D-164). */
+export function foamAtlasFrame(variant: number): AtlasFrame {
+  return {
+    x: (variant % FOAM_VARIANT_COUNT) * CELL_W,
+    y: FOAM_ROW * CELL_H,
+    width: CELL_W,
+    height: CELL_H,
+    anchorY: CELL_TOP,
+  };
 }
 
 /** Build the base atlas page. Call once at startup. */
@@ -597,6 +790,19 @@ export function buildTerrainAtlas(): TerrainAtlas {
 
   for (let direction = 0; direction < 8; direction++) {
     drawTrackCell(ctx, direction * CELL_W, TRACK_ROW * CELL_H, direction);
+  }
+
+  // The living water of M12 (D-164): three greyscale animation rows and the
+  // coastline foam row. The static Terrain.Water row above stays in the
+  // layout - removing a terrain row would renumber every frame key for
+  // sixteen cells of savings - but nothing draws from it any more.
+  for (let waterFrame = 0; waterFrame < WATER_FRAME_COUNT; waterFrame++) {
+    for (let slope = 0; slope < SLOPE_COUNT; slope++) {
+      drawWaterCell(ctx, slope * CELL_W, (WATER_ROW + waterFrame) * CELL_H, slope, waterFrame);
+    }
+  }
+  for (let variant = 0; variant < FOAM_VARIANT_COUNT; variant++) {
+    drawFoamCell(ctx, variant * CELL_W, FOAM_ROW * CELL_H, variant);
   }
 
   const frame = (column: number, row: number): AtlasFrame => ({
@@ -745,8 +951,7 @@ function detailCellSpecs(): readonly DetailCellSpec[] {
     specs.push({
       key: spec.key,
       tall: true,
-      draw: (ctx) =>
-        drawBox(ctx, 0, 0, spec.widthTiles, spec.heightPx * ATLAS_SCALE, spec.colour),
+      draw: (ctx) => drawBox(ctx, 0, 0, spec.widthTiles, spec.heightPx * ATLAS_SCALE, spec.colour),
     });
   }
 

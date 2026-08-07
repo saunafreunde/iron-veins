@@ -145,6 +145,39 @@ describe('chunk dirty set from a revision diff', () => {
     const n = computeDirtySet(map, book, false, out);
     expect(new Set(out.slice(0, n))).toEqual(new Set([0, 1, 2, 3]));
   });
+
+  it('an ocean-connectivity flip dirties both profiles though no corner moved', () => {
+    // A canal dug far away can reclassify a lake from inland to ocean - the
+    // water tone of D-164 reads `oceanMask`, so the mask is part of what a
+    // baked chunk shows, in the abstract profile as much as the full one.
+    const map = new TileMap(64);
+    const fullBook = checksumAll(map, true);
+    const terrainBook = checksumAll(map, false);
+    map.oceanMask[map.tileIndex(10, 10)] = 1;
+
+    const out: number[] = [];
+    expect(computeDirtySet(map, fullBook, true, out)).toBe(1);
+    expect(out[0]).toBe(0);
+    expect(computeDirtySet(map, terrainBook, false, out)).toBe(1);
+    expect(out[0]).toBe(0);
+  });
+
+  it('a shoreline flip just across the border dirties the full profile too', () => {
+    // Foam reads the NEIGHBOUR's terrain (coastEdgeMask), so the full
+    // checksum folds a one-tile terrain ring: tile (32,5) lies in chunk
+    // (1,0) but borders chunk (0,0)'s edge tiles. The abstract profile
+    // draws no foam and deliberately skips the ring.
+    const map = new TileMap(64);
+    const fullBook = checksumAll(map, true);
+    const terrainBook = checksumAll(map, false);
+    map.terrain[map.tileIndex(32, 5)] = Terrain.Water;
+
+    const out: number[] = [];
+    const n = computeDirtySet(map, fullBook, true, out);
+    expect(new Set(out.slice(0, n))).toEqual(new Set([0, 1]));
+    expect(computeDirtySet(map, terrainBook, false, out)).toBe(1);
+    expect(out[0]).toBe(1);
+  });
 });
 
 describe('network polyline extraction', () => {

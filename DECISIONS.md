@@ -41,11 +41,11 @@ no entry below. A number may appear under several topics.
 - **Competitors, AI & tenders:** D-107, D-108, D-109, D-115, D-116, D-121,
   D-122, D-147, D-152, D-153, D-154, D-155, D-156, D-158
 - **Rendering & art:** D-013, D-014, D-033, D-035, D-112, D-117, D-125, D-127,
-  D-136, D-140, D-160, D-161, D-162, D-163
+  D-136, D-140, D-160, D-161, D-162, D-163, D-164
 - **UI & input:** D-011, D-013, D-015, D-035, D-110, D-113, D-114, D-119,
   D-126, D-148
 - **Performance & measurement:** D-002, D-120, D-135, D-136, D-161, D-162,
-  D-163
+  D-163, D-164
 - **Platform, tooling & build:** D-012, D-014, D-015, D-016, D-017, D-029,
   D-030, D-031, D-160
 - **Crash safety:** D-132, D-139
@@ -3838,3 +3838,94 @@ base page 3.3-8.9 ms, detail page 8.5-10.3 ms per build, under 20 ms
 together - the slice is spent to a tenth. Render-only throughout: no sim
 contact, no save bump, no snapshot change; the baked-asset loader stub
 (D-160) and its per-zoom manifest are untouched and stay the M13 door.
+
+## M12 - the stage, stage 4: the living water (2026-08-07)
+
+### D-164 Water is a tint over greyscale, three rows on a counter, and the chunk rebakes for its own shimmer
+
+M12 orders the two 16.3 water tones from `oceanMask`/depth, a 2-4-frame
+animation on the deterministic blink counter, and a coastline seam - all of
+it render-only. This entry records the shape it took and the five choices
+inside it.
+
+**The tones are sprite tints over GREYSCALE cells, so the 16.3 hexes are
+exact by construction.** The water cells are drawn white-based (white top
+face, the terrain cell's own skirt and tilt shading, grain in greys);
+multiplying `#4a86a8` or `#2c5a78` over them reproduces the section-16.3
+colour on the flat face literally, where recolouring a blue-drawn cell with
+a second blue would multiply into neither. Deep is `oceanMask` AND a floor
+at least `WATER_DEEP_MIN_DEPTH` (2) levels under the surface, judged by the
+HIGHEST corner exactly as water itself is judged; an inland lake is never
+deep, whatever its floor - the mask is the fact that it is a lake. Both
+inputs are layers the simulation already keeps (map model note: both
+derived), so the sim was not touched. What DID move: the chunk checksums
+now fold `oceanMask` in both profiles - a canal dug at the coast flips a
+whole lake's mask without moving one corner near it - and a one-tile
+terrain RING in the full profile, because foam reads the NEIGHBOUR's
+terrain and a shoreline flip just across the chunk border must dirty the
+chunk on the rare edit that leaves every shared corner in place. The
+minimap keeps its single water colour: D-112's painter is a different,
+honest drawing and was not part of the order.
+
+**The animation is three rows ping-ponged on the blink counter.** Sequence
+0-1-2-1, thirty render frames per phase (roughly half a second), so
+consecutive phases - including across the loop - differ by exactly one row:
+a swap is a step, never a jump. The counter is MapView's blink counter, the
+deterministic frame counter the deadlock marker has always blinked on and
+the one SPEC2 M12 names; no wall clock (Fehlerkatalog 39). The still grain
+keeps the OLD water row's hash-placed speckle positions in every frame and
+only the ripple dashes move, which is what makes the swap read as light
+wandering over the surface rather than a strobe. On the detail path a
+phase swap re-textures exactly the water sprites the last rebuild recorded
+(parallel slot/slope arrays) - position, tint and draw order are
+row-independent, so nothing else is touched.
+
+**The foam row is sixteen cells because an edge only has two corners.** The
+sixteen slope shapes reduce, per edge, to the lift of that edge's two
+corners - nothing else moves the edge geometry - so 4 edges x 4 lift pairs
+covers every (slope, edge) combination that exists. Foam is placed per
+land-facing edge (the map border is open sea, never a shore), sits at the
+road layer a water tile can never occupy, is drawn in its own near-white
+rather than tinted - whiteness is what foam is - and does not animate, so
+a shoreline never flickers.
+
+**All four rows live on the BASE page, and the top zoom upscales its
+water.** The four rows are the M12 ledger booking (SPEC2 6.2, page 0 now
+2176x3456 of 4096, pinned in `terrainAtlas.spec.ts`). The detail page
+cannot take a twin: D-163 packed it to 4096x3840, and four more short rows
+are 1024 px it does not have. So water frames come from the base page at
+EVERY zoom, which at 4x is a 2x upscale of a low-frequency surface -
+stated openly here rather than discovered as a texture-cache surprise. The
+static `Terrain.Water` row of the base grid is dead now; it stays, because
+renumbering every terrain frame key would buy sixteen cells.
+
+**At 0.5x the chunk rebakes for its shimmer; at 0.25x the ocean holds
+still - measured, not guessed.** The two candidates M12 names were both
+measured on the reference machine over an all-water 1920x1080 viewport at
+0.5x (the water-heavy worst case). Option A, rebake water chunks on a
+phase swap: 0.28 ms p50 / 1.69 ms p99 CPU proxy per chunk, 18 visible
+chunks, staggered at WATER_CHUNK_REBAKES_PER_FRAME = 2 - the swap rolls
+over the viewport in nine frames of well under a millisecond median each,
+inside a thirty-frame phase window, and a pan pays nothing. Option B, keep
+water OUT of the bake as live sprites: 23,161 extra live sprites whose
+placement loop costs 5.8 ms p50 / 9.2 ms p99 on EVERY pan frame - the
+exact bill chunking exists to delete - plus a correctness trap: above the
+chunk layer, live water overdraws the baked cliff in front of it (a land
+tile one level up overlaps the water diamond behind it), so B is only
+correct UNDER the chunks, which buys nothing back. A wins on every column;
+what the CPU proxy cannot see (the GPU RenderTexture pass per rebake) is
+stated per D-136, and it is two render passes a frame at worst. Each
+ChunkEntry remembers `hasWater` and the row it baked, so a still ocean and
+a landlocked viewport never rebake at all. The abstract 0.25x profile pins
+row 0 and never animates: 16.1 strips detail there by design, a
+two-pixel tile cannot show a shimmer that reads as anything but noise, and
+every chunk agreeing on one row is what keeps the frozen ocean from
+becoming patchwork.
+
+The tripwires were re-measured with the water in the busy fixture (one
+tile row in six is now a canal with foam on both shores): sprite-pool
+rebuild 8,017 sprites at p50 1.37 ms / p99 4.31 ms against the unchanged
+25 ms tripwire, chunk bake 2,656 placements at p50 0.40 ms / p99 1.64 ms
+against the 4 ms acceptance budget, vehicle draw prep untouched at p99
+1.54 ms against 5. Render-only throughout: no sim contact, no save bump,
+no snapshot change, and the determinism suite never sees a pixel.

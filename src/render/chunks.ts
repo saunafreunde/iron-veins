@@ -123,13 +123,16 @@ const FNV_PRIME = 0x01000193;
  * although today's track art ignores it - M13 draws catenary from it, and
  * a checksum that lags the art by one milestone is a stale-chunk bug
  * waiting to be reported.
+ *
+ * Two folds serve the living water of D-164. `oceanMask` (both profiles)
+ * because the tone of a baked water tile reads it, and the mask can flip
+ * far from any local edit - a canal dug at the coast reclassifies a whole
+ * lake without moving one corner inside this chunk. And a one-tile terrain
+ * RING (full profile) because the coastline foam reads the NEIGHBOUR's
+ * terrain: a shoreline flip just across the chunk border must dirty this
+ * chunk even on the rare edit that leaves every shared corner where it was.
  */
-export function chunkChecksum(
-  map: TileMap,
-  chunkX: number,
-  chunkY: number,
-  full: boolean,
-): number {
+export function chunkChecksum(map: TileMap, chunkX: number, chunkY: number, full: boolean): number {
   const size = map.size;
   const x0 = chunkX * CHUNK_TILES;
   const y0 = chunkY * CHUNK_TILES;
@@ -149,6 +152,7 @@ export function chunkChecksum(
     let index = y * size + x0;
     for (let x = x0; x <= xMax; x++, index++) {
       hash = Math.imul(hash ^ map.terrain[index]!, FNV_PRIME);
+      hash = Math.imul(hash ^ map.oceanMask[index]!, FNV_PRIME);
       if (full) {
         hash = Math.imul(hash ^ map.roadBits[index]!, FNV_PRIME);
         hash = Math.imul(hash ^ map.trackBits[index]!, FNV_PRIME);
@@ -159,6 +163,32 @@ export function chunkChecksum(
         hash = Math.imul(hash ^ map.structureHeight[index]!, FNV_PRIME);
         hash = Math.imul(hash ^ map.buildingKind[index]!, FNV_PRIME);
         hash = Math.imul(hash ^ map.buildingLevel[index]!, FNV_PRIME);
+      }
+    }
+  }
+
+  if (full) {
+    // The one-tile terrain ring, clamped at the map edge. Fixed walk order
+    // (top row, bottom row, then the two side columns) - any fixed order
+    // does, it only has to be the same one every time.
+    const xRing0 = Math.max(x0 - 1, 0);
+    const xRing1 = Math.min(xMax + 1, size - 1);
+    if (y0 - 1 >= 0) {
+      let index = (y0 - 1) * size + xRing0;
+      for (let x = xRing0; x <= xRing1; x++, index++) {
+        hash = Math.imul(hash ^ map.terrain[index]!, FNV_PRIME);
+      }
+    }
+    if (yMax + 1 <= size - 1) {
+      let index = (yMax + 1) * size + xRing0;
+      for (let x = xRing0; x <= xRing1; x++, index++) {
+        hash = Math.imul(hash ^ map.terrain[index]!, FNV_PRIME);
+      }
+    }
+    for (let y = y0; y <= yMax; y++) {
+      if (x0 - 1 >= 0) hash = Math.imul(hash ^ map.terrain[y * size + x0 - 1]!, FNV_PRIME);
+      if (xMax + 1 <= size - 1) {
+        hash = Math.imul(hash ^ map.terrain[y * size + xMax + 1]!, FNV_PRIME);
       }
     }
   }

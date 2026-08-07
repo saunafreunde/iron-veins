@@ -7,9 +7,12 @@ import {
   CELL_HEADROOM_STEPS,
   CELL_SKIRT_STEPS,
   DETAIL_ATLAS_SCALE,
+  foamAtlasFrame,
   MAX_ATLAS_PX,
   planDetailAtlas,
+  waterAtlasFrame,
 } from '../../src/render/TerrainAtlas';
+import { FOAM_VARIANT_COUNT, WATER_FRAME_COUNT } from '../../src/render/water';
 import { HEIGHT_PX, TILE_H } from '../../src/render/projection';
 import { INDUSTRY_TYPE_COUNT } from '../../src/sim/industry/types';
 import { SLOPE_COUNT, TERRAIN_COUNT } from '../../src/sim/map/terrain';
@@ -52,10 +55,70 @@ describe('the base page layout guard', () => {
     expect(size.height).toBeLessThanOrEqual(MAX_ATLAS_PX);
   });
 
-  it('matches the ledger booking of SPEC2 6.2 (2176x2688)', () => {
+  it('matches the ledger booking of SPEC2 6.2 (2176x3456)', () => {
     // Growing the page is fine - but it is a BOOKING, made consciously in
     // SPEC2 6.2 and re-pinned here, never an accident (Fehlerkatalog 40).
-    expect(baseAtlasSize()).toEqual({ width: 2176, height: 2688 });
+    // 3456 is the original 2688 plus M12's four booked water rows (three
+    // animation rows and the coastline foam row, D-164).
+    expect(baseAtlasSize()).toEqual({ width: 2176, height: 3456 });
+  });
+});
+
+describe('the water rows of the base page (D-164)', () => {
+  const size = baseAtlasSize();
+  const cellH = TILE_H * ATLAS_SCALE + 16 * ATLAS_SCALE * (CELL_HEADROOM_STEPS + CELL_SKIRT_STEPS);
+  /** First row that did not exist before M12: everything above is Bestand. */
+  const bookedTop = size.height - 4 * cellH;
+
+  it('spends exactly the four booked rows, inside the page', () => {
+    for (let frame = 0; frame < WATER_FRAME_COUNT; frame++) {
+      for (let slope = 0; slope < SLOPE_COUNT; slope++) {
+        const cell = waterAtlasFrame(frame, slope);
+        expect(cell.y, `w${frame}:${slope}`).toBeGreaterThanOrEqual(bookedTop);
+        expect(cell.y + cell.height, `w${frame}:${slope}`).toBeLessThanOrEqual(size.height);
+        expect(cell.x + cell.width, `w${frame}:${slope}`).toBeLessThanOrEqual(size.width);
+      }
+    }
+    for (let variant = 0; variant < FOAM_VARIANT_COUNT; variant++) {
+      const cell = foamAtlasFrame(variant);
+      expect(cell.y, `f${variant}`).toBeGreaterThanOrEqual(bookedTop);
+      expect(cell.y + cell.height, `f${variant}`).toBeLessThanOrEqual(size.height);
+      expect(cell.x + cell.width, `f${variant}`).toBeLessThanOrEqual(size.width);
+    }
+    expect(WATER_FRAME_COUNT + 1).toBe(4);
+  });
+
+  it('never lets two water cells overlap', () => {
+    const seen = new Set<string>();
+    for (let frame = 0; frame < WATER_FRAME_COUNT; frame++) {
+      for (let slope = 0; slope < SLOPE_COUNT; slope++) {
+        const cell = waterAtlasFrame(frame, slope);
+        seen.add(`${cell.x}:${cell.y}`);
+      }
+    }
+    for (let variant = 0; variant < FOAM_VARIANT_COUNT; variant++) {
+      const cell = foamAtlasFrame(variant);
+      seen.add(`${cell.x}:${cell.y}`);
+    }
+    // Every cell sits on its own grid slot; a duplicate would collapse here.
+    expect(seen.size).toBe(WATER_FRAME_COUNT * SLOPE_COUNT + FOAM_VARIANT_COUNT);
+  });
+
+  it('gives every frame the base cell geometry, so a swap moves nothing', () => {
+    const reference = waterAtlasFrame(0, 0);
+    expect(reference.anchorY).toBe(16 * ATLAS_SCALE * CELL_HEADROOM_STEPS);
+    for (let frame = 0; frame < WATER_FRAME_COUNT; frame++) {
+      for (let slope = 0; slope < SLOPE_COUNT; slope++) {
+        const cell = waterAtlasFrame(frame, slope);
+        expect(cell.width).toBe(reference.width);
+        expect(cell.height).toBe(reference.height);
+        expect(cell.anchorY).toBe(reference.anchorY);
+        // The same slope reads the same column in every animation row, which
+        // is what makes the swap a texture change and nothing else.
+        expect(cell.x).toBe(waterAtlasFrame(0, slope).x);
+      }
+    }
+    expect(foamAtlasFrame(0).anchorY).toBe(reference.anchorY);
   });
 });
 
