@@ -11,7 +11,8 @@ decision is missing from this register or the register cites a number that has
 no entry below. A number may appear under several topics.
 
 - **Determinism, RNG & hashing:** D-001, D-002, D-003, D-004, D-009, D-010,
-  D-024, D-093, D-106, D-128, D-137, D-142, D-145, D-146, D-149, D-153, D-178
+  D-024, D-093, D-106, D-128, D-137, D-142, D-145, D-146, D-149, D-153, D-178,
+  D-181
 - **Commands, snapshot & worker boundary:** D-004, D-005, D-006, D-011, D-032,
   D-100, D-111, D-145, D-146, D-148, D-162, D-174, D-176, D-179
 - **Lines & timetables:** D-145, D-146, D-147, D-148, D-149, D-150, D-151,
@@ -21,7 +22,8 @@ no entry below. A number may appear under several topics.
 - **Terraforming & structures:** D-028, D-034, D-050, D-051, D-052, D-124,
   D-141
 - **Save format, migrations & replays:** D-007, D-025, D-026, D-027, D-048,
-  D-111, D-130, D-131, D-134, D-142, D-144, D-145, D-146, D-147, D-153, D-178
+  D-111, D-130, D-131, D-134, D-142, D-144, D-145, D-146, D-147, D-153, D-178,
+  D-181
 - **Rail & track:** D-042, D-043, D-044, D-045, D-046, D-047, D-053, D-141,
   D-153, D-157
 - **Signals & reservations:** D-054, D-055, D-056, D-057, D-058, D-059, D-060,
@@ -32,11 +34,12 @@ no entry below. A number may appear under several topics.
 - **Industry & production:** D-022, D-062, D-063, D-064, D-069, D-071, D-079,
   D-085, D-086, D-174
 - **Towns, council & ownership:** D-101, D-102, D-103, D-104
-- **Economy, finance & emissions:** D-008, D-090, D-091, D-092, D-105, D-154
+- **Economy, finance & emissions:** D-008, D-090, D-091, D-092, D-105, D-154,
+  D-180
 - **Balancing & scenarios:** D-038, D-039, D-040, D-041, D-066, D-087, D-088,
   D-116, D-151, D-152, D-156, D-158, D-159
 - **Vehicles & fleet:** D-043, D-044, D-045, D-068, D-076, D-089, D-093,
-  D-096, D-142, D-143, D-145, D-146, D-155, D-157, D-171, D-174
+  D-096, D-142, D-143, D-145, D-146, D-155, D-157, D-171, D-174, D-181
 - **Water & air:** D-094, D-095, D-096, D-097, D-098, D-099
 - **Competitors, AI & tenders:** D-107, D-108, D-109, D-115, D-116, D-121,
   D-122, D-147, D-152, D-153, D-154, D-155, D-156, D-158
@@ -44,7 +47,7 @@ no entry below. A number may appear under several topics.
   D-136, D-140, D-160, D-161, D-162, D-163, D-164, D-165, D-166, D-169, D-170,
   D-171, D-172, D-173, D-174, D-175, D-177, D-179
 - **UI & input:** D-011, D-013, D-015, D-035, D-110, D-113, D-114, D-119,
-  D-126, D-148, D-165, D-166, D-177, D-179
+  D-126, D-148, D-165, D-166, D-177, D-179, D-180, D-181, D-182
 - **Performance & measurement:** D-002, D-120, D-135, D-136, D-161, D-162,
   D-163, D-164, D-167, D-170, D-171, D-172, D-173, D-174, D-176, D-177
 - **Platform, tooling & build:** D-012, D-014, D-015, D-016, D-017, D-029,
@@ -5112,3 +5115,148 @@ would be marker-channel weight for nothing. The aggregate `waiting`
 number STAYS on the marker for the list, the minimap and the tutorial;
 the PANEL's aggregate display is what the per-cargo table replaced, as
 the milestone ordered.
+
+## M14 - instruments, bundle 4: the statistics centre (2026-08-07)
+
+### D-180 The value graph draws the yearly archive plus today, because a monthly company-value series is not honestly derivable
+
+SPEC.md 14.1's "Firmenwert-Verlauf" - the one display of that section
+still owed - and the M14 order to render it with axes and labels. The
+first question was whether new sim state was needed, and the answer is
+no: `CompanyState.valueHistory` has existed since M6 - one entry per
+closed game year, capped at COMPANY_VALUE_YEARS (25), saved, hashed and
+already shipped in the FinanceReport. The graph is that series plus ONE
+live point, the company value right now, so the line always reaches
+today instead of ending at last New Year.
+
+A MONTHLY value series was considered and rejected as underivable: the
+account rings record flows, but company value is a level - cash plus
+book value minus loan - and construction moves it OUTSIDE the accounts
+(a vehicle purchase books its whole price as an expense while raising
+`fixedAssetsCt` by the same amount; net value change zero, recorded
+change negative). Reconstructing month-end values backwards from the
+24-month ring would therefore be wrong by exactly the capital spending -
+the interesting part of a transport company's history. Saving a monthly
+value ring instead would be more v25 state for a curve the yearly series
+already shows; the 24-month DETAIL therefore stays what the archive
+honestly holds - the cash-flow bars, which gained the labelled scale and
+the covered months.
+
+Rendering: inline SVG in the FinancePanel, main thread, no second
+render path (the M6 div-bar argument extends: the value graph needs
+axis lines and gridlines, which divs do badly and a canvas would
+over-solve). The scaling lives in `ui/chart.ts` as pure functions -
+the classic 1/2/5 nice-numbers axis, degenerate series made drawable
+rather than rejected - pinned by `tests/unit/chart.spec.ts`, and the
+axis labels use a compact money format (`formatMoneyCompact`) because
+"1,2 Mio. EUR" fits where the full grouped figure does not.
+
+### D-181 The vehicle detail displays what the simulation computes, and the depot call is a one-shot flag beside the schedule, not an edit of it
+
+The M14 vehicle detail: age, reliability, breakdown count, the manifest
+with paid-up-to, running cost against revenue, the current order, and
+the "send to depot" and follow-camera buttons. The rule of D-179
+applies unchanged - the panel computes NOTHING the simulation does not
+already compute - and four decisions shaped it.
+
+**Everything on the marker channel, everything from the sim's own
+functions.** The VehicleMarker gained the detail fields (Fehler 37:
+low-frequency data rides the marker channel, never the 20 Hz stride):
+age and design life from `vehicleAgeYears`/`vehicleLifetimeYears`, the
+upkeep from `vehicleUpkeepCtPerYear` - factored OUT of
+`fleetUpkeepCtPerYear` so the per-vehicle figure and the fleet bill are
+one term, obsolescence doubling included, priced through `World.costCt`
+exactly as the monthly booking prices it - and the manifest from
+`sim/markers.ts` `vehicleCargoRows`: one row per stack (stacks are
+already merged by cargo, origin, destination and paid-from point, so
+the rows ARE the bookkeeping), with the open distance computed by the
+payment formula's own `tileDistance` from the paid-up-to marker to the
+vehicle's tile. The panel's own share - names, keys, rounding - is
+`ui/manifest.ts`, pure and tested.
+
+**Two fields joined the v25 payload, and the milestone's one bump
+stayed one.** `breakdownCount` (incremented where `rollBreakdowns`
+flips the state, so tally and news can never disagree) and `depotCall`
+are saved and hashed: the count because a lifetime tally that reset on
+every load would lie to the player (the D-176 "honest price" runs the
+other way here - unlike a flow ring it cannot re-measure itself), the
+flag because it steers routing and is therefore Z4 state. Z5 grants M14
+exactly one SAVE_VERSION bump and bundle 3 spent it; the version stays
+25 and the `v24_to_v25` migration was EXTENDED in place to default both
+fields - one bump per milestone, not one migration edit. The canonical
+pin was re-recorded under the D-137 protocol (`8146983bca3a6f92` on
+v25; the hash gained two fields per vehicle, behaviour unchanged - the
+determinism suite's three-run and save/load legs still pass on the same
+worlds). The corpus needed NO re-record: its played world contains no
+vehicles, so neither the v25 fixture's decode nor any recorded hash
+moved - checked, not assumed.
+
+**A depot call is a flag beside the schedule, never an edit of it.**
+`SendVehicleToDepot` (CommandKind 41) sets `depotCall`; while set, the
+ONE function every route decision already asks - `orderTargetTile` -
+answers with the home depot, and the arrival there services the
+vehicle, parks it Stopped (the refit-ready state of D-076) and clears
+the flag. The alternatives were worse: editing the order list breaks a
+LINE vehicle (the shared list is not the player's to bend from a
+button), and a new VehicleState would have touched every
+Driving/Braking comparison in the solver. What happens at command time
+depends on what the vehicle is doing (`divertToDepot`): standing in its
+own shed means served on the spot; rolling or idle means rerouted now;
+mid-dwell or broken down means the flag waits for the departure that
+routes through `orderTargetTile` anyway. The abandoned trip is
+forgotten (D-077: a shed detour is a measurement of nothing) and the
+arrival clears `lastStationId`, so no diverted leg can ever poison the
+link graph; stopping the vehicle cancels the call - the documented way
+out of a diversion whose shed became unreachable. Proven end to end on
+the recorded road line (`tests/unit/depotCall.spec.ts`), including the
+mid-diversion save/load hash equality.
+
+**The follow camera is a render fact.** The store carries
+`followVehicleId`; MapView centres on the followed sprite's
+interpolated position at the top of its frame (one frame of lag,
+applied BEFORE the camera transform so nothing tears), and a manual pan
+or a list jump takes the wheel back through the view's own
+`onFollowEnd` callback - button state and camera cannot disagree. A
+vehicle that leaves the world stops steering on the fleet cadence. No
+sim contact anywhere.
+
+### D-182 Notification routing is a settings-crossed-severity table over the news delta, and the pause is speed control
+
+The M14 notification routing: per-category off/ticker/toast/pause in
+the options, a one-line ticker strip, toast cards, pause-on-critical.
+Everything sim-side already existed - the news log of section 15 with
+`postOnce` guaranteeing spam-freedom - so the whole feature is
+presentation over the store (D-110: a setting, never a rule; two worlds
+with the same commands are identical whatever is chosen).
+
+**The decision is a pure table.** `routeNotification(mode, severity)`:
+Off routes nowhere, Ticker to the strip, Toast to a card, and Pause
+means "do not let me miss this" - a card always, the hard stop only
+above Info severity, because a completed contract must not freeze the
+game even in an armed category. Pause is deliberately never a DEFAULT
+(Finance and Network default to toast, the rest to ticker): stopping
+the world uninvited is a choice only the player may make. The pause
+itself travels as `setSpeed(0)` - control traffic, not a command
+(D-004), so a paused notification can never reach a replay log.
+
+**Fresh means two things, and both are checked.** The log travels
+whole on every change, so `newNewsEntries` finds the appended tail by
+locating the previous newest entry by IDENTITY (tick, category, key,
+tile - postOnce allows the same key at different tiles) and falls back
+to tick comparison when a burst pushed it off the ring. An empty
+previous yields nothing: the first sync of a world is its backlog. On
+top of that, entries older than NOTIFICATION_FRESH_TICKS (two game
+days) at first sight are swallowed - the belt to the delta's braces,
+so however a load races the ready flip, a months-old log can never
+flood the toast stack. The message rendering moved to
+`ui/notifications.ts` and the news panel reads the SAME
+`formatNewsMessage`/`severityClass` - one sentence per entry wherever
+it appears.
+
+**The settings shape is per category, normalised per entry.**
+`AppSettings.notifications` is one mode per NewsCategory; a pre-M14
+settings file gets the defaults, an out-of-range mode falls back
+alone. `shared/settings.ts` may not import the sim, so the category
+count is repeated there - and `tests/unit/notifications.spec.ts`
+carries the coupling assertion that fails the build the day the news
+log grows a sixth category the options screen would silently not show.

@@ -89,6 +89,7 @@ export function OrderEditor({
   stations,
   mapSize,
   labelKey,
+  activeIndex,
   onSend,
 }: {
   readonly orders: readonly OrderMarker[];
@@ -101,6 +102,12 @@ export function OrderEditor({
   readonly stations: readonly StationMarker[];
   readonly mapSize: number;
   readonly labelKey: string;
+  /**
+   * Index of the order the vehicle is currently running, highlighted in the
+   * list (SPEC2 M14) - or undefined for a LINE's shared list, where every
+   * assigned vehicle stands somewhere else in the cycle.
+   */
+  readonly activeIndex?: number;
   readonly onSend: (next: readonly OrderMarker[]) => void;
 }): ReactElement {
   const selectedTile = useSimStore((s) => s.selectedTile);
@@ -198,9 +205,17 @@ export function OrderEditor({
       </span>
 
       {orders.map((order, index) => (
-        <div className="order-row" key={index}>
+        <div
+          className={
+            activeIndex !== undefined && index === activeIndex % orders.length
+              ? 'order-row order-row--active'
+              : 'order-row'
+          }
+          key={index}
+        >
           <div className="button-row">
             <span className="value">
+              {activeIndex !== undefined && index === activeIndex % orders.length && '▶ '}
               {index + 1}. {targetLabel(order)}
             </span>
             <button

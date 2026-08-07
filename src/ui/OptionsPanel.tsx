@@ -1,8 +1,15 @@
 import { useState, type ReactElement } from 'react';
 import { LOCALES, t } from '../i18n';
-import { UI_SCALES, VOLUME_CHANNEL_KEYS } from '../shared/settings';
+import {
+  NOTIFICATION_CATEGORY_COUNT,
+  NOTIFICATION_MODE_COUNT,
+  NOTIFICATION_MODE_KEYS,
+  UI_SCALES,
+  VOLUME_CHANNEL_KEYS,
+} from '../shared/settings';
+import { NEWS_CATEGORY_KEYS } from '../sim/news/log';
 import { KEY_BINDINGS } from './keymap';
-import { setVolume, updateSettings } from './settings';
+import { setNotificationMode, setVolume, updateSettings } from './settings';
 import { useSimStore } from './store';
 
 /**
@@ -14,11 +21,12 @@ import { useSimStore } from './store';
  * changed mid-game, and they cannot: they are part of the state hash.
  */
 
-type Tab = 'display' | 'audio' | 'access' | 'controls';
+type Tab = 'display' | 'audio' | 'notify' | 'access' | 'controls';
 
 const TABS: readonly { readonly id: Tab; readonly key: string }[] = [
   { id: 'display', key: 'ui.options.display' },
   { id: 'audio', key: 'ui.options.audio' },
+  { id: 'notify', key: 'ui.options.notifications' },
   { id: 'access', key: 'ui.options.accessibility' },
   { id: 'controls', key: 'ui.options.controls' },
 ];
@@ -117,6 +125,37 @@ export function OptionsPanel({ onClose }: { readonly onClose: () => void }): Rea
             </label>
           ))}
           <p className="panel__hint">{t('ui.options.musicHint')}</p>
+        </>
+      )}
+
+      {tab === 'notify' && (
+        <>
+          <p className="panel__hint">{t('ui.options.notificationsHint')}</p>
+          {/* One row per news category (section 15): where do its fresh
+              entries go - nowhere, the ticker, a toast card, or a toast plus
+              pause (SPEC2 M14). The log itself is untouched either way. */}
+          {NEWS_CATEGORY_KEYS.slice(0, NOTIFICATION_CATEGORY_COUNT).map((categoryKey, category) => (
+            <div key={categoryKey}>
+              <span className="field__label field__label--spaced">{t(categoryKey)}</span>
+              <div className="button-row">
+                {NOTIFICATION_MODE_KEYS.slice(0, NOTIFICATION_MODE_COUNT).map((modeKey, mode) => (
+                  <button
+                    key={modeKey}
+                    type="button"
+                    className={
+                      (settings.notifications[category] ?? 0) === mode
+                        ? 'button button--active'
+                        : 'button'
+                    }
+                    onClick={() => setNotificationMode(category, mode)}
+                  >
+                    {t(modeKey)}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+          <p className="panel__hint">{t('ui.options.notifyPauseHint')}</p>
         </>
       )}
 

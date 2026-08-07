@@ -65,6 +65,7 @@ import { scheduleOf } from '../lines/LineStore';
 import {
   beginConnectionHold,
   beginSlotWait,
+  clearStopHolds,
   dropLatchedHolds,
   finishSlotWait,
   latchTaktSlot,
@@ -383,6 +384,11 @@ function routeTo(world: World, id: number, targetTile: number): boolean {
 /** Tile the current order sends the vehicle to, or -1 if it is unreachable. */
 function orderTargetTile(world: World, id: number): number {
   const vehicles = world.vehicles;
+  // An outstanding "send to depot" call (SPEC2 M14) overrides the schedule
+  // WITHOUT touching it: every route decision - departure, NoRoute retry,
+  // restart - asks this one function where to go, so the one interception
+  // point covers them all. The flag is cleared by the arrival at the shed.
+  if (vehicles.depotCall[id] === 1) return vehicles.homeDepotTile[id]!;
   const orders = scheduleOf(world, id);
   if (orders.length === 0) return -1;
 
@@ -496,6 +502,65 @@ export function startVehicle(world: World, id: number): boolean {
   }
   vehicles.state[id] = VehicleState.Driving;
   return true;
+}
+
+/**
+ * Arm a one-shot "send to depot" call (SPEC2 M14) and divert the vehicle.
+ *
+ * The schedule is never edited - the flag makes `orderTargetTile` answer with
+ * the home depot until the arrival there clears it - so a line vehicle can be
+ * called in without being released, and a restart resumes the orders exactly
+ * where they stood. What happens NOW depends on what the vehicle is doing:
+ *
+ *  - on its own shed tile (standing OR rolling over it): served on the spot;
+ *  - en route or standing idle elsewhere: rerouted to the shed immediately;
+ *  - mid-dwell (Loading, Holding, a foreign shed's service stop) or broken
+ *    down: the flag waits for the next departure, which routes through
+ *    `orderTargetTile` anyway - interrupting a cargo exchange halfway is
+ *    worse than finishing it, and a wreck's repair clock must keep its own
+ *    state until it has run out.
+ */
+export function divertToDepot(world: World, id: number): void {
+  const vehicles = world.vehicles;
+  const state = vehicles.state[id]!;
+  const depot = vehicles.homeDepotTile[id]!;
+
+  // Already ON the shed tile and not mid-exchange: served on the spot. This
+  // includes a vehicle ROLLING over its own shed - routing a vehicle from a
+  // tile to that same tile is the one route no pathfinder returns, and the
+  // NoRoute it would strand in retries the identical non-route for ever.
+  if (
+    vehicles.tileIndex[id] === depot &&
+    state !== VehicleState.Loading &&
+    state !== VehicleState.Holding
+  ) {
+    releaseAll(world, id);
+    vehicles.pathLength[id] = 0;
+    vehicles.routeRemainingM[id] = 0;
+    vehicles.progressM[id] = 0;
+    vehicles.speedMs[id] = 0;
+    serviceVehicle(world, id);
+    vehicles.state[id] = VehicleState.Stopped;
+    vehicles.depotCall[id] = 0;
+    clearStopHolds(world, id);
+    return;
+  }
+
+  vehicles.depotCall[id] = 1;
+  if (
+    state === VehicleState.Loading ||
+    state === VehicleState.Holding ||
+    state === VehicleState.BrokenDown ||
+    state === VehicleState.InDepot
+  ) {
+    return;
+  }
+
+  // Everything else is standing or rolling with no exchange in progress: the
+  // diversion starts now. A latched takt slot or connection hold belongs to
+  // the departure that will never happen (12.3).
+  clearStopHolds(world, id);
+  vehicles.state[id] = routeTo(world, id, depot) ? VehicleState.Driving : VehicleState.NoRoute;
 }
 
 /**
@@ -1206,6 +1271,24 @@ function stepVehicle(world: World, id: number): void {
       // with it - otherwise a train standing at a platform holds its whole
       // approach for the rest of the game.
       releaseAll(world, id);
+
+      // A depot call ends HERE, before the order logic ever runs: the vehicle
+      // stands in its own shed, is serviced, and parks Stopped - which is the
+      // state the refit and sell rules already accept (D-076). The schedule
+      // was never edited, so a later start resumes it exactly where it stood
+      // (SPEC2 M14, the vehicle detail's "send to depot").
+      if (vehicles.depotCall[id] === 1 && vehicles.tileIndex[id] === vehicles.homeDepotTile[id]) {
+        vehicles.depotCall[id] = 0;
+        serviceVehicle(world, id);
+        vehicles.state[id] = VehicleState.Stopped;
+        // The trip in progress ended in a shed, not at a stop: its time is a
+        // measurement of nothing (D-077 measures arrival to arrival between
+        // STATIONS), and a parked vehicle owes no takt slot (12.3).
+        vehicles.lastStationId[id] = -1;
+        vehicles.lastArrivalTick[id] = -1;
+        clearStopHolds(world, id);
+        return;
+      }
 
       const orders = scheduleOf(world, id);
       const order = orders[vehicles.orderIndex[id]! % orders.length];

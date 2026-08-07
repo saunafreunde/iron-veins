@@ -668,6 +668,161 @@ body {
 }
 
 /*
+ * The M14 statistics centre: the company-value SVG and the axis frame the
+ * cash-flow bars gained. The SVG scales with its column; text sizes live in
+ * the SVG's own coordinate space.
+ */
+.valuechart {
+  width: 100%;
+  background: var(--surface);
+  border-radius: 4px;
+}
+
+.valuechart__grid {
+  stroke: var(--border);
+  stroke-width: 0.5;
+}
+
+.valuechart__zero {
+  stroke: var(--text-muted);
+  stroke-width: 0.75;
+}
+
+.valuechart__line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.5;
+}
+
+.valuechart__now {
+  fill: var(--accent);
+}
+
+.valuechart__label {
+  fill: var(--text-muted);
+  font-size: 8px;
+}
+
+.valuechart__label--y {
+  text-anchor: end;
+  dominant-baseline: middle;
+}
+
+.valuechart__label--end {
+  text-anchor: end;
+}
+
+.chart-frame {
+  display: flex;
+  gap: 4px;
+}
+
+.chart-frame__axis {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  font-size: 10px;
+  color: var(--text-muted);
+  text-align: right;
+  /* The axis spans the BAR area only, not the range labels below it. */
+  padding-bottom: 16px;
+}
+
+.chart-frame__plot {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.chart-frame__range {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+/* The active stop of the M14 detail view, marked inside the order editor. */
+.order-row--active {
+  border-color: var(--accent);
+}
+
+/*
+ * The M14 notification routing: the one-line ticker strip above the app bar
+ * and the toast-card stack in the top right corner. Both are interface, so
+ * neither dims at night (D-127).
+ */
+.newsticker {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 44px;
+  max-width: min(64rem, 90vw);
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  padding: 4px 12px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.newsticker__date {
+  color: var(--text-muted);
+  flex: none;
+}
+
+.toaststack {
+  position: fixed;
+  top: 48px;
+  right: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 22rem;
+  z-index: 10;
+}
+
+.toastcard {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 8px 10px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 6px 20px rgb(0 0 0 / 45%);
+}
+
+.toastcard__body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: none;
+  border: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  padding: 0;
+  cursor: pointer;
+}
+
+.toastcard__close {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font: inherit;
+  cursor: pointer;
+  padding: 0 2px;
+}
+
+/*
  * The news log of section 17.1. Its own list rather than `.list`, because the
  * entity lists lay their rows out as ellipsised columns and a sentence needs
  * to wrap.

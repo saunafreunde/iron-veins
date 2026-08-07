@@ -1,7 +1,7 @@
 import { useMemo, useState, type ReactElement } from 'react';
-import { formatGameDate, formatMoney, t } from '../i18n';
-import type { NewsMarker } from '../shared/protocol';
-import { NEWS_CATEGORY_COUNT, NEWS_CATEGORY_KEYS, NewsSeverity } from '../sim/news/log';
+import { formatGameDate, t } from '../i18n';
+import { NEWS_CATEGORY_COUNT, NEWS_CATEGORY_KEYS } from '../sim/news/log';
+import { formatNewsMessage, severityClass } from './notifications';
 import { useSimStore } from './store';
 
 /**
@@ -66,7 +66,7 @@ export function NewsPanel(): ReactElement {
                 <span className="row__meta">
                   {formatGameDate(entry.year, entry.month, entry.day)}
                 </span>
-                <span className={severityClass(entry.severity)}>{message(entry)}</span>
+                <span className={severityClass(entry.severity)}>{formatNewsMessage(entry)}</span>
               </button>
             </li>
           ))}
@@ -76,30 +76,6 @@ export function NewsPanel(): ReactElement {
   );
 }
 
-function severityClass(severity: number): string {
-  if (severity === NewsSeverity.Alarm) return 'value--danger';
-  if (severity === NewsSeverity.Warning) return 'value--warning';
-  return '';
-}
-
-/**
- * Render one entry.
- *
- * Two conventions the simulation side keeps to, because it holds no prose and
- * no formatting: a STRING parameter is another translation key - an industry's
- * name, say - and a parameter named `...Ct` is money in cents. Everything else
- * is a plain number.
- */
-function message(entry: NewsMarker): string {
-  const resolved: Record<string, string | number> = {};
-  for (const key of Object.keys(entry.params).sort(byName)) {
-    const value = entry.params[key]!;
-    if (typeof value === 'string') resolved[key] = t(value);
-    else resolved[key] = key.endsWith('Ct') ? formatMoney(value) : value;
-  }
-  return t(entry.messageKey, resolved);
-}
-
-function byName(a: string, b: string): number {
-  return a < b ? -1 : a > b ? 1 : 0;
-}
+// Rendering one entry - message resolution and severity colour - moved to
+// notifications.ts with M14, where the ticker and the toast cards read the
+// SAME functions: one sentence per entry, wherever it appears.

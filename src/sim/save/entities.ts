@@ -93,6 +93,10 @@ export interface VehicleSave {
   builtTick: number;
   reliability: number;
   breakdownTicks: number;
+  /** Breakdowns suffered since purchase - the M14 detail view's tally. */
+  breakdownCount: number;
+  /** 1 while a "send to depot" diversion is outstanding (SPEC2 M14, Z4). */
+  depotCall: number;
   loadTicks: number;
   refitCargo: number;
   homeDepotTile: number;
@@ -179,6 +183,8 @@ export function encodeVehicles(store: VehicleStore): VehicleSave[] {
       builtTick: store.builtTick[id]!,
       reliability: store.reliability[id]!,
       breakdownTicks: store.breakdownTicks[id]!,
+      breakdownCount: store.breakdownCount[id]!,
+      depotCall: store.depotCall[id]!,
       loadTicks: store.loadTicks[id]!,
       refitCargo: store.refitCargo[id]!,
       homeDepotTile: store.homeDepotTile[id]!,
@@ -377,6 +383,8 @@ export function decodeVehicles(value: unknown, path: string): VehicleSave[] {
       builtTick: int(raw['builtTick'], `${path}[${i}].builtTick`),
       reliability: int(raw['reliability'], `${path}[${i}].reliability`),
       breakdownTicks: int(raw['breakdownTicks'], `${path}[${i}].breakdownTicks`),
+      breakdownCount: int(raw['breakdownCount'], `${path}[${i}].breakdownCount`),
+      depotCall: int(raw['depotCall'], `${path}[${i}].depotCall`),
       loadTicks: num(raw['loadTicks'], `${path}[${i}].loadTicks`),
       refitCargo: int(raw['refitCargo'], `${path}[${i}].refitCargo`),
       homeDepotTile: int(raw['homeDepotTile'], `${path}[${i}].homeDepotTile`),
@@ -531,6 +539,8 @@ export function buildVehicleStore(saves: readonly VehicleSave[]): VehicleStore {
     store.builtTick[id] = save.builtTick;
     store.reliability[id] = save.reliability;
     store.breakdownTicks[id] = save.breakdownTicks;
+    store.breakdownCount[id] = save.breakdownCount;
+    store.depotCall[id] = save.depotCall;
     store.loadTicks[id] = save.loadTicks;
     store.refitCargo[id] = save.refitCargo;
     store.homeDepotTile[id] = save.homeDepotTile;

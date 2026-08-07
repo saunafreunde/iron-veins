@@ -47,7 +47,7 @@ import {
   sellVehicle,
 } from './build';
 import { releaseAll } from '../vehicles/reservations';
-import { startVehicle } from '../vehicles/update';
+import { divertToDepot, startVehicle } from '../vehicles/update';
 import { applyTerraform, estimateTerraform, levelTile, TerraformDirection } from '../map/terraform';
 import { acceptContract, isOpen } from '../economy/contracts';
 import { applyTownMeasure, buyExclusiveRights } from '../town/measures';
@@ -438,6 +438,10 @@ export function executeCommand(world: World, command: Command): CommandOutcome {
       if (!command.running) {
         world.vehicles.state[id] = VehicleState.Stopped;
         world.vehicles.speedMs[id] = 0;
+        // Stopping is the player taking the wheel back, so it also cancels an
+        // outstanding depot call - the one documented way out of a diversion
+        // whose shed has become unreachable (SPEC2 M14).
+        world.vehicles.depotCall[id] = 0;
         forgetTrip(world, id);
         // A parked vehicle owes no slot and holds no departure (12.3).
         clearStopHolds(world, id);
@@ -449,6 +453,21 @@ export function executeCommand(world: World, command: Command): CommandOutcome {
       if (!startVehicle(world, id)) {
         return { ok: false, reasonKey: RejectReason.NoRouteToStop };
       }
+      return ACCEPTED;
+    }
+
+    case CommandKind.SendVehicleToDepot: {
+      const id = command.vehicleId;
+      if (!world.vehicles.isAlive(id)) {
+        return { ok: false, reasonKey: RejectReason.NoSuchVehicle };
+      }
+      if (world.vehicles.ownerId[id] !== world.company.id) {
+        return { ok: false, reasonKey: RejectReason.NotYours };
+      }
+      // The trip in progress is abandoned, so its measurement is too: the leg
+      // that ends after a shed detour is not the leg the line drives (D-077).
+      forgetTrip(world, id);
+      divertToDepot(world, id);
       return ACCEPTED;
     }
   }

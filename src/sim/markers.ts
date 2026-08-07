@@ -3,7 +3,9 @@ import type {
   StationHistoryMarker,
   StationMarker,
   StationWaitingMarker,
+  VehicleCargoMarker,
 } from '../shared/protocol';
+import { tileDistance } from './cargo/payment';
 import { CARGO_COUNT } from './cargo/types';
 import { STATION_HISTORY_MONTHS, TICKS_PER_DAY } from './constants';
 import type { Industry } from './industry/types';
@@ -104,6 +106,43 @@ function historyRows(station: Station): StationHistoryMarker[] {
     }
     rows.push({ cargo, collected, delivered, expired });
   }
+  return rows;
+}
+
+/**
+ * The manifest of one vehicle for the M14 detail view: every parcel aboard,
+ * with its destination and its paid-up-to marker turned into the number a
+ * player can read - the open distance since the last paid point, measured
+ * with the SAME `tileDistance` the payment formula uses (section 7.4), from
+ * the tile the vehicle stands on. One row per stack, largest first: stacks
+ * are already merged by (cargo, origin, destination, paid-from), so the rows
+ * are exactly the simulation's own bookkeeping, never a re-aggregation.
+ */
+export function vehicleCargoRows(world: World, id: number): VehicleCargoMarker[] {
+  const vehicles = world.vehicles;
+  const size = world.map.size;
+  const tile = vehicles.tileIndex[id]!;
+  const x = tile % size;
+  const y = (tile / size) | 0;
+
+  const rows = vehicles.cargo[id]!.map((stack) => ({
+    cargo: stack.cargo,
+    units: Math.round(stack.amount),
+    originStationId: stack.originStationId,
+    destinationStationId: stack.destinationStationId,
+    ageDays: (world.tick - stack.createdTick) / TICKS_PER_DAY,
+    openTiles: tileDistance(stack.paidFromX, stack.paidFromY, x, y),
+  }));
+  // Total order (law #3): units desc, then the routing identity of the stack.
+  // Stacks that tie on all of it keep their deterministic insertion order -
+  // Array.prototype.sort is stable per spec.
+  rows.sort(
+    (a, b) =>
+      b.units - a.units ||
+      a.cargo - b.cargo ||
+      a.destinationStationId - b.destinationStationId ||
+      a.originStationId - b.originStationId,
+  );
   return rows;
 }
 

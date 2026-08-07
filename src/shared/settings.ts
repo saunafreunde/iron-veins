@@ -31,6 +31,49 @@ export const VOLUME_CHANNEL_KEYS: readonly string[] = [
   'ui.options.volumeInterface',
 ];
 
+/**
+ * Where a news category's fresh entries go (SPEC2 M14). Pure presentation
+ * (D-110): the LOG is simulation state and `postOnce` already guarantees
+ * spam-freedom sim-side; this setting only decides how loudly the interface
+ * repeats what the log recorded. `Pause` also stops the clock on anything
+ * above Info severity - the "pause on critical" of the milestone order.
+ */
+export const NotificationMode = {
+  Off: 0,
+  Ticker: 1,
+  Toast: 2,
+  Pause: 3,
+} as const;
+export type NotificationMode = (typeof NotificationMode)[keyof typeof NotificationMode];
+
+export const NOTIFICATION_MODE_COUNT = 4;
+
+/** Translation keys for the four modes, indexed by NotificationMode. */
+export const NOTIFICATION_MODE_KEYS: readonly string[] = [
+  'ui.options.notifyOff',
+  'ui.options.notifyTicker',
+  'ui.options.notifyToast',
+  'ui.options.notifyPause',
+];
+
+/** How many news categories the routing table covers (sim/news/log.ts). */
+export const NOTIFICATION_CATEGORY_COUNT = 5;
+
+/**
+ * Defaults per category, indexed by NewsCategory (Finance, Industry, Fleet,
+ * Network, Town). Finance and Network default to toast cards - money trouble
+ * and stuck trains are what ends runs - the rest to the one-line ticker.
+ * Pause is deliberately never a default: stopping the world uninvited is a
+ * choice only the player may make.
+ */
+export const DEFAULT_NOTIFICATIONS: readonly number[] = [
+  NotificationMode.Toast,
+  NotificationMode.Ticker,
+  NotificationMode.Ticker,
+  NotificationMode.Toast,
+  NotificationMode.Ticker,
+];
+
 export interface AppSettings {
   /** 'de' or 'en'. Kept as a plain string so this file needs no i18n import. */
   readonly locale: string;
@@ -54,6 +97,12 @@ export interface AppSettings {
   readonly autosave: boolean;
   /** Show the tutorial offer when the application starts. */
   readonly offerTutorial: boolean;
+  /**
+   * Notification routing per news category, indexed by NewsCategory, each a
+   * NotificationMode (SPEC2 M14). A setting, never a rule: the log itself is
+   * identical whatever is chosen here.
+   */
+  readonly notifications: readonly number[];
 }
 
 /**
@@ -72,6 +121,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   audioEnabled: true,
   autosave: true,
   offerTutorial: true,
+  notifications: DEFAULT_NOTIFICATIONS,
 };
 
 /**
@@ -94,6 +144,25 @@ export function normaliseSettings(raw: unknown): AppSettings {
     volumes.push(typeof entry === 'number' && entry >= 0 && entry <= 1 ? entry : fallback);
   }
 
+  // Absent in files written before M14; per entry, so a file from a build
+  // with fewer categories keeps what it chose and defaults the rest.
+  const notifications: number[] = [];
+  const rawNotifications = Array.isArray(value['notifications'])
+    ? (value['notifications'] as unknown[])
+    : [];
+  for (let category = 0; category < NOTIFICATION_CATEGORY_COUNT; category++) {
+    const entry = rawNotifications[category];
+    const fallback = DEFAULT_NOTIFICATIONS[category]!;
+    notifications.push(
+      typeof entry === 'number' &&
+        Number.isInteger(entry) &&
+        entry >= 0 &&
+        entry < NOTIFICATION_MODE_COUNT
+        ? entry
+        : fallback,
+    );
+  }
+
   const scale = value['uiScalePercent'];
   return {
     locale: value['locale'] === 'en' ? 'en' : 'de',
@@ -108,5 +177,6 @@ export function normaliseSettings(raw: unknown): AppSettings {
     audioEnabled: value['audioEnabled'] !== false,
     autosave: value['autosave'] !== false,
     offerTutorial: value['offerTutorial'] !== false,
+    notifications,
   };
 }

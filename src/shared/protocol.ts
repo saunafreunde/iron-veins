@@ -208,6 +208,27 @@ export interface OrderMarker {
   readonly condJumpTo: number;
 }
 
+/**
+ * One parcel aboard a vehicle, as the M14 detail view's manifest shows it -
+ * the paid-up-to point of section 7.4 included, because that marker is what
+ * decides what the parcel will earn when it is set down (SPEC2 M14).
+ */
+export interface VehicleCargoMarker {
+  readonly cargo: number;
+  readonly units: number;
+  readonly originStationId: number;
+  /** Station the parcel is trying to reach, or -1 (routeless, section 7.4). */
+  readonly destinationStationId: number;
+  /** Time in transit so far. [game days] */
+  readonly ageDays: number;
+  /**
+   * Straight-line distance from the paid-up-to point to where the vehicle is
+   * now - the distance this leg would be paid for if it unloaded here,
+   * computed with the payment formula's own `tileDistance`. [tiles]
+   */
+  readonly openTiles: number;
+}
+
 /** A vehicle as the fleet list shows it. */
 export interface VehicleMarker {
   readonly id: number;
@@ -226,6 +247,25 @@ export interface VehicleMarker {
    * its own otherwise - for the order editor of section 12.1.
    */
   readonly orders: readonly OrderMarker[];
+  /** Index of the order it is currently running, highlighted by the panel. */
+  readonly orderIndex: number;
+  /** Age since purchase, fractional. [game years] */
+  readonly ageYears: number;
+  /** Design life; for a train the shortest life in the consist. [years] */
+  readonly lifetimeYears: number;
+  /** Current reliability, 0..RELIABILITY_MAX (10000 = certain to run). */
+  readonly reliability: number;
+  /** Breakdowns suffered since purchase (SPEC2 M14). */
+  readonly breakdownCount: number;
+  /**
+   * Yearly upkeep as the books charge it right now: obsolescence doubling and
+   * this year's price level included (sections 11.3, 14.2). [cent]
+   */
+  readonly upkeepPerYearCt: number;
+  /** True while a "send to depot" call is outstanding (SPEC2 M14). */
+  readonly depotCall: boolean;
+  /** What is aboard, with the paid-up-to marker of section 7.4. */
+  readonly manifest: readonly VehicleCargoMarker[];
   /** Units the train is made of, empty for anything else. */
   readonly consist: readonly number[];
   /** Fastest the whole vehicle may run, curves aside. [m/s] */

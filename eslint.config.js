@@ -133,6 +133,9 @@ export default tseslint.config(
       'coverage/**',
       'src/assets/**',
       '*.tsbuildinfo',
+      // Tool-managed session worktrees: full checkouts that would otherwise
+      // be linted twice (and with the wrong project root).
+      '.claude/**',
     ],
   },
 

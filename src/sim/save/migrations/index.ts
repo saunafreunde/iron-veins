@@ -856,6 +856,16 @@ const v23_to_v24: SaveMigration = (payload) => {
  * its own past. Fields already present are kept, so the corpus trick of
  * wrapping a CURRENT state in an old container cannot flatten real months
  * back to zero.
+ *
+ * The statistics-centre bundle of the SAME milestone extended the SAME v25
+ * payload with two per-vehicle fields - `breakdownCount` (the detail view's
+ * lifetime tally) and `depotCall` (the outstanding "send to depot" diversion,
+ * Z4) - so this migration defaults them too. One bump per milestone is the Z5
+ * rule; a migration may grow while its milestone is still open, and the pin
+ * and corpus were re-recorded under their own protocols when it did (D-181).
+ * A v24 world had suffered breakdowns it never counted - the zero is what it
+ * knew, exactly like the zeroed ring above - and could not have had a depot
+ * call outstanding, because the command did not exist.
  */
 const v24_to_v25: SaveMigration = (payload) => {
   const inner = state(payload);
@@ -863,6 +873,11 @@ const v24_to_v25: SaveMigration = (payload) => {
   // here: the decoder validates the section itself (the v17_to_v18 precedent).
   const stations = Array.isArray(inner['stations']) ? inner['stations'] : null;
   if (stations === null) return payload;
+
+  // A missing vehicle section stays missing - the decoder is the one that
+  // refuses it, and a migration must not turn a malformed save into an
+  // acceptable empty one.
+  const vehicles = Array.isArray(inner['vehicles']) ? inner['vehicles'] : null;
 
   return {
     ...payload,
@@ -878,6 +893,18 @@ const v24_to_v25: SaveMigration = (payload) => {
             previous['monthCounters'] ?? new Array<number>(STATION_MONTH_COUNTER_SIZE).fill(0),
         };
       }),
+      ...(vehicles === null
+        ? {}
+        : {
+            vehicles: vehicles.map((vehicle) => {
+              const previous = vehicle as Record<string, unknown>;
+              return {
+                ...previous,
+                breakdownCount: previous['breakdownCount'] ?? 0,
+                depotCall: previous['depotCall'] ?? 0,
+              };
+            }),
+          }),
     },
   };
 };

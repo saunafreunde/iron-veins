@@ -32,7 +32,12 @@ import {
 } from './constants';
 import { loanLimitCt } from './economy/company';
 import { scheduleOf } from './lines/LineStore';
-import { industryMarkers, stationMarkers } from './markers';
+import { industryMarkers, stationMarkers, vehicleCargoRows } from './markers';
+import {
+  vehicleAgeYears,
+  vehicleLifetimeYears,
+  vehicleUpkeepCtPerYear,
+} from './vehicles/lifecycle';
 import {
   adviseFleet,
   lineProfitPerYearCt,
@@ -309,6 +314,19 @@ function postFleet(current: World): void {
       // The whole grammar of the list the vehicle RUNS - its line's when it
       // is assigned to one - so the panel shows what actually happens.
       orders: scheduleOf(current, id).map((order) => ({ ...order })),
+      orderIndex: vehicles.orderIndex[id]!,
+      // The M14 detail view: age against design life, the reliability the
+      // breakdown roll reads, the lifetime tally, the upkeep as the books
+      // charge it (obsolescence and price level included), the outstanding
+      // depot call, and the manifest with its paid-up-to distances - all
+      // computed by the simulation's own functions, never re-derived UI-side.
+      ageYears: vehicleAgeYears(current, id),
+      lifetimeYears: vehicleLifetimeYears(current, id),
+      reliability: vehicles.reliability[id]!,
+      breakdownCount: vehicles.breakdownCount[id]!,
+      upkeepPerYearCt: current.costCt(vehicleUpkeepCtPerYear(current, id)),
+      depotCall: vehicles.depotCall[id] === 1,
+      manifest: vehicleCargoRows(current, id),
       consist: [...vehicles.consist[id]!],
       maxSpeedMs: vehicles.maxSpeedMs[id]!,
       lengthM: vehicles.lengthM[id]!,

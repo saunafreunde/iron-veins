@@ -838,6 +838,11 @@ export function parseCommand(value: unknown, path: string): Command {
         vehicleId: asInt(raw['vehicleId'], `${path}.vehicleId`),
         running: asBoolean(raw['running'], `${path}.running`),
       };
+    case CommandKind.SendVehicleToDepot:
+      return {
+        kind: CommandKind.SendVehicleToDepot,
+        vehicleId: asInt(raw['vehicleId'], `${path}.vehicleId`),
+      };
     default:
       throw new SaveFormatError(`${path}.kind: ${kind} is not a known command`, `${path}.kind`);
   }

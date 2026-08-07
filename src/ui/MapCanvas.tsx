@@ -197,6 +197,7 @@ export function MapCanvas({ client }: { readonly client: SimClient }): ReactElem
   const industries = useSimStore((s) => s.industries);
   const mapRevision = useSimStore((s) => s.mapRevision);
   const selectedVehicleId = useSimStore((s) => s.selectedVehicleId);
+  const followVehicleId = useSimStore((s) => s.followVehicleId);
   const stations = useSimStore((s) => s.stations);
   const companyColorIndex = useSimStore((s) => s.companyColorIndex);
   const tool = useSimStore((s) => s.tool);
@@ -421,6 +422,12 @@ export function MapCanvas({ client }: { readonly client: SimClient }): ReactElem
     view.onSelectVehicle = (vehicleId) => {
       useSimStore.getState().setSelectedVehicle(vehicleId);
     };
+    // The follow camera hands the wheel back on a manual pan or a list jump
+    // (SPEC2 M14) - the view clears itself and tells the store, so the
+    // detail panel's button state stays honest.
+    view.onFollowEnd = () => {
+      useSimStore.getState().setFollowVehicle(null);
+    };
 
     // A list row jumps to what it names (section 17.1).
     useSimStore.getState().setCentreOnTile((x, y) => view.centreOnTile(x, y));
@@ -494,6 +501,19 @@ export function MapCanvas({ client }: { readonly client: SimClient }): ReactElem
   useEffect(() => {
     viewRef.current?.setSelectedVehicle(selectedVehicleId);
   }, [selectedVehicleId]);
+
+  useEffect(() => {
+    viewRef.current?.setFollowVehicle(followVehicleId);
+  }, [followVehicleId]);
+
+  useEffect(() => {
+    // A followed vehicle that left the world (sold, renewed, wound up) stops
+    // steering the camera; the fleet cadence is when the interface learns.
+    if (followVehicleId === null) return;
+    if (!fleet.some((vehicle) => vehicle.id === followVehicleId)) {
+      useSimStore.getState().setFollowVehicle(null);
+    }
+  }, [fleet, followVehicleId]);
 
   useEffect(() => {
     viewRef.current?.setStations(stations);

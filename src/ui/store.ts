@@ -153,6 +153,13 @@ export interface SimUiState extends SnapshotValues {
   /** Which entity list is open, or null. The V/L/H/T/I keys of section 17.2. */
   openList: 'vehicles' | 'lines' | 'stations' | 'towns' | 'industries' | null;
   selectedVehicleId: number | null;
+  /**
+   * Vehicle the camera follows, or null (SPEC2 M14). A render fact: the map
+   * view centres on the sprite's interpolated position each frame, and a
+   * manual pan hands the camera back by clearing this through the view's
+   * own callback.
+   */
+  followVehicleId: number | null;
   /** Line the line panel has open, or null. */
   selectedLineId: number | null;
   /** First corner of a road drag; the second click completes it. */
@@ -254,6 +261,7 @@ export interface SimUiState extends SnapshotValues {
   setCentreOnTile: (centre: (x: number, y: number) => void) => void;
   setFleet: (vehicles: readonly VehicleMarker[]) => void;
   setSelectedVehicle: (id: number | null) => void;
+  setFollowVehicle: (id: number | null) => void;
   setLines: (lines: readonly LineMarker[]) => void;
   setSelectedLine: (id: number | null) => void;
   setRoadAnchor: (anchor: { readonly x: number; readonly y: number } | null) => void;
@@ -339,6 +347,7 @@ export const useSimStore = create<SimUiState>((set) => ({
   overlay: null,
   openList: null,
   selectedVehicleId: null,
+  followVehicleId: null,
   selectedLineId: null,
   roadAnchor: null,
   trackPreview: null,
@@ -417,6 +426,7 @@ export const useSimStore = create<SimUiState>((set) => ({
   setStations: (stations) => set({ stations }),
   setFleet: (vehicles) => set({ fleet: vehicles }),
   setSelectedVehicle: (id) => set({ selectedVehicleId: id }),
+  setFollowVehicle: (id) => set({ followVehicleId: id }),
   setLines: (lines) => set({ lines }),
   setSelectedLine: (id) => set({ selectedLineId: id }),
   setRoadAnchor: (anchor) => set({ roadAnchor: anchor, trackPreview: null }),
@@ -441,6 +451,7 @@ export const useSimStore = create<SimUiState>((set) => ({
       hoveredTile: null,
       selectedTile: null,
       selectedVehicleId: null,
+      followVehicleId: null,
       selectedLineId: null,
       roadAnchor: null,
       trackPreview: null,

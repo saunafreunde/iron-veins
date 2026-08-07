@@ -328,6 +328,27 @@ export class VehicleStore {
   readonly builtTick: Int32Array;
   readonly reliability: Uint16Array;
   readonly breakdownTicks: Int32Array;
+  /**
+   * Breakdowns suffered since the vehicle was bought (SPEC2 M14).
+   *
+   * Display state for the vehicle detail view, but SAVED and hashed all the
+   * same: a lifetime counter that reset to zero on every load would tell the
+   * player a twenty-year jalopy never broke down - the D-176 "honest price"
+   * argument runs the other way here, because unlike a flow ring this number
+   * cannot re-measure itself.
+   */
+  readonly breakdownCount: Int32Array;
+  /**
+   * 1 while a "send to depot" call is outstanding (SPEC2 M14).
+   *
+   * A one-shot diversion: while set, `orderTargetTile` answers with the home
+   * depot instead of the current order, and the arrival there services the
+   * vehicle, parks it Stopped and clears the flag - the schedule itself is
+   * never touched, which is what lets a line vehicle be called in without
+   * being released. Saved and hashed (Z4): it steers routing, so a save taken
+   * mid-diversion must reload into the same diversion.
+   */
+  readonly depotCall: Uint8Array;
   /** Remaining ticks of the current loading stop. */
   readonly loadTicks: Float32Array;
   /** Cargo the vehicle is configured to carry. */
@@ -396,6 +417,8 @@ export class VehicleStore {
     this.builtTick = new Int32Array(capacity);
     this.reliability = new Uint16Array(capacity);
     this.breakdownTicks = new Int32Array(capacity);
+    this.breakdownCount = new Int32Array(capacity);
+    this.depotCall = new Uint8Array(capacity);
     this.loadTicks = new Float32Array(capacity);
     this.refitCargo = new Uint8Array(capacity);
     this.homeDepotTile = new Int32Array(capacity);
@@ -499,6 +522,8 @@ export class VehicleStore {
         ? aggregateConsist(consist).reliability0
         : vehicleSpec(specId).reliability0;
     this.breakdownTicks[id] = 0;
+    this.breakdownCount[id] = 0;
+    this.depotCall[id] = 0;
     this.loadTicks[id] = 0;
     this.refitCargo[id] = cargo;
     this.homeDepotTile[id] = tileIndex;

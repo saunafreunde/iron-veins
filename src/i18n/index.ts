@@ -61,6 +61,19 @@ export function formatMoney(cents: number, fractionDigits = 0): string {
   }).format(cents / 100);
 }
 
+/**
+ * Format a cent amount compactly ("1,2 Mio. €") for chart axis labels, where
+ * a full grouped figure would not fit beside the plot (SPEC2 M14).
+ */
+export function formatMoneyCompact(cents: number): string {
+  return new Intl.NumberFormat(intlTag(), {
+    style: 'currency',
+    currency: 'EUR',
+    notation: 'compact',
+    maximumFractionDigits: 1,
+  }).format(cents / 100);
+}
+
 /** Format a plain integer with locale aware grouping. */
 export function formatInteger(value: number): string {
   return new Intl.NumberFormat(intlTag()).format(value);

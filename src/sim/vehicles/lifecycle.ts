@@ -45,6 +45,9 @@ export function rollBreakdowns(world: World): void {
     vehicles.state[id] = VehicleState.BrokenDown;
     vehicles.speedMs[id] = 0;
     vehicles.breakdownTicks[id] = world.rng.nextRange(BREAKDOWN_MIN_TICKS, BREAKDOWN_MAX_TICKS);
+    // The lifetime tally the M14 vehicle detail shows. Counted where the
+    // verdict falls, so the count and the news log can never disagree.
+    vehicles.breakdownCount[id] = vehicles.breakdownCount[id]! + 1;
   }
 }
 
@@ -124,14 +127,25 @@ export function fleetUpkeepCtPerYear(world: World, ownerId: number): number {
 
   for (let id = 0; id < vehicles.count; id++) {
     if (vehicles.alive[id] !== 1 || vehicles.ownerId[id] !== ownerId) continue;
-    const units = vehicles.consist[id]!;
-    const upkeep =
-      units.length > 0
-        ? aggregateConsist(units).upkeepCtPerYear
-        : vehicleSpec(vehicles.specId[id]!).upkeepCtPerYear;
-    total += isObsolete(world, id) ? upkeep * OBSOLETE_UPKEEP_FACTOR : upkeep;
+    total += vehicleUpkeepCtPerYear(world, id);
   }
   return total;
+}
+
+/**
+ * What ONE vehicle costs to keep this year, obsolescence included - the
+ * exact per-vehicle term of the fleet total above, factored out so the M14
+ * vehicle detail shows the same number the books charge (before the price
+ * level, which `World.costCt` applies where the bill is drawn).
+ */
+export function vehicleUpkeepCtPerYear(world: World, id: number): number {
+  const vehicles = world.vehicles;
+  const units = vehicles.consist[id]!;
+  const upkeep =
+    units.length > 0
+      ? aggregateConsist(units).upkeepCtPerYear
+      : vehicleSpec(vehicles.specId[id]!).upkeepCtPerYear;
+  return isObsolete(world, id) ? upkeep * OBSOLETE_UPKEEP_FACTOR : upkeep;
 }
 
 /**

@@ -24,6 +24,7 @@ import { quickLoad } from './saves';
 import { updateSettings } from './settings';
 import { MapCanvas } from './MapCanvas';
 import { NewsPanel } from './NewsPanel';
+import { NotificationHost } from './NotificationHost';
 import { TilePanel } from './TilePanel';
 import type { SimClient } from './SimClient';
 import { StatusBar } from './StatusBar';
@@ -262,6 +263,11 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
             screen a healthy game shows - the menu included, because the menu
             is where a freshly restarted player is standing. */}
         <StoredCrashNotice />
+        {/* The notification host stays mounted behind full-screen overlays
+            too: the game keeps running under the handbook, and a pause-armed
+            alarm that fired while the player was reading must still stop the
+            clock (SPEC2 M14). */}
+        <NotificationHost client={client} />
       </div>
     );
   }
@@ -343,6 +349,10 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
           {t(rejectionKey)}
         </div>
       )}
+
+      {/* The M14 notification routing: ticker strip and toast cards over the
+          news the store already holds - pure presentation (D-110). */}
+      <NotificationHost client={client} />
 
       <StoredCrashNotice />
     </div>

@@ -901,6 +901,16 @@ export class MapView {
    */
   onSelectVehicle: ((vehicleId: number | null) => void) | null = null;
 
+  /**
+   * The follow camera gave the wheel back - a manual pan broke the follow
+   * (SPEC2 M14). The interface clears its own state through this, so the
+   * button and the camera cannot disagree about who is steering.
+   */
+  onFollowEnd: (() => void) | null = null;
+
+  /** Vehicle the camera tracks each frame, or null (SPEC2 M14). */
+  private followVehicleId: number | null = null;
+
   private stations: readonly StationMarker[] = [];
   /** Company colour, applied to stations and vehicles as a tint. */
   private companyTint = 0xf08020;
@@ -1438,6 +1448,12 @@ export class MapView {
   }
 
   centreOnTile(tileX: number, tileY: number): void {
+    // An explicit jump outranks the follow camera, exactly like a pan (M14) -
+    // without this the next frame would snap straight back to the vehicle.
+    if (this.followVehicleId !== null) {
+      this.followVehicleId = null;
+      this.onFollowEnd?.();
+    }
     const map = this.map;
     const height = map === null ? 0 : map.baseHeight(tileX, tileY);
     const world = tileToWorld(tileX, tileY, height);
@@ -1535,6 +1551,11 @@ export class MapView {
 
     canvas.addEventListener('pointermove', (event) => {
       if (panning) {
+        // A manual pan takes the wheel back from the follow camera (M14).
+        if (this.followVehicleId !== null) {
+          this.followVehicleId = null;
+          this.onFollowEnd?.();
+        }
         // No smoothing: inertia makes precise construction unpleasant.
         this.centreX -= (event.clientX - lastX) / this.zoom;
         this.centreY -= (event.clientY - lastY) / this.zoom;
@@ -1614,6 +1635,22 @@ export class MapView {
   private readonly update = (): void => {
     const map = this.map;
     if (map === null) return;
+
+    // The follow camera (SPEC2 M14): centre on the followed vehicle's drawn
+    // position from the LAST frame's draw prep - applied before the camera
+    // transform below, so the frame never tears; at display rates the one
+    // frame of lag is a fraction of a tile. A vehicle that is gone from the
+    // frame (sold, renewed) simply stops steering; the interface clears the
+    // follow on the fleet cadence.
+    if (this.followVehicleId !== null) {
+      for (let i = 0; i < this.drawnVehicles; i++) {
+        if (this.vehicleIds[i] !== this.followVehicleId) continue;
+        const screen = this.vehicleScreen[i]!;
+        this.centreX = screen.x;
+        this.centreY = screen.y;
+        break;
+      }
+    }
 
     this.clampCentre(map.size);
     this.world.scale.set(this.zoom);
@@ -3982,6 +4019,11 @@ export class MapView {
   /** Mark a vehicle as selected, or clear it. Driven by the store. */
   setSelectedVehicle(vehicleId: number | null): void {
     this.selectedVehicleId = vehicleId;
+  }
+
+  /** Follow a vehicle with the camera, or stop. Driven by the store. */
+  setFollowVehicle(vehicleId: number | null): void {
+    this.followVehicleId = vehicleId;
   }
 
   /** Route the build preview is currently showing, drawn on the overlay. */

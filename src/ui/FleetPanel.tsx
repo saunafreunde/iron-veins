@@ -25,6 +25,7 @@ import { refitTargets, standsInDepot } from './refit';
 import type { SimClient } from './SimClient';
 import { useSimStore } from './store';
 import { stationAtTile } from './TilePanel';
+import { VehicleDetail } from './VehicleDetail';
 
 /**
  * Buying vehicles and giving them their orders.
@@ -317,6 +318,9 @@ export function FleetPanel({ client }: { readonly client: SimClient }): ReactEle
 
       {selected !== undefined && (
         <>
+          {/* The M14 vehicle detail: statistics, manifest, depot call and
+              follow camera - shown for whatever the click selected. */}
+          <VehicleDetail client={client} vehicle={selected} />
           {selected.lineId >= 0 ? (
             <LineMembership client={client} vehicle={selected} />
           ) : (
@@ -327,6 +331,7 @@ export function FleetPanel({ client }: { readonly client: SimClient }): ReactEle
                 stations={stations}
                 mapSize={mapSize}
                 labelKey="ui.fleet.orders"
+                activeIndex={selected.orderIndex}
                 onSend={(next) =>
                   client.send({
                     kind: CommandKind.SetVehicleOrders,

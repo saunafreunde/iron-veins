@@ -55,4 +55,11 @@ export function setVolume(channel: number, value: number): void {
   updateSettings({ volumes });
 }
 
+/** Route one news category without disturbing the others (SPEC2 M14). */
+export function setNotificationMode(category: number, mode: number): void {
+  const current = useSimStore.getState().settings.notifications;
+  const notifications = current.map((existing, index) => (index === category ? mode : existing));
+  updateSettings({ notifications });
+}
+
 export { DEFAULT_SETTINGS };

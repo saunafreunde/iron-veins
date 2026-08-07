@@ -46,6 +46,8 @@ export const CommandKind = {
   ReleaseVehicleFromLine: 38,
   SetLineTakt: 39,
   SetTransferNode: 40,
+  /** Divert a vehicle to its home shed and park it there (SPEC2 M14). */
+  SendVehicleToDepot: 41,
 } as const;
 export type CommandKind = (typeof CommandKind)[keyof typeof CommandKind];
 
@@ -160,6 +162,16 @@ export interface SetVehicleOrdersCommand {
   readonly kind: typeof CommandKind.SetVehicleOrders;
   readonly vehicleId: number;
   readonly orders: readonly OrderSpec[];
+}
+
+/**
+ * The "send to depot" button of the M14 vehicle detail: a one-shot diversion
+ * to the vehicle's home shed. The schedule is untouched - see
+ * `vehicles/update.ts` `divertToDepot` for what the flag does.
+ */
+export interface SendVehicleToDepotCommand {
+  readonly kind: typeof CommandKind.SendVehicleToDepot;
+  readonly vehicleId: number;
 }
 
 export interface SetVehicleRunningCommand {
@@ -472,7 +484,8 @@ export type Command =
   | BuyRoadVehicleCommand
   | SellVehicleCommand
   | SetVehicleOrdersCommand
-  | SetVehicleRunningCommand;
+  | SetVehicleRunningCommand
+  | SendVehicleToDepotCommand;
 
 /** A command bound to the exact tick at which it is executed. */
 export interface CommandEnvelope {

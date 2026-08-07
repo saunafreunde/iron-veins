@@ -162,6 +162,7 @@ const SAMPLES: Record<keyof typeof CommandKind, Command> = {
     ],
   },
   SetVehicleRunning: { kind: CommandKind.SetVehicleRunning, vehicleId: 6, running: true },
+  SendVehicleToDepot: { kind: CommandKind.SendVehicleToDepot, vehicleId: 6 },
   BuildTrack: {
     kind: CommandKind.BuildTrack,
     x1: 3,

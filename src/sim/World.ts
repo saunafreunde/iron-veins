@@ -930,6 +930,10 @@ function hashDynamicState(h: Fnv1a64, world: World): void {
     h.int(vehicles.taktDelayTicks[id]!);
     h.u32(vehicles.orderIndex[id]!).u32(vehicles.reliability[id]!);
     h.u32(vehicles.breakdownTicks[id]!).f64(vehicles.loadTicks[id]!);
+    // The M14 pair: the lifetime tally is display state but saved, so it is
+    // fingerprinted like every other saved field (D-134); the depot call
+    // steers routing, so a bent flag is a different future (Z4).
+    h.u32(vehicles.breakdownCount[id]!).u32(vehicles.depotCall[id]!);
     h.f64(vehicles.earnedCt[id]!).f64(vehicles.workJ[id]!);
     h.int(vehicles.lastStationId[id]!).int(vehicles.lastArrivalTick[id]!);
     // The orders drive every decision the vehicle makes; leaving them out of
