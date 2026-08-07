@@ -138,6 +138,22 @@ export const SnapshotReserved = {
 } as const;
 export const SNAPSHOT_RESERVED_STRIDE = 2;
 
+/**
+ * One read of the published vehicle block, tagged with the generation that
+ * published it, its tick and the measured simulation rate - the bundle the
+ * render-side interpolator of E-05 copies and times its alpha against
+ * (D-162). A shared type because both sides of the channel name it: the
+ * reader produces it, the renderer consumes it.
+ */
+export interface VehicleFrame {
+  readonly data: Int32Array;
+  readonly count: number;
+  readonly generation: number;
+  readonly tick: number;
+  /** Measured simulation rate in hundredths of a tick per second. */
+  readonly simRateCentiHz: number;
+}
+
 const HEADER_BYTES = HEADER_I32_COUNT * 4;
 const STATUS_I32_BYTES = SNAPSHOT_I32_COUNT * 4;
 const STATUS_F64_BYTES = SNAPSHOT_F64_COUNT * 8;
@@ -284,13 +300,22 @@ export class SnapshotReader {
     return this.vehicleSlots[this.lastGeneration & 1]!;
   }
 
-  /** Views of the currently published generation, for a renderer that polls. */
-  currentVehicles(): { readonly data: Int32Array; readonly count: number } {
+  /**
+   * Vehicle block of the published generation, tagged with that generation,
+   * its tick and the measured sim rate (E-05, D-162). The generation is read
+   * ONCE and every view derived from it, so a publish landing between two
+   * separate reads cannot tag a fresh block with a stale number.
+   */
+  currentVehicleFrame(): VehicleFrame {
     const generation = this.peekGeneration();
     const slot = generation & 1;
+    const i32 = this.i32Slots[slot]!;
     return {
       data: this.vehicleSlots[slot]!,
-      count: this.i32Slots[slot]![SnapshotI32.VehicleCount]!,
+      count: i32[SnapshotI32.VehicleCount]!,
+      generation,
+      tick: i32[SnapshotI32.Tick]!,
+      simRateCentiHz: i32[SnapshotI32.SimRateCentiHz]!,
     };
   }
 

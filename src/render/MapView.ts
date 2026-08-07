@@ -13,6 +13,7 @@ import {
   SNAPSHOT_VEHICLE_STRIDE,
   SnapshotReserved,
   SnapshotVehicle,
+  type VehicleFrame,
 } from '../shared/snapshot';
 import { MAX_HEIGHT } from '../sim/constants';
 import type { TileMap } from '../sim/map/TileMap';
@@ -60,6 +61,7 @@ import {
   type NetSegment,
 } from './chunks';
 import { DAY_TINT_NEUTRAL, dayNightTint } from './dayNight';
+import { sampleWorldX, sampleWorldY, shouldSnap, SnapshotInterpolator } from './interpolation';
 
 /**
  * The isometric map view.
@@ -292,8 +294,16 @@ export class MapView {
   private tickSource: (() => number) | null = null;
   /** Last world tint applied, so an unchanged frame does not dirty the tree. */
   private appliedTint = DAY_TINT_NEUTRAL;
-  /** Where the renderer fetches the per-tick vehicle block from. */
-  private vehicleSource: (() => { data: Int32Array; count: number }) | null = null;
+  /** Where the renderer fetches the tagged per-tick vehicle frame from. */
+  private vehicleSource: (() => VehicleFrame) | null = null;
+  /**
+   * Reader-side copies of the two newest generations plus the wall-clock
+   * alpha between them (E-05, D-162). Owned here because the interpolation
+   * is drawing policy: the sim, the protocol and the stride know nothing.
+   */
+  private readonly interpolator = new SnapshotInterpolator();
+  /** This frame's alpha, shared by vehicle motion and the day/night phase. */
+  private frameAlpha = 1;
   private previewRoute: readonly number[] | null = null;
   private readonly vehicleSprites: Sprite[] = [];
   /**
@@ -393,10 +403,12 @@ export class MapView {
   }
 
   /**
-   * Where to read the per-tick vehicle block. Pulled every frame rather than
-   * pushed, because the renderer runs at 60 Hz and the simulation at 20.
+   * Where to read the tagged per-tick vehicle frame. Pulled every frame
+   * rather than pushed, because the renderer runs at 60 Hz and the
+   * simulation at 20 - which is exactly the gap the E-05 interpolator
+   * bridges from the generation tag on this frame.
    */
-  setVehicleSource(source: () => { data: Int32Array; count: number }): void {
+  setVehicleSource(source: () => VehicleFrame): void {
     this.vehicleSource = source;
   }
 
@@ -577,6 +589,16 @@ export class MapView {
       this.app.screen.height / 2 - this.centreY * this.zoom,
     );
 
+    // E-05 (D-162): pull the published vehicle frame ONCE per frame. When a
+    // new generation arrived the interpolator swaps its reader-side copies;
+    // the wall-clock alpha then places this frame between the previous and
+    // the current tick. The wall clock decides only WHERE between two
+    // published ticks the frame sits - the sim knows nothing of it, and a
+    // pause parks alpha at 1.
+    const nowMs = performance.now();
+    if (this.vehicleSource !== null) this.interpolator.observe(this.vehicleSource(), nowMs);
+    this.frameAlpha = this.interpolator.alpha(nowMs);
+
     // Day/night (section 16.3): ONE tint on the world-art container -
     // chunks, tiles, network lines and vehicles alike - computed once per
     // frame from the snapshot tick and multiplied down the tree by the GPU;
@@ -584,10 +606,15 @@ export class MapView {
     // same modulation as the sprite path. The overlay Graphics and the
     // minimap are deliberately outside it: selection markers, previews and
     // the F3 blocks are interface, and interface does not dim at night
-    // (D-127).
-    const tint = this.dayNight
-      ? dayNightTint(this.tickSource === null ? 0 : this.tickSource())
-      : DAY_TINT_NEUTRAL;
+    // (D-127). Since M12 the curve reads the INTERPOLATED phase - the same
+    // alpha that glides the vehicles glides the light, so dawn does not
+    // step once per tick; the phase never leaves the two published ticks.
+    const phase = this.interpolator.hasFrame
+      ? this.interpolator.phase(this.frameAlpha)
+      : this.tickSource === null
+        ? 0
+        : this.tickSource();
+    const tint = this.dayNight ? dayNightTint(phase) : DAY_TINT_NEUTRAL;
     if (tint !== this.appliedTint) {
       this.appliedTint = tint;
       this.art.tint = tint;
@@ -1365,19 +1392,27 @@ export class MapView {
 
   /**
    * Vehicles are redrawn every frame, not with the tiles: they move between
-   * simulation ticks and the renderer interpolates along the tile they are
-   * crossing, which is what keeps them smooth at 60 Hz over a 20 Hz sim.
+   * simulation ticks, and since M12 the renderer lerps each one from its
+   * PREVIOUS published position towards its current one by the frame's
+   * wall-clock alpha (E-05, D-162) - true 60 Hz motion over the 20 Hz sim,
+   * reading the interpolator's reader-side copies, never the live buffer.
+   * A vehicle without a previous row (fresh spawn), one that jumped a
+   * teleport distance or one whose state change makes a glide wrong snaps
+   * to its current position instead.
    *
    * In the abstract mode (0.25x, SPEC.md 16.1) each vehicle is a dot in its
    * company's colour instead of a sprite - the same positions feed the same
    * hit-test arrays, so clicking a dot still selects the vehicle.
    */
   private drawVehicles(map: TileMap, abstract: boolean): void {
-    const source = this.vehicleSource;
     const atlas = this.atlas;
-    if (source === null || atlas === null) return;
+    const interp = this.interpolator;
+    if (atlas === null || !interp.hasFrame) return;
 
-    const { data, count } = source();
+    const data = interp.data;
+    const count = interp.count;
+    const prev = interp.prevData;
+    const alpha = this.frameAlpha;
     const size = map.size;
     this.drawnVehicles = 0;
 
@@ -1392,6 +1427,7 @@ export class MapView {
       const tile = data[base + SnapshotVehicle.Tile]!;
       const next = data[base + SnapshotVehicle.NextTile]!;
       const progress = data[base + SnapshotVehicle.ProgressMilli]! / 1000;
+      const state = data[base + SnapshotVehicle.State]!;
       const kind = data[base + SnapshotVehicle.Kind]!;
       const vehicleId = data[base + SnapshotVehicle.VehicleId]!;
       const owner = data[base + SnapshotVehicle.Owner]!;
@@ -1405,11 +1441,50 @@ export class MapView {
       // railHeight, so a train on a bridge rides the deck instead of the river.
       const fromHeight = map.railHeight(fromX, fromY);
       const toHeight = map.railHeight(toX, toY);
-      const from = tileToWorld(fromX, fromY, fromHeight);
-      const to = tileToWorld(toX, toY, toHeight);
 
-      const worldX = from.x + (to.x - from.x) * progress;
-      const worldY = from.y + (to.y - from.y) * progress;
+      // The CURRENT generation's sample - allocation-free, the same 16.1
+      // projection tileToWorld computes.
+      const currX = sampleWorldX(fromX, fromY, toX, toY, progress);
+      const currY = sampleWorldY(fromX, fromY, fromHeight, toX, toY, toHeight, progress);
+
+      // E-05: glide from the PREVIOUS generation's sample towards the
+      // current one. The pairing runs by vehicle id because the block is
+      // compacted; a fresh spawn, a teleport or a snap-state change draws
+      // at the current position outright.
+      let worldX = currX;
+      let worldY = currY;
+      if (alpha < 1) {
+        const prevRow = interp.prevRowOf(vehicleId);
+        if (prevRow >= 0) {
+          const prevBase = prevRow * SNAPSHOT_VEHICLE_STRIDE;
+          const prevTile = prev[prevBase + SnapshotVehicle.Tile]!;
+          const prevNext = prev[prevBase + SnapshotVehicle.NextTile]!;
+          const prevState = prev[prevBase + SnapshotVehicle.State]!;
+          const prevFromX = prevTile % size;
+          const prevFromY = (prevTile / size) | 0;
+          const prevToX = prevNext % size;
+          const prevToY = (prevNext / size) | 0;
+          if (
+            map.contains(prevFromX, prevFromY) &&
+            map.contains(prevToX, prevToY) &&
+            !shouldSnap(fromX - prevFromX, fromY - prevFromY, prevState, state)
+          ) {
+            const prevProgress = prev[prevBase + SnapshotVehicle.ProgressMilli]! / 1000;
+            const prevX = sampleWorldX(prevFromX, prevFromY, prevToX, prevToY, prevProgress);
+            const prevY = sampleWorldY(
+              prevFromX,
+              prevFromY,
+              map.railHeight(prevFromX, prevFromY),
+              prevToX,
+              prevToY,
+              map.railHeight(prevToX, prevToY),
+              prevProgress,
+            );
+            worldX = prevX + (currX - prevX) * alpha;
+            worldY = prevY + (currY - prevY) * alpha;
+          }
+        }
+      }
 
       if (!abstract) {
         let sprite = this.vehicleSprites[i];
@@ -1519,14 +1594,16 @@ export class MapView {
    * enough to tell an idling engine from a working one.
    */
   vehicleAudioInputs(out: VehicleAudioInput[]): number {
-    const source = this.vehicleSource;
     // `attach` is asynchronous and the caller polls on a timer, so the first
     // few calls can arrive before Pixi has a screen to measure - and before
     // any vehicle has been drawn there is nothing to say anyway.
-    if (source === null || this.map === null || this.drawnVehicles === 0) return 0;
+    if (!this.interpolator.hasFrame || this.map === null || this.drawnVehicles === 0) return 0;
     const screenSize = this.app.screen;
     if (screenSize === undefined) return 0;
-    const { data } = source();
+    // The interpolator's copy rather than the live buffer: it is the block
+    // the drawn rows and `vehicleIds` were built from this frame, so a sound
+    // stays attached to the vehicle its row describes.
+    const data = this.interpolator.data;
 
     const halfWidth = screenSize.width / 2;
     const halfHeight = screenSize.height / 2;

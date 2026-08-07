@@ -13,7 +13,7 @@ no entry below. A number may appear under several topics.
 - **Determinism, RNG & hashing:** D-001, D-002, D-003, D-004, D-009, D-010,
   D-024, D-093, D-106, D-128, D-137, D-142, D-145, D-146, D-149, D-153
 - **Commands, snapshot & worker boundary:** D-004, D-005, D-006, D-011, D-032,
-  D-100, D-111, D-145, D-146, D-148
+  D-100, D-111, D-145, D-146, D-148, D-162
 - **Lines & timetables:** D-145, D-146, D-147, D-148, D-149, D-150, D-151,
   D-152, D-155, D-159
 - **Map generation & terrain:** D-018, D-019, D-020, D-021, D-022, D-023,
@@ -41,10 +41,10 @@ no entry below. A number may appear under several topics.
 - **Competitors, AI & tenders:** D-107, D-108, D-109, D-115, D-116, D-121,
   D-122, D-147, D-152, D-153, D-154, D-155, D-156, D-158
 - **Rendering & art:** D-013, D-014, D-033, D-035, D-112, D-117, D-125, D-127,
-  D-136, D-140, D-160, D-161
+  D-136, D-140, D-160, D-161, D-162
 - **UI & input:** D-011, D-013, D-015, D-035, D-110, D-113, D-114, D-119,
   D-126, D-148
-- **Performance & measurement:** D-002, D-120, D-135, D-136, D-161
+- **Performance & measurement:** D-002, D-120, D-135, D-136, D-161, D-162
 - **Platform, tooling & build:** D-012, D-014, D-015, D-016, D-017, D-029,
   D-030, D-031, D-160
 - **Crash safety:** D-132, D-139
@@ -3702,3 +3702,79 @@ constants now (`CELL_HEADROOM_STEPS`, `CELL_SKIRT_STEPS` in TerrainAtlas),
 because the chunk AABB must enclose everything a cell can draw and a margin
 that drifted from the cell would clip every tall building at a chunk edge -
 the D-117 anchorY lesson applied before it could happen a second time.
+
+## M12 - the stage, stage 2: true 60 Hz motion (2026-08-07)
+
+### D-162 The renderer draws one tick behind and glides towards the newest, and the wall clock decides only the blend
+
+E-05 ordered the mechanism - a reader-side copy of the previous generation's
+vehicle block, a wall-clock alpha lerp, a clamp at discontinuities, no third
+SharedArrayBuffer, no stride change - and this entry records the shape it
+took and the five choices inside it.
+
+**The interpolator renders the PAST, never a prediction.**
+`SnapshotInterpolator` (`src/render/interpolation.ts`) keeps preallocated
+copies of the two newest published generations and MapView draws every
+vehicle at `prev + (curr - prev) * alpha` - one tick behind the simulation,
+gliding towards the newest published truth. The alternative, extrapolating
+FORWARD from the newest tick, was rejected because an extrapolated vehicle
+overshoots every stop and every signal halt and then visibly rebounds; a
+50 ms display lag is imperceptible, an overshoot at a red signal is a lie
+about the one thing this game promises to draw honestly. The alpha is
+clamped to [0, 1] at both ends - clock skew shows the previous positions,
+a pause or stall parks every sprite at its current published position, and
+nothing ever moves that the simulation did not publish. The copies are
+taken only when the generation counter moved (20 Hz, never per frame), the
+per-frame path allocates nothing, and the within-tile projection moved into
+allocation-free pure functions (`sampleWorldX`/`sampleWorldY`, asserted
+equal to `tileToWorld` by test) so the lerp can run it twice per vehicle.
+
+**Rows are paired by vehicle id, because the block is compacted.** A row's
+position says nothing about which vehicle it holds (the D-126-era snapshot
+lesson), so the previous copy is indexed by `VehicleId` into a preallocated
+`Int32Array(MAX_VEHICLES)` at generation-swap time. A vehicle with no
+previous row - a fresh spawn, a vehicle that entered the block's cap - draws
+at its current position outright: there is nothing to glide from.
+
+**The clamp has two triggers, and both cut to the CURRENT position.** A
+tile-space jump past three tiles between generations is a teleport (depot
+recall, path reset, a loaded world - a vehicle moves at most one tile per
+tick, so even a doubled generation gap under fast-forward stays within two),
+and a state transition into or out of Loading, BrokenDown or InDepot snaps
+too: a lorry must not slide INTO the bay it is already loading at, a
+breakdown must not drift to its standstill, a shed must not swallow a sprite
+mid-glide. Braking, signal waits and takt waits keep gliding - the physics
+already smooths those, and the published positions describe the honest
+deceleration. The three state values are duplicated as a bit mask to keep
+render free of sim enums (the MapView pattern);
+`tests/unit/interpolation.spec.ts` pins them against `VehicleState`.
+
+**The lerp window comes from the measured rate, not the nominal step.** The
+snapshot already publishes `SimRateCentiHz`; 100 000 / rate is the true
+cadence at every speed setting, so fast-forward shortens the glide instead
+of lagging it, and a genuinely slow sim is lerped over its genuine interval.
+Capped at 250 ms: past that the sim is stalling, and a sprite a quarter
+second behind its own truth reads as lag, not smoothness. The channel
+carries the tag as `currentVehicleFrame()` - generation, tick and rate read
+in ONE call so a publish cannot slip between the block and its label; the
+superseded untagged `currentVehicles()` was deleted rather than left as a
+second way to read the same slot.
+
+**The day/night phase glides on the same alpha.** D-127's curve now receives
+`prevTick + (currTick - prevTick) * alpha` instead of the integer tick, so
+dawn stops stepping once per tick at the same moment the vehicles stop
+stepping. Fehlerkatalog 39 is honoured, not bent: the wall clock chooses
+where BETWEEN two published counters the frame sits - the phase is bounded
+by the two ticks, it never invents a counter value, and world animation
+(water, later particles) stays keyed to deterministic counters. Stated
+openly: two screenshots of the same tick can differ sub-tick in vehicle
+positions and tint - that is what E-05 bought, the sim hash and every
+replay are untouched, and the determinism suite never looks at pixels.
+
+The draw-prep tripwire (D-136) now prices the lerp: the proxy replays the
+previous-row lookup, the snap check, both samples and the blend at alpha
+one half - the worst frame, since a settled frame skips the branch
+wholesale. Measured p99 1.26 ms for the full 1,500-vehicle block against
+the unchanged 5 ms tripwire (was 0.41 ms before the lerp; the cost is the
+second sample and the pairing, roughly threefold, still a quarter of the
+budget).

@@ -18,6 +18,7 @@ import {
   vehicleDrawOrder,
 } from '../../src/render/projection';
 import { CHUNK_TILES, chunkChecksum, extractNetworkSegments } from '../../src/render/chunks';
+import { sampleWorldX, sampleWorldY, shouldSnap } from '../../src/render/interpolation';
 
 /**
  * The render CPU tripwire of SPEC2 6.3: Sprite-Pool-Rebuild-ms, Draw-Prep-ms
@@ -29,8 +30,8 @@ import { CHUNK_TILES, chunkChecksum, extractNetworkSegments } from '../../src/re
  * frame, and that is where a render regression that no screenshot would catch
  * builds up: the per-tile work of `MapView.rebuild` (diagonal iteration, layer
  * decisions, frame-cache lookups, draw-order keys) and the per-frame work of
- * `MapView.drawVehicles` (stride reads, height lookups, interpolation, vehicle
- * draw-order sort keys).
+ * `MapView.drawVehicles` (stride reads, height lookups, the E-05 generation
+ * lerp, vehicle draw-order sort keys).
  *
  * This is a PROXY, stated as one: it replays the same reads, the same key
  * arithmetic and the same frame-cache lookups as `MapView`, writing into flat
@@ -207,11 +208,38 @@ function syntheticVehicleBlock(map: TileMap): Int32Array {
 }
 
 /**
+ * The previous generation's copy for the E-05 lerp: the same vehicles one
+ * tick earlier on the same steps, plus the id-to-row index the interpolator
+ * maintains - here the identity, because the synthetic block never compacts.
+ */
+function syntheticPrevBlock(data: Int32Array): { prev: Int32Array; prevRowById: Int32Array } {
+  const prev = new Int32Array(data);
+  const prevRowById = new Int32Array(SNAPSHOT_MAX_VEHICLES);
+  for (let i = 0; i < SNAPSHOT_MAX_VEHICLES; i++) {
+    const base = i * SNAPSHOT_VEHICLE_STRIDE;
+    prev[base + SnapshotVehicle.ProgressMilli] = Math.max(
+      0,
+      prev[base + SnapshotVehicle.ProgressMilli]! - 350,
+    );
+    prevRowById[i] = i;
+  }
+  return { prev, prevRowById };
+}
+
+/**
  * The CPU of `MapView.drawVehicles` for one frame: stride reads, tile
- * decomposition, `railHeight` at both ends, projection, interpolation and the
+ * decomposition, `railHeight` at both ends, projection, the E-05 generation
+ * lerp (previous-row lookup, snap check, both samples, alpha blend) and the
  * vehicle draw-order key - everything except the sprite it lands on.
  */
-function drawPrepProxy(map: TileMap, data: Int32Array, out: DrawList): number {
+function drawPrepProxy(
+  map: TileMap,
+  data: Int32Array,
+  prev: Int32Array,
+  prevRowById: Int32Array,
+  alpha: number,
+  out: DrawList,
+): number {
   const size = map.size;
   let drawn = 0;
   for (let i = 0; i < SNAPSHOT_MAX_VEHICLES; i++) {
@@ -219,6 +247,8 @@ function drawPrepProxy(map: TileMap, data: Int32Array, out: DrawList): number {
     const tile = data[base + SnapshotVehicle.Tile]!;
     const next = data[base + SnapshotVehicle.NextTile]!;
     const progress = data[base + SnapshotVehicle.ProgressMilli]! / 1000;
+    const state = data[base + SnapshotVehicle.State]!;
+    const vehicleId = data[base + SnapshotVehicle.VehicleId]!;
 
     const fromX = tile % size;
     const fromY = (tile / size) | 0;
@@ -228,13 +258,47 @@ function drawPrepProxy(map: TileMap, data: Int32Array, out: DrawList): number {
 
     const fromHeight = map.railHeight(fromX, fromY);
     const toHeight = map.railHeight(toX, toY);
-    const from = tileToWorld(fromX, fromY, fromHeight);
-    const to = tileToWorld(toX, toY, toHeight);
+    const currX = sampleWorldX(fromX, fromY, toX, toY, progress);
+    const currY = sampleWorldY(fromX, fromY, fromHeight, toX, toY, toHeight, progress);
+
+    let worldX = currX;
+    let worldY = currY;
+    const prevRow =
+      vehicleId >= 0 && vehicleId < prevRowById.length ? prevRowById[vehicleId]! : -1;
+    if (alpha < 1 && prevRow >= 0) {
+      const prevBase = prevRow * SNAPSHOT_VEHICLE_STRIDE;
+      const prevTile = prev[prevBase + SnapshotVehicle.Tile]!;
+      const prevNext = prev[prevBase + SnapshotVehicle.NextTile]!;
+      const prevState = prev[prevBase + SnapshotVehicle.State]!;
+      const prevFromX = prevTile % size;
+      const prevFromY = (prevTile / size) | 0;
+      const prevToX = prevNext % size;
+      const prevToY = (prevNext / size) | 0;
+      if (
+        map.contains(prevFromX, prevFromY) &&
+        map.contains(prevToX, prevToY) &&
+        !shouldSnap(fromX - prevFromX, fromY - prevFromY, prevState, state)
+      ) {
+        const prevProgress = prev[prevBase + SnapshotVehicle.ProgressMilli]! / 1000;
+        const prevX = sampleWorldX(prevFromX, prevFromY, prevToX, prevToY, prevProgress);
+        const prevY = sampleWorldY(
+          prevFromX,
+          prevFromY,
+          map.railHeight(prevFromX, prevFromY),
+          prevToX,
+          prevToY,
+          map.railHeight(prevToX, prevToY),
+          prevProgress,
+        );
+        worldX = prevX + (currX - prevX) * alpha;
+        worldY = prevY + (currY - prevY) * alpha;
+      }
+    }
 
     out.key[drawn] = vehicleDrawOrder(fromX, fromY, fromHeight, toX, toY, toHeight, progress);
     out.frame[drawn] = data[base + SnapshotVehicle.Kind]!;
-    out.x[drawn] = from.x + (to.x - from.x) * progress - TILE_W / 2;
-    out.y[drawn] = from.y + (to.y - from.y) * progress - HEIGHT_PX;
+    out.x[drawn] = worldX - TILE_W / 2;
+    out.y[drawn] = worldY - HEIGHT_PX;
     drawn++;
   }
   return drawn;
@@ -378,12 +442,15 @@ describe('render CPU tripwire (SPEC2 6.3)', () => {
       y: new Float64Array(SNAPSHOT_MAX_VEHICLES),
     };
     const data = syntheticVehicleBlock(map);
-    const drawn = drawPrepProxy(map, data, out);
+    // Alpha one half: the E-05 lerp branch runs on EVERY vehicle, which is
+    // the worst frame - alpha 1 (a settled frame) skips the branch wholesale.
+    const { prev, prevRowById } = syntheticPrevBlock(data);
+    const drawn = drawPrepProxy(map, data, prev, prevRowById, 0.5, out);
 
     const samples = new Float64Array(DRAW_PREP_SAMPLES);
     for (let i = 0; i < DRAW_PREP_SAMPLES; i++) {
       const started = performance.now();
-      drawPrepProxy(map, data, out);
+      drawPrepProxy(map, data, prev, prevRowById, 0.5, out);
       samples[i] = performance.now() - started;
     }
 

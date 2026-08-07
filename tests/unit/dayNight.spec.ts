@@ -67,6 +67,20 @@ describe('the day/night curve', () => {
     }
   });
 
+  it('glides through nightfall on a fractional tick instead of stepping (E-05)', () => {
+    // Since M12 the renderer feeds the INTERPOLATED phase - tick plus the
+    // frame's alpha - into this curve (D-162). Nightfall (day fraction 0.5
+    // to 0.58) is the steepest red slope, so half a tick must land strictly
+    // between its integer neighbours: the proof that a fractional phase
+    // smooths the tint rather than quantising back to the tick.
+    const nightfall = Math.round(TICKS_PER_DAY * 0.51);
+    const [before] = channels(dayNightTint(nightfall));
+    const [between] = channels(dayNightTint(nightfall + 0.5));
+    const [after] = channels(dayNightTint(nightfall + 1));
+    expect(between).toBeLessThan(before);
+    expect(between).toBeGreaterThan(after);
+  });
+
   it('never jumps between two consecutive ticks', () => {
     // The renderer applies the tint every frame; a step in the curve would be
     // a visible flicker. Eight units per channel per tick is well under what

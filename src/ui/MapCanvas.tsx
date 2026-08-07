@@ -386,7 +386,9 @@ export function MapCanvas({ client }: { readonly client: SimClient }): ReactElem
 
     // A list row jumps to what it names (section 17.1).
     useSimStore.getState().setCentreOnTile((x, y) => view.centreOnTile(x, y));
-    view.setVehicleSource(() => client.readVehicles());
+    // Tagged with generation, tick and rate: the renderer's E-05 interpolator
+    // copies the block when the generation moves and lerps between the copies.
+    view.setVehicleSource(() => client.readVehicleFrame());
     view.setReservedSource(() => client.readReserved());
     // The day/night curve reads the published tick, never the wall clock.
     view.setTickSource(() => client.readTick());

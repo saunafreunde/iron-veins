@@ -5,7 +5,13 @@ import type {
   SaveSlotKind,
   WorkerToMainMessage,
 } from '../shared/protocol';
-import { createSnapshotBuffer, SnapshotF64, SnapshotI32, SnapshotReader } from '../shared/snapshot';
+import {
+  createSnapshotBuffer,
+  SnapshotF64,
+  SnapshotI32,
+  SnapshotReader,
+  type VehicleFrame,
+} from '../shared/snapshot';
 import type { Command } from '../sim/commands/types';
 import type { Difficulty, MapClimate } from '../sim/constants';
 import { handleWorkerCrash, recordCommand, recordWorldReplaced } from './crashReporter';
@@ -41,6 +47,19 @@ const UI_REFRESH_MS = 66;
 
 /** Returned before the worker has published anything. */
 const EMPTY_VEHICLES = new Int32Array(0);
+
+/**
+ * The vehicle frame of a channel that has never published. Generation 0 is
+ * the writer's "nothing yet" value, which the interpolator ignores by
+ * contract.
+ */
+const EMPTY_FRAME: VehicleFrame = {
+  data: EMPTY_VEHICLES,
+  count: 0,
+  generation: 0,
+  tick: 0,
+  simRateCentiHz: 0,
+};
 
 function hexWord(value: number): string {
   return (value >>> 0).toString(16).padStart(8, '0');
@@ -107,11 +126,14 @@ export class SimClient {
   }
 
   /**
-   * Per-tick vehicle block, read straight out of the shared buffer.
-   * The renderer pulls this every frame; it is never copied.
+   * Per-tick vehicle block of the published generation, tagged with the
+   * generation, its tick and the measured rate (E-05). The renderer's
+   * interpolator pulls this every frame; nothing is copied HERE - the
+   * reader-side copy is the interpolator's, taken only when the generation
+   * moved.
    */
-  readVehicles(): { data: Int32Array; count: number } {
-    return this.reader?.currentVehicles() ?? { data: EMPTY_VEHICLES, count: 0 };
+  readVehicleFrame(): VehicleFrame {
+    return this.reader?.currentVehicleFrame() ?? EMPTY_FRAME;
   }
 
   /** Claimed track of the published tick, for the F3 overlay. */
