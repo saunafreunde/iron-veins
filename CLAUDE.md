@@ -521,6 +521,81 @@ Closed D-093, D-121 and D-116 (the last on a recalibrated band, D-158).
   the big-town pax piles pin at the station cap, and the farm-to-food
   chain is a measured trap (livestock dies over the 100-tile haul).
 
+## M12 - the stage: hybrid renderer, 60 Hz motion, living water, map text
+
+The render substrate everything later mounts on (SPEC2 E-04/E-05/E-14).
+Strictly render-only: zero sim contact, zero save bumps, zero snapshot
+changes - the wall clock may only choose WHERE BETWEEN two published
+counters a frame sits, never invent one (D-162), and world animation keys
+to the deterministic blink counter, never `performance.now()`
+(Fehlerkatalog 39, D-164).
+
+- **The Kenney bake is a pure function from pinned kits to bit-identical
+  atlases** (D-160). `tools/assets-manifest.json` pins twelve packs by URL
+  AND SHA-256; `assets:fetch` fills a gitignored cache, `assets:bake`
+  rasterises GLB models through EXACTLY the 16.1 dimetric camera (coupling
+  test against `projection.ts`) with an own ~400-line rasteriser and a
+  fflate PNG writer ("bake twice, bit-identical" across machines). No
+  cache means a warning and procedural art - the game ALWAYS starts. The
+  glob test walks the git index and is the guard. The game consumes
+  nothing yet: `bakedAtlas.ts` is the M13 door.
+- **A chunk is a checksum with a texture** (D-161). At 0.5x and below the
+  static world is 32x32-tile RenderTextures; the per-chunk FNV digest
+  (corners one PAST the range - seams are shared) is what makes "only
+  touched chunks rebake" true. Industries, stations and vehicles stay
+  live sprites (markers and tints must not force rebakes). At 0.25x:
+  terrain chunks + network polylines + vehicle dots - one batched fill
+  per company, dots are clickable. Chunk-granular painter order is
+  pixel-exact (proof in the entry); textures bake at display zoom, LRU
+  with current-frame exemption.
+- **The renderer draws one tick behind and glides towards the newest**
+  (D-162). Reader-side copies of the two newest generations, wall-clock
+  alpha in between, rows paired by vehicle id (the block is compacted),
+  clamped at teleports AND at Loading/BrokenDown/InDepot transitions.
+  Never extrapolate: an overshoot at a red signal is a lie. The lerp
+  window comes from the published `SimRateCentiHz`, capped 250 ms; the
+  day/night phase glides on the same alpha.
+- **The top zoom has its own atlas page, packed by headroom** (D-163). A
+  uniform 4x grid would burst the 4096 GPU guarantee, so short rows for
+  terrain/road/track, tall rows for buildings - and `anchorY` moved ONTO
+  the frame: every frame states its own ground line, `MapView.place`
+  reads nothing else. The cells are the base drawing code under a 2x
+  transform - no second artwork to keep in sync. Chunks always bake from
+  the BASE page.
+- **Water is a tint over greyscale, three rows on the blink counter**
+  (D-164). White-based cells make the two 16.3 hexes exact by
+  construction; deep = `oceanMask` AND two levels under the surface. The
+  chunk checksums fold `oceanMask` plus a one-tile terrain ring (foam
+  reads the neighbour). Phase swaps re-texture recorded sprites on the
+  detail path and REBAKE water chunks staggered (2/frame) at 0.5x -
+  measured against live water sprites, the rebake wins on every column.
+  The 0.25x ocean deliberately holds still.
+- **Map text is a startup-rasterised system font in an unscaled stage
+  layer** (D-165, E-14 - no font binary, the glob test guards). Town and
+  station labels read the marker channels that always carried the names;
+  the culling (`labels.ts`, headless-tested) is greedy in priority order
+  - towns by population before stations - so labels DROP, never overlap.
+  Towns are never zoom-gated (the overview is for reading maps); station
+  labels exist only at 1x+ where their modules are visible sprites.
+  Relayout only when zoom, lists or revision move; the layer follows the
+  camera by one position copy per frame, outside the D-127 tint.
+- **The minimap draws the camera as an honest parallelogram, over the
+  painter and never in it** (D-166). `minimapViewQuad` back-projects the
+  four screen corners at height zero; the PANEL strokes it on a second
+  canvas above the bitmap, so `paintMinimap` stays pure and the save
+  thumbnail stays a picture of the world (D-112). Camera facts flow
+  view->store change-detected; drag-to-pan is pointer-captured, clamped
+  at the map edge.
+
+Measured (reference machine, in the ledger 6.1.1): tick p50/p99 unchanged
+(render-only; the +0.43 ms read is run-to-run noise, argued in the row),
+chunk bake p99 1.57 ms against the 4 ms acceptance budget, sprite-pool
+rebuild p99 4.17 ms / draw-prep p99 1.58 ms against 25/5 ms tripwires,
+both atlas pages under 20 ms of the 250 ms startup slice.
+Atlas ledger: page 0 at 2176x3456 of 4096 (the four water rows), page
+0-detail booked 4096x3840 (D-163) - every further cell needs a 6.2
+booking first (Fehlerkatalog 40).
+
 ## Still outstanding
 
 - **The two named walls of D-158.** A passenger pile a fleet merely

@@ -2,6 +2,7 @@ import { COMPANY_COLORS, COMPANY_COLORS_CVD, TERRAIN_COLORS } from '../shared/pa
 import { SEA_LEVEL, TILE_PUBLIC } from '../sim/constants';
 import type { TileMap } from '../sim/map/TileMap';
 import { Terrain } from '../sim/map/terrain';
+import { worldToTileAtHeight } from './projection';
 
 /**
  * The minimap of section 17.1, owed since M1.
@@ -188,8 +189,65 @@ function paintMarkers(map: TileMap, out: Uint8ClampedArray, markers: MinimapMark
   }
 }
 
+/**
+ * What the map view sees, as the minimap needs to know it (SPEC2 M12).
+ *
+ * Pushed by `MapView` whenever the camera actually moved - centre, zoom or
+ * screen size - and change-detected there, so an idle frame publishes
+ * nothing. The panel turns it into the viewport outline; `paintMinimap`
+ * never sees it, which is what keeps the painter pure and the save
+ * thumbnail free of interface chrome (D-112).
+ */
+export interface CameraView {
+  /** Camera centre in unzoomed world pixels. */
+  readonly centreX: number;
+  readonly centreY: number;
+  readonly zoom: number;
+  /** Canvas size in screen pixels. */
+  readonly screenW: number;
+  readonly screenH: number;
+}
+
+/** One corner of the projected viewport, in fractional tile coordinates. */
+export interface TileCorner {
+  readonly x: number;
+  readonly y: number;
+}
+
+/**
+ * The camera's viewport as a quadrilateral in tile space.
+ *
+ * A screen rectangle is NOT a rectangle on the minimap: the projection is
+ * dimetric, so the view maps to a diamond over the tile grid. Drawing the
+ * honest quad instead of its bounding box is the difference between "this is
+ * what you see" and a frame twice the viewport's area. The four screen
+ * corners are back-projected at height zero - the same assumption the
+ * culling in `MapView.visibleTileBounds` makes - in the order top-left,
+ * top-right, bottom-right, bottom-left.
+ */
+export function minimapViewQuad(camera: CameraView): readonly TileCorner[] {
+  const halfW = camera.screenW / 2 / camera.zoom;
+  const halfH = camera.screenH / 2 / camera.zoom;
+  const corners: TileCorner[] = [];
+  for (const [sx, sy] of [
+    [-halfW, -halfH],
+    [halfW, -halfH],
+    [halfW, halfH],
+    [-halfW, halfH],
+  ] as const) {
+    corners.push(worldToTileAtHeight(camera.centreX + sx, camera.centreY + sy, 0));
+  }
+  return corners;
+}
+
 /** A small square, because one pixel on a 1024 map is invisible. */
-function blot(map: TileMap, out: Uint8ClampedArray, tile: number, radius: number, colour: Rgb): void {
+function blot(
+  map: TileMap,
+  out: Uint8ClampedArray,
+  tile: number,
+  radius: number,
+  colour: Rgb,
+): void {
   const size = map.size;
   const x = tile % size;
   const y = (tile / size) | 0;

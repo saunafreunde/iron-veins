@@ -596,7 +596,6 @@ body {
   vertical-align: baseline;
 }
 
-
 /* ------------------------------------------------------- M9: menus and maps */
 
 /* A full-window overlay: the menu, the options, the save screen, the handbook. */
@@ -638,6 +637,14 @@ body {
   background: color-mix(in srgb, var(--card) 92%, transparent);
 }
 
+/* Two stacked canvases: the pure world bitmap below, the viewport outline
+   above (SPEC2 M12). The outline redraws on every camera move; the megapixel
+   below it only when the ground changes - stacking is what keeps those two
+   cadences from paying for each other. */
+.minimap__frame {
+  position: relative;
+}
+
 .minimap__canvas {
   display: block;
   width: 100%;
@@ -645,6 +652,16 @@ body {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   cursor: crosshair;
+}
+
+.minimap__viewport {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+  /* The drag-to-pan must own the gesture; a browser pan-zoom would fight it. */
+  touch-action: none;
 }
 
 /* Colour swatches: the company colour picker. */

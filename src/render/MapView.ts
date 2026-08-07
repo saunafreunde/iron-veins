@@ -1,5 +1,7 @@
 import {
   Application,
+  BitmapFont,
+  BitmapText,
   Container,
   Graphics,
   Rectangle,
@@ -82,6 +84,30 @@ import {
 } from './chunks';
 import { DAY_TINT_NEUTRAL, dayNightTint } from './dayNight';
 import { sampleWorldX, sampleWorldY, shouldSnap, SnapshotInterpolator } from './interpolation';
+import {
+  cullLabels,
+  LABEL_FONT_BASE_PX,
+  LABEL_FONT_CHARS,
+  LABEL_FONT_FAMILY,
+  LABEL_LIFT_PX,
+  STATION_LABEL_MIN_ZOOM,
+  STATION_LABEL_SIZE_PX,
+  STATION_LABEL_TINT,
+  TOWN_LABEL_MIN_ZOOM,
+  TOWN_LABEL_TINT,
+  townLabelSizePx,
+  type LabelRect,
+} from './labels';
+import type { CameraView } from './Minimap';
+
+/**
+ * The registered name of the startup-rasterised label font (E-14: from
+ * system faces, never a binary in the repo). Installed once per page load -
+ * the raster is global Pixi state, and a StrictMode remount must not build
+ * it twice.
+ */
+const LABEL_FONT_NAME = 'iron-veins-label';
+let labelFontInstalled = false;
 
 /**
  * The isometric map view.
@@ -349,6 +375,38 @@ export class MapView {
   /** Chunks of the last full-profile visible set, for the staggered rebake. */
   private visibleFullChunkCount = 0;
 
+  /**
+   * The map text of SPEC2 M12: town and station labels as BitmapText
+   * sprites in a stage-level layer OUTSIDE `world` - screen-space, so the
+   * glyphs render 1:1 whatever the zoom, and outside the D-127 tint,
+   * because a name is wayfinding and wayfinding does not dim at night. The
+   * layer follows `world.position` each frame (one copy); the labels
+   * themselves are re-laid-out only when the zoom, the marker lists or the
+   * map revision move.
+   */
+  private readonly labelLayer = new Container();
+  private readonly labelPool: BitmapText[] = [];
+  private labelFontReady = false;
+  private labelsBuiltZoom = -1;
+  private labelsBuiltRevision = -1;
+  private labelsBuiltTowns: readonly TownMarker[] | null = null;
+  private labelsBuiltStations: readonly StationMarker[] | null = null;
+
+  /**
+   * Where the minimap learns what the camera sees (SPEC2 M12). Fired only
+   * when centre, zoom or screen size actually moved - an idle frame
+   * publishes nothing - and carries world-space camera facts only; the
+   * panel does the tile-space projection with `minimapViewQuad`.
+   */
+  onCamera: ((camera: CameraView) => void) | null = null;
+  private readonly sentCamera = {
+    centreX: NaN,
+    centreY: NaN,
+    zoom: NaN,
+    screenW: NaN,
+    screenH: NaN,
+  };
+
   /** F3: the block and reservation overlay of section 9.3. */
   private blockOverlay = false;
   private reservedSource: (() => { data: Int32Array; count: number }) | null = null;
@@ -471,6 +529,37 @@ export class MapView {
     this.world.addChild(this.art);
     this.world.addChild(this.overlay);
     this.app.stage.addChild(this.world);
+    // The label layer sits ABOVE the world on the stage, unscaled: glyphs
+    // render 1:1 at every zoom, and names stay at full contrast at night
+    // (D-127: interface does not dim). It never takes pointer events - a
+    // click through a town name must still select the tile under it.
+    this.labelLayer.eventMode = 'none';
+    this.labelLayer.interactiveChildren = false;
+    this.app.stage.addChild(this.labelLayer);
+
+    // The label font, rasterised NOW from system faces (E-14): no font
+    // binary exists to load, and the raster is reused for the whole page
+    // lifetime - a StrictMode remount must not build a second atlas.
+    if (!labelFontInstalled) {
+      BitmapFont.install({
+        name: LABEL_FONT_NAME,
+        style: {
+          fontFamily: LABEL_FONT_FAMILY,
+          fontSize: LABEL_FONT_BASE_PX,
+          fill: 0xffffff,
+          // Baked outline, so a pale name survives pale terrain. The glyphs
+          // are white and tinted per label; the outline multiplies towards
+          // black under any tint, so it stays an outline.
+          stroke: { color: 0x11161c, width: 3 },
+        },
+        chars: LABEL_FONT_CHARS,
+        // Rasterised at twice the base size: labels draw at 10-18 px from
+        // an 18 px face, and the doubled raster keeps the downscales crisp.
+        resolution: 2,
+      });
+      labelFontInstalled = true;
+    }
+    this.labelFontReady = true;
 
     this.installInput(this.app.canvas);
     this.app.ticker.add(this.update);
@@ -570,6 +659,10 @@ export class MapView {
     this.freeTerrainTextures.length = 0;
     this.app.destroy(true, { children: true });
     this.frameCache.clear();
+    // The BitmapText objects died with the stage; the pool must not hand
+    // out corpses to a later attach. The FONT stays installed: it is
+    // page-global by design (see LABEL_FONT_NAME).
+    this.labelPool.length = 0;
   }
 
   // ------------------------------------------------------------------ input
@@ -763,7 +856,126 @@ export class MapView {
     this.animateWater(map, chunked, abstract);
     this.drawVehicles(map, abstract);
     this.drawOverlay(map);
+
+    // Map text (SPEC2 M12): re-laid-out only when zoom, lists or revision
+    // moved; per frame the whole layer just follows the camera - one copy.
+    this.maintainLabels(map);
+    this.labelLayer.position.copyFrom(this.world.position);
+    this.publishCamera();
   };
+
+  /**
+   * Rebuild the label layout when its inputs moved (SPEC2 M12).
+   *
+   * Priority order IS the culling policy (labels.ts): towns before
+   * stations, larger towns before smaller, so when two names fight for the
+   * same pixels the map keeps the one a player is more likely to be
+   * looking for. Positions are world coordinates times zoom, because the
+   * layer itself is unscaled - which is also why this must rerun on a zoom
+   * flip even though nothing in the world moved.
+   */
+  private maintainLabels(map: TileMap): void {
+    if (!this.labelFontReady) return;
+    if (
+      this.zoom === this.labelsBuiltZoom &&
+      map.revision === this.labelsBuiltRevision &&
+      this.towns === this.labelsBuiltTowns &&
+      this.stations === this.labelsBuiltStations
+    ) {
+      return;
+    }
+    this.labelsBuiltZoom = this.zoom;
+    this.labelsBuiltRevision = map.revision;
+    this.labelsBuiltTowns = this.towns;
+    this.labelsBuiltStations = this.stations;
+
+    const zoom = this.zoom;
+    const towns =
+      zoom >= TOWN_LABEL_MIN_ZOOM
+        ? [...this.towns].sort((a, b) => b.population - a.population || a.id - b.id)
+        : [];
+    const stations =
+      zoom >= STATION_LABEL_MIN_ZOOM ? [...this.stations].sort((a, b) => a.id - b.id) : [];
+
+    const rects: LabelRect[] = [];
+    let used = 0;
+    for (const town of towns) {
+      const label = this.takeLabel(used++, town.name, townLabelSizePx(town.population));
+      label.tint = TOWN_LABEL_TINT;
+      const world = tileToWorld(town.x, town.y, map.baseHeight(town.x, town.y));
+      label.position.set(world.x * zoom, world.y * zoom - LABEL_LIFT_PX);
+      rects.push(this.labelRect(label));
+    }
+    for (const station of stations) {
+      const label = this.takeLabel(used++, station.name, STATION_LABEL_SIZE_PX);
+      label.tint = STATION_LABEL_TINT;
+      const world = tileToWorld(station.x, station.y, map.baseHeight(station.x, station.y));
+      label.position.set(world.x * zoom, world.y * zoom - LABEL_LIFT_PX);
+      rects.push(this.labelRect(label));
+    }
+
+    // Collision culling: labels drop, they never overlap (SPEC2 M12). The
+    // rects are in priority order, so the greedy keep is the policy.
+    const keep = cullLabels(rects);
+    for (let i = 0; i < used; i++) this.labelPool[i]!.visible = keep[i]!;
+    for (let i = used; i < this.labelPool.length; i++) this.labelPool[i]!.visible = false;
+  }
+
+  /** Pooled BitmapText, created on first use; text and size change-detected. */
+  private takeLabel(index: number, text: string, sizePx: number): BitmapText {
+    let label = this.labelPool[index];
+    if (label === undefined) {
+      label = new BitmapText({
+        text: '',
+        style: { fontFamily: LABEL_FONT_NAME, fontSize: LABEL_FONT_BASE_PX },
+      });
+      // Centred over its anchor point, sitting on it: a name hovers above
+      // its tile rather than covering it.
+      label.anchor.set(0.5, 1);
+      this.labelPool.push(label);
+      this.labelLayer.addChild(label);
+    }
+    if (label.text !== text) label.text = text;
+    if (label.style.fontSize !== sizePx) label.style.fontSize = sizePx;
+    label.visible = true;
+    return label;
+  }
+
+  /** The screen-space rectangle a laid-out label covers (anchor 0.5/1). */
+  private labelRect(label: BitmapText): LabelRect {
+    const w = label.width;
+    const h = label.height;
+    return { x: label.position.x - w / 2, y: label.position.y - h, w, h };
+  }
+
+  /** Tell the minimap what the camera sees, only when that actually moved. */
+  private publishCamera(): void {
+    if (this.onCamera === null) return;
+    const screenW = this.app.screen.width;
+    const screenH = this.app.screen.height;
+    const sent = this.sentCamera;
+    if (
+      sent.centreX === this.centreX &&
+      sent.centreY === this.centreY &&
+      sent.zoom === this.zoom &&
+      sent.screenW === screenW &&
+      sent.screenH === screenH
+    ) {
+      return;
+    }
+    sent.centreX = this.centreX;
+    sent.centreY = this.centreY;
+    sent.zoom = this.zoom;
+    sent.screenW = screenW;
+    sent.screenH = screenH;
+    this.onCamera({
+      centreX: this.centreX,
+      centreY: this.centreY,
+      zoom: this.zoom,
+      screenW,
+      screenH,
+    });
+  }
 
   /**
    * Advance the living water to this frame's animation row (D-164).

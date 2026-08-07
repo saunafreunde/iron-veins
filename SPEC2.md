@@ -375,6 +375,7 @@ abgenommen.
 |---|---|---|---|---|
 | M10 | 2026-08-07 | **1,45 ms / 3,26 ms** (max 39,4 ms über 6 500 Ticks inkl. Monatsgrenze) | Grundlinie | D-135 |
 | M11 | 2026-08-07 | **1,20 ms / 2,54 ms** (max 36,0 ms über 6 500 Ticks) | **−0,72 ms** (Budget +0,20; die Halt-Checks/Slot-Logik verschwinden im Messrauschen — kein Mehrverbrauch nachweisbar) | D-141–D-159 |
+| M12 | 2026-08-07 | **1,46 ms / 3,69 ms** (max 19,1 ms über 6 500 Ticks; Zweitlauf 1,34 / 3,19) | **+0,00 ms belegt** (render-only, kein Byte unter `src/sim` verändert; die zwei Läufe messen +0,43 und −0,07 gegen die Grundlinie — sie STRADDELN sie, das ist das ±0,7-ms-Laufrauschen dieser Maschine, das schon die M11-Zeile dokumentiert) | D-160–D-166 |
 
 M11-Zeile im Detail: **SAVE_VERSION v24** — genau EIN Bump für alle drei
 Stufen (Z5; Order-Grammatik-Stride, LineStore, Takt-Felder,
@@ -387,6 +388,35 @@ plus Compounding-durch-Renewal-Assertion, Rail/Expansiv solvent
 erfüllt (−8,3 %), Rating-Varianz 0,57 auf 0,6-Band mit strukturellem
 Boden (D-159). Render-Tripwires unverändert grün (Sprite-Pool-Rebuild
 p99 2,7 ms, Draw-Prep p99 0,46 ms).
+
+M12-Zeile im Detail: **kein SAVE_VERSION-Bump, kein Snapshot-Layout-Bump,
+kein Marker-Kanal-Feld** — render-only wie zugesagt (die Stadt-/
+Stationslabels lesen Name+Position aus den Marker-Kanälen, die beide seit
+M1/M2 tragen); die Determinismus-Suite sieht nie ein Pixel.
+Abnahme-Messwerte (Referenzmaschine, `npm run test:perf` 2026-08-07):
+**Chunk-Rebake p50 0,41 / p99 1,57 ms gegen das 4-ms-Akzeptanzbudget**
+(die Tripwire-Schwelle IST hier die Abnahmezahl, D-161; 2 656 Placements
++ Segmente pro Bake, Wasser-Fixture inklusive); Sprite-Pool-Rebuild
+8 017 Sprites p50 1,30 / p99 4,17 ms (Tripwire 25); Vehicle-Draw-Prep
+inkl. E-05-Lerp 1 500 Fahrzeuge p50 0,73 / p99 1,58 ms (Tripwire 5);
+prozedurale Atlas-Seiten beim Start base 3,3–8,9 ms + detail
+8,5–10,3 ms, zusammen < 20 ms der 250-ms-Startscheibe (D-163, Chromium).
+Atlas-Buchung gegen 6.2: Seite 0 steht bei **2176×3456 von 4096** — die
+zugesagten „+4 Wasser-Animationszeilen" sind exakt eingelöst (3
+Animations- + 1 Küstensaum-Zeile, D-164) —, Seite 0-detail bei
+**4096×3840 von 4096** (D-163-Buchung); Seiten 1/2 unberührt (M13). Kein
+Font- und kein sonstiges Binärasset im Repo (Glob-Test über den
+Git-Index, D-160; die Label-Schrift wird beim Start aus Systemschriften
+gerastert, D-165); der Kenney-Bake ist doppelt ausgeführt bit-identisch
+(D-160). Fertig-wenn-Posten der M12-Sektion: Chunk-Rebake ≤ 4 ms
+gemessen ✓, Rebake nur bei Revisionswechsel (Checksummen-Test, D-161) ✓,
+0,25×-Stufe Terrain+Netz+Punkte ✓, Interpolations-Alpha per Test belegt
+(D-162) ✓, zoom-gestaffelte Labels mit Kollisionsausdünnung (D-165) ✓,
+kein Font-Binärasset (Glob-Test) ✓. Der 60-fps-Schwenk der 2048²-Karte
+bei 0,25× ist ein GPU-Kriterium und bleibt Handmessung nach dem
+M9-Verfahren (README) — der CPU-Anteil ist über die Chunk- und
+Draw-Prep-Proxies belegt, mehr kann ein headless Test nicht sehen
+(D-136).
 
 Die M10-Grundlinie liegt UNTER der linearen Extrapolation (~3–4 ms) — der
 Eskalationspfad (Kanten-Graph vor M14) ist nicht ausgelöst. Referenzmaschine:

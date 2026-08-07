@@ -386,6 +386,10 @@ export function MapCanvas({ client }: { readonly client: SimClient }): ReactElem
 
     // A list row jumps to what it names (section 17.1).
     useSimStore.getState().setCentreOnTile((x, y) => view.centreOnTile(x, y));
+    // The minimap's viewport outline follows the camera (SPEC2 M12). The
+    // view publishes only when the camera actually moved, so an idle game
+    // writes nothing into the store.
+    view.onCamera = (camera) => useSimStore.getState().setCamera(camera);
     // Tagged with generation, tick and rate: the renderer's E-05 interpolator
     // copies the block when the generation moves and lerps between the copies.
     view.setVehicleSource(() => client.readVehicleFrame());

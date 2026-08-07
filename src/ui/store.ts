@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { setLocale as applyLocale, type Locale } from '../i18n';
 import type { TileInfo } from '../render/MapView';
-import { MINIMAP_MODE_COUNT, MinimapMode } from '../render/Minimap';
+import { MINIMAP_MODE_COUNT, MinimapMode, type CameraView } from '../render/Minimap';
 import type {
   FinanceReport,
   CompanyMarker,
@@ -23,14 +23,7 @@ import type { CrashBundleSummary } from './crashBundle';
  * The full-screen panels of M9. One at a time, because each of them wants the
  * whole window and two of them at once would mean deciding which is on top.
  */
-export type OverlayKind =
-  | 'menu'
-  | 'newGame'
-  | 'options'
-  | 'saves'
-  | 'handbook'
-  | 'tutorial'
-  | null;
+export type OverlayKind = 'menu' | 'newGame' | 'options' | 'saves' | 'handbook' | 'tutorial' | null;
 
 /** What a left click on the map does. */
 export type Tool =
@@ -122,6 +115,13 @@ export interface SimUiState extends SnapshotValues {
   assistant: boolean;
   /** Which minimap view is showing; the N key cycles it (section 17.2). */
   minimapMode: MinimapMode;
+  /**
+   * What the map camera currently sees, pushed by the view only when it
+   * actually moved (SPEC2 M12). The minimap panel draws its viewport
+   * outline from this; nothing else subscribes, so a pan re-renders one
+   * small overlay and not the interface.
+   */
+  camera: CameraView | null;
   stations: readonly StationMarker[];
   fleet: readonly VehicleMarker[];
   /** The player's lines, as the line list shows them (section 12.2). */
@@ -214,6 +214,7 @@ export interface SimUiState extends SnapshotValues {
   setAssistant: (on: boolean) => void;
   setMinimapMode: (mode: MinimapMode) => void;
   cycleMinimapMode: () => void;
+  setCamera: (camera: CameraView) => void;
   setStations: (stations: readonly StationMarker[]) => void;
   setIndustries: (industries: readonly IndustryMarker[]) => void;
   setTowns: (towns: readonly TownMarker[]) => void;
@@ -306,6 +307,7 @@ export const useSimStore = create<SimUiState>((set) => ({
   autoSignal: false,
   assistant: true,
   minimapMode: MinimapMode.Terrain,
+  camera: null,
   stations: [],
   fleet: [],
   lines: [],
@@ -372,6 +374,7 @@ export const useSimStore = create<SimUiState>((set) => ({
     set((state) => ({
       minimapMode: ((state.minimapMode + 1) % MINIMAP_MODE_COUNT) as MinimapMode,
     })),
+  setCamera: (camera) => set({ camera }),
   setIndustries: (industries) => set({ industries }),
   setTowns: (towns) => set({ towns }),
   setFinances: (finances) => set({ finances }),
@@ -386,7 +389,8 @@ export const useSimStore = create<SimUiState>((set) => ({
   centreOnTile: () => undefined,
   setCentreOnTile: (centreOnTile) => set({ centreOnTile }),
   setTrackPreview: (preview) => set({ trackPreview: preview }),
-  setConnectAnchor: (connectAnchor) => set({ connectAnchor, connectPlan: null, connectError: null }),
+  setConnectAnchor: (connectAnchor) =>
+    set({ connectAnchor, connectPlan: null, connectError: null }),
   setConnectPlan: (connectPlan, connectError) => set({ connectPlan, connectError }),
   clearConnect: () => set({ connectAnchor: null, connectPlan: null, connectError: null }),
   setStations: (stations) => set({ stations }),
@@ -403,6 +407,7 @@ export const useSimStore = create<SimUiState>((set) => ({
   resetWorld: () =>
     set({
       ready: false,
+      camera: null,
       towns: [],
       industries: [],
       stations: [],

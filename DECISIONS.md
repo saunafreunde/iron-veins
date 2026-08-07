@@ -41,9 +41,9 @@ no entry below. A number may appear under several topics.
 - **Competitors, AI & tenders:** D-107, D-108, D-109, D-115, D-116, D-121,
   D-122, D-147, D-152, D-153, D-154, D-155, D-156, D-158
 - **Rendering & art:** D-013, D-014, D-033, D-035, D-112, D-117, D-125, D-127,
-  D-136, D-140, D-160, D-161, D-162, D-163, D-164
+  D-136, D-140, D-160, D-161, D-162, D-163, D-164, D-165, D-166
 - **UI & input:** D-011, D-013, D-015, D-035, D-110, D-113, D-114, D-119,
-  D-126, D-148
+  D-126, D-148, D-165, D-166
 - **Performance & measurement:** D-002, D-120, D-135, D-136, D-161, D-162,
   D-163, D-164
 - **Platform, tooling & build:** D-012, D-014, D-015, D-016, D-017, D-029,
@@ -3929,3 +3929,102 @@ rebuild 8,017 sprites at p50 1.37 ms / p99 4.31 ms against the unchanged
 against the 4 ms acceptance budget, vehicle draw prep untouched at p99
 1.54 ms against 5. Render-only throughout: no sim contact, no save bump,
 no snapshot change, and the determinism suite never sees a pixel.
+
+## M12 - the stage, stage 5: names on the map and the finished minimap (2026-08-07)
+
+### D-165 Map text is a startup-rasterised system font in an unscaled layer, and the culling order is the policy
+
+M12 orders zoom-staged town and station labels with collision thinning, set
+from a BitmapFont rasterised at startup out of system faces (E-14 - no font
+binary may enter the repository; the D-160 glob test guards that). This
+entry records the shape it took and the four choices inside it.
+
+**The data was already there, so the marker channels were not touched.**
+`TownMarker` has carried name, position and population since M1 and
+`StationMarker` name and position since M2 - the labels are a pure reader
+of channels that exist. Verified, not assumed: the alternative this rules
+out is a second name export drifting beside the first.
+
+**The label layer sits on the STAGE, unscaled, and follows the camera by
+one copy per frame.** Inside the world container the glyphs would scale
+with the zoom - four-times-blurry at 4x, unreadable at 0.25x - so the
+layer lives beside the world, text renders 1:1 at every zoom, and each
+frame copies `world.position` once. Label positions are world coordinates
+times zoom, which is why a zoom flip re-lays-out the labels even though
+nothing in the world moved; a pan re-lays-out nothing. The layer is
+deliberately OUTSIDE the D-127 day/night tint - a name is wayfinding, and
+wayfinding does not dim at night - and it swallows no pointer events, so a
+click through a town name still selects the tile under it. Layout reruns
+only when the zoom, the marker lists or the map revision move (a terraform
+can change the height a label sits on); per frame the whole feature is
+four equality checks.
+
+**Culling is a pure greedy keep, and the ARRAY ORDER is the whole
+policy.** `cullLabels` (src/render/labels.ts) keeps a label exactly when
+it overlaps no label already kept - first come, first kept - and MapView
+states the priority once, at the call site: towns before stations, larger
+towns before smaller. When two names fight for the same pixels the map
+keeps the one the player is more likely to be looking for, and no two
+kept labels ever overlap, which is the SPEC2 sentence made structural.
+Dropped labels block nobody (they are not kept), touching edges do not
+collide, and all of it is pinned headless in `tests/unit/labels.spec.ts`
+- the D-136 split again: pure parts under test, Pixi sprites not.
+
+**Towns are never gated; stations vanish exactly where their modules do.**
+The 0.25x overview is the view MADE for reading a map, so town names
+survive to the bottom of the zoom ladder and the collision culling does
+the thinning there - population-first priority means the villages drop
+before the cities. Station labels exist only at 1x and above: at 0.5x the
+modules they caption are baked into chunks two pixels tall, and a caption
+for something invisible is noise. Town size is three population steps
+(11/14/18 px against thresholds of 1,000 and 3,000 inhabitants), so the
+map reads like a map: a city announces itself.
+
+**The glyph inventory is a constant a test sweeps the name generator
+against.** The raster covers exactly `LABEL_FONT_CHARS`; the test runs six
+thousand generated names off a fixed seed and asserts every character
+seen is covered, plus space, digits and hyphen (the composed-name path)
+explicitly. The generator is umlaut-free by construction ("Sued",
+"Koenigs"), but the raster carries A-umlaut through eszett anyway, as
+E-14 orders - a future name source (scenario files, M22) must not be able
+to break map text with a perfectly ordinary German letter. The font
+installs once per page load behind a module flag: the raster is global
+Pixi state, and a StrictMode remount must not build a second atlas.
+
+### D-166 The minimap draws the camera as an honest parallelogram, over the painter and never in it
+
+M12 orders the minimap's viewport rectangle and drag-to-pan. Both landed
+in the PANEL; `paintMinimap` was not touched, and that is the decision.
+
+**The viewport is drawn over the pure bitmap, not into it.** D-112's
+painter is called from two places - the corner panel and the save
+thumbnail - and a camera outline painted into the pixels would put
+interface chrome inside every save file's picture. The panel therefore
+stacks a second canvas over the bitmap: the outline redraws on every
+camera move, the megapixel below it only when the ground changes, and the
+thumbnail keeps calling the untouched painter. Two canvases are two
+cadences, kept from paying for each other.
+
+**The outline is the projected quadrilateral, not a bounding box.** A
+screen rectangle back-projects into tile space as a rotated parallelogram
+(the 16.1 dimetric read backwards); its axis-aligned bounds would claim
+roughly twice the area the player actually sees. `minimapViewQuad`
+(src/render/Minimap.ts) projects the four screen corners at height zero -
+the same assumption `MapView.visibleTileBounds` makes - and is pure under
+`tests/unit/minimapViewport.spec.ts`, corner for corner against the
+projection module.
+
+**The camera flows view - store - panel, and only when it moved.**
+MapView publishes centre, zoom and screen size through `onCamera`,
+change-detected, so an idle game writes nothing into the store and a pan
+re-renders one small overlay rather than the interface. The panel does
+the tile-space projection itself; the view exports camera FACTS, not
+minimap geometry - the renderer does not know the minimap exists.
+
+**Drag-to-pan is the click it always was, captured.** Pointer capture
+makes press-jump-drag-release one gesture; coordinates are clamped to the
+map rather than ignored outside it, so a drag that leaves the little
+panel pins the camera to the edge instead of freezing mid-gesture. The N
+key and the mode buttons still drive one store value (D-126), and the
+interactive element carries the accessible name the bitmap canvas used
+to.
