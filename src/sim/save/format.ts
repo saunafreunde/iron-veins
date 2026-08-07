@@ -245,6 +245,10 @@ function parseAiProject(value: unknown, path: string): AiProject {
     cargo: asInt(raw['cargo'], `${path}.cargo`),
     specIds: parseNumbers(raw['specIds'], `${path}.specIds`),
     startedTick: asInt(raw['startedTick'], `${path}.startedTick`),
+    // Absent in every save written before M11 stage C2, when the AI could
+    // only lay single track - which is exactly what a default of ONE says
+    // (the D-146 pattern: the old wire format keeps parsing).
+    railTrains: raw['railTrains'] === undefined ? 1 : asInt(raw['railTrains'], `${path}.railTrains`),
     lineId: asInt(raw['lineId'], `${path}.lineId`),
   };
 }

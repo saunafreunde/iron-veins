@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { CommandQueue } from '../../src/sim/commands/queue';
 import { Difficulty, MapClimate, TICKS_PER_YEAR, TILE_PUBLIC } from '../../src/sim/constants';
-import { PERSONALITY_COUNT } from '../../src/sim/ai/types';
+import { PERSONALITY_COUNT, Personality } from '../../src/sim/ai/types';
 import { hashWorld, World } from '../../src/sim/World';
 
 /**
@@ -80,9 +80,36 @@ function play(years: number, seed = 4_711): { world: World; queue: CommandQueue 
   return { world, queue };
 }
 
+/**
+ * The twenty-five year world is played ONCE and shared: every long test in
+ * this file reads it and none of them writes, and replaying the same
+ * deterministic quarter century three times was most of the suite's wall
+ * time.
+ */
+let sharedRun: { world: World; queue: CommandQueue } | null = null;
+function quarterCentury(): { world: World; queue: CommandQueue } {
+  sharedRun ??= play(YEARS);
+  return sharedRun;
+}
+
+/**
+ * The floors of M11 stage C2 (DECISIONS.md D-156), in cents, pinned under
+ * the measured run so a regression of the kind that stage fixed - a
+ * personality that stops building, a renewal that eats a company, a loan
+ * churn - goes red by name rather than shifting a printed number nobody
+ * reads. Measured on this seed: road solvent at 544,857 EUR with a
+ * six-vehicle line, rail alive at -15,142 EUR (its train frozen by the
+ * braking defect D-156 names), the town network wound up at 96,512 EUR.
+ */
+const VALUE_FLOOR_CT: ReadonlyMap<number, number> = new Map([
+  [Personality.Rail, -150_000_00],
+  [Personality.Road, 400_000_00],
+  [Personality.TownNetwork, 0],
+]);
+
 describe('M8 acceptance: twenty-five years against three competitors', () => {
   it('runs through without the player touching anything', () => {
-    const { world } = play(YEARS);
+    const { world } = quarterCentury();
 
     expect(world.date.year).toBe(1950 + YEARS);
     expect(world.companies.length).toBe(4);
@@ -106,8 +133,40 @@ describe('M8 acceptance: twenty-five years against three competitors', () => {
     expect(builders.length).toBeGreaterThan(0);
   });
 
+  it('holds the measured solvency count and the per-personality value floors', () => {
+    // ASSERTED, not narrated (M11 stage C2, D-156): the printed table above
+    // stayed green through every regression this stage dug out, because a
+    // printed number fails nobody's build.
+    const { world } = quarterCentury();
+    const rows = world.ai.map((state) => measure(world, state.companyId));
+
+    // Solvency: at most one competitor may be wound up, and at least two
+    // must finish the quarter century alive - the measured run has the town
+    // network wound up and the other two still standing.
+    const woundUp = rows.filter((row) => row.bankrupt);
+    expect(woundUp.length).toBeLessThanOrEqual(1);
+    expect(rows.length - woundUp.length).toBeGreaterThanOrEqual(2);
+
+    // Value floors per personality, pinned under the measured run.
+    for (const row of rows) {
+      const floor = VALUE_FLOOR_CT.get(row.personality as Personality);
+      if (floor === undefined) continue;
+      expect(row.valueCt).toBeGreaterThanOrEqual(floor);
+    }
+
+    // And the winner is a real network, not the degenerate pile the 4.05M
+    // note in the project history warns about: its fleet works several
+    // stations, with a sane vehicles-per-station density.
+    const best = rows.reduce((a, b) => (b.valueCt > a.valueCt ? b : a));
+    expect(best.bankrupt).toBe(false);
+    expect(best.lines).toBeGreaterThanOrEqual(1);
+    expect(best.vehicles).toBeGreaterThanOrEqual(2);
+    expect(best.stations).toBeGreaterThanOrEqual(2);
+    expect(best.vehicles).toBeLessThanOrEqual(best.stations * 6);
+  });
+
   it('builds networks that can be told apart', () => {
-    const { world } = play(YEARS);
+    const { world } = quarterCentury();
     const rows = world.ai.map((state) => measure(world, state.companyId));
 
     // Every competitor got its own personality - three drawn from five without
@@ -127,7 +186,7 @@ describe('M8 acceptance: twenty-five years against three competitors', () => {
   });
 
   it('plays by the same rules the player does', () => {
-    const { world } = play(YEARS);
+    const { world } = quarterCentury();
 
     for (const state of world.ai) {
       const company = world.companyOf(state.companyId);

@@ -51,6 +51,13 @@ const PARSER_IGNORED: readonly { path: string; reason: string }[] = [
     path: 'state.news[].params.*',
     reason: 'message-specific substitution keys; the record itself is required, its keys vary',
   },
+  {
+    path: 'state.ai[].project.railTrains',
+    reason:
+      'absent in every save written before M11 stage C2 and parsed to 1, the single track ' +
+      'the old AI laid (the D-146 wire pattern, D-153); the value itself is hashed, so the ' +
+      'change probe still watches it',
+  },
 ];
 
 /**
@@ -294,6 +301,7 @@ beforeAll(() => {
         cargo: 0,
         specIds: [200],
         startedTick: 50,
+        railTrains: 1,
         lineId: -1,
       },
     });

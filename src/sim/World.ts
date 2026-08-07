@@ -782,6 +782,7 @@ function hashDynamicState(h: Fnv1a64, world: World): void {
     h.u32(project.stage).u32(project.fromX).u32(project.fromY);
     h.u32(project.toX).u32(project.toY).u32(project.depotX).u32(project.depotY);
     h.u32(project.rail ? 1 : 0).u32(project.cargo).u32(project.startedTick);
+    h.u32(project.railTrains);
     h.int(project.lineId);
     h.u32(project.specIds.length);
     for (const specId of project.specIds) h.u32(specId);

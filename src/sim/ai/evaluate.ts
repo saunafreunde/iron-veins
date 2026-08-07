@@ -1,13 +1,19 @@
 import { Cargo } from '../cargo/types';
-import { deliveryRevenueCt } from '../cargo/payment';
+import { deliveryRevenueCt, timeFactor } from '../cargo/payment';
 import {
+  AI_DRAIN_MARGIN,
+  AI_LIFT_REAL_SHARE,
   AI_MAX_DISTANCE,
+  AI_MAX_VEHICLES_PER_LINE,
+  AI_MIN_ARRIVAL_FACTOR,
   AI_MIN_DISTANCE,
   AI_CHAIN_BONUS,
   AI_PRODUCING_SINK_PENALTY,
   AI_LORRY_PRICE_CT,
   AI_PLATFORM_TILES,
+  AI_RAIL_MAX_TRAINS,
   AI_RIVAL_PENALTY,
+  AI_TICKS_PER_TILE,
   AI_TILES_PER_MONTH,
   AI_TOWN_OUTPUT_SHARE,
   AI_TRAIN_PRICE_CT,
@@ -16,9 +22,12 @@ import {
   ROAD_DEPOT_COST_CT,
   ROAD_STOP_COST_CT,
   ROAD_COST_PER_TILE_CT,
+  CARGO_MAX_WAIT_DAYS,
   STATION_CATCHMENT_SCAN_RADIUS,
+  TICKS_PER_DAY,
 } from '../constants';
 import { pickRoadVehicle, pickTrain } from './build';
+import { capacityFor, vehicleSpec } from '../vehicles/catalog';
 import { industryBaseOutput, industrySpec, type Industry } from '../industry/types';
 import type { Town } from '../town/types';
 import { RAIL_TYPE_COST_CT, RailType } from '../map/track';
@@ -51,6 +60,12 @@ export interface Opportunity {
   readonly score: number;
   /** Whether the personality would lay rail for it. */
   readonly rail: boolean;
+  /**
+   * What the source makes in a month, at today's level. [units/month]
+   * The fleet advisor divides the round time by the interval at which a full
+   * vehicle must leave to lift exactly this (stage C2, E-06).
+   */
+  readonly monthlyOutput: number;
 }
 
 /** Tile distance the way everything else in this game measures it. */
@@ -100,6 +115,48 @@ function outputOf(industry: Industry): number {
 }
 
 /**
+ * Does most of a FRESH load's value survive the drive?
+ *
+ * A feasibility gate over one-way transit time at the nominal speed, NOT a
+ * pricing term - D-122 tried pricing the decay into the revenue quote and
+ * reverted it, and that verdict stands (see the `ticksInTransit: 0` note in
+ * `rate`). What the gate removes is the pair no ranking should ever see:
+ * measured on the scenario-5 trace, the top road candidate was a 123-tile
+ * grain haul whose 44-day drive left 0.46 of the value before the station
+ * queue had aged the load at all, and every vehicle put on it earned the
+ * 10 % floor. Coal at the same distance keeps 0.94 and passes.
+ */
+function arrivesAlive(cargo: number, distance: number): boolean {
+  const oneWayDays = (distance * AI_TICKS_PER_TILE) / TICKS_PER_DAY;
+  return timeFactor(cargo as Cargo, oneWayDays) >= AI_MIN_ARRIVAL_FACTOR;
+}
+
+/**
+ * What the catchment of a station offers per month of the given cargo - the
+ * recompute-from-store twin of the figures the collectors below feed `rate`,
+ * for the stages of a project that run AFTER the stations exist (D-108: each
+ * stage observes the world, it never trusts the plan).
+ */
+export function stationMonthlyOutput(
+  world: World,
+  station: { readonly townId: number; readonly servedIndustries: readonly number[] },
+  cargo: number,
+): number {
+  if (cargo === Cargo.Passengers) {
+    const town = world.towns[station.townId];
+    return town === undefined ? 0 : townOutput(town);
+  }
+  let output = 0;
+  for (const industryId of station.servedIndustries) {
+    const industry = world.industries.find((entry) => entry.id === industryId);
+    if (industry === undefined || !industry.open) continue;
+    if (outputOf(industry) !== cargo) continue;
+    output += expectedOutput(world, industry);
+  }
+  return output;
+}
+
+/**
  * Score every source-and-sink pair this personality would consider, best
  * first.
  *
@@ -116,28 +173,74 @@ export function opportunities(
   const found: Opportunity[] = [];
   const rail = personality === Personality.Rail || personality === Personality.Expansive;
 
-  // The town specialist works passengers between towns; everybody else works
-  // industry. Both of them will deliver finished goods into a town, because a
-  // town is the one sink in the game that cannot shut down.
+  // The town specialist works passengers between towns exclusively; the road
+  // personality works BOTH - section 15 step 1 says "alle Paare (Quelle,
+  // Senke)", and a town is a source. Measured on the scenario-5 trace (512
+  // map, seed 4711): industry pairs alone left the road company exactly ONE
+  // candidate on the whole map - the 1950 lorry catalogue carries only bulk,
+  // and the filter cascade ate everything else - so its first failed line was
+  // also its last. Forty towns were sitting there the entire time, and
+  // "Lorries and buses, short hauls" is the personality's own definition.
+  // Rail and the two temperaments keep their industry focus: that is what
+  // keeps the five distinguishable.
   if (personality === Personality.TownNetwork) collectTownPairs(world, found, rail);
   else collectIndustryPairs(world, found, rail, companyId);
+  if (personality === Personality.Road) collectTownPairs(world, found, rail);
   collectTownDeliveries(world, found, rail, companyId);
 
   // Drop anything nothing on the market can carry. In 1950 there is no
   // refrigerated lorry, so every food line scores beautifully and is
   // unbuildable - and a competitor that keeps picking those builds nothing at
   // all for the first twenty years of the game.
-  const carriable = new Map<number, boolean>();
+  //
+  // And drop any pair whose queue would ROT. A source that outproduces the
+  // largest allowed fleet does not merely cap the revenue - loading takes the
+  // oldest cargo first (the M5 rule), so a pile the vehicles can never drain
+  // pins at the write-off horizon and every unit actually carried is a month
+  // stale. Whether that matters is the CARGO's affair: measured on the
+  // scenario-5 trace, six buses running FULL both ways between two large
+  // towns earned a fifth of scenario 1's rate - passengers a month old pay
+  // the floor - while balancing scenario 2's own coal line runs under-lifted
+  // for ever and is IN BAND, because coal a month old pays face value. So an
+  // oversupplied pair is rejected only when a load as old as the pinned queue
+  // plus the drive would arrive below the same survival threshold the fresh
+  // gate uses. The lift figure is the REAL capacity of the vehicle the
+  // builder will pick, not the estimate's nominal load (20 units where the
+  // 1950 bus lifts 150), corrected by the real-round factor - and ONLY that
+  // one. The first version also multiplied in AI_TAKT_UTILISATION, and the
+  // double discount priced the largest fleet at a QUARTER of its physical
+  // lift: every large-town pair on the map failed the gate, and the road
+  // company was left with the two smallest pairs of forty towns. Utilisation
+  // is a SIZING headroom (how big a fleet to buy), never a bound on what a
+  // full fleet can physically drain.
+  const carriable = new Map<number, number>();
   const buildable = found.filter((opportunity) => {
     const key = opportunity.cargo * 2 + (opportunity.rail ? 1 : 0);
-    let allowed = carriable.get(key);
-    if (allowed === undefined) {
-      allowed = opportunity.rail
-        ? pickTrain(world, opportunity.cargo).length > 0
-        : pickRoadVehicle(world, opportunity.cargo) >= 0;
-      carriable.set(key, allowed);
+    let liftUnits = carriable.get(key);
+    if (liftUnits === undefined) {
+      if (opportunity.rail) {
+        liftUnits = 0;
+        for (const specId of pickTrain(world, opportunity.cargo)) {
+          liftUnits += capacityFor(vehicleSpec(specId), opportunity.cargo as Cargo);
+        }
+      } else {
+        const specId = pickRoadVehicle(world, opportunity.cargo);
+        liftUnits = specId >= 0 ? capacityFor(vehicleSpec(specId), opportunity.cargo as Cargo) : 0;
+      }
+      carriable.set(key, liftUnits);
     }
-    return allowed;
+    if (liftUnits <= 0) return false;
+    const roundsPerMonth = AI_TILES_PER_MONTH / (2 * opportunity.distance);
+    const cap = opportunity.rail ? AI_RAIL_MAX_TRAINS : AI_MAX_VEHICLES_PER_LINE;
+    const maxLift = cap * liftUnits * roundsPerMonth * AI_LIFT_REAL_SHARE;
+    // The fleet must OUT-lift a decaying source, not merely match it: a pile
+    // it can never eat pins at a month of age and pays the floor for ever
+    // (AI_DRAIN_MARGIN records the measured case).
+    if (opportunity.monthlyOutput * AI_DRAIN_MARGIN <= maxLift) return true;
+    const staleDays =
+      CARGO_MAX_WAIT_DAYS +
+      (opportunity.distance * AI_TICKS_PER_TILE) / TICKS_PER_DAY / AI_LIFT_REAL_SHARE;
+    return timeFactor(opportunity.cargo as Cargo, staleDays) >= AI_MIN_ARRIVAL_FACTOR;
   });
 
   // A total order: score first, then the tiles, so two pairs that score the
@@ -193,6 +296,7 @@ function collectIndustryPairs(
 
       const distance = tileDistance(source.x, source.y, sink.x, sink.y);
       if (distance < AI_MIN_DISTANCE || distance > AI_MAX_DISTANCE) continue;
+      if (!arrivesAlive(cargo, distance)) continue;
       const terminal = industrySpec(sink.type).outputs.length === 0;
       // A works that produces something shuts down in twenty-four months if
       // nobody collects it, and takes the line feeding it with it. So a pair
@@ -225,7 +329,13 @@ function collectTownPairs(world: World, into: Opportunity[], rail: boolean): voi
       const to = world.towns[b]!;
       const distance = tileDistance(from.x, from.y, to.x, to.y);
       if (distance < AI_MIN_DISTANCE || distance > AI_MAX_DISTANCE) continue;
+      if (!arrivesAlive(Cargo.Passengers, distance)) continue;
       // A town's passengers are its own production, and it never runs dry.
+      // The output is the LARGER end: a passenger line loads at both stops,
+      // so the bigger town is what the fleet has to lift - gating on the
+      // smaller one let a village pair the AI's buses with a city whose
+      // queue they could never drain, and the city's stale pile set the
+      // whole line's revenue (measured on the scenario-5 trace).
       into.push(
         rate(
           world,
@@ -237,7 +347,7 @@ function collectTownPairs(world: World, into: Opportunity[], rail: boolean): voi
           distance,
           rail,
           true,
-          townOutput(from),
+          Math.max(townOutput(from), townOutput(to)),
         ),
       );
     }
@@ -290,6 +400,7 @@ function collectTownDeliveries(
     for (const town of world.towns) {
       const distance = tileDistance(source.x, source.y, town.x, town.y);
       if (distance < AI_MIN_DISTANCE || distance > AI_MAX_DISTANCE) continue;
+      if (!arrivesAlive(cargo, distance)) continue;
       into.push(
         rate(
           world,
@@ -396,7 +507,9 @@ function rate(
    * a competitor to build the shortest thing on the map - measured, and it cost
    * the road company two thirds of its twenty-five year value.
    */
-  const perTile = rail ? RAIL_TYPE_COST_CT[RailType.Plain]! : ROAD_COST_PER_TILE_CT;
+  // TWICE the rail per-tile cost: the AI lays a one-way oval since stage C2 -
+  // an outbound and a return track - so the way genuinely costs double.
+  const perTile = rail ? RAIL_TYPE_COST_CT[RailType.Plain]! * 2 : ROAD_COST_PER_TILE_CT;
   const buildCostCt = world.costCt(distance * perTile);
 
   /*
@@ -430,7 +543,19 @@ function rate(
   // supply shuts down and takes our own line with it.
   if (flags.chain) score *= AI_CHAIN_BONUS;
 
-  return { fromX, fromY, toX, toY, cargo, distance, revenueCtPerMonth, buildCostCt, score, rail };
+  return {
+    fromX,
+    fromY,
+    toX,
+    toY,
+    cargo,
+    distance,
+    revenueCtPerMonth,
+    buildCostCt,
+    score,
+    rail,
+    monthlyOutput,
+  };
 }
 
 /** Units a train and a lorry are assumed to shift per trip, for the estimate. */

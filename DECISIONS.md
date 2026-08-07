@@ -11,17 +11,19 @@ decision is missing from this register or the register cites a number that has
 no entry below. A number may appear under several topics.
 
 - **Determinism, RNG & hashing:** D-001, D-002, D-003, D-004, D-009, D-010,
-  D-024, D-093, D-106, D-128, D-137, D-142, D-145, D-146, D-149
+  D-024, D-093, D-106, D-128, D-137, D-142, D-145, D-146, D-149, D-153
 - **Commands, snapshot & worker boundary:** D-004, D-005, D-006, D-011, D-032,
   D-100, D-111, D-145, D-146, D-148
-- **Lines & timetables:** D-145, D-146, D-147, D-148, D-149, D-150, D-151
+- **Lines & timetables:** D-145, D-146, D-147, D-148, D-149, D-150, D-151,
+  D-152, D-155
 - **Map generation & terrain:** D-018, D-019, D-020, D-021, D-022, D-023,
   D-025, D-027
 - **Terraforming & structures:** D-028, D-034, D-050, D-051, D-052, D-124,
   D-141
 - **Save format, migrations & replays:** D-007, D-025, D-026, D-027, D-048,
-  D-111, D-130, D-131, D-134, D-142, D-144, D-145, D-146, D-147
-- **Rail & track:** D-042, D-043, D-044, D-045, D-046, D-047, D-053, D-141
+  D-111, D-130, D-131, D-134, D-142, D-144, D-145, D-146, D-147, D-153
+- **Rail & track:** D-042, D-043, D-044, D-045, D-046, D-047, D-053, D-141,
+  D-153
 - **Signals & reservations:** D-054, D-055, D-056, D-057, D-058, D-059, D-060,
   D-061, D-073, D-080, D-081, D-082, D-083
 - **Stations & catchment:** D-049, D-080, D-095, D-150
@@ -30,14 +32,14 @@ no entry below. A number may appear under several topics.
 - **Industry & production:** D-022, D-062, D-063, D-064, D-069, D-071, D-079,
   D-085, D-086
 - **Towns, council & ownership:** D-101, D-102, D-103, D-104
-- **Economy, finance & emissions:** D-008, D-090, D-091, D-092, D-105
+- **Economy, finance & emissions:** D-008, D-090, D-091, D-092, D-105, D-154
 - **Balancing & scenarios:** D-038, D-039, D-040, D-041, D-066, D-087, D-088,
-  D-116, D-151
+  D-116, D-151, D-152, D-156
 - **Vehicles & fleet:** D-043, D-044, D-045, D-068, D-076, D-089, D-093,
-  D-096, D-142, D-143, D-145, D-146
+  D-096, D-142, D-143, D-145, D-146, D-155
 - **Water & air:** D-094, D-095, D-096, D-097, D-098, D-099
 - **Competitors, AI & tenders:** D-107, D-108, D-109, D-115, D-116, D-121,
-  D-122, D-147
+  D-122, D-147, D-152, D-153, D-154, D-155, D-156
 - **Rendering & art:** D-013, D-014, D-033, D-035, D-112, D-117, D-125, D-127,
   D-136, D-140
 - **UI & input:** D-011, D-013, D-015, D-035, D-110, D-113, D-114, D-119,
@@ -3098,3 +3100,218 @@ milestone wants the full halving, the levers are known: per-stop offsets
 instead of one anchor, or a stop model that loads at departure instead of
 arrival - both real redesigns of 11.4/12.1 machinery, neither smuggled in
 here.
+
+## M11 - the line backbone, stage C2: the AI fleet and the honest scenario-5 verdict (2026-08-07)
+
+### D-152 The AI sizes its fleet with the advisor, and the takt is for de-bunching trains - never for pacing roads
+
+E-06 executed: `AI_VEHICLES_PER_LINE = 1` is gone, and a competitor sizes
+every new fleet with literally the exported `adviseFleet` of 12.3. The
+call feeds the DEMAND interval (how often a departure planned
+`AI_TAKT_UTILISATION` full must leave to lift what the source makes in a
+month, floored at one a day, `AI_SERVICE_INTERVAL_MIN_TICKS`), which is
+what sizes the fleet; the divisor is the REAL round, estimated as the
+nominal straight-line round over `AI_LIFT_REAL_SHARE` = 0.5, the measured
+ratio between the two (14 nominal days against 27-29 driven on a 25-tile
+line). Each later stage re-derives the figure from what actually exists
+(D-108): the stations' real distance, their catchments' real monthly
+output, the railway that was really laid.
+
+What the month-by-month trace (D-109/D-121's method - this stage's
+plausible first diagnoses were wrong too) then established about the takt:
+
+* **The takt must be the fleet's own spacing, `realRound / crew`, never
+  the demand interval.** The demand interval was fed to `SetLineTakt`
+  first, and it strangled every small line: a thirty-day takt on a fleet
+  whose natural cadence was eighteen days THROTTLED it to one departure a
+  month, the pile never aged below a month, and oldest-first loading
+  served every passenger at the 10 % decay floor - 255 EUR in five
+  months, closed by its own review.
+* **Only a RAILWAY with two trains gets a takt at all.** The two-train
+  oval is the shape the takt fixture proved, and the grid is what holds
+  the second train half a cycle behind the first. On ROAD lines the slot
+  idle costs more than the bunching it removes at every fleet size the
+  cap allows: with a takt, every measured bus line had one to four
+  vehicles in WaitingForSlot at any moment and earned five to ten percent
+  of scenario 1's own untakted per-vehicle rate on the same shape. The
+  road de-buncher is the D-074 stop queue itself. A lone vehicle never
+  gets a takt - it has nothing to de-bunch, and a grid built from the
+  ESTIMATED round only makes it stand out the estimate's error at the
+  anchor every lap.
+
+Three gates keep the sizing from being fed nonsense, all measured on the
+scenario-5 trace (512 map, seed 4711):
+
+* **A pair is offered only if a FRESH load survives the drive**
+  (`AI_MIN_ARRIVAL_FACTOR` - a feasibility gate, NOT the D-122 pricing
+  term that was tried and reverted; that verdict stands). The old top
+  road candidate was a 123-tile grain haul arriving at 0.46 of its value.
+* **A decaying source must be OUT-lifted, not matched**
+  (`AI_DRAIN_MARGIN`): a six-bus line whose real lift sat two percent
+  over the town's deposits ran for ever against a pile pinned at thirty
+  days of age. The rot gate's lift figure uses the REAL capacity of the
+  vehicle the builder will pick and the real-round share - and no
+  utilisation discount: utilisation is a sizing headroom, and multiplying
+  it into the gate priced the largest fleet at a quarter of its physical
+  lift and left the road company two candidate pairs on a forty-town map.
+* **A pair with own stations at BOTH ends is never a new line.** Living
+  stations mean reinforcement's job; DEAD stations are the graveyard of a
+  line the review closed, and they are deliberately the AI's "do not
+  return" memory - scanning only living lines' stations was tried, and
+  the review-close/rebuild loop it opened burned about 20,000 EUR per
+  cycle on the same doomed pair for ever. The standing stations cost
+  nothing extra to remember (Z4 satisfied by the map itself).
+
+The road personality also collects TOWN pairs now (section 15 step 1 says
+"alle Paare"; the 1950 lorry catalogue carries only bulk, and industry
+pairs alone left it ONE candidate on the whole map), its passenger output
+expectation is the honest `AI_TOWN_OUTPUT_SHARE` = 0.18 derived from the
+real deposit constants rather than the old generous 0.5, and a new line's
+schedule is SYMMETRIC (both stops load partial, both unload all) with the
+DELIVERY end as the first station order - the D-151 playbook applied to
+the AI's own lines. A failed scan now also arms the `AI_RETRY_TICKS`
+backoff: the scan dry-plans up to sixty candidates with the real route
+search, and without the backoff it ran every four hundred ticks for
+twenty-five game years and tripled the acceptance run's wall time.
+
+### D-153 The AI railway is an oval where the terrain allows one, single track with ONE train everywhere else - and the shape is save state
+
+Stage C2's mandate was D-082-shaped AI railways, and the shape exists:
+`planRailOval` lays the takt fixture's railway verbatim - two straight
+parallel one-way rows joined at both ends, platforms on the outbound row,
+the shed on a stub off the return row that MERGES rather than crosses,
+one-way signals along the direction of travel every `AI_SIGNAL_SPACING`
+tiles, connectors and stub left unsignalled (D-055). Two trains circulate
+and never meet head on.
+
+Measured on real generated terrain, the oval almost never fits, for three
+separate reasons the debug trace itemised per tile: the corridor rows
+through the stop anchors cross the INDUSTRY FOOTPRINTS themselves; a
+dead-straight row violates the D-042 gradient window on almost any relief
+(`planTrack ok false/false` on every cleared candidate row); and a
+diagonal pair cannot be served by any straight corridor at all, because
+no row lies within catchment reach of both ends. L-shaped and free-form
+ovals were tried in an earlier iteration and refused every candidate too.
+An oval-only rail branch therefore built NOTHING - the rail personality
+never laid a tile in twenty-five years - which is strictly worse than the
+D-115 single line it replaced.
+
+So the fallback IS the D-115 shape: the assistant-planned single line
+(hills routed around, not refused), platforms one tile in from each end,
+the shed in line on the first tile, no signals - and exactly ONE train,
+because a second on single track meets the first nose to nose and
+deadlocks (D-059). Which shape got built cannot be recomputed from the
+map once the tracks are down, and the stage that buys runs a cycle later
+- a historical input to a sim decision, so it is save state (Z4):
+`AiProject.railTrains`, absent in every pre-C2 save and parsed to 1 (the
+D-146 wire pattern), hashed in `hashWorld`, covered by the D-134 audit's
+synthetic project representative. The v24 pins did NOT move: the
+canonical cross-OS world (D-137) and the corpus game (D-130) both run
+without AI companies, so neither hash contains an `AiProject` - verified
+by the green determinism and corpus suites, not asserted from the
+armchair. A railway is also never REINFORCED: the safe cap for a shape
+the optimiser can no longer see is the fleet that was sized at build
+time.
+
+### D-154 A build plan is proven before any money moves, and a borrower builds in the same command batch
+
+Two funding defects, both found because the rail personality finally had
+plans expensive enough to trip them:
+
+* **The loan-churn deadlock.** "Borrow now, build next cycle" composed
+  with D-109's repayment rule ("repay as soon as the debt is covered with
+  a reserve to spare") into a perfect standstill: the borrowed cash lay
+  idle at the very next decision, the repayment rule paid it straight
+  back, and the retry backoff then allowed the next loan. Measured on
+  seed 3: the rail company borrowed and repaid three hundred thousand
+  every six thousand ticks for twenty-five game years and never laid a
+  tile. A borrowing competitor now enqueues the loan and the whole build
+  in ONE command batch - the loan is first in the queue, so the money has
+  landed by the time the first build command bills, and by the next
+  decision the cash is in rails, where the repayment rule cannot reach
+  it.
+* **The road the AI orders is now FOUND first.** `BuildRoad` lays an L
+  and rejects the whole command on the first blocked tile - right for a
+  player who sees the lake, fatal for an AI that does not: every
+  town-to-town road of the measured road company was refused, the stops
+  and buses were bought anyway, and six lines in a row sat in KEIN_WEG
+  through their whole review period. `planRoadRuns` walks a breadth-first
+  search (iterative, fixed neighbour order, law #8) over passable tiles
+  inside the corridor box inflated by `AI_ROAD_DETOUR_MARGIN` and returns
+  maximal straight runs, each of which one BuildRoad lays exactly. The
+  whole plan - rail or road - is additionally dry-planned into a scratch
+  queue before the affordability check, so a loan is never taken for a
+  line that cannot exist.
+
+### D-155 A renewed fleet is not a failing line: the successor finder takes each replacement once, and the review re-anchors on turnover
+
+Stage C2 turns per-line auto-renewal ON for every AI line at creation
+(section 11.3, D-146) - the audit finding this closes is an AI fleet
+ageing into doubled upkeep for ever, because nobody at an AI company ever
+pressed the switch the player has. Enabling it exposed two defects,
+measured at month 252 of the twenty-five-year road run, where the best
+line of the game - six lorries, 5,000 EUR a month - hit its design life:
+
+* **All six renewals adopted the SAME successor.** A fleet bought in one
+  tick renews in one tick, and the fresh-vehicle finder ("built this tick
+  at that shed", D-146) found the first replacement again for every
+  renewal after the first: six successors paid for, one crewed, five
+  standing orphaned in the shed. The finder now skips a candidate that
+  already runs a line; `renewal.spec.ts` renews a three-vehicle fleet in
+  one tick and asserts every successor is on the line.
+* **The review then closed the thriving line.** Section 15's judgement is
+  "earned SINCE the last look", and the lifetime meters of a replaced
+  fleet restart at zero - so the gained figure went hugely negative and
+  the verdict was "unprofitable" one month after a renewal that had
+  drained the pile and pushed the station to rating 86. A negative gain
+  is impossible for a stable fleet (earnings only accumulate), so it now
+  RELIABLY means turnover: the baseline is re-anchored on the new fleet
+  and the verdict waits one review period, exactly as for a new line.
+
+With both fixes the renewed line runs straight through: the measured run
+compounds through its year-twenty renewal instead of crashing forty
+percent of the company's value in two months.
+
+### D-156 Scenario 5 stays out of the suite, measured at a fifth of the band floor, and the next bottleneck has a name
+
+The stage's mandate was to put balancing scenario 5 into the suite at
+5-25 million; the honest measured verdict is that it cannot be, and this
+entry extends D-116's reasoning: a red band nobody can act on is not a
+specification. What twenty-five simulated years on the 512 map now
+measure, month by month, per personality:
+
+* **Road (seed 4711): 1,120,000 EUR, solvent, compounding** - from
+  433,000 and stalled before this stage's fixes. It builds sized fleets,
+  runs them untakted, survives its year-twenty renewal, and is still
+  growing at year twenty-five (about +110,000 EUR a year). A fifth of
+  the band floor.
+* **Rail (seed 3) and Expansive (seed 2): wound up** in 1959 and 1967.
+  Not for want of building - the rail company now borrows, lays its
+  26-tile line, and earns 10,000 EUR in its first two months, ON PACE
+  for the band - but its train then breaks down on the final approach
+  and never arrives again.
+
+The bottleneck has a precise signature, watched tick by tick: a train
+forced to a dead stop with its nose at the last path boundary
+(`routeRemainingM - progressM = 0`, `pathIndex` two short of
+`pathLength`) oscillates Braking/Driving at speed ~0 for ever - arrival
+requires crossing the boundary, the brake curve targets exactly it, and
+a train that stopped ON the target (a mid-brake breakdown does this
+reliably) creeps past it by nothing. Every single-train railway dies of
+it within months; it is a vehicles/update.ts state-machine defect, not
+an AI defect, it predates this stage (D-121's "two deliveries in six
+months" carries the same signature), and it is the named next step -
+along with the second observation that a passenger pile a fleet merely
+matches pays the decay floor for ever, which is what keeps even healthy
+bus lines an order of magnitude below what the band assumes.
+
+`aiGame.spec.ts` is hardened as far as the measured state honestly
+allows: the solvent count and per-personality value floors are ASSERTED
+instead of narrated (measured on the 256 map, seed 4711: road solvent at
+545,000 EUR with a six-vehicle line, rail alive at -15,000 EUR, the town
+network wound up at 97,000 EUR), pinned under the measured run so a
+regression of the kind this stage fixed - a personality that stops
+building, a renewal that eats a company - goes red by name. The 25-year
+world is built once and shared across the file, which with the D-152
+scan backoff takes the file from ten minutes back to about seventy
+seconds.

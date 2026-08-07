@@ -169,13 +169,20 @@ export function renewFleet(world: World, company: CompanyState): number {
 
     // The fresh vehicle is the one BUILT THIS TICK at that shed - never
     // `count - 1`: the store reuses freed slots, so the replacement usually
-    // lands exactly in the slot the old vehicle vacated.
+    // lands exactly in the slot the old vehicle vacated. And never one that
+    // already runs a line: a whole fleet bought in one tick renews in one
+    // tick, and without that clause every renewal after the first found the
+    // FIRST replacement again - measured on the scenario-5 trace, a six-lorry
+    // line renewed at its design life adopted one successor six times, left
+    // five paid-for lorries standing orphaned in the shed, and the line was
+    // closed by its own review a month later.
     let fresh = -1;
     for (let candidate = 0; candidate < vehicles.count; candidate++) {
       if (vehicles.alive[candidate] !== 1) continue;
       if (vehicles.builtTick[candidate] !== world.tick) continue;
       if (vehicles.homeDepotTile[candidate] !== depotTile) continue;
       if (vehicles.ownerId[candidate] !== company.id) continue;
+      if (vehicles.lineId[candidate]! >= 0) continue;
       fresh = candidate;
       break;
     }

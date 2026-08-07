@@ -163,6 +163,36 @@ describe('renewing a fleet', () => {
     expect(world.lines.orders[0]).toHaveLength(1);
   });
 
+  it('renews a whole fleet in one tick without orphaning a single successor', () => {
+    // A fleet bought in one tick ages in step and renews in one tick. Every
+    // replacement must end up ON the line: the fresh-vehicle finder used to
+    // find the FIRST successor again for every renewal after the first, and
+    // a six-lorry line measured on the scenario-5 trace paid for six
+    // successors, crewed one, and was closed by its own review a month
+    // later - five paid-for lorries standing orphaned in the shed.
+    const scenario = renewingBusLine();
+    const world = scenario.world;
+    apply(scenario, { kind: CommandKind.BuyRoadVehicle, x: 40, y: 40, specId: BUS });
+    apply(scenario, { kind: CommandKind.BuyRoadVehicle, x: 40, y: 40, specId: BUS });
+    apply(scenario, { kind: CommandKind.AssignVehicleToLine, vehicleId: 1, lineId: 0 });
+    apply(scenario, { kind: CommandKind.AssignVehicleToLine, vehicleId: 2, lineId: 0 });
+
+    world.tick = 50 * TICKS_PER_YEAR;
+    world.vehicles.builtTick[0] = 0;
+    world.vehicles.builtTick[1] = 0;
+    world.vehicles.builtTick[2] = 0;
+
+    for (let tick = 0; tick < TICKS_PER_YEAR; tick++) world.step(scenario.queue, null);
+
+    // Three vehicles, all newer, ALL on the line - none orphaned in the shed.
+    expect(world.vehicles.livingCount).toBe(3);
+    for (let id = 0; id < world.vehicles.count; id++) {
+      if (world.vehicles.alive[id] !== 1) continue;
+      expect(world.vehicles.specId[id]).not.toBe(BUS);
+      expect(world.vehicles.lineId[id]).toBe(0);
+    }
+  });
+
   it('draws no randomness, so an existing world runs on unchanged', () => {
     // Two worlds, identical but for the switch. The rng state after a year has
     // to match, or every seeded future diverges the moment a player enables it.

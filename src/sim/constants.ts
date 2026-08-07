@@ -388,23 +388,70 @@ export const AI_CANDIDATES_TRIED = 60;
 export const AI_MAX_LINES = 20;
 
 /**
- * Vehicles a new line starts with, and the most it can ever be given.
+ * Densest service a competitor SIZES a fleet for: one departure per game day.
+ * [ticks]
  *
- * ONE. A line's fleet is most of what it costs to open, and a competitor that
- * buys two of everything can afford half as many lines - which matters far more
- * than the frequency does, because an unfinished chain kills the works at the
- * end of it. Cargo piling up at the first stop is what buys the second vehicle,
- * and that is the reinforcement rule doing its job.
+ * The AI sizes a fleet with the 12.3 advisor - `ceil(round / interval)` - and
+ * the interval it feeds in is how often a vehicle planned AI_TAKT_UTILISATION
+ * full must leave to lift what the source makes in a month
+ * (`load * utilisation * TICKS_PER_MONTH / output`). A very large source
+ * would push that interval towards zero and the formula towards an unbounded
+ * fleet; a departure a day is where the floor sits, because a cadence below
+ * one day buys rating-frequency nothing (the rating window of section 10.2
+ * is measured in days) and the station pile is capped anyway. The interval
+ * sizes the FLEET only - the takt the line then runs is the fleet's own
+ * spacing (see fleetFor in ai/ai.ts), never this figure.
  */
-export const AI_VEHICLES_PER_LINE = 1;
+export const AI_SERVICE_INTERVAL_MIN_TICKS = TICKS_PER_DAY;
+
+/**
+ * Share of a load's value that must survive the DRIVE for a pair to be
+ * offered at all: `timeFactor(cargo, one-way days at nominal speed) >= 0.5`.
+ *
+ * A feasibility gate, not a pricing term. D-122 tried charging the revenue
+ * ESTIMATE for transit decay and reverted it - the term depressed every
+ * candidate instead of reordering them - and that stands. This gate is
+ * different: it removes only the pairs where even a FRESH load arrives with
+ * most of its value gone, which no ranking should ever see. Measured on the
+ * scenario-5 trace (512 map, seed 4711): the road company's top candidate
+ * was a 123-tile grain haul - 44 days one-way against grain's 14-day grace,
+ * arrival factor 0.46 - and every vehicle put on it earned the 10 % floor
+ * while the estimate had quoted it fresh.
+ */
+export const AI_MIN_ARRIVAL_FACTOR = 0.5;
 
 /**
  * Share of a town's inhabitants a competitor assumes it could carry in a month.
  *
- * Generous on purpose: a town is the one source that never runs dry, and what
- * really limits a passenger line is the station rating.
+ * It used to be a "generous on purpose" 0.5 - fine while the figure only
+ * RANKED pairs, wrong the moment stage C2 made it SIZE fleets and GATE pairs:
+ * a town really deposits `PASSENGERS_PER_INHABITANT_PER_MONTH` (0.35) times
+ * the station-rating share (about half on a decently served stop), roughly
+ * 0.18 per inhabitant - so the old figure overstated every town's traffic
+ * close to threefold, over-fleeted every bus line and let the lift gate pass
+ * towns whose real queue the fleet could never drain. This is the honest
+ * expectation, and the two constants it is derived from are named above.
  */
-export const AI_TOWN_OUTPUT_SHARE = 0.5;
+export const AI_TOWN_OUTPUT_SHARE = 0.18;
+
+/**
+ * Share of a departure's capacity the AI plans to FILL when it sizes a
+ * fleet. [share, 0..1]
+ *
+ * Not 1.0, deliberately. A fleet sized so that the deposits between two
+ * departures exactly fill the vehicle leaves no room to eat a backlog: the
+ * pile that built up while the line was under construction is then recycled
+ * for ever, and oldest-first keeps every load a month stale at the 10 % floor
+ * (measured on the scenario-5 trace - matched lift, permanent floor). Half a
+ * vehicle of headroom per departure is what balancing scenario 1's own
+ * healthy line runs at: its buses leave with deposits-per-visit around a
+ * third of capacity, drain the pile whole at every call, and earn near the
+ * fresh rate - the calibrated profile this figure copies. A SIZING headroom
+ * only: it doubles the fleet the demand interval asks for, and it must never
+ * discount what a fleet can physically lift (the rot gate in ai/evaluate.ts
+ * learned that the measured way).
+ */
+export const AI_TAKT_UTILISATION = 0.5;
 
 /**
  * What a competitor assumes its train and its lorry cost, for the ESTIMATE.
@@ -450,6 +497,17 @@ export const AI_TILES_PER_MONTH =
 export const AI_TICKS_PER_TILE = TILE_SIZE_M / AI_NOMINAL_SPEED_MS / (TICK_MS / 1000);
 export const AI_MAX_VEHICLES_PER_LINE = 6;
 
+/**
+ * Most trains a competitor puts on one railway.
+ *
+ * The AI's railway is a one-way oval (the shape D-082 proved and the takt
+ * fixture pinned): trains circulate, follow, and never meet head on. TWO is
+ * what that fixture measured over five game years with zero deadlocks; every
+ * further train stands in the D-074 queue behind a loading one - the stations
+ * sit on the ring, so a third train buys waiting, not throughput.
+ */
+export const AI_RAIL_MAX_TRAINS = 2;
+
 /** Cargo waiting at a line's first stop before it is reinforced. [units] */
 export const AI_REINFORCE_WAITING = 300;
 
@@ -482,6 +540,58 @@ export const AI_CASH_RESERVE_CT = 200_000_00;
  */
 export const AI_LINE_REVIEW_TICKS = TICKS_PER_YEAR / 2;
 
+/**
+ * Share of the fleet's NOMINAL monthly lift a source may demand before the
+ * pair is dropped as unliftable. [share, 0..1]
+ *
+ * The lift gate compares a source's assumed monthly output against what the
+ * largest allowed fleet could carry at AI_NOMINAL_SPEED_MS - and the nominal
+ * round is about HALF the real one (measured on the scenario-5 trace: 14
+ * nominal days against 27-29 driven days on a 25-tile bus line; 36 against
+ * ~90 on the 100-tile grain haul - corners, slopes, loading and the takt
+ * dwell are all invisible to a straight line at 14 m/s). A gate at the
+ * nominal figure therefore admits pairs the real fleet can only just match -
+ * and a queue the fleet merely MATCHES never drains, so oldest-first keeps
+ * every load a month stale at the 10 % floor for ever (the M5 oversupply
+ * rule). Half the nominal lift is the real lift; demanding the source fit
+ * inside it is what lets the queue actually drain.
+ */
+export const AI_LIFT_REAL_SHARE = 0.5;
+
+/**
+ * How much the largest allowed fleet's real lift must EXCEED a decaying
+ * source's monthly output for the pair to be worth serving. [factor]
+ *
+ * Matching the output is not enough, and the scenario-5 trace measured why:
+ * a six-bus line whose real lift (613/month) sat two percent over the town's
+ * deposits ran for ever against a standing pile pinned at thirty days of
+ * age - oldest-first loading turns a backlog the fleet cannot OUT-lift into
+ * a conveyor of month-old passengers, every one of them at the 10 % decay
+ * floor, and the line earned less than half its own upkeep. A pile only
+ * stops costing when the fleet can genuinely eat it: half again over the
+ * deposits clears a month's backlog in two months and then keeps the pile
+ * young. Applies to cargo that decays; a coal pile a month old pays face
+ * value and needs no margin (the stale-arrival branch of the gate).
+ */
+export const AI_DRAIN_MARGIN = 1.5;
+
+/**
+ * How far off the straight corridor the AI's road planner may look, per side.
+ * [tiles]
+ *
+ * The BuildRoad command lays an L and rejects the WHOLE run on the first
+ * blocked tile - right for a player who can see the map, fatal for an AI that
+ * cannot: measured on the scenario-5 trace, every town-to-town road the road
+ * personality ordered was refused (a building or a lake on the L), the stops
+ * and buses were bought anyway, and six lines in a row ran their whole review
+ * period in KEIN_WEG. The AI therefore walks a breadth-first search around
+ * the obstacles first and orders the road it actually found, run by run. The
+ * search is bounded to the corridor box inflated by this margin: one town
+ * radius (TOWN_START_RADIUS is 10) plus slack, so a road can round the town
+ * it starts in but cannot wander across the map.
+ */
+export const AI_ROAD_DETOUR_MARGIN = 16;
+
 /** Wagons a competitor puts behind a locomotive. */
 export const AI_RAIL_WAGONS = 5;
 
@@ -505,20 +615,54 @@ export const AI_PLATFORM_TILES = 2;
 export const AI_RAIL_MIN_TILES = 8;
 
 /**
- * Signal spacing on AI track, in tiles. ZERO: no automatic signalling.
+ * Signal spacing on the AI's railway, in tiles.
  *
  * The automatic signalling of section 9.4 lays ONE-WAY signals facing the way
- * the line was drawn, which is exactly right for a main line worked in one
- * direction and exactly wrong for what a competitor builds: a single track
- * between two industries, worked out and back. The return trip is refused by
- * the very signals meant to help, the train sits in its shed with no route,
- * and the line is closed six months later as unprofitable. That was the whole
- * of the first company measured against balancing scenario 5.
- *
- * An unsignalled single line carries one train, which is what a new line has.
- * The line review closes it if a second one ever deadlocks against the first.
+ * the line was drawn. On the single out-and-back track the AI used to build
+ * that was fatal - the return trip was refused by the very signals meant to
+ * help (D-115) - and the spacing stood at ZERO. Since M11 stage C2 the AI
+ * builds a one-way OVAL: the outbound row is drawn from A to B, the return
+ * row from B to A, and one-way signals along the drawn direction are then
+ * exactly right on both. Eight tiles matches the takt fixture that proved
+ * the shape over five game years with two trains.
  */
-export const AI_SIGNAL_SPACING = 0;
+export const AI_SIGNAL_SPACING = 8;
+
+/**
+ * How far the corridor row of an AI railway may sit from either end's stop
+ * anchor, across the corridor. [tiles]
+ *
+ * The AI lays the takt fixture's oval verbatim: two straight parallel one-way
+ * rows with both platforms on the outbound row. That needs one straight row
+ * that serves BOTH industries: the stop anchor is at most 3 tiles from its
+ * industry (stopTileNear), the catchment is measured over
+ * STATION_CATCHMENT_SCAN_RADIUS = 12, and 8 keeps the platform inside the
+ * catchment with a tile of slack. A pair whose ends sit further apart across
+ * every candidate row is skipped, not bent around - the L-shaped and
+ * free-form ovals were tried first and refused every candidate on real
+ * terrain (the offset copy of an assistant-planned route lands on hills,
+ * water and its own outbound track).
+ */
+export const AI_RAIL_CORRIDOR_SKEW_MAX = 8;
+
+/**
+ * Overrun beyond the outermost platform to the oval's end connector. [tiles]
+ *
+ * The takt fixture keeps its loop connectors four tiles clear of the
+ * platforms; three is the minimum that leaves a signal's worth of plain line
+ * between a platform end and the connector junction (D-055: a signal stands
+ * only on plain line).
+ */
+export const AI_RAIL_LOOP_MARGIN = 3;
+
+/**
+ * Distance between the oval's outbound and return rows. [tiles]
+ *
+ * Two, exactly the takt fixture (ROW 30 / ROW2 32): the empty row between
+ * the two keeps the end connectors three tiles long - long enough that the
+ * connector's middle tile is plain line a claim can end on.
+ */
+export const AI_RAIL_OVAL_GAP = 2;
 
 /**
  * What a pair already served by somebody is worth, as a share.

@@ -457,18 +457,34 @@ divergence between platforms is a law-#3 break and is never re-pinned.
 
 ## Still outstanding
 
-- **The rail and town-network competitors still finish a twenty-five year run
-  insolvent.** D-116 blamed the crewing stage; traced month by month that is
-  wrong, and D-121 says what actually happens - the rail company builds, crews
-  and runs its line, and loses it at the six-month review because one train on
-  an eighty-three tile line makes two deliveries. Three arithmetic errors in the
-  opportunity estimate are fixed (D-121, D-122) and the road competitor went
-  from 583 000 to 973 000 over the same run; the other two need the fleet SIZED
-  to the line, which `AI_VEHICLES_PER_LINE = 1` does not do.
-- **Balancing scenario 5** of section 19.4 therefore cannot be met: the AI
-  finishes a 512-map quarter century worth about 580 000 against a band of five
-  to twenty-five million. The test is NOT in the suite - see D-116 for why a
-  red light nobody can act on is worse than a written-down gap.
+- **A train forced to a dead stop on its final approach never arrives.** THE
+  bottleneck under every rail number below, with a precise measured signature
+  (D-156): `routeRemainingM - progressM = 0`, `pathIndex` two short of
+  `pathLength`, Braking/Driving oscillating at speed ~0 for ever - a
+  mid-brake breakdown produces it reliably. It is a `vehicles/update.ts`
+  state-machine defect, not an AI one, and D-121's "two deliveries in six
+  months" carries the same signature. Every single-train railway dies of it
+  within months; fix this before touching any AI constant.
+- **Balancing scenario 5** of section 19.4 is still not met, and the test is
+  still NOT in the suite (D-116's reasoning, extended by D-156). Stage C2's
+  measured state on the 512 map: the road personality compounds to
+  1 120 000 - from 433 000 and stalled - and survives its year-twenty fleet
+  renewal; the rail personalities build and run profitable first lines (on
+  pace for the band) until the braking freeze above kills their trains. The
+  second measured wall: a passenger pile a fleet merely MATCHES pays the
+  decay floor for ever (oldest first), which holds even healthy bus lines an
+  order of magnitude below what the band assumes.
+- **What the AI does since stage C2** (D-152 to D-155): fleets sized with
+  the 12.3 advisor from the demand interval; a takt ONLY on two-train
+  railways (the fleet's own spacing - on roads the slot idle costs more than
+  the bunching); railways are the D-082 oval where flat straight ground
+  exists and the assistant-planned single line with ONE train everywhere
+  else (`AiProject.railTrains`, saved); roads are found by BFS before they
+  are ordered; a borrower takes the loan and builds in the same command
+  batch (the loan-churn deadlock is dead); per-line auto-renewal is ON for
+  every AI line, whole fleets renew in one tick without orphaning
+  successors, and the review re-anchors on fleet turnover instead of
+  reading a renewal as a loss.
 - **The timetable of 12.3 exists since M11 stage C1**: per-line takt with ONE
   takt point (the first station order - D-149 says why not every stop),
   slip-to-next-slot on a missed departure, the per-station transfer nodes of
@@ -479,10 +495,11 @@ divergence between platforms is a law-#3 break and is never re-pinned.
   `lineId` and read its order list live through `lines/LineStore.scheduleOf` -
   the ONLY correct way to read a vehicle's schedule anywhere in the sim.
   Auto-renewal is per line (D-146), the AI runs real lines through the
-  player's own commands (D-147), L opens the line list (D-148). Still owed by
-  stage C2: the AI fleet sized by the advisor, D-082-shaped AI railways, and
-  scenario 5 into the suite. Read D-151 before touching the takt balance
-  fixture - it records why the band is measured the way it is.
+  player's own commands (D-147), L opens the line list (D-148). Stage C2
+  delivered the AI fleet sizing, railways and renewal (D-152 to D-155);
+  scenario 5 stays out of the suite with its verdict measured and written
+  down (D-156). Read D-151 before touching the takt balance fixture - it
+  records why the band is measured the way it is.
 - **Undo and redo** (section 17.2). See D-114.
 - The installer BUILDS: `npm run build:desktop` produced both bundles in about
   eight minutes, and Tauri fetched WiX and NSIS itself. Neither is signed, so

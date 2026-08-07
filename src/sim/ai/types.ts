@@ -81,6 +81,17 @@ export interface AiProject {
   readonly specIds: readonly number[];
   readonly startedTick: number;
   /**
+   * Most trains the railway that was ACTUALLY laid can carry: the one-way
+   * oval takes AI_RAIL_MAX_TRAINS, the single-track fallback exactly one
+   * (D-059: two trains on single track deadlock nose to nose). Which shape
+   * got built cannot be recomputed from the map once the tracks are down,
+   * and the buying stage runs a cycle later - a historical input to a sim
+   * decision, so it is save state (Z4). 1 for road projects and for every
+   * project migrated from a save older than this field, because the old AI
+   * only ever laid single track.
+   */
+  readonly railTrains: number;
+  /**
    * The REAL line being reinforced (a Line entity id) when this is a
    * reinforcement rather than a new build, or -1. A reinforcement already has
    * its line, so it skips straight to crewing whatever comes out of the depot.
