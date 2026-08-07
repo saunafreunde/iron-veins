@@ -341,7 +341,7 @@ abgenommen.** Eine Überschreitung ist ein Abnahme-Fehler, kein Schulterzucken.
 | M11 | **v24** — Order-Grammatik-Stride, LineStore, Takt-Felder, AiState-Migration | +`lineId` je Fahrzeug (Layout-Bump) | +0,20 ms (Halt-Checks, Slot-Logik) | 0 |
 | M12 | — | — | +0,00 ms (render-only) | +4 Wasser-Animationszeilen Seite 0 |
 | M13 | — | +`IndustryMarker.level` (Layout-Bump) — **B6 gemessen: seit M5 vorhanden (Marker-Kanal, Industrie-Uhr); null Byte Layout-Änderung, `SNAPSHOT_LAYOUT_VERSION` bleibt 6 (D-174, das D-171-Muster)** | +0,00 ms (render-only) | Seite 1 (~600 Fahrzeug-Zellen), Seite 2 (Emissive) |
-| M14 | **v25** — Stations-Frachthistorie-Ring | +FlowMarker-Block (Layout-Bump) | +0,00 ms Tick; ≤ +0,5 ms je Snapshot-Publish | 0 (Vektor) |
+| M14 | **v25** — Stations-Frachthistorie-Ring | +FlowMarker-Block (Layout-Bump) — **B1 eingelöst: `SNAPSHOT_LAYOUT_VERSION` 6 → 7 (EIN Bump: +FlowCount-Feld, Stride-8-Block, Cap 4 096 Legs); Export im selben Publish-Pass wie `structureSignature` (Fehler 33), gemessen median 0,060 / p99 0,285 ms bei 420 aktiven Legs auf der Referenzflotte — unter der ≤-0,5-ms-Zusage, Tripwire gated den Median auf der Zusage selbst (D-176, D-167)** | +0,00 ms Tick; ≤ +0,5 ms je Snapshot-Publish | 0 (Vektor) |
 | M15 | **v26** — 8.4-Weltregeln + Stau-Layer (~1 MB gehasht auf 1024²) | +Stau-Overlay-Block | +0,50 ms (Inkremente, Zerfall, A*-Term) | 0 |
 | M16 | **v27** — Checkpoint-Ring-Metadaten, `.ironreplay` | — | +0,00 ms (Checkpoints auf Save-Pfad) | 0 |
 | M17 | **v28** — GoalState | +Goal-Block (~64 B) | +0,05 ms (nur Tages-Hook) | 0 |

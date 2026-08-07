@@ -18,6 +18,7 @@ import {
 } from '../shared/snapshot';
 import { CommandQueue } from './commands/queue';
 import type { CommandEnvelope, CommandOutcome } from './commands/types';
+import { writeFlowLegs } from './flow';
 import {
   BANKRUPTCY_MONTHS,
   MAX_TICK,
@@ -464,6 +465,9 @@ function publishSnapshot(current: World, sink: SnapshotWriter): void {
 
   i32[SnapshotI32.VehicleCount] = writeVehicles(current, sink.draftVehicles);
   i32[SnapshotI32.ReservedCount] = writeReserved(current, sink.draftReserved);
+  // The flow atlas rides THIS publish pass like every other block - a second
+  // pass over stations or links is the exact mistake Fehler 33 names (M14).
+  i32[SnapshotI32.FlowCount] = writeFlowLegs(current, sink.draftFlow);
   i32[SnapshotI32.MonthsInDebt] = current.playerCompany.bankrupt
     ? BANKRUPTCY_MONTHS
     : current.playerCompany.monthsInDebt;

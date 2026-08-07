@@ -1,5 +1,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
+import { SNAPSHOT_FLOW_STRIDE, SNAPSHOT_MAX_FLOW_LEGS } from '../../src/shared/snapshot';
 import { TICKS_PER_DAY } from '../../src/sim/constants';
+import { writeFlowLegs } from '../../src/sim/flow';
 import { decodeSave, encodeSave } from '../../src/sim/save/serialize';
 import { VehicleState } from '../../src/sim/vehicles/VehicleStore';
 import {
@@ -34,6 +36,21 @@ const TICK_P99_BUDGET_MS = 8;
 
 /** Section 19.1 / 21: a 1024 save with 1,500 vehicles, read back. [ms] */
 const LOAD_BUDGET_MS = 3_000;
+
+/**
+ * M14's ledger row: the flow-atlas export may add at most half a millisecond
+ * to a snapshot publish at this fixture. The MEDIAN is gated at the ledger
+ * number itself - the clean-machine measurement sits an order of magnitude
+ * below it, so this is the M13-particle case where the tripwire IS the budget,
+ * with headroom instead of against it (D-167). [ms]
+ */
+const FLOW_EXPORT_MEDIAN_GATE_MS = 0.5;
+
+/** Very generous p99 backstop for a saturated CI box (D-167). [ms] */
+const FLOW_EXPORT_P99_BACKSTOP_MS = 5;
+
+/** Publishes sampled for the flow-export percentiles. */
+const FLOW_EXPORT_SAMPLES = 500;
 
 /**
  * Ticks sampled for the percentile. More than one game month, deliberately:
@@ -98,6 +115,41 @@ describe('performance budgets of section 21', () => {
 
     expect(p99).toBeLessThan(TICK_P99_BUDGET_MS);
   }, 300_000);
+
+  it('exports the flow atlas inside its publish allowance (M14, D-176)', () => {
+    // The added cost of the M14 FlowMarker block, priced exactly as the
+    // ledger prices it: per snapshot publish, at the reference fleet. The
+    // fixture built its 210 routes through commands, so the active legs the
+    // export walks are the real ones - ~420 directed station pairs.
+    const { world } = fixture;
+    const block = new Int32Array(SNAPSHOT_MAX_FLOW_LEGS * SNAPSHOT_FLOW_STRIDE);
+
+    const rows = writeFlowLegs(world, block);
+    // A measurement over an empty block would gate nothing: prove the graph
+    // is populated before timing it.
+    expect(rows).toBeGreaterThanOrEqual(300);
+    expect(rows).toBeLessThan(SNAPSHOT_MAX_FLOW_LEGS);
+
+    const samples = new Float64Array(FLOW_EXPORT_SAMPLES);
+    for (let i = 0; i < FLOW_EXPORT_SAMPLES; i++) {
+      const started = performance.now();
+      writeFlowLegs(world, block);
+      samples[i] = performance.now() - started;
+    }
+    const sorted = Array.from(samples).sort((a, b) => a - b);
+    const median = sorted[Math.floor(sorted.length * 0.5)]!;
+    const p99 = sorted[Math.floor(sorted.length * 0.99)]!;
+
+    console.log(
+      `flow export with ${rows} active legs at ${MEASURED_VEHICLES} vehicles: ` +
+        `median ${median.toFixed(4)} ms, p99 ${p99.toFixed(4)} ms per publish ` +
+        `(gate median <= ${FLOW_EXPORT_MEDIAN_GATE_MS} ms, backstop p99 <= ` +
+        `${FLOW_EXPORT_P99_BACKSTOP_MS} ms)`,
+    );
+
+    expect(median).toBeLessThan(FLOW_EXPORT_MEDIAN_GATE_MS);
+    expect(p99).toBeLessThan(FLOW_EXPORT_P99_BACKSTOP_MS);
+  });
 
   it('reads a large save back inside three seconds', () => {
     const { world, queue } = fixture;

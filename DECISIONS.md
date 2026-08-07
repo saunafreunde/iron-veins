@@ -13,7 +13,7 @@ no entry below. A number may appear under several topics.
 - **Determinism, RNG & hashing:** D-001, D-002, D-003, D-004, D-009, D-010,
   D-024, D-093, D-106, D-128, D-137, D-142, D-145, D-146, D-149, D-153
 - **Commands, snapshot & worker boundary:** D-004, D-005, D-006, D-011, D-032,
-  D-100, D-111, D-145, D-146, D-148, D-162, D-174
+  D-100, D-111, D-145, D-146, D-148, D-162, D-174, D-176
 - **Lines & timetables:** D-145, D-146, D-147, D-148, D-149, D-150, D-151,
   D-152, D-155, D-159
 - **Map generation & terrain:** D-018, D-019, D-020, D-021, D-022, D-023,
@@ -28,7 +28,7 @@ no entry below. A number may appear under several topics.
   D-061, D-073, D-080, D-081, D-082, D-083, D-157, D-173
 - **Stations & catchment:** D-049, D-080, D-095, D-150, D-159
 - **Cargo, payment & routing:** D-036, D-037, D-065, D-067, D-075, D-077,
-  D-078, D-118, D-142, D-151
+  D-078, D-118, D-142, D-151, D-176
 - **Industry & production:** D-022, D-062, D-063, D-064, D-069, D-071, D-079,
   D-085, D-086, D-174
 - **Towns, council & ownership:** D-101, D-102, D-103, D-104
@@ -46,7 +46,7 @@ no entry below. A number may appear under several topics.
 - **UI & input:** D-011, D-013, D-015, D-035, D-110, D-113, D-114, D-119,
   D-126, D-148, D-165, D-166
 - **Performance & measurement:** D-002, D-120, D-135, D-136, D-161, D-162,
-  D-163, D-164, D-167, D-170, D-171, D-172, D-173, D-174
+  D-163, D-164, D-167, D-170, D-171, D-172, D-173, D-174, D-176
 - **Platform, tooling & build:** D-012, D-014, D-015, D-016, D-017, D-029,
   D-030, D-031, D-160, D-168, D-169, D-170, D-172, D-175
 - **Crash safety:** D-132, D-139
@@ -4861,3 +4861,73 @@ per facing per zoom and the counts differ; the per-zoom truth stands in
 `src/`, no save, no snapshot, no i18n; the game reads whatever
 `baked-manifest.json` the bake wrote (D-170), so the remap is complete
 at bake time.
+
+## M14 - instruments, bundle 1: the FlowMarker snapshot block (2026-08-07)
+
+### D-176 The flow atlas measures the leg-sample window, rides the one publish pass, and no simulation decision may read it back
+
+SPEC2 M14 wants the section 7.4 connection graph renderer-visible:
+station-pair legs with measured volumes and leg times, the data the flow
+arrows draw from. Three decisions shaped the block.
+
+**The volume window is the graph's own eight-trip ring, not a
+twelve-month one.** The task left the choice open; the evidence closed
+it. `cargo/linkGraph.ts` measures a leg as the mean of its last eight
+completed trips (LINK_SAMPLE_COUNT, arrival to arrival, D-077), so a
+volume recorded per trip over the same window describes the SAME
+journeys the time does - one staleness rule, one acceptance filter (a
+trip whose time is rejected records no flow either). A per-leg
+twelve-month ring would instead be new historical state: saved, it is a
+second save bump beside the one Z5 grants M14 (the station
+cargo-history ring owns v25) and a second twelve-month mechanism beside
+that very ring (the Fehler-26 shape); unsaved, a year of arrow widths
+would evaporate on every load. The eight-trip ring loses at most eight
+trips' worth on load and re-measures within one round per leg - the
+honest price, stated in the block by the row's own Measured flag.
+
+**Display-only is a build property, not a promise.** The rings
+(`flowUnits`/`flowTicks`/cursor, plus last owner and line) live on the
+in-memory link, are never serialised (the CargoLinkSave shape is
+field-for-field the v24 one - asserted in the test), never hashed
+(bending a ring provably leaves `hashWorld` fixed), and are read by
+exactly two files: the graph that records them and `sim/flow.ts` that
+writes the block. `tests/unit/flowExport.spec.ts` walks every file
+under `src/sim` and fails the build the day a pathfinder or a rating
+starts reading the flow vocabulary - that would be a world rule fed by
+an unsaved layer, Fehler 23/24 in one move. The exporter is extracted
+from SimWorker exactly as the marker assembly was (D-174), so the perf
+suite can price it and a unit test can hold its rows; SimWorker calls
+it from the SAME publish pass as every other block (Fehler 33 - never a
+second pass), and the tick never sees it.
+
+**One layout bump carries everything the M14 render needs.** Snapshot
+layout v6 -> v7: a FlowCount field (the i32 block rounds 15 up to 16)
+and a stride-8 row per active directed leg - stations, volume, oldest
+trip tick, mean ticks, measured flag, owner, line - capped at 4,096
+rows on the reserved-tile rule (past the cap the atlas stops drawing,
+the simulation never slows). Owner and line ride along because the M14
+MUSS colours the arrows by company/line, and shipping the block without
+them would force a second layout bump inside the same milestone.
+OldestTick exists because a volume without a window is not a flow:
+eight full buses last week and eight full buses last year must not draw
+the same arrow, so the reader (`currentFlow`, tagged with the frame's
+own tick read from the same generation) can turn units into units per
+day. The load a trip records is what the vehicle had aboard AT arrival,
+before unloading - the leg moved it, so the leg gets it; an empty run
+records a zero and thins the arrow honestly.
+
+Measured on the reference machine against the 1,500-vehicle fixture
+(420 active legs, the fixture's real graph): **median 0.060 ms, p99
+0.285 ms per publish** against the ledger's <= 0.5 ms allowance - the
+6.1 M14 row's snapshot promise, delivered at an order of magnitude of
+headroom. The tripwire gates the MEDIAN at the 0.5 ms allowance itself
+with a 5 ms p99 backstop - the M13-particle case where the gate IS the
+budget, with headroom instead of against it (D-167). Tick p50/p99
+1.393/3.232 ms sit on the M10 baseline (1.45/3.26): the extended
+`observe` signature and the per-arrival load sum cost nothing the
+fixture can see. The determinism pins did not move - the rings are
+deterministic state the digest deliberately ignores, and no decision
+reads them. The three-line transfer network of the Fertig-wenn sentence
+is a reusable helper (`tests/helpers/transferNetwork.ts`), built for
+bundle 2 to reuse on the same stations. No i18n: the block carries
+numbers, and every string above it belongs to the panel bundles.

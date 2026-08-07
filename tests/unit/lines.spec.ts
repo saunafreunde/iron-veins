@@ -3,7 +3,12 @@ import { CommandKind, RejectReason } from '../../src/sim/commands/types';
 import { MAX_LINES, TICKS_PER_DAY } from '../../src/sim/constants';
 import { scheduleOf } from '../../src/sim/lines/LineStore';
 import { lineRoundTicks, lineStations, lineVehicles } from '../../src/sim/lines/metrics';
-import { OrderLoad, OrderTarget, OrderUnload, VehicleState } from '../../src/sim/vehicles/VehicleStore';
+import {
+  OrderLoad,
+  OrderTarget,
+  OrderUnload,
+  VehicleState,
+} from '../../src/sim/vehicles/VehicleStore';
 import {
   apply,
   buildBusLine,
@@ -104,9 +109,9 @@ describe('the line commands', () => {
     expect(tryApply(scenario, { kind: CommandKind.DeleteLine, lineId: 0 }, 1)).toBe(
       RejectReason.NotYours,
     );
-    expect(
-      tryApply(scenario, { kind: CommandKind.SetLineOrders, lineId: 0, orders: [] }, 1),
-    ).toBe(RejectReason.NotYours);
+    expect(tryApply(scenario, { kind: CommandKind.SetLineOrders, lineId: 0, orders: [] }, 1)).toBe(
+      RejectReason.NotYours,
+    );
     expect(
       tryApply(scenario, { kind: CommandKind.AssignVehicleToLine, vehicleId: 0, lineId: 0 }, 1),
     ).toBe(RejectReason.NotYours);
@@ -278,8 +283,8 @@ describe('per-line statistics, recomputed from the stores', () => {
 
     // Once both legs carry a real trip, the flag flips and the sum follows
     // the measured means - the SINGLE round-time source (D-077).
-    world.cargoLinks.observe(0, 1, 900);
-    world.cargoLinks.observe(1, 0, 1_100);
+    world.cargoLinks.observe(0, 1, 900, 0, 0, -1, world.tick);
+    world.cargoLinks.observe(1, 0, 1_100, 0, 0, -1, world.tick);
     const after = lineRoundTicks(world, 0);
     expect(after.measured).toBe(true);
     expect(after.ticks).toBe(2_000);

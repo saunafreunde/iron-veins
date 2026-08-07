@@ -58,6 +58,29 @@ export interface CargoLink {
    * [ticks]
    */
   meanTicks: number;
+
+  // ----------------------------------------------- flow-atlas measurement
+  //
+  // What the same trips MOVED, for the M14 flow atlas (D-176). Display-only
+  // by law: recorded here, exported by sim/flow.ts in the publish pass, and
+  // read back by NO simulation decision - the coupling test in
+  // tests/unit/flowExport.spec.ts walks src/sim and holds that. Therefore
+  // never saved and never hashed (the save keeps its v24 shape); after a
+  // load the rings are empty and re-measure, exactly as the ACTIVE flags do.
+  //
+  // A ring of its own rather than a column of `samples`: a load restores the
+  // time samples but not these, so a shared cursor would misalign the two.
+
+  /** Units of cargo aboard each recorded trip, newest overwriting oldest. */
+  readonly flowUnits: number[];
+  /** Tick each recorded trip arrived at, parallel to flowUnits. */
+  readonly flowTicks: number[];
+  /** Where the next trip record goes once the flow ring is full. */
+  flowCursor: number;
+  /** Company whose vehicle completed the newest recorded trip, -1 before any. */
+  flowOwnerId: number;
+  /** Line that vehicle was assigned to, -1 when it ran free orders. */
+  flowLineId: number;
 }
 
 /** Serialised shape of one link. */
@@ -129,6 +152,15 @@ export class LinkGraph {
   }
 
   /**
+   * True while some vehicle is ordered to run the link at this index of
+   * {@link links}. The index form of {@link isActive}, for the one consumer
+   * that walks the link list itself: the flow export (sim/flow.ts).
+   */
+  activeAt(at: number): boolean {
+    return this.active[at] === 1;
+  }
+
+  /**
    * True once at least one real trip has been recorded over the leg.
    *
    * The line panel asks this so it can label a mean that is still the
@@ -151,8 +183,23 @@ export class LinkGraph {
    * Trips over a leg no vehicle is ordered to run any more are ignored, as are
    * absurdly long ones - a vehicle that was stopped half way, or had its orders
    * rewritten, did not measure this leg, it merely took that long to reappear.
+   *
+   * Beside the travel time the trip's LOAD is recorded for the M14 flow atlas:
+   * `units` is what the vehicle carried over the leg (measured at arrival,
+   * before unloading), `atTick` the arrival tick, `ownerId`/`lineId` whose
+   * vehicle it was. One acceptance rule for both rings - a trip that did not
+   * measure the leg's time did not measure its flow either (D-077's filter,
+   * applied whole).
    */
-  observe(fromStationId: number, toStationId: number, ticks: number): void {
+  observe(
+    fromStationId: number,
+    toStationId: number,
+    ticks: number,
+    units: number,
+    ownerId: number,
+    lineId: number,
+    atTick: number,
+  ): void {
     if (ticks <= 0 || ticks > LINK_SAMPLE_MAX_TICKS) return;
     const at = this.linkAt(fromStationId, toStationId);
     if (at < 0 || this.active[at] !== 1) return;
@@ -168,6 +215,19 @@ export class LinkGraph {
     for (let i = 0; i < link.samples.length; i++) total += link.samples[i]!;
     link.meanTicks = total / link.samples.length;
     this.means++;
+
+    // The flow ring, display-only (see the CargoLink field notes). An empty
+    // run is a real measurement: it thins the arrow honestly.
+    if (link.flowUnits.length < LINK_SAMPLE_COUNT) {
+      link.flowUnits.push(units);
+      link.flowTicks.push(atTick);
+    } else {
+      link.flowUnits[link.flowCursor] = units;
+      link.flowTicks[link.flowCursor] = atTick;
+      link.flowCursor = (link.flowCursor + 1) % LINK_SAMPLE_COUNT;
+    }
+    link.flowOwnerId = ownerId;
+    link.flowLineId = lineId;
   }
 
   /**
@@ -247,6 +307,11 @@ export class LinkGraph {
       samples: [],
       cursor: 0,
       meanTicks: estimateTicks(world, from, to),
+      flowUnits: [],
+      flowTicks: [],
+      flowCursor: 0,
+      flowOwnerId: -1,
+      flowLineId: -1,
     });
     this.index.set(key, at);
 
@@ -453,6 +518,11 @@ export class LinkGraph {
   /**
    * Restore measured links. Which of them are active, and the table built from
    * them, are derived and are worked out again on the first day that runs.
+   *
+   * The flow rings deliberately start EMPTY: they are display-only measurement
+   * (never saved, never hashed - the v24 save shape is untouched), so after a
+   * load the atlas re-measures its arrow widths trip by trip while the saved
+   * time means keep routing exactly as before.
    */
   loadData(saved: readonly CargoLinkSave[]): void {
     this.links.length = 0;
@@ -467,6 +537,11 @@ export class LinkGraph {
         samples: [...link.samples],
         cursor: link.cursor,
         meanTicks: link.meanTicks,
+        flowUnits: [],
+        flowTicks: [],
+        flowCursor: 0,
+        flowOwnerId: -1,
+        flowLineId: -1,
       });
     }
     this.active = new Uint8Array(0);

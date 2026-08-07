@@ -482,7 +482,11 @@ export function startVehicle(world: World, id: number): boolean {
   const orders = scheduleOf(world, id);
   if (orders.length > 0) {
     // Starting from a stand is a stop event, so the conditions speak here too.
-    vehicles.orderIndex[id] = resolveOrderIndex(world, id, vehicles.orderIndex[id]! % orders.length);
+    vehicles.orderIndex[id] = resolveOrderIndex(
+      world,
+      id,
+      vehicles.orderIndex[id]! % orders.length,
+    );
   }
   const target = orderTargetTile(world, id);
   if (target === -1 || !routeTo(world, id, target)) {
@@ -563,11 +567,23 @@ function serveStation(world: World, id: number, station: Station): number {
   let units = 0;
 
   // The leg that has just ended, arrival to arrival. This is the measurement the
-  // whole connection table of section 7.4 is built out of.
+  // whole connection table of section 7.4 is built out of. What the vehicle has
+  // aboard RIGHT NOW - before anything is unloaded - is what the leg moved, so
+  // the same call records the trip's load for the M14 flow atlas (D-176).
   const previous = vehicles.lastStationId[id]!;
   const departed = vehicles.lastArrivalTick[id]!;
   if (previous >= 0 && previous !== station.id && departed >= 0) {
-    world.cargoLinks.observe(previous, station.id, world.tick - departed);
+    let carriedUnits = 0;
+    for (let i = 0; i < carried.length; i++) carriedUnits += carried[i]!.amount;
+    world.cargoLinks.observe(
+      previous,
+      station.id,
+      world.tick - departed,
+      carriedUnits,
+      vehicles.ownerId[id]!,
+      vehicles.lineId[id]!,
+      world.tick,
+    );
   }
   vehicles.lastStationId[id] = station.id;
   vehicles.lastArrivalTick[id] = world.tick;
@@ -626,13 +642,7 @@ function serveStation(world: World, id: number, station: Station): number {
         deliverCargo(world, station, stack.cargo, paidFor);
         // A contract is satisfied by cargo that actually REACHED the town, so
         // it is credited on the delivery path and nowhere else.
-        creditDelivery(
-          world,
-          vehicles.ownerId[id]!,
-          station.townId,
-          stack.cargo,
-          paidFor,
-        );
+        creditDelivery(world, vehicles.ownerId[id]!, station.townId, stack.cargo, paidFor);
       }
       units += paidFor;
       stack.amount -= paidFor;
@@ -1240,11 +1250,7 @@ function stepVehicle(world: World, id: number): void {
         : LOAD_TICKS_PER_UNIT;
       // The minimum dwell of section 12.1 stretches the stop, never shortens
       // the loading it has to cover anyway.
-      vehicles.loadTicks[id] = Math.max(
-        MIN_STATION_STOP_TICKS,
-        units * perUnit,
-        order.waitTicks,
-      );
+      vehicles.loadTicks[id] = Math.max(MIN_STATION_STOP_TICKS, units * perUnit, order.waitTicks);
       vehicles.state[id] = VehicleState.Loading;
       return;
     }

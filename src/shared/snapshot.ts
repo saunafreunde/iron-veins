@@ -12,7 +12,7 @@
  * refuses to interpret a buffer written by a different layout.
  */
 
-export const SNAPSHOT_LAYOUT_VERSION = 6;
+export const SNAPSHOT_LAYOUT_VERSION = 7;
 
 /** Header fields, shared by both slots. */
 export const SnapshotHeader = {
@@ -48,6 +48,8 @@ export const SnapshotI32 = {
   ReservedCount: 12,
   /** Consecutive months closed in the red; 0 when solvent (section 14.2). */
   MonthsInDebt: 13,
+  /** How many entries of the flow-leg block are in use (M14 flow atlas). */
+  FlowCount: 14,
 } as const;
 
 /**
@@ -56,9 +58,9 @@ export const SnapshotI32 = {
  * The Float64 block starts immediately after it, and a Float64Array view has to
  * begin on an eight byte boundary - so an odd number of Int32 fields would make
  * the whole snapshot unconstructable. Adding a field here means checking this
- * number, not only the enum above.
+ * number, not only the enum above. Fifteen fields round up to sixteen.
  */
-export const SNAPSHOT_I32_COUNT = 14;
+export const SNAPSHOT_I32_COUNT = 16;
 
 /**
  * Float fields of one slot. Money is an exact integer number of cents; it lives
@@ -139,6 +141,57 @@ export const SnapshotReserved = {
 export const SNAPSHOT_RESERVED_STRIDE = 2;
 
 /**
+ * Station-pair flow legs the flow atlas may draw in one tick (SPEC2 M14).
+ *
+ * The measured connection graph of section 7.4 made renderer-visible: one row
+ * per ACTIVE directed leg, written by the same publish pass as every other
+ * block (Fehlerkatalog 2, Fehler 33 - never a second pass) and read by nobody
+ * on the simulation side (D-176). A row is a station pair plus what the last
+ * eight completed trips measured over it; the renderer joins the pair with the
+ * station markers it already holds for positions and names.
+ *
+ * The cap follows the reserved-tile precedent: past it the atlas stops drawing
+ * further legs rather than the simulation slowing down. 4,096 directed legs is
+ * roughly two thousand simultaneously served station pairs - far past what the
+ * 1,500-vehicle reference world produces (~420).
+ */
+export const SNAPSHOT_MAX_FLOW_LEGS = 4_096;
+
+/** Fields per flow leg. */
+export const SnapshotFlow = {
+  /** Station the leg leaves from. */
+  FromStation: 0,
+  /** Station the leg arrives at. */
+  ToStation: 1,
+  /**
+   * Units of cargo that moved over the leg in its recorded trips (the last
+   * eight completed, the section 7.4 sample window), rounded. 0 while the leg
+   * is still an estimate - the arrow exists, at minimum width.
+   */
+  VolumeUnits: 2,
+  /**
+   * Tick the OLDEST recorded trip arrived at, -1 while there is none. With the
+   * frame's own tick this turns the volume into an honest rate: eight full
+   * buses last week and eight full buses last year must not draw the same
+   * arrow.
+   */
+  OldestTick: 3,
+  /**
+   * Mean travel time of the leg, arrival to arrival, rounded. [ticks] The
+   * D-077 mean: the straight-line 54 km/h seed until the first real trip
+   * replaces it - which is what the Measured field says.
+   */
+  MeanTicks: 4,
+  /** 1 once at least one real trip measured the mean, 0 while it is a seed. */
+  Measured: 5,
+  /** Company whose vehicle completed the newest recorded trip, -1 before any. */
+  OwnerId: 6,
+  /** Line that trip's vehicle was assigned to, -1 when it ran free orders. */
+  LineId: 7,
+} as const;
+export const SNAPSHOT_FLOW_STRIDE = 8;
+
+/**
  * One read of the published vehicle block, tagged with the generation that
  * published it, its tick and the measured simulation rate - the bundle the
  * render-side interpolator of E-05 copies and times its alpha against
@@ -159,7 +212,9 @@ const STATUS_I32_BYTES = SNAPSHOT_I32_COUNT * 4;
 const STATUS_F64_BYTES = SNAPSHOT_F64_COUNT * 8;
 const VEHICLE_BYTES = SNAPSHOT_MAX_VEHICLES * SNAPSHOT_VEHICLE_STRIDE * 4;
 const RESERVED_BYTES = SNAPSHOT_MAX_RESERVED_TILES * SNAPSHOT_RESERVED_STRIDE * 4;
-const SLOT_BYTES = STATUS_I32_BYTES + STATUS_F64_BYTES + VEHICLE_BYTES + RESERVED_BYTES;
+const FLOW_BYTES = SNAPSHOT_MAX_FLOW_LEGS * SNAPSHOT_FLOW_STRIDE * 4;
+const SLOT_BYTES =
+  STATUS_I32_BYTES + STATUS_F64_BYTES + VEHICLE_BYTES + RESERVED_BYTES + FLOW_BYTES;
 
 export const SNAPSHOT_BYTES = HEADER_BYTES + 2 * SLOT_BYTES;
 
@@ -191,6 +246,14 @@ function reservedView(buffer: SharedArrayBuffer, slot: number): Int32Array {
   );
 }
 
+function flowView(buffer: SharedArrayBuffer, slot: number): Int32Array {
+  return new Int32Array(
+    buffer,
+    slotByteOffset(slot) + STATUS_I32_BYTES + STATUS_F64_BYTES + VEHICLE_BYTES + RESERVED_BYTES,
+    SNAPSHOT_MAX_FLOW_LEGS * SNAPSHOT_FLOW_STRIDE,
+  );
+}
+
 /** Allocate a correctly sized, cross-origin-isolated snapshot buffer. */
 export function createSnapshotBuffer(): SharedArrayBuffer {
   return new SharedArrayBuffer(SNAPSHOT_BYTES);
@@ -203,6 +266,7 @@ export class SnapshotWriter {
   private readonly f64Slots: readonly [Float64Array, Float64Array];
   private readonly vehicleSlots: readonly [Int32Array, Int32Array];
   private readonly reservedSlots: readonly [Int32Array, Int32Array];
+  private readonly flowSlots: readonly [Int32Array, Int32Array];
   private generation = 0;
 
   constructor(readonly buffer: SharedArrayBuffer) {
@@ -211,6 +275,7 @@ export class SnapshotWriter {
     this.f64Slots = [f64View(buffer, 0), f64View(buffer, 1)];
     this.vehicleSlots = [vehicleView(buffer, 0), vehicleView(buffer, 1)];
     this.reservedSlots = [reservedView(buffer, 0), reservedView(buffer, 1)];
+    this.flowSlots = [flowView(buffer, 0), flowView(buffer, 1)];
     Atomics.store(this.header, SnapshotHeader.LayoutVersion, SNAPSHOT_LAYOUT_VERSION);
     Atomics.store(this.header, SnapshotHeader.Generation, 0);
   }
@@ -235,6 +300,11 @@ export class SnapshotWriter {
     return this.reservedSlots[(this.generation + 1) & 1]!;
   }
 
+  /** Flow-leg block of the slot currently being filled (M14 flow atlas). */
+  get draftFlow(): Int32Array {
+    return this.flowSlots[(this.generation + 1) & 1]!;
+  }
+
   /** Make the drafted slot visible to the reader. */
   publish(): void {
     this.generation++;
@@ -249,6 +319,7 @@ export class SnapshotReader {
   private readonly f64Slots: readonly [Float64Array, Float64Array];
   private readonly vehicleSlots: readonly [Int32Array, Int32Array];
   private readonly reservedSlots: readonly [Int32Array, Int32Array];
+  private readonly flowSlots: readonly [Int32Array, Int32Array];
   /** 0 means "nothing published yet"; the writer starts publishing at 1. */
   private lastGeneration = 0;
 
@@ -258,6 +329,7 @@ export class SnapshotReader {
     this.f64Slots = [f64View(buffer, 0), f64View(buffer, 1)];
     this.vehicleSlots = [vehicleView(buffer, 0), vehicleView(buffer, 1)];
     this.reservedSlots = [reservedView(buffer, 0), reservedView(buffer, 1)];
+    this.flowSlots = [flowView(buffer, 0), flowView(buffer, 1)];
 
     const layout = Atomics.load(this.header, SnapshotHeader.LayoutVersion);
     if (layout !== 0 && layout !== SNAPSHOT_LAYOUT_VERSION) {
@@ -334,6 +406,25 @@ export class SnapshotReader {
     return {
       data: this.reservedSlots[slot]!,
       count: this.i32Slots[slot]![SnapshotI32.ReservedCount]!,
+    };
+  }
+
+  /**
+   * Flow legs of the published tick, for the M14 flow atlas.
+   *
+   * Tagged with that tick, read from the SAME generation as the block: the
+   * renderer turns VolumeUnits and OldestTick into a rate, and pairing the
+   * block with a tick read separately could straddle a publish (the
+   * currentVehicleFrame rule).
+   */
+  currentFlow(): { readonly data: Int32Array; readonly count: number; readonly tick: number } {
+    const generation = this.peekGeneration();
+    const slot = generation & 1;
+    const i32 = this.i32Slots[slot]!;
+    return {
+      data: this.flowSlots[slot]!,
+      count: i32[SnapshotI32.FlowCount]!,
+      tick: i32[SnapshotI32.Tick]!,
     };
   }
 }
