@@ -42,6 +42,9 @@ function markerFor(s: Scenario, id: number): StationMarker {
     waiting: 0,
     transferNode: false,
     modules: station.modules.map((module) => ({ kind: module.kind, x: module.x, y: module.y })),
+    terms: { wait: 0, frequency: 0, equipment: 0, reliability: 0, overflow: 0 },
+    waitingByCargo: [],
+    history: [],
   };
 }
 

@@ -11,9 +11,9 @@ decision is missing from this register or the register cites a number that has
 no entry below. A number may appear under several topics.
 
 - **Determinism, RNG & hashing:** D-001, D-002, D-003, D-004, D-009, D-010,
-  D-024, D-093, D-106, D-128, D-137, D-142, D-145, D-146, D-149, D-153
+  D-024, D-093, D-106, D-128, D-137, D-142, D-145, D-146, D-149, D-153, D-178
 - **Commands, snapshot & worker boundary:** D-004, D-005, D-006, D-011, D-032,
-  D-100, D-111, D-145, D-146, D-148, D-162, D-174, D-176
+  D-100, D-111, D-145, D-146, D-148, D-162, D-174, D-176, D-179
 - **Lines & timetables:** D-145, D-146, D-147, D-148, D-149, D-150, D-151,
   D-152, D-155, D-159
 - **Map generation & terrain:** D-018, D-019, D-020, D-021, D-022, D-023,
@@ -21,14 +21,14 @@ no entry below. A number may appear under several topics.
 - **Terraforming & structures:** D-028, D-034, D-050, D-051, D-052, D-124,
   D-141
 - **Save format, migrations & replays:** D-007, D-025, D-026, D-027, D-048,
-  D-111, D-130, D-131, D-134, D-142, D-144, D-145, D-146, D-147, D-153
+  D-111, D-130, D-131, D-134, D-142, D-144, D-145, D-146, D-147, D-153, D-178
 - **Rail & track:** D-042, D-043, D-044, D-045, D-046, D-047, D-053, D-141,
   D-153, D-157
 - **Signals & reservations:** D-054, D-055, D-056, D-057, D-058, D-059, D-060,
   D-061, D-073, D-080, D-081, D-082, D-083, D-157, D-173
-- **Stations & catchment:** D-049, D-080, D-095, D-150, D-159
+- **Stations & catchment:** D-049, D-080, D-095, D-150, D-159, D-178, D-179
 - **Cargo, payment & routing:** D-036, D-037, D-065, D-067, D-075, D-077,
-  D-078, D-118, D-142, D-151, D-176
+  D-078, D-118, D-142, D-151, D-176, D-178
 - **Industry & production:** D-022, D-062, D-063, D-064, D-069, D-071, D-079,
   D-085, D-086, D-174
 - **Towns, council & ownership:** D-101, D-102, D-103, D-104
@@ -42,9 +42,9 @@ no entry below. A number may appear under several topics.
   D-122, D-147, D-152, D-153, D-154, D-155, D-156, D-158
 - **Rendering & art:** D-013, D-014, D-033, D-035, D-112, D-117, D-125, D-127,
   D-136, D-140, D-160, D-161, D-162, D-163, D-164, D-165, D-166, D-169, D-170,
-  D-171, D-172, D-173, D-174, D-175, D-177
+  D-171, D-172, D-173, D-174, D-175, D-177, D-179
 - **UI & input:** D-011, D-013, D-015, D-035, D-110, D-113, D-114, D-119,
-  D-126, D-148, D-165, D-166, D-177
+  D-126, D-148, D-165, D-166, D-177, D-179
 - **Performance & measurement:** D-002, D-120, D-135, D-136, D-161, D-162,
   D-163, D-164, D-167, D-170, D-171, D-172, D-173, D-174, D-176, D-177
 - **Platform, tooling & build:** D-012, D-014, D-015, D-016, D-017, D-029,
@@ -5012,3 +5012,103 @@ honestly mean before the measurement existed); Fluss answers "what
 moves where" now that it is measured. Two questions, two modes - not
 the Fehler-26 shape, and the entry says so where the next reader will
 look.
+
+## M14 - instruments, bundle 3: the station x-ray + the cargo-history ring (2026-08-07)
+
+### D-178 The cargo-history ring counts three per-cargo verdicts, accumulates in the month and is written by the monthly hook, and only the full digest pays for it
+
+SPEC2 M14's one Z5 save bump (v25): twelve months of per-station,
+per-cargo Int32 history. Three decisions shaped the state.
+
+**Three counters, and they are verdicts, not events.** The task left the
+exact fields open; what the panel and 10.1 genuinely ask closed them.
+Collected is what left ON A VEHICLE - the D-085 measure, the number the
+death spiral is about. Delivered is what arrived here as its
+destination. Expired is every loss the station wore: platform decay, the
+thirty-day write-off of routeless cargo, and cargo turned away at a full
+door - the same three losses that feed `overflowUnits` and the decay
+sweep, i.e. exactly what 10.1's overflow malus punishes, now visible per
+cargo and per month. A transfer set-down is deliberately NONE of the
+three: it is the same parcel passing through, and it will be somebody's
+Collected on its next leg - per STATION the books stay honest.
+
+**Events add onto Float64 accumulators; the monthly hook rounds them
+into the ring.** Cargo amounts are fractional shares (a destination
+split, a decay share), and rounding per event would systematically lose
+the small ones - a two-unit-a-day decay would vanish entirely. So the
+tick's own paths (loading, delivery, the daily sweeps) do one indexed
+add into a preallocated per-station Float64 block (law #7: no
+allocation, nothing read back), and `rollStationHistories` - on the
+monthly hook, where every other monthly counter is read and reset -
+rounds the finished month into the Int32 ring at the cursor and zeroes
+the accumulators. The accumulators are SAVED AND HASHED like the ring:
+a load mid-month must not silently drop half a month of history, and an
+unsaved input to saved state is the Fehler-23 shape one storage class
+down.
+
+**The ring rides the FULL digest only - the tile-layer precedent.** The
+D-134 audit demands every saved field be refused-when-missing and
+seen-when-bent, and it is (the audit passes over the v25 payload
+unchanged; the ring travels as plain numbers, never as a typed array -
+msgpack would serialise an Int32Array as platform-endian raw bytes and
+hand back a Uint8Array, the quiet corruption the corpus exists to
+catch). But ~700 numbers per station on a monthly cadence do not belong
+in the per-day LIVE digest, exactly as the megabytes of tile layers do
+not: every event that moves the accumulators also moves a waiting stack
+or the overflow figure, which `hashWorldLive` already covers, so the
+live digest still moves when the world does. Pin and corpus were
+re-recorded under their own protocols (D-137/D-130): canonical hash
+`bbe572afe2880243` on v25, corpus manifest re-recorded with the
+self-primed `v25-played.ironsave` - all four fixtures still decode to
+one world hash, which is the migration (old saves get the zeroed ring a
+pre-M14 world honestly had; the corpus wrap keeps real months) proving
+itself container-shape-only for a stationless game.
+
+### D-179 The x-ray displays the simulation's own terms, the preview asks the build's own join question, and the stations join the fleet cadence
+
+The M14 station x-ray, and the rule all three halves share: the panel
+computes NOTHING the simulation does not already compute.
+
+**`stationRating` is now the sum of `ratingTerms` - the five 10.1 terms
+were factored out, not duplicated.** The rating had all five terms
+folded inline; the x-ray needs them singly; a parallel formula would
+drift (the M14 order names this trap by name). So `ratingTerms` fills a
+caller-provided record with the wait, frequency, equipment, reliability
+and overflow terms, `stationRating` itself sums exactly those into the
+old round(clamp(base + ...)) - the test asserts sum-equals-rating over
+played and deliberately bent stations - and the marker channel ships
+the record as computed. The warning sentence names
+`dominantLossTerm`: the biggest gap to each term's maximum, ties to the
+lower index so the sentence cannot flicker between two equal causes,
+gated at RATING_XRAY_WARN_LOSS (5 points) so a healthy station is not
+nagged about a half-point. One i18n key per term, de+en, because "serve
+it more often" and "add a canopy" are different sentences, not
+parameters of one.
+
+**The catchment preview answers with the build command's own rules.**
+The join rule left `commands/build.ts` for `station/types.ts`
+(`joinTargetIdFor`, the command delegates to it), and the preview
+composes it with the same D-095 centre rule (`centreOfModules`, which
+`recomputeCentre` now delegates to) and the same radius rule
+(`radiusForModuleCount`) - so the circle drawn before the click IS the
+catchment the build produces, quay exclusion included, and the tests
+hold command and preview to one answer. The overlay traces the
+tile-space circle point by point at terrain height (a flat screen
+ellipse lies on every hillside) with the D-095 centre marked, on the
+existing per-frame overlay exactly like the route preview - no new
+layer, no wall clock, nothing baked.
+
+**Station markers ride the fleet cadence, and the ring travels sparse.**
+The x-ray's wait term, waiting table and visit window all move without
+anything `structureSignature` can see moving - a panel that freezes
+until somebody builds is not an instrument - so `postStations` joins
+the existing FLEET_REFRESH branch (one message per game day, the
+cadence the fleet list already pays). The marker assembly moved to
+`sim/markers.ts` (the D-174 extraction, so a unit test holds the rows
+against the state), and history rows exist only for cargos that
+recorded anything: most stations handle two or three of the eighteen,
+and fifteen all-zero rows of thirty-six numbers per station per day
+would be marker-channel weight for nothing. The aggregate `waiting`
+number STAYS on the marker for the list, the minimap and the tutorial;
+the PANEL's aggregate display is what the per-cargo table replaced, as
+the milestone ordered.

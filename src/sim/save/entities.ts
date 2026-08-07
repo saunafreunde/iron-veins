@@ -1,5 +1,7 @@
 import type { CargoStack } from '../cargo/stack';
 import { CARGO_COUNT } from '../cargo/types';
+import { STATION_HISTORY_MONTHS } from '../constants';
+import { STATION_HISTORY_SIZE, STATION_MONTH_COUNTER_SIZE } from '../station/history';
 import {
   MODULE_KIND_COUNT,
   type ModuleKind,
@@ -42,6 +44,18 @@ export interface StationSave {
   /** Derived on load, written to the file only because the shape is shared. */
   acceptedCargo: number;
   servedIndustries: number[];
+  /**
+   * The M14 cargo-history ring as a PLAIN list (station/history.ts layout).
+   *
+   * Plain numbers, never the live Int32Array: msgpack would serialise a typed
+   * array as raw bytes in platform endianness and hand back a Uint8Array on
+   * decode - the exact category of quiet corruption the corpus exists to
+   * catch. `buildStation` below rebuilds the typed blocks.
+   */
+  history: number[];
+  historyCursor: number;
+  /** The month in progress, per cargo and counter - same treatment. */
+  monthCounters: number[];
 }
 
 export interface VehicleSave {
@@ -110,7 +124,24 @@ export function encodeStations(stations: readonly Station[]): StationSave[] {
     // Recomputed on load; carried here only so the encoded shape matches.
     acceptedCargo: 0,
     servedIndustries: [],
+    history: [...station.history],
+    historyCursor: station.historyCursor,
+    monthCounters: [...station.monthCounters],
   }));
+}
+
+/** Rebuild one live station from validated save data (M14: typed blocks). */
+export function buildStation(save: StationSave): Station {
+  return {
+    ...save,
+    modules: save.modules.map((module) => ({ ...module })),
+    waiting: save.waiting.map((stack) => ({ ...stack })),
+    visitTicks: [...save.visitTicks],
+    runwayFreeTick: [...save.runwayFreeTick],
+    servedIndustries: [...save.servedIndustries],
+    history: Int32Array.from(save.history),
+    monthCounters: Float64Array.from(save.monthCounters),
+  };
 }
 
 export function encodeVehicles(store: VehicleStore): VehicleSave[] {
@@ -216,7 +247,7 @@ function decodeStacks(value: unknown, path: string): CargoStack[] {
   });
 }
 
-export function decodeStations(value: unknown, path: string): Station[] {
+export function decodeStations(value: unknown, path: string): StationSave[] {
   return list(value, path).map((entry, i) => {
     const raw = record(entry, `${path}[${i}]`);
     const modules = list(raw['modules'], `${path}[${i}].modules`).map((moduleValue, m) => {
@@ -255,8 +286,40 @@ export function decodeStations(value: unknown, path: string): Station[] {
       visitTicks: list(raw['visitTicks'], `${path}[${i}].visitTicks`).map((tick, t) =>
         int(tick, `${path}[${i}].visitTicks[${t}]`),
       ),
+      history: decodeHistory(raw['history'], `${path}[${i}].history`),
+      historyCursor: decodeHistoryCursor(raw['historyCursor'], `${path}[${i}].historyCursor`),
+      monthCounters: decodeMonthCounters(raw['monthCounters'], `${path}[${i}].monthCounters`),
     };
   });
+}
+
+/** The M14 ring: exactly STATION_HISTORY_SIZE integers (station/history.ts). */
+function decodeHistory(value: unknown, path: string): number[] {
+  const entries = list(value, path);
+  if (entries.length !== STATION_HISTORY_SIZE) {
+    throw new SaveFormatError(
+      `${path}: expected ${STATION_HISTORY_SIZE} ring slots, got ${entries.length}`,
+    );
+  }
+  return entries.map((slot, s) => int(slot, `${path}[${s}]`));
+}
+
+function decodeHistoryCursor(value: unknown, path: string): number {
+  const cursor = int(value, path);
+  if (cursor < 0 || cursor >= STATION_HISTORY_MONTHS) {
+    throw new SaveFormatError(`${path}: ${cursor} is outside the ${STATION_HISTORY_MONTHS} slots`);
+  }
+  return cursor;
+}
+
+function decodeMonthCounters(value: unknown, path: string): number[] {
+  const entries = list(value, path);
+  if (entries.length !== STATION_MONTH_COUNTER_SIZE) {
+    throw new SaveFormatError(
+      `${path}: expected ${STATION_MONTH_COUNTER_SIZE} counters, got ${entries.length}`,
+    );
+  }
+  return entries.map((counter, c) => num(counter, `${path}[${c}]`));
 }
 
 /** Validate the vehicle section of a save. */

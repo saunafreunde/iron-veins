@@ -16,6 +16,7 @@ import {
   TICKS_PER_YEAR,
 } from '../constants';
 import { hasModule, ModuleKind, trimVisits } from '../station/types';
+import { recordStationCargo, StationHistoryField } from '../station/history';
 import { vehicleSpec } from './catalog';
 import { aggregateConsist } from './consist';
 import type { World } from '../World';
@@ -171,7 +172,9 @@ export function expireStaleCargo(world: World): void {
       // zeroing it would take two thousand units off an over-supplied station
       // in a single tick - which is the steady state of every mine nobody
       // collects from.
-      stack.amount -= stack.amount * share;
+      const lost = stack.amount * share;
+      stack.amount -= lost;
+      recordStationCargo(station, StationHistoryField.Expired, stack.cargo, lost);
       stack.createdTick += TICKS_PER_DAY;
     }
     compactStacks(station.waiting);

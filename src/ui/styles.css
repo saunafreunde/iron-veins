@@ -324,6 +324,127 @@ body {
   color: var(--success);
 }
 
+/* ---------------------------------------- station x-ray (SPEC2 M14) ----- */
+
+/* One 10.1 term: label, meter, value - the five rows of the breakdown. */
+.xray-term {
+  display: grid;
+  grid-template-columns: minmax(0, 7em) 1fr minmax(0, 5em);
+  gap: 8px;
+  align-items: center;
+  font-size: 12px;
+}
+
+.xray-term__label {
+  color: var(--text-muted);
+}
+
+.xray-term__meter {
+  height: 6px;
+  background: var(--surface);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.xray-term__fill {
+  display: block;
+  height: 100%;
+  background: var(--success);
+}
+
+.xray-term__fill--malus {
+  background: var(--danger);
+}
+
+.xray-term__value {
+  text-align: right;
+}
+
+.xray-table {
+  border-collapse: collapse;
+  font-size: 12px;
+  width: 100%;
+}
+
+.xray-table th {
+  color: var(--text-muted);
+  font-weight: normal;
+  text-align: left;
+  padding: 2px 8px 2px 0;
+}
+
+.xray-table td {
+  padding: 2px 8px 2px 0;
+  border-top: 1px solid var(--border);
+}
+
+/* One cargo's twelve-month ring: name beside twelve stacked mini-bars. */
+.xray-history {
+  display: grid;
+  grid-template-columns: minmax(0, 7em) 1fr;
+  gap: 8px;
+  align-items: end;
+  font-size: 12px;
+}
+
+.xray-history__cargo {
+  color: var(--text-muted);
+}
+
+.xray-bars {
+  display: flex;
+  gap: 2px;
+  height: 28px;
+  align-items: flex-end;
+}
+
+.xray-bars__month {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  height: 100%;
+  background: var(--surface);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.xray-bars__seg {
+  display: block;
+  width: 100%;
+}
+
+.xray-bars__seg--collected {
+  background: var(--success);
+}
+
+.xray-bars__seg--delivered {
+  background: var(--accent);
+}
+
+.xray-bars__seg--expired {
+  background: var(--danger);
+}
+
+.xray-legend {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+}
+
+.xray-legend--collected {
+  background: var(--success);
+}
+
+.xray-legend--delivered {
+  background: var(--accent);
+}
+
+.xray-legend--expired {
+  background: var(--danger);
+}
+
 /* ------------------------------------------------------------------ forms */
 
 .field {

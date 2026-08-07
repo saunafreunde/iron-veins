@@ -8,6 +8,7 @@ import {
 import { stationAccepts } from '../industry/catchment';
 import { industrySpec } from '../industry/types';
 import { scheduleOf } from '../lines/LineStore';
+import { recordStationCargo, StationHistoryField } from '../station/history';
 import type { Station } from '../station/types';
 import { OrderTarget } from '../vehicles/VehicleStore';
 import type { World } from '../World';
@@ -127,6 +128,8 @@ export function loadFromStation(
   if (moved > 0) {
     compactStacks(station.waiting);
     creditCollection(world, station, cargo, moved);
+    // The M14 history ring: what left aboard a vehicle, per cargo and month.
+    recordStationCargo(station, StationHistoryField.Collected, cargo, moved);
   }
   return moved;
 }
@@ -317,10 +320,14 @@ export function depositAtStation(
   const space = STATION_CARGO_CAPACITY - waiting;
   if (space <= 0) {
     station.overflowUnits += amount;
+    recordStationCargo(station, StationHistoryField.Expired, cargo, amount);
     return 0;
   }
   const accepted = amount < space ? amount : space;
   station.overflowUnits += amount - accepted;
+  // Cargo turned away at the door is a loss of this station like any other -
+  // the same event 10.1's overflow malus punishes, so the history counts it.
+  recordStationCargo(station, StationHistoryField.Expired, cargo, amount - accepted);
 
   const found = chooseDestinations(world, station, cargo);
   if (found === 0) {
@@ -385,6 +392,7 @@ export function refreshCargoRouting(world: World): void {
       stack.destinationStationId = -1;
       if (world.tick - stack.createdTick <= cutoff) continue;
       station.overflowUnits += stack.amount;
+      recordStationCargo(station, StationHistoryField.Expired, stack.cargo, stack.amount);
       stack.amount = 0;
       dropped = true;
     }

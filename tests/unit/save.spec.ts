@@ -255,10 +255,10 @@ describe('save migrations', () => {
 
   it('pins the current save version', () => {
     // Bumping SAVE_VERSION has to be a conscious act, because from the first
-    // released build onwards it also requires a migration. 24 is M11's single
-    // bump (SPEC2 Z5); the milestone's later stages extend the v24 migration
-    // rather than adding numbers.
-    expect(SAVE_VERSION).toBe(24);
+    // released build onwards it also requires a migration. 25 is M14's single
+    // bump (SPEC2 Z5): the per-station cargo-history ring of the station
+    // x-ray owns it; the milestone's other bundles must not add numbers.
+    expect(SAVE_VERSION).toBe(25);
   });
 
   it('has a real migration for every step from version 2 on', () => {

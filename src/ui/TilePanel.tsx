@@ -23,7 +23,13 @@ import {
 import { inflatedCostCt } from '../sim/cargo/payment';
 import { CommandKind } from '../sim/commands/types';
 import { INDUSTRY_SPECS } from '../sim/industry/types';
-import { isOneWay, SIGNAL_KIND_KEYS, signalDirection, signalKind, SignalKind } from '../sim/map/signals';
+import {
+  isOneWay,
+  SIGNAL_KIND_KEYS,
+  signalDirection,
+  signalKind,
+  SignalKind,
+} from '../sim/map/signals';
 import { WAYPOINT_KIND_KEYS } from '../sim/map/waypoints';
 import { TERRAIN_NAME_KEYS } from '../sim/map/terrain';
 import { SCREEN_ARROWS } from './signalCycle';
@@ -32,6 +38,7 @@ import { RAIL_TYPE_COST_CT, RailType } from '../sim/map/track';
 import { ConnectPanel } from './ConnectPanel';
 import { CouncilPanel } from './CouncilPanel';
 import { DeliveryPanel } from './DeliveryPanel';
+import { StationXray } from './StationPanel';
 import type { SimClient } from './SimClient';
 import { useSimStore, type Tool } from './store';
 
@@ -330,10 +337,6 @@ export function TilePanel({ client }: { readonly client: SimClient }): ReactElem
               </dd>
             </div>
             <div>
-              <dt>{t('ui.station.waiting')}</dt>
-              <dd className="value value--mono">{station.waiting}</dd>
-            </div>
-            <div>
               <dt>{t('ui.station.modules')}</dt>
               <dd className="value value--mono">{station.modules.length}</dd>
             </div>
@@ -362,7 +365,9 @@ export function TilePanel({ client }: { readonly client: SimClient }): ReactElem
               {t('ui.station.transferNode')}
             </label>
           )}
-          {station.rating < 40 && <p className="panel__hint">{t('ui.station.lowRating')}</p>}
+          {/* The x-ray of SPEC2 M14: five terms, the dominant loss named,
+              waiting per cargo, and the twelve-month history ring. */}
+          <StationXray station={station} />
         </>
       )}
 

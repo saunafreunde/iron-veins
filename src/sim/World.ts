@@ -37,17 +37,20 @@ import { BlockIndex } from './signals/blocks';
 import { RoadPathfinder } from './net/roadPath';
 import {
   buildLineStore,
+  buildStation,
   buildVehicleStore,
   encodeLines,
   encodeStations,
   encodeVehicles,
   type LineSave,
+  type StationSave,
   type VehicleSave,
 } from './save/entities';
 import { LineStore } from './lines/LineStore';
 import { assignStationIndustries } from './industry/catchment';
 import { openNewIndustries } from './industry/lifecycle';
 import { SaveFormatError } from './save/format';
+import { rollStationHistories } from './station/history';
 import type { Station } from './station/types';
 import {
   collectIndustryOutput,
@@ -96,7 +99,8 @@ export interface WorldStateData {
   map: TileMapData;
   towns: Town[];
   industries: Industry[];
-  stations: Station[];
+  /** Save shape, not the live one: the M14 ring travels as plain numbers. */
+  stations: StationSave[];
   vehicles: VehicleSave[];
   /** The lines of section 12.2 (M11): shared order lists, saved and hashed. */
   lines: LineSave[];
@@ -420,6 +424,9 @@ export class World {
       // Before growTowns, which clears the traffic counters the rating reads.
       reviewCouncils(this);
       growTowns(this);
+      // Close the month on every station's cargo-history ring (SPEC2 M14):
+      // the day's collections above already landed in the month being closed.
+      rollStationHistories(this);
       for (let index = 0; index < this.companies.length; index++) {
         closeMonth(this.companies[index]!);
       }
@@ -436,7 +443,8 @@ export class World {
       this.news.post({
         tick: this.tick,
         category: NewsCategory.Finance,
-        severity: this.playerCompany.lastYearProfitCt < 0 ? NewsSeverity.Warning : NewsSeverity.Info,
+        severity:
+          this.playerCompany.lastYearProfitCt < 0 ? NewsSeverity.Warning : NewsSeverity.Info,
         messageKey: 'news.yearClosed',
         params: { year: this.date.year - 1, profitCt: this.playerCompany.profitThisYearCt },
         tileIndex: -1,
@@ -612,7 +620,7 @@ export class World {
 
     world.tick = data.tick;
     world.rng.setState(data.rng);
-    world.stations.push(...data.stations);
+    world.stations.push(...data.stations.map(buildStation));
     // What a station serves and accepts is derived from the map, so it is
     // worked out again here rather than trusted from the file.
     for (const station of world.stations) assignStationIndustries(world, station);
@@ -781,7 +789,9 @@ function hashDynamicState(h: Fnv1a64, world: World): void {
     if (project === null) continue;
     h.u32(project.stage).u32(project.fromX).u32(project.fromY);
     h.u32(project.toX).u32(project.toY).u32(project.depotX).u32(project.depotY);
-    h.u32(project.rail ? 1 : 0).u32(project.cargo).u32(project.startedTick);
+    h.u32(project.rail ? 1 : 0)
+      .u32(project.cargo)
+      .u32(project.startedTick);
     h.u32(project.railTrains);
     h.int(project.lineId);
     h.u32(project.specIds.length);
@@ -951,6 +961,18 @@ function hashDynamicState(h: Fnv1a64, world: World): void {
 export function hashWorld(world: World): string {
   const h = new Fnv1a64();
   hashDynamicState(h, world);
+
+  // The M14 cargo-history rings are saved state and therefore fingerprinted
+  // (D-134) - but like the tile layers below they live in the FULL digest
+  // only: ~700 numbers per station that move on a monthly cadence would make
+  // the per-day live digest pay for what it can never see change. Every
+  // event that moves the accumulators also moves a waiting stack or the
+  // overflow figure, both of which the live digest already covers.
+  for (const station of world.stations) {
+    h.u32(station.historyCursor);
+    h.intArray(station.history);
+    for (let i = 0; i < station.monthCounters.length; i++) h.f64(station.monthCounters[i]!);
+  }
 
   const map = world.map;
   h.u32(map.size);

@@ -32,7 +32,7 @@ import {
 } from './constants';
 import { loanLimitCt } from './economy/company';
 import { scheduleOf } from './lines/LineStore';
-import { industryMarkers } from './markers';
+import { industryMarkers, stationMarkers } from './markers';
 import {
   adviseFleet,
   lineProfitPerYearCt,
@@ -47,7 +47,6 @@ import { bookValueCt, companyValueCt, monthsInOrder } from './economy/ledger';
 import { contractProgress, isOpen } from './economy/contracts';
 import { SaveCorruptionError, SaveFormatError } from './save/format';
 import { decodeSave, encodeSave } from './save/serialize';
-import { stationRating } from './station/types';
 import { councilRating, exclusiveRightsCostCt, TOWN_MEASURE_COUNT } from './town/council';
 import { calendarFromTick, hashWorldLive, World } from './World';
 
@@ -274,21 +273,17 @@ function postNews(current: World): void {
   });
 }
 
+/**
+ * The stations with their M14 x-ray (rating terms, per-cargo waiting, the
+ * twelve-month ring). Assembled in sim/markers.ts so a unit test can hold
+ * the rows against the state (the D-174 pattern).
+ */
+function postStations(current: World): void {
+  scope.postMessage({ type: 'stationsChanged', stations: stationMarkers(current) });
+}
+
 function postStructure(current: World): void {
-  scope.postMessage({
-    type: 'stationsChanged',
-    stations: current.stations.map((station) => ({
-      id: station.id,
-      name: station.name,
-      ownerId: station.ownerId,
-      x: station.x,
-      y: station.y,
-      rating: stationRating(station, current.tick),
-      waiting: Math.round(station.waiting.reduce((sum, stack) => sum + stack.amount, 0)),
-      transferNode: station.transferNode,
-      modules: station.modules.map((module) => ({ kind: module.kind, x: module.x, y: module.y })),
-    })),
-  });
+  postStations(current);
   scope.postMessage({ type: 'industriesChanged', industries: industryMarkers(current.industries) });
   postFleet(current);
 }
@@ -492,7 +487,10 @@ function publishSnapshot(current: World, sink: SnapshotWriter): void {
   } else if (current.tick % FLEET_REFRESH_TICKS === 0) {
     // The list also shows state and earnings, which change without the fleet
     // changing size; a refresh once per game day keeps it honest without
-    // sending a message per tick.
+    // sending a message per tick. The stations ride the same cadence since
+    // M14: the x-ray's wait term, waiting table and visit counts all move
+    // without anything the structure signature can see moving.
+    postStations(current);
     postFleet(current);
   }
 

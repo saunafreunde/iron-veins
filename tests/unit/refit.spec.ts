@@ -47,6 +47,9 @@ function depotStation(kind: ModuleKind): StationMarker {
     waiting: 0,
     transferNode: false,
     modules: [{ kind, x: 10, y: 10 }],
+    terms: { wait: 0, frequency: 0, equipment: 0, reliability: 0, overflow: 0 },
+    waitingByCargo: [],
+    history: [],
   };
 }
 

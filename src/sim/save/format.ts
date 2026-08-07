@@ -50,15 +50,19 @@ export const SAVE_MAGIC = 'IRVN';
  * account of section 14.3, 21 the tenders of section 14.4, 22 the AI
  * competitors of section 15, 23 the world digest of M10 - a container-only
  * change: the hashed state itself is untouched, which the migration test
- * proves by hash identity - and 24 the M11 line backbone: the full order
+ * proves by hash identity - 24 the M11 line backbone: the full order
  * grammar of section 12.1 (waypoints, refit, dwell, conditional jumps), the
  * waypoint tile layer, and - Stage B of the same bump - the line entities of
  * section 12.2 with the per-vehicle assignment, the per-line auto-renewal
- * that replaces the company-wide flag, and the AI's line adoption (E-06).
+ * that replaces the company-wide flag, and the AI's line adoption (E-06);
  * M11's ONE bump (SPEC2 Z5): the later stages of the milestone extend the
- * same v24 migration rather than adding numbers.
+ * same v24 migration rather than adding numbers. 25 is M14's one bump: the
+ * per-station cargo-history ring of the station x-ray (twelve months of
+ * collected/delivered/expired per cargo, plus the month in progress). A
+ * pre-M14 world recorded no history, so the migration hands every station a
+ * zeroed ring - which is exactly what that world knew.
  */
-export const SAVE_VERSION = 24;
+export const SAVE_VERSION = 25;
 
 /** File extension used for manual and automatic saves. */
 export const SAVE_EXTENSION = '.ironsave';

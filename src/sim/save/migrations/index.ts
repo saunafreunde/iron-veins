@@ -1,5 +1,6 @@
 import { LEDGER_HISTORY_MONTHS, TILE_PUBLIC } from '../../constants';
 import { ACCOUNT_COUNT } from '../../economy/ledger';
+import { STATION_HISTORY_SIZE, STATION_MONTH_COUNTER_SIZE } from '../../station/history';
 import { SaveFormatError, SAVE_VERSION } from '../format';
 
 /**
@@ -542,7 +543,9 @@ const v19_to_v20: SaveMigration = (payload) => {
         const company = entry as Record<string, unknown>;
         const history = company['monthHistory'];
         if (!Array.isArray(history)) {
-          throw new SaveFormatError(`save.state.companies[${index}].monthHistory: expected an array`);
+          throw new SaveFormatError(
+            `save.state.companies[${index}].monthHistory: expected an array`,
+          );
         }
         const months = history.length / oldCount;
         const relaid: number[] = [];
@@ -555,7 +558,10 @@ const v19_to_v20: SaveMigration = (payload) => {
         return {
           ...company,
           accounts: widen(company['accounts'], `save.state.companies[${index}].accounts`),
-          yearAccounts: widen(company['yearAccounts'], `save.state.companies[${index}].yearAccounts`),
+          yearAccounts: widen(
+            company['yearAccounts'],
+            `save.state.companies[${index}].yearAccounts`,
+          ),
           lastYearAccounts: widen(
             company['lastYearAccounts'],
             `save.state.companies[${index}].lastYearAccounts`,
@@ -843,6 +849,40 @@ const v23_to_v24: SaveMigration = (payload) => {
 };
 
 /**
+ * M14 added the per-station cargo-history ring of the station x-ray (SPEC2
+ * M14, the milestone's one Z5 bump). A version 24 world recorded no history,
+ * so every station gets a zeroed ring, a cursor at slot 0 and zeroed
+ * month-in-progress counters - which is exactly what that world knew about
+ * its own past. Fields already present are kept, so the corpus trick of
+ * wrapping a CURRENT state in an old container cannot flatten real months
+ * back to zero.
+ */
+const v24_to_v25: SaveMigration = (payload) => {
+  const inner = state(payload);
+  // A payload with no station section is left as it is rather than rejected
+  // here: the decoder validates the section itself (the v17_to_v18 precedent).
+  const stations = Array.isArray(inner['stations']) ? inner['stations'] : null;
+  if (stations === null) return payload;
+
+  return {
+    ...payload,
+    state: {
+      ...inner,
+      stations: stations.map((station) => {
+        const previous = station as Record<string, unknown>;
+        return {
+          ...previous,
+          history: previous['history'] ?? new Array<number>(STATION_HISTORY_SIZE).fill(0),
+          historyCursor: previous['historyCursor'] ?? 0,
+          monthCounters:
+            previous['monthCounters'] ?? new Array<number>(STATION_MONTH_COUNTER_SIZE).fill(0),
+        };
+      }),
+    },
+  };
+};
+
+/**
  * Registry keyed by the version a migration reads (section 19.1).
  *
  * There is deliberately no entry for 1 -> 2: a version 1 world had no map at
@@ -872,6 +912,7 @@ export const SAVE_MIGRATIONS: ReadonlyMap<number, SaveMigration> = new Map<numbe
   [21, v21_to_v22],
   [22, v22_to_v23],
   [23, v23_to_v24],
+  [24, v24_to_v25],
 ]);
 
 /**

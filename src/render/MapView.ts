@@ -534,6 +534,13 @@ const NET_RAIL_COLOR = 0x9a938a;
 /** Vehicle dot edge length in the abstract mode. [screen px] */
 const VEHICLE_DOT_PX = 4;
 
+/**
+ * Segments the M14 catchment-preview circle is traced with. Enough that a
+ * ten-tile radius reads as a circle, few enough that the per-frame overlay
+ * never notices the cost.
+ */
+const CATCHMENT_SEGMENTS = 48;
+
 /** ModuleKind values, duplicated as constants to keep render free of sim enums. */
 const ROAD_DEPOT_KIND = 2;
 const RAIL_PLATFORM_KIND = 3;
@@ -936,6 +943,12 @@ export class MapView {
   /** This frame's alpha, shared by vehicle motion and the day/night phase. */
   private frameAlpha = 1;
   private previewRoute: readonly number[] | null = null;
+  /**
+   * The M14 catchment preview: centre and tile radius the station WOULD have
+   * after placing the hovered module, computed by the interface from the
+   * same D-095 rules the build applies (station/types.ts).
+   */
+  private catchmentPreview: { x: number; y: number; radius: number } | null = null;
   private readonly vehicleSprites: Sprite[] = [];
   /**
    * The company-colour pass of the two-pass tint (D-160) and the soft
@@ -3977,6 +3990,15 @@ export class MapView {
   }
 
   /**
+   * Catchment circle to preview while a station module tool hovers (SPEC2
+   * M14), or null. Follows the build-preview precedent: the interface
+   * computes WHAT to show, the overlay only draws it.
+   */
+  setCatchmentPreview(preview: { x: number; y: number; radius: number } | null): void {
+    this.catchmentPreview = preview;
+  }
+
+  /**
    * The flow atlas of SPEC2 M14 (D-177): the measured legs of the FlowMarker
    * block as quadratic volume arrows between station centres.
    *
@@ -4104,6 +4126,37 @@ export class MapView {
         else this.overlay.lineTo(centre.x, centre.y + TILE_H / 2);
       }
       this.overlay.stroke({ width: 4 / this.zoom, color: 0x4caf7d, alpha: 0.9 });
+    }
+
+    // The M14 catchment preview: the tile-space circle of the D-095 centre,
+    // traced point by point so it hugs the terrain the way the catchment
+    // rule itself measures in tile space - a flat screen ellipse would lie
+    // on every hillside. Redrawn per frame like the rest of the overlay.
+    const catchment = this.catchmentPreview;
+    if (catchment !== null) {
+      const size = map.size;
+      const last = size - 1;
+      for (let i = 0; i <= CATCHMENT_SEGMENTS; i++) {
+        const angle = (i / CATCHMENT_SEGMENTS) * Math.PI * 2;
+        const tx = catchment.x + catchment.radius * Math.cos(angle);
+        const ty = catchment.y + catchment.radius * Math.sin(angle);
+        // Height is sampled at the nearest tile inside the map; the circle
+        // itself may reach past the edge, exactly as the catchment does.
+        const hx = tx < 0 ? 0 : tx > last ? last : Math.floor(tx);
+        const hy = ty < 0 ? 0 : ty > last ? last : Math.floor(ty);
+        const point = tileToWorld(tx, ty, map.baseHeight(hx, hy));
+        if (i === 0) this.overlay.moveTo(point.x, point.y + TILE_H / 2);
+        else this.overlay.lineTo(point.x, point.y + TILE_H / 2);
+      }
+      this.overlay.stroke({ width: 2 / this.zoom, color: 0x4caf7d, alpha: 0.9 });
+
+      // The centre the catchment is measured from (D-095) - the one fact a
+      // player cannot read off the circle alone when a quay is involved.
+      const cx = catchment.x < 0 ? 0 : catchment.x > last ? last : catchment.x;
+      const cy = catchment.y < 0 ? 0 : catchment.y > last ? last : catchment.y;
+      const centre = tileToWorld(cx, cy, map.baseHeight(cx, cy));
+      this.diamond(centre.x, centre.y);
+      this.overlay.stroke({ width: 2 / this.zoom, color: 0x4caf7d, alpha: 0.9 });
     }
     for (const [tile, colour, alpha] of [
       [this.hovered, 0xf08020, 0.85],

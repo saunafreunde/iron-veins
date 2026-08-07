@@ -32,7 +32,6 @@ import {
   ROAD_STOP_UPKEEP_CT,
   ROAD_UPKEEP_PER_TILE_CT,
   BUILDING_DEMOLITION_COST_CT,
-  STATION_JOIN_DISTANCE,
   TILE_PUBLIC,
   TICKS_PER_YEAR,
   TOWN_ROAD_MAX_SLOPE,
@@ -66,11 +65,13 @@ import {
   airportSize,
   isSupportModule,
   isWaterModule,
+  joinTargetIdFor,
   ModuleKind,
   recomputeCentre,
   type Station,
   type StationModule,
 } from '../station/types';
+import { createMonthCounters, createStationHistory } from '../station/history';
 import { assignStationCatchment } from '../town/update';
 import { RoadBit } from '../town/types';
 import type { Cargo } from '../cargo/types';
@@ -631,28 +632,18 @@ function stationAt(world: World, tile: number): Station | null {
 /**
  * Nearest station of the same company within the join distance, so adjacent
  * modules form one station with a shared cargo pool (section 10).
+ *
+ * The rule itself lives in station/types.ts (`joinTargetIdFor`) since M14,
+ * because the catchment preview has to answer the same question BEFORE the
+ * click - one rule, two callers, no drift.
  */
 function joinTarget(world: World, x: number, y: number): Station | null {
-  let best: Station | null = null;
-  let bestDistanceSq = Infinity;
-
+  const id = joinTargetIdFor(world.stations, world.company.id, x, y);
+  if (id < 0) return null;
   for (const station of world.stations) {
-    if (station.ownerId !== world.company.id) continue;
-    for (const module of station.modules) {
-      const dx = module.x - x;
-      const dy = module.y - y;
-      const distanceSq = dx * dx + dy * dy;
-      if (distanceSq > STATION_JOIN_DISTANCE * STATION_JOIN_DISTANCE) continue;
-      if (
-        distanceSq < bestDistanceSq ||
-        (distanceSq === bestDistanceSq && best !== null && station.id < best.id)
-      ) {
-        bestDistanceSq = distanceSq;
-        best = station;
-      }
-    }
+    if (station.id === id) return station;
   }
-  return best;
+  return null;
 }
 
 /**
@@ -687,6 +678,9 @@ function attachModule(world: World, module: StationModule): Station {
       acceptedCargo: 0,
       servedIndustries: [],
       runwayFreeTick: [],
+      history: createStationHistory(),
+      historyCursor: 0,
+      monthCounters: createMonthCounters(),
     };
     world.stations.push(station);
   } else {

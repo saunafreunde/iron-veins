@@ -48,6 +48,9 @@ function station(id: number, x: number, y: number): StationMarker {
     waiting: 0,
     transferNode: false,
     modules: [{ kind: 0, x, y }],
+    terms: { wait: 0, frequency: 0, equipment: 0, reliability: 0, overflow: 0 },
+    waitingByCargo: [],
+    history: [],
   };
 }
 

@@ -8,7 +8,7 @@ import { RailType } from '../sim/map/track';
 import { inflatedCostCt } from '../sim/cargo/payment';
 import { planTrack } from '../sim/net/trackBuilder';
 import { AUTO_SIGNAL_SPACING_TILES, DEADLOCK_WARN_TICKS } from '../sim/constants';
-import { ModuleKind } from '../sim/station/types';
+import { catchmentAfterPlacing, joinTargetIdFor, ModuleKind } from '../sim/station/types';
 import type { SimClient } from './SimClient';
 import { audioEngine } from './audioBridge';
 import { planConnection } from './connect';
@@ -27,6 +27,27 @@ const AUDIO_REFRESH_MS = 120;
 
 /** Reused between refreshes so a running game allocates nothing for sound. */
 const audioScratch: VehicleAudioInput[] = [];
+
+/**
+ * Which module a station tool places - the SPEC2 M14 catchment preview needs
+ * the kind before the click, because a quay is left out of the D-095 centre.
+ * Kept in step with `commandForClick` below; tools missing here build no
+ * station module and preview no catchment.
+ */
+const MODULE_TOOL_KINDS: Partial<Record<Tool, ModuleKind>> = {
+  stop: ModuleKind.BusStop,
+  depot: ModuleKind.RoadDepot,
+  platform: ModuleKind.RailPlatform,
+  raildepot: ModuleKind.RailDepot,
+  airstrip: ModuleKind.Airstrip,
+  airport: ModuleKind.Airport,
+  intlairport: ModuleKind.InternationalAirport,
+  quay: ModuleKind.Quay,
+  shipdepot: ModuleKind.ShipDepot,
+  freightterminal: ModuleKind.FreightTerminal,
+  canopy: ModuleKind.Canopy,
+  coldstore: ModuleKind.ColdStore,
+};
 
 /**
  * Hosts the PixiJS map view inside the React tree.
@@ -193,6 +214,22 @@ export function MapCanvas({ client }: { readonly client: SimClient }): ReactElem
     view.onHover = (tile) => {
       const state = useSimStore.getState();
       state.setHoveredTile(tile);
+
+      // The M14 catchment preview: while a station-module tool hovers, show
+      // the circle the station WOULD serve - centre and radius from the same
+      // D-095 rules the build applies (station/types.ts), fed with the same
+      // join answer, so the preview and the outcome cannot disagree.
+      const moduleKind = MODULE_TOOL_KINDS[state.tool];
+      if (moduleKind !== undefined && tile !== null) {
+        const joinId = joinTargetIdFor(state.stations, 0, tile.x, tile.y);
+        const joined =
+          joinId < 0 ? undefined : state.stations.find((station) => station.id === joinId);
+        view.setCatchmentPreview(
+          catchmentAfterPlacing(joined?.modules ?? [], moduleKind, tile.x, tile.y),
+        );
+      } else {
+        view.setCatchmentPreview(null);
+      }
 
       // Live build preview: planned on the main thread with the same planner
       // the command uses, so the numbers shown and the numbers charged are the
@@ -445,6 +482,12 @@ export function MapCanvas({ client }: { readonly client: SimClient }): ReactElem
     // plan keeps its green route on the map for ever.
     if (trackPreview === null && connectPlan === null) {
       viewRef.current?.setPreviewRoute(null);
+    }
+    // The catchment circle likewise: switching away from a module tool must
+    // not leave the last hover's circle standing (next hover would never
+    // clear it if the pointer has left the map).
+    if (MODULE_TOOL_KINDS[tool] === undefined) {
+      viewRef.current?.setCatchmentPreview(null);
     }
   }, [tool, trackPreview, connectPlan]);
 

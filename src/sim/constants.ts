@@ -1115,6 +1115,25 @@ export const RATING_CANOPY_BONUS = 8;
 export const RATING_RELIABILITY_MAX = 10;
 export const RATING_OVERFLOW_PENALTY_MAX = 15;
 
+/**
+ * Months the per-station cargo-history ring remembers (SPEC2 M14). [months]
+ *
+ * Twelve completed months, one Int32 slot per month, cargo and counter -
+ * enough for the station panel's bar history to show a full year of
+ * collected/delivered/expired per cargo, small enough that the ring stays a
+ * preallocated fixed-size block (architecture law #7).
+ */
+export const STATION_HISTORY_MONTHS = 12;
+
+/**
+ * Smallest dominant rating loss the station x-ray names in its warning
+ * sentence (SPEC2 M14). [rating points]
+ *
+ * Below this every term is close to full marks and "Rating sinkt, weil ..."
+ * would be noise about a station that is fine.
+ */
+export const RATING_XRAY_WARN_LOSS = 5;
+
 // -------------------------------------------------------------------- towns
 
 /** Inhabitants per tonne of goods demanded per month. */

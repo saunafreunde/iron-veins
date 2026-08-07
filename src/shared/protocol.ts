@@ -128,6 +128,40 @@ export interface StationModuleMarker {
   readonly y: number;
 }
 
+/**
+ * The five 10.1 terms of the station x-ray (SPEC2 M14), exactly as the
+ * simulation's own `ratingTerms` computed them - the panel displays these,
+ * it never recomputes them.
+ */
+export interface StationTermsMarker {
+  readonly wait: number;
+  readonly frequency: number;
+  readonly equipment: number;
+  readonly reliability: number;
+  /** The malus - subtracted, 0 when nothing overflowed recently. */
+  readonly overflow: number;
+}
+
+/** One row of the per-cargo waiting table (SPEC2 M14). */
+export interface StationWaitingMarker {
+  readonly cargo: number;
+  readonly units: number;
+  /** Age of the oldest waiting parcel of this cargo. [days] */
+  readonly oldestDays: number;
+}
+
+/**
+ * Twelve completed months of one cargo's history at one station, oldest
+ * first (SPEC2 M14). Only cargos with any recorded month travel - most
+ * stations handle two or three of the eighteen.
+ */
+export interface StationHistoryMarker {
+  readonly cargo: number;
+  readonly collected: readonly number[];
+  readonly delivered: readonly number[];
+  readonly expired: readonly number[];
+}
+
 export interface StationMarker {
   readonly id: number;
   readonly name: string;
@@ -139,6 +173,12 @@ export interface StationMarker {
   /** Marked as an "Umsteigeknoten" of section 12.3. */
   readonly transferNode: boolean;
   readonly modules: readonly StationModuleMarker[];
+  /** The x-ray of SPEC2 M14: the five 10.1 terms, individually quantified. */
+  readonly terms: StationTermsMarker;
+  /** Waiting cargo per type, ascending cargo id - the panel's table. */
+  readonly waitingByCargo: readonly StationWaitingMarker[];
+  /** The twelve-month ring, one row per cargo that has any history. */
+  readonly history: readonly StationHistoryMarker[];
 }
 
 /**

@@ -12,6 +12,7 @@ import {
   RATING_WAIT_MAX,
   RELIABILITY_MAX,
   STATION_BASE_RADIUS,
+  STATION_JOIN_DISTANCE,
   STATION_MAX_RADIUS,
   STATION_MODULES_PER_RADIUS,
   STATION_RATING_BASE,
@@ -167,6 +168,25 @@ export interface Station {
    * is why an international airport is worth its price.
    */
   runwayFreeTick: number[];
+
+  /**
+   * The twelve-month cargo-history ring of SPEC2 M14 (v25 save state).
+   *
+   * STATION_HISTORY_MONTHS completed months, each holding CARGO_COUNT x
+   * STATION_HISTORY_FIELD_COUNT Int32 counters - see station/history.ts for
+   * the layout and the write path. Preallocated at creation (law #7), saved
+   * and covered by the FULL world digest.
+   */
+  history: Int32Array;
+  /** Ring slot the NEXT completed month will be written to, 0..11. */
+  historyCursor: number;
+  /**
+   * The month in progress, accumulated per cargo and counter as events happen
+   * (Float64 because cargo amounts are fractional shares) and rounded into the
+   * ring by the monthly hook. Same save/hash treatment as the ring - a load
+   * mid-month must not silently drop half a month of history.
+   */
+  monthCounters: Float64Array;
 }
 
 /** Does the station have at least one module of this kind? */
@@ -220,11 +240,15 @@ function hasPlatformAt(station: Station, x: number, y: number): boolean {
   return false;
 }
 
+/** Catchment radius for a station of `count` modules (section 10). */
+export function radiusForModuleCount(count: number): number {
+  const radius = STATION_BASE_RADIUS + Math.floor(count / STATION_MODULES_PER_RADIUS);
+  return radius > STATION_MAX_RADIUS ? STATION_MAX_RADIUS : radius;
+}
+
 /** Catchment radius grows with the number of modules (section 10). */
 export function stationRadius(station: Station): number {
-  const radius =
-    STATION_BASE_RADIUS + Math.floor(station.modules.length / STATION_MODULES_PER_RADIUS);
-  return radius > STATION_MAX_RADIUS ? STATION_MAX_RADIUS : radius;
+  return radiusForModuleCount(station.modules.length);
 }
 
 /** True when a tile lies inside the station's catchment area. */
@@ -247,25 +271,111 @@ export function inCatchment(station: Station, x: number, y: number): boolean {
  */
 export function recomputeCentre(station: Station): void {
   if (station.modules.length === 0) return;
+  const centre = centreOfModules(station.modules);
+  station.x = centre.x;
+  station.y = centre.y;
+}
 
+/** The minimum a module contributes to the centre and join rules. */
+export interface ModulePlace {
+  readonly kind: number;
+  readonly x: number;
+  readonly y: number;
+}
+
+/**
+ * THE centre rule of D-095, as a pure function over module places.
+ *
+ * `recomputeCentre` applies it to the live station, and the catchment
+ * preview of SPEC2 M14 applies it to a module that does not exist yet - one
+ * rule, so the circle drawn before the click is the circle the build
+ * produces.
+ */
+export function centreOfModules(modules: readonly ModulePlace[]): { x: number; y: number } {
   let sumX = 0;
   let sumY = 0;
   let counted = 0;
-  for (const module of station.modules) {
+  for (const module of modules) {
     if (isWaterModule(module.kind)) continue;
     sumX += module.x;
     sumY += module.y;
     counted++;
   }
   if (counted === 0) {
-    for (const module of station.modules) {
+    for (const module of modules) {
       sumX += module.x;
       sumY += module.y;
     }
-    counted = station.modules.length;
+    counted = modules.length;
   }
-  station.x = Math.round(sumX / counted);
-  station.y = Math.round(sumY / counted);
+  return { x: Math.round(sumX / counted), y: Math.round(sumY / counted) };
+}
+
+/** The minimum a station contributes to the join rule. */
+export interface JoinCandidate {
+  readonly id: number;
+  readonly ownerId: number;
+  readonly modules: readonly ModulePlace[];
+}
+
+/**
+ * Which of `ownerId`'s stations a module built at (x, y) would join, or -1
+ * for a new station - THE join rule of section 10, shared between the build
+ * command (commands/build.ts) and the M14 catchment preview so the two can
+ * never disagree about where a module will land.
+ *
+ * Nearest module within STATION_JOIN_DISTANCE wins; a distance tie goes to
+ * the lower station id, so the answer cannot depend on iteration order.
+ */
+export function joinTargetIdFor(
+  stations: readonly JoinCandidate[],
+  ownerId: number,
+  x: number,
+  y: number,
+): number {
+  let bestId = -1;
+  let bestDistanceSq = Number.POSITIVE_INFINITY;
+  for (const station of stations) {
+    if (station.ownerId !== ownerId) continue;
+    for (const module of station.modules) {
+      const dx = module.x - x;
+      const dy = module.y - y;
+      const distanceSq = dx * dx + dy * dy;
+      if (distanceSq > STATION_JOIN_DISTANCE * STATION_JOIN_DISTANCE) continue;
+      if (
+        distanceSq < bestDistanceSq ||
+        (distanceSq === bestDistanceSq && bestId >= 0 && station.id < bestId)
+      ) {
+        bestDistanceSq = distanceSq;
+        bestId = station.id;
+      }
+    }
+  }
+  return bestId;
+}
+
+/** What the M14 catchment preview draws: a circle in tile space. */
+export interface CatchmentPreview {
+  readonly x: number;
+  readonly y: number;
+  readonly radius: number;
+}
+
+/**
+ * Centre and radius the station WOULD have after placing one more module -
+ * the live preview of SPEC2 M14, built from the same D-095 centre rule and
+ * the same radius rule the simulation applies after the build. `existing` is
+ * the joined station's modules, or empty for a brand-new station.
+ */
+export function catchmentAfterPlacing(
+  existing: readonly ModulePlace[],
+  kind: number,
+  x: number,
+  y: number,
+): CatchmentPreview {
+  const modules = [...existing, { kind, x, y }];
+  const centre = centreOfModules(modules);
+  return { x: centre.x, y: centre.y, radius: radiusForModuleCount(modules.length) };
 }
 
 /** Drop visits that fell out of the frequency window. */
@@ -279,44 +389,144 @@ export function trimVisits(station: Station, nowTick: number): void {
 }
 
 /**
- * Station rating, 0..100 (section 10.1).
+ * The five 10.1 terms, individually quantified (SPEC2 M14).
  *
- * The rating is not decoration: it is the share of the cargo produced nearby
- * that actually turns up here. A neglected station therefore gets less cargo,
- * which makes it even less attractive to serve - the death spiral is intended,
- * and the UI has to say so plainly.
+ * `overflow` is the malus and is SUBTRACTED; the four others add onto the
+ * base. The rating is round(clamp(base + wait + frequency + equipment +
+ * reliability - overflow)) and nothing else - `stationRating` below is
+ * built ON these terms, so the x-ray panel and the rating can never quote
+ * two different formulas.
  */
-export function stationRating(station: Station, nowTick: number): number {
-  let rating = STATION_RATING_BASE;
+export interface RatingTerms {
+  /** 0..RATING_WAIT_MAX, full while the oldest cargo is fresh. */
+  wait: number;
+  /** 0..RATING_FREQUENCY_MAX, from vehicle visits in the window. */
+  frequency: number;
+  /** 0..RATING_EQUIPMENT_MAX, from the modules. */
+  equipment: number;
+  /** 0..RATING_RELIABILITY_MAX, mean reliability of the serving vehicles. */
+  reliability: number;
+  /** 0..RATING_OVERFLOW_PENALTY_MAX, the malus for cargo lost to overflow. */
+  overflow: number;
+}
 
+/**
+ * Compute the five terms into `out` (no allocation - the collection gate and
+ * the town production call the rating from daily hooks inside the tick).
+ */
+export function ratingTerms(station: Station, nowTick: number, out: RatingTerms): RatingTerms {
   // Waiting time: full marks while the oldest cargo is fresh.
   const ageDays = oldestAge(station.waiting, nowTick) / TICKS_PER_DAY;
   if (station.waiting.length === 0 || ageDays <= RATING_WAIT_GOOD_DAYS) {
-    rating += RATING_WAIT_MAX;
+    out.wait = RATING_WAIT_MAX;
   } else if (ageDays < RATING_WAIT_BAD_DAYS) {
     const span = RATING_WAIT_BAD_DAYS - RATING_WAIT_GOOD_DAYS;
-    rating += RATING_WAIT_MAX * (1 - (ageDays - RATING_WAIT_GOOD_DAYS) / span);
+    out.wait = RATING_WAIT_MAX * (1 - (ageDays - RATING_WAIT_GOOD_DAYS) / span);
+  } else {
+    out.wait = 0;
   }
 
   // Frequency: how often a vehicle called recently.
-  const visits = station.visitTicks.length;
-  const frequency = visits / RATING_FREQUENCY_SATURATION_VISITS;
-  rating += RATING_FREQUENCY_MAX * (frequency > 1 ? 1 : frequency);
+  const frequency = station.visitTicks.length / RATING_FREQUENCY_SATURATION_VISITS;
+  out.frequency = RATING_FREQUENCY_MAX * (frequency > 1 ? 1 : frequency);
 
   // Equipment: every module beyond the first adds a little comfort, and a
   // canopy is worth eight points of it on its own (section 10).
   const modules = (station.modules.length - 1) / 6;
   let equipment = RATING_EQUIPMENT_MAX * (modules > 1 ? 1 : modules < 0 ? 0 : modules);
   if (hasModule(station, ModuleKind.Canopy)) equipment += RATING_CANOPY_BONUS;
-  rating += equipment > RATING_EQUIPMENT_MAX ? RATING_EQUIPMENT_MAX : equipment;
+  out.equipment = equipment > RATING_EQUIPMENT_MAX ? RATING_EQUIPMENT_MAX : equipment;
 
   // Reliability of the vehicles that serve it.
-  rating += (RATING_RELIABILITY_MAX * station.servedReliability) / RELIABILITY_MAX;
+  out.reliability = (RATING_RELIABILITY_MAX * station.servedReliability) / RELIABILITY_MAX;
 
   // Penalty for cargo that was turned away because the station was full.
   const overflow = station.overflowUnits / 500;
-  rating -= RATING_OVERFLOW_PENALTY_MAX * (overflow > 1 ? 1 : overflow);
+  out.overflow = RATING_OVERFLOW_PENALTY_MAX * (overflow > 1 ? 1 : overflow);
 
+  return out;
+}
+
+/** Reused by stationRating so the daily hooks allocate nothing. */
+const termsScratch: RatingTerms = {
+  wait: 0,
+  frequency: 0,
+  equipment: 0,
+  reliability: 0,
+  overflow: 0,
+};
+
+/** The five term names, in the fixed order the loss comparison runs in. */
+export const RatingTermIndex = {
+  Wait: 0,
+  Frequency: 1,
+  Equipment: 2,
+  Reliability: 3,
+  Overflow: 4,
+} as const;
+export type RatingTermIndex = (typeof RatingTermIndex)[keyof typeof RatingTermIndex];
+
+/** How many points each term can lose at most, by RatingTermIndex. */
+export const RATING_TERM_MAX: readonly number[] = [
+  RATING_WAIT_MAX,
+  RATING_FREQUENCY_MAX,
+  RATING_EQUIPMENT_MAX,
+  RATING_RELIABILITY_MAX,
+  RATING_OVERFLOW_PENALTY_MAX,
+];
+
+/** Points the term at `index` is currently losing against its maximum. */
+export function ratingLossOf(terms: RatingTerms, index: RatingTermIndex): number {
+  switch (index) {
+    case RatingTermIndex.Wait:
+      return RATING_WAIT_MAX - terms.wait;
+    case RatingTermIndex.Frequency:
+      return RATING_FREQUENCY_MAX - terms.frequency;
+    case RatingTermIndex.Equipment:
+      return RATING_EQUIPMENT_MAX - terms.equipment;
+    case RatingTermIndex.Reliability:
+      return RATING_RELIABILITY_MAX - terms.reliability;
+    case RatingTermIndex.Overflow:
+      return terms.overflow;
+  }
+}
+
+/**
+ * The DOMINANT loss term - the one the x-ray's "Rating sinkt, weil ..."
+ * sentence names (SPEC2 M14). Ties go to the lower index, i.e. the order of
+ * RatingTermIndex, so the sentence cannot flicker between two equal causes.
+ */
+export function dominantLossTerm(terms: RatingTerms): RatingTermIndex {
+  let best: RatingTermIndex = RatingTermIndex.Wait;
+  let bestLoss = ratingLossOf(terms, best);
+  for (let index = 1; index < RATING_TERM_MAX.length; index++) {
+    const loss = ratingLossOf(terms, index as RatingTermIndex);
+    if (loss > bestLoss) {
+      best = index as RatingTermIndex;
+      bestLoss = loss;
+    }
+  }
+  return best;
+}
+
+/**
+ * Station rating, 0..100 (section 10.1).
+ *
+ * The rating is not decoration: it is the share of the cargo produced nearby
+ * that actually turns up here. A neglected station therefore gets less cargo,
+ * which makes it even less attractive to serve - the death spiral is intended,
+ * and the UI has to say so plainly. Since M14 it is the SUM of the five
+ * ratingTerms above - one source of truth for the x-ray and the gate alike.
+ */
+export function stationRating(station: Station, nowTick: number): number {
+  const terms = ratingTerms(station, nowTick, termsScratch);
+  const rating =
+    STATION_RATING_BASE +
+    terms.wait +
+    terms.frequency +
+    terms.equipment +
+    terms.reliability -
+    terms.overflow;
   const clamped = rating < 0 ? 0 : rating > 100 ? 100 : rating;
   return Math.round(clamped);
 }

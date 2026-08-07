@@ -48,6 +48,7 @@ import {
 import { bookExpense, bookRevenue } from '../economy/company';
 import { refitCapacity, refitPriceCt } from './refit';
 import { serviceVehicle } from './lifecycle';
+import { recordStationCargo, StationHistoryField } from '../station/history';
 import { deliverToIndustry } from '../industry/production';
 import { isOneWay, signalDirection, signalKind, SignalKind } from '../map/signals';
 import { flightPath } from '../net/airPath';
@@ -706,6 +707,8 @@ function serveStation(world: World, id: number, station: Station): number {
  * rating of the very station that is working well.
  */
 function deliverCargo(world: World, station: Station, cargo: Cargo, amount: number): void {
+  // The M14 history ring: cargo that arrived here as its destination.
+  recordStationCargo(station, StationHistoryField.Delivered, cargo, amount);
   let left = amount;
 
   for (const industryId of station.servedIndustries) {
