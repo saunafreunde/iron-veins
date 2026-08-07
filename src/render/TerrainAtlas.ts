@@ -35,9 +35,20 @@ const STEP = 16 * ATLAS_SCALE;
  * renderer where the ground actually is inside the cell. That coupling used to
  * be an unwritten agreement between two files.
  */
+/**
+ * Headroom above the tile diamond and skirt below it, in HEIGHT STEPS.
+ *
+ * Exported because the chunk AABBs of the hybrid renderer (chunks.ts) must
+ * enclose everything a cell can draw: a cell that grew headroom without the
+ * chunk maths following would silently clip every tall building at a chunk
+ * edge - the exact unwritten-agreement failure D-117 fixed with `anchorY`.
+ */
+export const CELL_HEADROOM_STEPS = 3;
+export const CELL_SKIRT_STEPS = 1;
+
 const CELL_W = TILE_W;
-const CELL_TOP = STEP * 3;
-const CELL_H = TILE_H + CELL_TOP + STEP;
+const CELL_TOP = STEP * CELL_HEADROOM_STEPS;
+const CELL_H = TILE_H + CELL_TOP + STEP * CELL_SKIRT_STEPS;
 
 /** Speckle colour per terrain, used for a little surface texture. */
 const TERRAIN_SPECKLE: readonly string[] = [

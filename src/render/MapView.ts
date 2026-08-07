@@ -1,4 +1,12 @@
-import { Application, Container, Graphics, Rectangle, Sprite, Texture } from 'pixi.js';
+import {
+  Application,
+  Container,
+  Graphics,
+  Rectangle,
+  RenderTexture,
+  Sprite,
+  Texture,
+} from 'pixi.js';
 import type { IndustryMarker, StationMarker, TownMarker } from '../shared/protocol';
 import {
   SNAPSHOT_RESERVED_STRIDE,
@@ -40,6 +48,17 @@ export interface VehicleAudioInput {
   distance: number;
 }
 import { ATLAS_SCALE, buildTerrainAtlas, type AtlasFrame, type TerrainAtlas } from './TerrainAtlas';
+import {
+  CHUNK_TILES,
+  chunkAabb,
+  chunkChecksum,
+  chunksPerSide,
+  computeDirtySet,
+  extractNetworkSegments,
+  NetKind,
+  visibleChunks,
+  type NetSegment,
+} from './chunks';
 import { DAY_TINT_NEUTRAL, dayNightTint } from './dayNight';
 
 /**
@@ -71,6 +90,46 @@ const BLOCK_COLOURS: readonly number[] = [
 
 /** Below this zoom the map is drawn as a plain overview: no roads, no houses. */
 const DETAIL_ZOOM_MIN = 0.5;
+
+/**
+ * At and below this zoom the baked chunk path replaces the per-tile sprite
+ * pool (E-04, D-161); above it the M10 drawOrder sprite path is unchanged.
+ */
+const CHUNK_ZOOM_MAX = 0.5;
+
+/**
+ * At and below this zoom the map is the abstract overview of SPEC.md 16.1:
+ * terrain chunks, network polylines and vehicle dots - nothing else.
+ */
+const ABSTRACT_ZOOM_MAX = 0.25;
+
+/**
+ * Baked chunk textures kept per profile before least-recently-used eviction.
+ * A full-profile texture is 1024x664 px (~2.7 MB), a terrain-profile texture
+ * 512x332 px (~0.7 MB); the caps bound GPU memory at roughly 90/65 MB while
+ * staying far above what one viewport shows. Chunks used in the current
+ * frame are never evicted, so an oversized screen degrades to a larger
+ * cache, not to thrashing.
+ */
+const CHUNK_CACHE_MAX_FULL = 32;
+const CHUNK_CACHE_MAX_TERRAIN = 96;
+
+/** Cached polyline lists kept before unused chunks are dropped. [chunks] */
+const SEGMENT_CACHE_MAX = 256;
+
+/**
+ * Abstract-mode network style. Widths are SCREEN pixels (divided by zoom at
+ * draw time); the colours are section 16.3's road asphalt and track ballast
+ * - the ballast tone rather than the rail tone, because a dark grey line on
+ * dark green terrain is a network the overview exists to show, not hide.
+ */
+const NET_ROAD_WIDTH_PX = 2;
+const NET_RAIL_WIDTH_PX = 2.5;
+const NET_ROAD_COLOR = 0x4a4a4d;
+const NET_RAIL_COLOR = 0x9a938a;
+
+/** Vehicle dot edge length in the abstract mode. [screen px] */
+const VEHICLE_DOT_PX = 4;
 
 /** ModuleKind values, duplicated as constants to keep render free of sim enums. */
 const ROAD_DEPOT_KIND = 2;
@@ -119,12 +178,63 @@ export interface TileInfo {
  */
 const WAYPOINT_TINTS: readonly number[] = [0xffffff, 0x4d8fe0, 0xe0564d, 0xe0a34d];
 
+/** One baked chunk: its texture and the checksum of what was baked into it. */
+interface ChunkEntry {
+  readonly texture: RenderTexture;
+  readonly chunkX: number;
+  readonly chunkY: number;
+  checksum: number;
+  /** Frame stamp of the last frame this chunk was on screen, for the LRU. */
+  lastUsed: number;
+}
+
+/** Cached network polylines of one chunk, for the abstract mode. */
+interface SegmentEntry {
+  readonly checksum: number;
+  readonly segments: readonly NetSegment[];
+  lastUsed: number;
+}
+
 export class MapView {
   private readonly app = new Application();
   private readonly world = new Container();
+  /**
+   * Everything that IS the world - chunks, tiles, network lines, vehicles -
+   * as one container, so the day/night tint of D-127 stays a single
+   * assignment however many drawing paths feed it. The overlay is a sibling:
+   * interface does not dim at night.
+   */
+  private readonly art = new Container();
   private readonly tiles = new Container();
   private readonly overlay = new Graphics();
   private readonly pool: Sprite[] = [];
+
+  /** The baked-chunk layer of the hybrid renderer (E-04), under the sprites. */
+  private readonly chunkLayer = new Container();
+  private readonly chunkSprites: Sprite[] = [];
+  private readonly fullChunks = new Map<number, ChunkEntry>();
+  private readonly terrainChunks = new Map<number, ChunkEntry>();
+  private readonly segmentCache = new Map<number, SegmentEntry>();
+  /** Evicted RenderTextures per profile, recycled instead of reallocated. */
+  private readonly freeFullTextures: RenderTexture[] = [];
+  private readonly freeTerrainTextures: RenderTexture[] = [];
+  /** Off-stage container the chunk bake renders through. */
+  private readonly bakeRoot = new Container();
+  private readonly bakePool: Sprite[] = [];
+  private readonly visibleChunkScratch: number[] = [];
+  private readonly dirtyChunkScratch: number[] = [];
+  /** Map revision the chunk caches were last diffed against. */
+  private chunkSeenRevision = -1;
+  /** Hash of the visible chunk set, so the net redraws only when it moves. */
+  private chunkSetHash = -1;
+  /** The abstract network polylines (0.25x), rebuilt only when stale. */
+  private readonly net = new Graphics();
+  private netDirty = true;
+  /** Vehicle dots of the abstract mode, redrawn every frame - they move. */
+  private readonly dots = new Graphics();
+  private vehicleSpritesHidden = false;
+  /** Owner per drawn vehicle this frame, parallel to `vehicleScreen`. */
+  private readonly vehicleOwners: number[] = [];
 
   private atlas: TerrainAtlas | null = null;
   /** Ground line inside an atlas cell, in world pixels. */
@@ -235,7 +345,17 @@ export class MapView {
     // key (section 16.1) - a vehicle layer on top can never put a train
     // behind a hill. Pixi only re-sorts when a zIndex actually changed.
     this.tiles.sortableChildren = true;
-    this.world.addChild(this.tiles);
+    // Chunk sprites sort by their diagonal (chunkX + chunkY), which keeps the
+    // painter's order between chunks; the bake root sorts its sprites by the
+    // same drawOrder keys the live path uses, so a baked chunk is
+    // pixel-identical to what the sprite pool would have drawn.
+    this.chunkLayer.sortableChildren = true;
+    this.bakeRoot.sortableChildren = true;
+    this.art.addChild(this.chunkLayer);
+    this.art.addChild(this.net);
+    this.art.addChild(this.tiles);
+    this.art.addChild(this.dots);
+    this.world.addChild(this.art);
     this.world.addChild(this.overlay);
     this.app.stage.addChild(this.world);
 
@@ -249,6 +369,7 @@ export class MapView {
     this.towns = towns;
     this.industries = industries;
     this.builtRevision = -1;
+    this.clearChunkCaches();
 
     const start = towns[0];
     if (start !== undefined) this.centreOnTile(start.x, start.y);
@@ -321,6 +442,17 @@ export class MapView {
     if (!this.live) return; // attach is still running and will clean up
     this.live = false;
     this.app.ticker.remove(this.update);
+    // Chunk RenderTextures live in the caches, not in the stage tree, so the
+    // app's own destroy would leak them on the GPU.
+    for (const entry of this.fullChunks.values()) entry.texture.destroy(true);
+    for (const entry of this.terrainChunks.values()) entry.texture.destroy(true);
+    for (const texture of this.freeFullTextures) texture.destroy(true);
+    for (const texture of this.freeTerrainTextures) texture.destroy(true);
+    this.fullChunks.clear();
+    this.terrainChunks.clear();
+    this.segmentCache.clear();
+    this.freeFullTextures.length = 0;
+    this.freeTerrainTextures.length = 0;
     this.app.destroy(true, { children: true });
     this.frameCache.clear();
   }
@@ -445,18 +577,32 @@ export class MapView {
       this.app.screen.height / 2 - this.centreY * this.zoom,
     );
 
-    // Day/night (section 16.3): ONE tint on the tile/vehicle container,
-    // computed once per frame from the snapshot tick and multiplied down the
-    // tree by the GPU - never per-sprite work. The overlay Graphics and the
-    // minimap are deliberately outside it: selection markers, previews and the
-    // F3 blocks are interface, and interface does not dim at night (D-127).
+    // Day/night (section 16.3): ONE tint on the world-art container -
+    // chunks, tiles, network lines and vehicles alike - computed once per
+    // frame from the snapshot tick and multiplied down the tree by the GPU;
+    // never per-sprite work, and the baked chunk textures take exactly the
+    // same modulation as the sprite path. The overlay Graphics and the
+    // minimap are deliberately outside it: selection markers, previews and
+    // the F3 blocks are interface, and interface does not dim at night
+    // (D-127).
     const tint = this.dayNight
       ? dayNightTint(this.tickSource === null ? 0 : this.tickSource())
       : DAY_TINT_NEUTRAL;
     if (tint !== this.appliedTint) {
       this.appliedTint = tint;
-      this.tiles.tint = tint;
+      this.art.tint = tint;
     }
+
+    // The hybrid renderer of E-04: at and below 0.5x the static world comes
+    // from baked 32x32-tile chunks and only markers and vehicles stay live
+    // sprites; at 0.25x the overview abstracts to terrain + network
+    // polylines + vehicle dots (SPEC.md 16.1). Detail zooms keep the M10
+    // sprite path untouched.
+    const chunked = this.zoom <= CHUNK_ZOOM_MAX;
+    const abstract = this.zoom <= ABSTRACT_ZOOM_MAX;
+    this.chunkLayer.visible = chunked;
+    this.net.visible = abstract;
+    this.dots.visible = abstract;
 
     const bounds = this.visibleTileBounds(map.size);
     const changed =
@@ -468,12 +614,17 @@ export class MapView {
       bounds.maxY !== this.builtBounds.maxY;
 
     if (changed) {
-      this.rebuild(map, bounds);
+      if (chunked) {
+        this.maintainChunks(map, abstract);
+        this.rebuildMarkers(map, bounds, abstract);
+      } else {
+        this.rebuild(map, bounds);
+      }
       this.builtRevision = map.revision;
       this.builtZoom = this.zoom;
       this.builtBounds = bounds;
     }
-    this.drawVehicles(map);
+    this.drawVehicles(map, abstract);
     this.drawOverlay(map);
   };
 
@@ -485,18 +636,25 @@ export class MapView {
     if (this.centreY > size * TILE_H) this.centreY = size * TILE_H;
   }
 
+  /** The viewport in unzoomed world pixels. */
+  private viewRect(): { left: number; top: number; right: number; bottom: number } {
+    const halfW = this.app.screen.width / 2 / this.zoom;
+    const halfH = this.app.screen.height / 2 / this.zoom;
+    return {
+      left: this.centreX - halfW,
+      right: this.centreX + halfW,
+      top: this.centreY - halfH,
+      bottom: this.centreY + halfH,
+    };
+  }
+
   private visibleTileBounds(size: number): {
     minX: number;
     minY: number;
     maxX: number;
     maxY: number;
   } {
-    const halfW = this.app.screen.width / 2 / this.zoom;
-    const halfH = this.app.screen.height / 2 / this.zoom;
-    const left = this.centreX - halfW;
-    const right = this.centreX + halfW;
-    const top = this.centreY - halfH;
-    const bottom = this.centreY + halfH;
+    const { left, top, right, bottom } = this.viewRect();
 
     // Corners of the viewport, back-projected at height 0.
     const sums = [(2 * top) / TILE_H, (2 * bottom) / TILE_H];
@@ -702,42 +860,71 @@ export class MapView {
       }
     }
 
-    // Industry blocks sit on their origin tile. Their key is the FRONT corner
-    // of the footprint, so the artwork is never cut by its own footprint's
-    // ground - while a hill one diagonal nearer still covers it correctly.
-    if (detailed) {
-      for (const industry of this.industries) {
-        if (
-          industry.x < bounds.minX ||
-          industry.x > bounds.maxX ||
-          industry.y < bounds.minY ||
-          industry.y > bounds.maxY
-        ) {
-          continue;
-        }
-        const world = tileToWorld(industry.x, industry.y, map.baseHeight(industry.x, industry.y));
-        const sprite = this.take(used++);
-        const footprint = INDUSTRY_SPECS[industry.type]?.footprint ?? 1;
-        // No tint. The industry is drawn in its own colours now - a tint
-        // multiplies, and it flattened a coal heap and a chimney to the same
-        // shade of whatever the tint was.
-        this.place(
-          sprite,
-          this.frameTexture(`i${industry.type}`, atlas.industryFrame(industry.type)),
-          world.x,
-          world.y,
-          drawOrder(
-            industry.x + footprint - 1,
-            industry.y + footprint - 1,
-            map.baseHeight(industry.x, industry.y),
-            DrawLayer.Building,
-          ),
-        );
-      }
-    }
+    if (detailed) used = this.placeIndustries(map, bounds, used);
+    used = this.placeStations(map, bounds, used);
 
-    // Station modules, keyed on their own tile at the station layer: above the
-    // track a platform covers, below a vehicle standing on it.
+    for (let i = used; i < this.pool.length; i++) this.pool[i]!.visible = false;
+  }
+
+  /**
+   * Industry blocks sit on their origin tile. Their key is the FRONT corner
+   * of the footprint, so the artwork is never cut by its own footprint's
+   * ground - while a hill one diagonal nearer still covers it correctly.
+   *
+   * Marker-driven and therefore NEVER baked into a chunk: the marker list
+   * moves on its own channel (founding, closure), not with the map revision,
+   * and a baked copy would go stale against it.
+   */
+  private placeIndustries(
+    map: TileMap,
+    bounds: { minX: number; minY: number; maxX: number; maxY: number },
+    used: number,
+  ): number {
+    const atlas = this.atlas!;
+    for (const industry of this.industries) {
+      if (
+        industry.x < bounds.minX ||
+        industry.x > bounds.maxX ||
+        industry.y < bounds.minY ||
+        industry.y > bounds.maxY
+      ) {
+        continue;
+      }
+      const world = tileToWorld(industry.x, industry.y, map.baseHeight(industry.x, industry.y));
+      const sprite = this.take(used++);
+      const footprint = INDUSTRY_SPECS[industry.type]?.footprint ?? 1;
+      // No tint. The industry is drawn in its own colours now - a tint
+      // multiplies, and it flattened a coal heap and a chimney to the same
+      // shade of whatever the tint was.
+      this.place(
+        sprite,
+        this.frameTexture(`i${industry.type}`, atlas.industryFrame(industry.type)),
+        world.x,
+        world.y,
+        drawOrder(
+          industry.x + footprint - 1,
+          industry.y + footprint - 1,
+          map.baseHeight(industry.x, industry.y),
+          DrawLayer.Building,
+        ),
+      );
+    }
+    return used;
+  }
+
+  /**
+   * Station modules, keyed on their own tile at the station layer: above the
+   * track a platform covers, below a vehicle standing on it.
+   *
+   * Live sprites at every zoom that shows them, never baked: they carry the
+   * company tint, and a company recolour must not force a chunk rebake.
+   */
+  private placeStations(
+    map: TileMap,
+    bounds: { minX: number; minY: number; maxX: number; maxY: number },
+    used: number,
+  ): number {
+    const atlas = this.atlas!;
     for (const station of this.stations) {
       for (const module of station.modules) {
         if (
@@ -761,16 +948,431 @@ export class MapView {
         sprite.tint = this.companyTint;
       }
     }
+    return used;
+  }
 
+  /**
+   * The live-sprite remainder of the chunk path: industries and station
+   * modules at 0.5x, exactly as the detail path draws them - the boundary
+   * zoom must not lose a marker to the bake. The 0.25x abstract mode shows
+   * neither (SPEC.md 16.1: terrain, network, vehicle dots and nothing else).
+   */
+  private rebuildMarkers(
+    map: TileMap,
+    bounds: { minX: number; minY: number; maxX: number; maxY: number },
+    abstract: boolean,
+  ): void {
+    let used = 0;
+    if (!abstract) {
+      used = this.placeIndustries(map, bounds, used);
+      used = this.placeStations(map, bounds, used);
+    }
     for (let i = used; i < this.pool.length; i++) this.pool[i]!.visible = false;
+  }
+
+  // ---------------------------------------------------------------- chunks
+
+  /** Drop every baked chunk - a new world invalidates all of them at once. */
+  private clearChunkCaches(): void {
+    for (const entry of this.fullChunks.values()) this.freeFullTextures.push(entry.texture);
+    for (const entry of this.terrainChunks.values()) this.freeTerrainTextures.push(entry.texture);
+    this.fullChunks.clear();
+    this.terrainChunks.clear();
+    this.segmentCache.clear();
+    this.chunkSeenRevision = -1;
+    this.chunkSetHash = -1;
+    this.netDirty = true;
+  }
+
+  /**
+   * Keep the chunk layer in step with the camera and the map revision. Runs
+   * only when the visible tile range, the zoom or the revision changed -
+   * never per frame - and rebakes ONLY chunks whose checksum says their
+   * static layers actually moved (E-04).
+   */
+  private maintainChunks(map: TileMap, abstract: boolean): void {
+    const cache = abstract ? this.terrainChunks : this.fullChunks;
+    const freelist = abstract ? this.freeTerrainTextures : this.freeFullTextures;
+    const cap = abstract ? CHUNK_CACHE_MAX_TERRAIN : CHUNK_CACHE_MAX_FULL;
+    const scale = abstract ? ABSTRACT_ZOOM_MAX : CHUNK_ZOOM_MAX;
+
+    // A revision change re-checks every cached chunk in BOTH profiles (and
+    // the polyline cache): the one currently hidden must not come back stale
+    // when the player flips zoom.
+    if (map.revision !== this.chunkSeenRevision) {
+      this.chunkSeenRevision = map.revision;
+      this.invalidateChunkCache(map, this.fullChunks, true, this.freeFullTextures);
+      // A dropped terrain chunk means ground moved: the net Graphics bakes
+      // projected HEIGHTS into its path, so lines over that ground are stale
+      // even when no road or track bit changed.
+      const droppedTerrain = this.invalidateChunkCache(
+        map,
+        this.terrainChunks,
+        false,
+        this.freeTerrainTextures,
+      );
+      const staleSegments = computeDirtySet(map, this.segmentCache, true, this.dirtyChunkScratch);
+      for (let i = 0; i < staleSegments; i++) {
+        this.segmentCache.delete(this.dirtyChunkScratch[i]!);
+      }
+      if (staleSegments > 0 || droppedTerrain > 0) this.netDirty = true;
+    }
+
+    const rect = this.viewRect();
+    const visible = visibleChunks(
+      rect.left,
+      rect.top,
+      rect.right,
+      rect.bottom,
+      map.size,
+      this.visibleChunkScratch,
+    );
+    const per = chunksPerSide(map.size);
+    const stamp = this.blink;
+    let setHash = 0x811c9dc5 | 0;
+
+    for (let i = 0; i < visible; i++) {
+      const key = this.visibleChunkScratch[i]!;
+      setHash = Math.imul(setHash ^ key, 0x01000193);
+      const chunkX = key % per;
+      const chunkY = (key / per) | 0;
+      let entry = cache.get(key);
+      if (entry === undefined) {
+        entry = this.bakeChunk(map, chunkX, chunkY, abstract, freelist.pop(), scale);
+        cache.set(key, entry);
+      }
+      entry.lastUsed = stamp;
+
+      let sprite = this.chunkSprites[i];
+      if (sprite === undefined) {
+        sprite = new Sprite();
+        this.chunkSprites.push(sprite);
+        this.chunkLayer.addChild(sprite);
+      }
+      const aabb = chunkAabb(chunkX, chunkY);
+      sprite.texture = entry.texture;
+      sprite.visible = true;
+      sprite.position.set(aabb.minX, aabb.minY);
+      sprite.scale.set(1 / scale);
+      // Painter's order between chunks. Pixel-exact although coarser than
+      // the per-tile diagonals: content never leaves its tile's 64px-wide
+      // cell column, and a pair that could draw in the wrong order - later
+      // chunk, earlier diagonal - is always two or more columns apart, so
+      // the two never touch the same pixel (the argument is in D-161).
+      sprite.zIndex = chunkX + chunkY;
+    }
+    for (let i = visible; i < this.chunkSprites.length; i++) {
+      this.chunkSprites[i]!.visible = false;
+    }
+
+    if (setHash !== this.chunkSetHash) {
+      this.chunkSetHash = setHash;
+      this.netDirty = true;
+    }
+    if (cache.size > cap) this.evictChunks(cache, freelist, cap, stamp);
+
+    if (abstract && this.netDirty) {
+      this.rebuildNet(map, visible, per, stamp);
+      this.netDirty = false;
+    }
+  }
+
+  /**
+   * Recycle every cached chunk whose checksum no longer matches the map.
+   * Returns how many were dropped.
+   */
+  private invalidateChunkCache(
+    map: TileMap,
+    cache: Map<number, ChunkEntry>,
+    full: boolean,
+    freelist: RenderTexture[],
+  ): number {
+    const stale = computeDirtySet(map, cache, full, this.dirtyChunkScratch);
+    for (let i = 0; i < stale; i++) {
+      const key = this.dirtyChunkScratch[i]!;
+      freelist.push(cache.get(key)!.texture);
+      cache.delete(key);
+    }
+    return stale;
+  }
+
+  /** Evict least-recently-used chunks beyond the cap; never the ones on screen. */
+  private evictChunks(
+    cache: Map<number, ChunkEntry>,
+    freelist: RenderTexture[],
+    cap: number,
+    inUseStamp: number,
+  ): void {
+    while (cache.size > cap) {
+      let oldestKey = -1;
+      let oldestStamp = Infinity;
+      for (const [key, entry] of cache) {
+        if (entry.lastUsed === inUseStamp) continue;
+        if (entry.lastUsed < oldestStamp) {
+          oldestStamp = entry.lastUsed;
+          oldestKey = key;
+        }
+      }
+      if (oldestKey < 0) return; // everything left is on screen right now
+      freelist.push(cache.get(oldestKey)!.texture);
+      cache.delete(oldestKey);
+    }
+  }
+
+  /**
+   * Bake one chunk into a RenderTexture at the zoom it will be shown at, so
+   * one texture pixel is one screen pixel and nothing is resampled.
+   *
+   * The sprite placement is the SAME per-tile logic as the detail path -
+   * same atlas frames, same drawOrder keys sorted inside the bake root -
+   * minus industries and station modules, which stay live sprites above the
+   * chunks. The abstract profile bakes terrain only; roads and track appear
+   * as polylines instead (SPEC.md 16.1).
+   */
+  private bakeChunk(
+    map: TileMap,
+    chunkX: number,
+    chunkY: number,
+    abstract: boolean,
+    recycled: RenderTexture | undefined,
+    scale: number,
+  ): ChunkEntry {
+    const atlas = this.atlas!;
+    const aabb = chunkAabb(chunkX, chunkY);
+    const texture =
+      recycled ??
+      RenderTexture.create({
+        width: Math.round((aabb.maxX - aabb.minX) * scale),
+        height: Math.round((aabb.maxY - aabb.minY) * scale),
+      });
+
+    this.bakeRoot.scale.set(scale);
+    this.bakeRoot.position.set(-aabb.minX * scale, -aabb.minY * scale);
+
+    const size = map.size;
+    const x0 = chunkX * CHUNK_TILES;
+    const y0 = chunkY * CHUNK_TILES;
+    const xMax = Math.min(x0 + CHUNK_TILES - 1, size - 1);
+    const yMax = Math.min(y0 + CHUNK_TILES - 1, size - 1);
+    let used = 0;
+
+    for (let sum = x0 + y0; sum <= xMax + yMax; sum++) {
+      const xStart = Math.max(x0, sum - yMax);
+      const xEnd = Math.min(xMax, sum - y0);
+
+      for (let x = xStart; x <= xEnd; x++) {
+        const y = sum - x;
+        const index = map.tileIndex(x, y);
+        const height = map.baseHeight(x, y);
+        const world = tileToWorld(x, y, height);
+
+        const terrain = map.terrain[index]!;
+        const slope = map.slopeAt(x, y);
+        this.place(
+          this.bakeTake(used++),
+          this.frameTexture(`t${terrain}:${slope}`, atlas.terrainFrame(terrain, slope)),
+          world.x,
+          world.y,
+          drawOrder(x, y, height, DrawLayer.Ground),
+        );
+
+        if (abstract) continue;
+
+        const structure = map.structure[index]!;
+        if (structure !== 0) {
+          if (structure === BRIDGE_STRUCTURE) {
+            const deckHeight = map.structureHeight[index]!;
+            const deck = tileToWorld(x, y, deckHeight);
+            this.place(
+              this.bakeTake(used++),
+              this.frameTexture('bridge', atlas.bridgeFrame()),
+              deck.x,
+              deck.y,
+              drawOrder(x, y, deckHeight, DrawLayer.Ground),
+            );
+            const bits = map.trackBits[index]!;
+            for (let direction = 0; direction < 8; direction++) {
+              if ((bits & (1 << direction)) === 0) continue;
+              this.place(
+                this.bakeTake(used++),
+                this.frameTexture(`k${direction}`, atlas.trackFrame(direction)),
+                deck.x,
+                deck.y,
+                drawOrder(x, y, deckHeight, DrawLayer.Track),
+              );
+            }
+          }
+          continue;
+        }
+
+        if (map.waypoint[index] !== 0) {
+          const marker = this.bakeTake(used++);
+          this.place(
+            marker,
+            this.frameTexture('signal', atlas.signalFrame()),
+            world.x,
+            world.y,
+            drawOrder(x, y, height, DrawLayer.Signal),
+          );
+          marker.tint = WAYPOINT_TINTS[map.waypoint[index]!] ?? 0xffffff;
+        }
+
+        if (terrain === Terrain.Water) continue;
+
+        const roadBits = map.roadBits[index]!;
+        if (roadBits !== 0) {
+          this.place(
+            this.bakeTake(used++),
+            this.frameTexture(`r${roadBits}`, atlas.roadFrame(roadBits)),
+            world.x,
+            world.y,
+            drawOrder(x, y, height, DrawLayer.Road),
+          );
+        }
+
+        const trackBits = map.trackBits[index]!;
+        if (trackBits !== 0) {
+          for (let direction = 0; direction < 8; direction++) {
+            if ((trackBits & (1 << direction)) === 0) continue;
+            this.place(
+              this.bakeTake(used++),
+              this.frameTexture(`k${direction}`, atlas.trackFrame(direction)),
+              world.x,
+              world.y,
+              drawOrder(x, y, height, DrawLayer.Track),
+            );
+          }
+        }
+
+        if (map.signal[index] !== 0) {
+          this.place(
+            this.bakeTake(used++),
+            this.frameTexture('signal', atlas.signalFrame()),
+            world.x,
+            world.y,
+            drawOrder(x, y, height, DrawLayer.Signal),
+          );
+        }
+
+        const buildingKind = map.buildingKind[index]!;
+        if (buildingKind !== 0) {
+          const level = map.buildingLevel[index]!;
+          this.place(
+            this.bakeTake(used++),
+            this.frameTexture(`b${buildingKind}:${level}`, atlas.buildingFrame(buildingKind, level)),
+            world.x,
+            world.y,
+            drawOrder(x, y, height, DrawLayer.Building),
+          );
+        }
+      }
+    }
+
+    for (let i = used; i < this.bakePool.length; i++) this.bakePool[i]!.visible = false;
+    this.app.renderer.render({ container: this.bakeRoot, target: texture, clear: true });
+
+    return {
+      texture,
+      chunkX,
+      chunkY,
+      checksum: chunkChecksum(map, chunkX, chunkY, !abstract),
+      lastUsed: 0,
+    };
+  }
+
+  /** The bake root's own sprite pool, mirroring {@link take}. */
+  private bakeTake(index: number): Sprite {
+    let sprite = this.bakePool[index];
+    if (sprite === undefined) {
+      sprite = new Sprite();
+      sprite.scale.set(1 / ATLAS_SCALE);
+      this.bakePool.push(sprite);
+      this.bakeRoot.addChild(sprite);
+    }
+    sprite.visible = true;
+    return sprite;
+  }
+
+  /**
+   * Redraw the abstract network from the per-chunk polyline caches. World
+   * coordinates, so panning inside an unchanged chunk set costs nothing;
+   * rebuilt only when the set or the map moved.
+   */
+  private rebuildNet(map: TileMap, visible: number, per: number, stamp: number): void {
+    this.net.clear();
+
+    // Two passes, one stroke each: roads below, rails above.
+    for (const kind of [NetKind.Road, NetKind.Rail]) {
+      for (let i = 0; i < visible; i++) {
+        const key = this.visibleChunkScratch[i]!;
+        let entry = this.segmentCache.get(key);
+        if (entry === undefined) {
+          const chunkX = key % per;
+          const chunkY = (key / per) | 0;
+          const x0 = chunkX * CHUNK_TILES;
+          const y0 = chunkY * CHUNK_TILES;
+          entry = {
+            checksum: chunkChecksum(map, chunkX, chunkY, true),
+            segments: extractNetworkSegments(
+              map,
+              x0,
+              y0,
+              x0 + CHUNK_TILES - 1,
+              y0 + CHUNK_TILES - 1,
+            ),
+            lastUsed: stamp,
+          };
+          this.segmentCache.set(key, entry);
+        }
+        entry.lastUsed = stamp;
+
+        for (const segment of entry.segments) {
+          if (segment.kind !== kind) continue;
+          // A rail rides its bridge deck; a road stays on the ground.
+          const height =
+            kind === NetKind.Rail
+              ? map.railHeight(segment.tileX, segment.tileY)
+              : map.baseHeight(segment.tileX, segment.tileY);
+          const lift = height * HEIGHT_PX;
+          this.net.moveTo(
+            (segment.ax - segment.ay) * (TILE_W / 2),
+            (segment.ax + segment.ay) * (TILE_H / 2) - lift,
+          );
+          this.net.lineTo(
+            (segment.bx - segment.by) * (TILE_W / 2),
+            (segment.bx + segment.by) * (TILE_H / 2) - lift,
+          );
+        }
+      }
+      this.net.stroke({
+        width: (kind === NetKind.Rail ? NET_RAIL_WIDTH_PX : NET_ROAD_WIDTH_PX) / this.zoom,
+        color: kind === NetKind.Rail ? NET_RAIL_COLOR : NET_ROAD_COLOR,
+        cap: 'round',
+        join: 'round',
+      });
+    }
+
+    // The polyline cache is CPU-cheap but unbounded panning would still grow
+    // it without limit; drop the least recently seen entries past the cap.
+    if (this.segmentCache.size > SEGMENT_CACHE_MAX) {
+      for (const [key, entry] of this.segmentCache) {
+        if (this.segmentCache.size <= SEGMENT_CACHE_MAX) break;
+        if (entry.lastUsed === stamp) continue;
+        this.segmentCache.delete(key);
+      }
+    }
   }
 
   /**
    * Vehicles are redrawn every frame, not with the tiles: they move between
    * simulation ticks and the renderer interpolates along the tile they are
    * crossing, which is what keeps them smooth at 60 Hz over a 20 Hz sim.
+   *
+   * In the abstract mode (0.25x, SPEC.md 16.1) each vehicle is a dot in its
+   * company's colour instead of a sprite - the same positions feed the same
+   * hit-test arrays, so clicking a dot still selects the vehicle.
    */
-  private drawVehicles(map: TileMap): void {
+  private drawVehicles(map: TileMap, abstract: boolean): void {
     const source = this.vehicleSource;
     const atlas = this.atlas;
     if (source === null || atlas === null) return;
@@ -778,6 +1380,12 @@ export class MapView {
     const { data, count } = source();
     const size = map.size;
     this.drawnVehicles = 0;
+
+    if (abstract && !this.vehicleSpritesHidden) {
+      for (const sprite of this.vehicleSprites) sprite.visible = false;
+      this.vehicleSpritesHidden = true;
+    }
+    if (!abstract) this.vehicleSpritesHidden = false;
 
     for (let i = 0; i < count; i++) {
       const base = i * SNAPSHOT_VEHICLE_STRIDE;
@@ -800,34 +1408,37 @@ export class MapView {
       const from = tileToWorld(fromX, fromY, fromHeight);
       const to = tileToWorld(toX, toY, toHeight);
 
-      let sprite = this.vehicleSprites[i];
-      if (sprite === undefined) {
-        sprite = new Sprite(this.frameTexture('vehicle', atlas.vehicleFrame()));
-        sprite.scale.set(1 / ATLAS_SCALE);
-        this.vehicleSprites.push(sprite);
-        // Into the SAME sorted container as the tiles: the drawOrder key is
-        // what lets a hill in front of a train draw over it (section 16.1).
-        this.tiles.addChild(sprite);
-      }
-
-      // A sprite is reused for whatever vehicle lands in its slot, so the
-      // texture is set every frame rather than once at creation.
-      sprite.texture =
-        kind === TRAIN_KIND
-          ? this.frameTexture('train', atlas.trainFrame())
-          : this.frameTexture('vehicle', atlas.vehicleFrame());
-      sprite.visible = true;
-      // Every company's own colour, so a competitor's train is recognisable as
-      // one at a glance rather than only in a list.
-      sprite.tint = owner === 0 ? this.companyTint : (COMPANY_TINTS[owner] ?? this.companyTint);
-
-      sprite.zIndex = vehicleDrawOrder(fromX, fromY, fromHeight, toX, toY, toHeight, progress);
-
       const worldX = from.x + (to.x - from.x) * progress;
       const worldY = from.y + (to.y - from.y) * progress;
-      sprite.position.set(worldX - TILE_W / 2, worldY - HEIGHT_PX);
+
+      if (!abstract) {
+        let sprite = this.vehicleSprites[i];
+        if (sprite === undefined) {
+          sprite = new Sprite(this.frameTexture('vehicle', atlas.vehicleFrame()));
+          sprite.scale.set(1 / ATLAS_SCALE);
+          this.vehicleSprites.push(sprite);
+          // Into the SAME sorted container as the tiles: the drawOrder key is
+          // what lets a hill in front of a train draw over it (section 16.1).
+          this.tiles.addChild(sprite);
+        }
+
+        // A sprite is reused for whatever vehicle lands in its slot, so the
+        // texture is set every frame rather than once at creation.
+        sprite.texture =
+          kind === TRAIN_KIND
+            ? this.frameTexture('train', atlas.trainFrame())
+            : this.frameTexture('vehicle', atlas.vehicleFrame());
+        sprite.visible = true;
+        // Every company's own colour, so a competitor's train is recognisable
+        // as one at a glance rather than only in a list.
+        sprite.tint = owner === 0 ? this.companyTint : (COMPANY_TINTS[owner] ?? this.companyTint);
+
+        sprite.zIndex = vehicleDrawOrder(fromX, fromY, fromHeight, toX, toY, toHeight, progress);
+        sprite.position.set(worldX - TILE_W / 2, worldY - HEIGHT_PX);
+      }
 
       this.vehicleIds[this.drawnVehicles] = vehicleId;
+      this.vehicleOwners[this.drawnVehicles] = owner;
       const screen = this.vehicleScreen[this.drawnVehicles] ?? { x: 0, y: 0 };
       screen.x = worldX;
       screen.y = worldY;
@@ -835,8 +1446,41 @@ export class MapView {
       this.drawnVehicles++;
     }
 
-    for (let i = count; i < this.vehicleSprites.length; i++) {
-      this.vehicleSprites[i]!.visible = false;
+    if (abstract) {
+      this.drawVehicleDots();
+    } else {
+      for (let i = count; i < this.vehicleSprites.length; i++) {
+        this.vehicleSprites[i]!.visible = false;
+      }
+    }
+  }
+
+  /**
+   * The vehicle dots of the abstract mode, from the positions the main loop
+   * just wrote. One fill per company rather than one per vehicle, so a full
+   * snapshot block is eight batched fills, not 1,500.
+   */
+  private drawVehicleDots(): void {
+    this.dots.clear();
+    const half = VEHICLE_DOT_PX / this.zoom / 2;
+
+    for (let pass = 0; pass < COMPANY_TINTS.length; pass++) {
+      let any = false;
+      for (let i = 0; i < this.drawnVehicles; i++) {
+        const owner = this.vehicleOwners[i]!;
+        // Owners outside the palette fall into pass 0, like the sprite path's
+        // fallback tint.
+        const slot = owner > 0 && owner < COMPANY_TINTS.length ? owner : 0;
+        if (slot !== pass) continue;
+        const screen = this.vehicleScreen[i]!;
+        this.dots.rect(screen.x - half, screen.y - HEIGHT_PX / 2 - half, half * 2, half * 2);
+        any = true;
+      }
+      if (any) {
+        this.dots.fill({
+          color: pass === 0 ? this.companyTint : (COMPANY_TINTS[pass] ?? this.companyTint),
+        });
+      }
     }
   }
 

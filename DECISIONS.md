@@ -41,10 +41,10 @@ no entry below. A number may appear under several topics.
 - **Competitors, AI & tenders:** D-107, D-108, D-109, D-115, D-116, D-121,
   D-122, D-147, D-152, D-153, D-154, D-155, D-156, D-158
 - **Rendering & art:** D-013, D-014, D-033, D-035, D-112, D-117, D-125, D-127,
-  D-136, D-140, D-160
+  D-136, D-140, D-160, D-161
 - **UI & input:** D-011, D-013, D-015, D-035, D-110, D-113, D-114, D-119,
   D-126, D-148
-- **Performance & measurement:** D-002, D-120, D-135, D-136
+- **Performance & measurement:** D-002, D-120, D-135, D-136, D-161
 - **Platform, tooling & build:** D-012, D-014, D-015, D-016, D-017, D-029,
   D-030, D-031, D-160
 - **Crash safety:** D-132, D-139
@@ -3612,3 +3612,93 @@ stub behind the feature check (`atlasSourceFor` - only a validated,
 non-empty manifest earns the baked path; absence, damage or an unknown
 version all mean procedural, decided by a pure function under unit test),
 and MapView switches over in M13.
+
+## M12 - the stage, stage 1: the hybrid renderer (2026-08-07)
+
+### D-161 The chunk is a checksum with a texture, and the overview finally shows the network
+
+E-04 settled the architecture and D-125 recorded why; this entry records the
+shape M12 gave it and the five choices inside that shape. The split itself is
+as ordered: at 1x, 2x and 4x the M10 drawOrder sprite path is untouched; at
+0.5x and below the static world comes out of 32x32-tile RenderTexture chunks
+with camera-AABB culling; at 0.25x the map is the abstract overview of
+SPEC.md 16.1 - terrain chunks, network polylines, vehicle dots.
+
+**A per-chunk checksum is what makes "only touched chunks" true.** The map
+revision is ONE counter for the whole world, so the revision alone can only
+say "something changed somewhere" - acting on that would rebake every cached
+chunk on every terraform. Each cached chunk therefore remembers an FNV-1a 32
+digest of the static layers it drew (corners one past the tile range, because
+seam corners are shared: an edit to one dirties every chunk that draws a
+slope from it), and a revision change recomputes digests over the CACHED
+chunks only - both zoom profiles and the polyline cache, so the profile
+currently hidden cannot come back stale after a zoom flip. Rail type is
+folded in although today's track art ignores it: M13 draws catenary from it,
+and a checksum that lags the art by a milestone is a stale-chunk bug on a
+timer. The digest walk is bounded by the cache, not the map; the pure parts
+(`chunkChecksum`, `computeDirtySet`, `visibleChunks`, `chunkAabb`,
+`extractNetworkSegments`) live in `src/render/chunks.ts` under
+`tests/unit/chunks.spec.ts`.
+
+**What a chunk holds is decided by what can go stale against it.** Baked:
+terrain, roads, track, bridges, signals, waypoints, buildings - tile layers
+that move ONLY with the revision the checksum watches. Not baked, ever:
+industry blocks (their marker list travels on its own channel - founding,
+closure - and a baked copy would drift against it) and station modules (they
+carry the company tint, and recolouring a company must not rebake the map).
+Both stay live sprites above the chunks at 0.5x, drawn by the same placement
+code as the detail path, so the boundary zoom loses no marker. Vehicles stay
+live sprites too; that they can no longer duck behind baked hills at
+overview zooms is the compromise E-04 priced in ("wo 16.1 selbst Details
+streicht") and D-125 explains.
+
+**Chunk-granular painter order is pixel-exact, and here is the argument.**
+Chunk sprites sort by their diagonal (chunkX + chunkY). A wrongly-ordered
+pair would need a tile in an earlier-drawn chunk that overlaps a
+farther-diagonal tile in a later-drawn one; overlap needs their screen
+columns within one tile of each other, but crossing a chunk border in x or y
+while LOWERING the diagonal forces the columns at least two tiles apart -
+the cases exclude each other, so no pixel ever has a wrong winner. Within a
+chunk the bake root sorts by the exact drawOrder keys of the live path.
+
+**Textures are baked at the zoom they are shown at and never resampled.**
+One texture pixel is one screen pixel (1024x664 at 0.5x, 512x332 at 0.25x),
+and the AABB deliberately ignores the map edge so every chunk of a profile
+has the same footprint: an evicted texture is recycled for any other chunk
+instead of reallocated. Eviction is least-recently-used over caps sized in
+`MapView.ts` (32 full / 96 terrain), with the current frame's chunks exempt -
+a huge viewport degrades to a bigger cache, never to thrashing.
+
+**The abstract network is polylines because sprites are why it vanished.**
+Below 0.5x the detail sprites are stripped, which until now deleted the
+network from exactly the zoom made for looking at networks. Each tile emits
+half-segments from its centre towards every connected edge (roads) or corner
+(diagonal rail), so neighbours meet without double-drawing; the renderer
+projects them at the tile's display height (rail rides its bridge deck),
+strokes roads in 16.3's asphalt and rail in 16.3's BALLAST tone - the rail
+tone itself is too dark on dark terrain at map scale - at screen-constant
+width, cached per chunk under the full checksum, and redrawn only when the
+visible chunk set or the map moves, never on a pan inside the set. Vehicles
+become one dot per vehicle, batched into one fill per company, writing the
+same hit-test arrays as the sprite path - a dot is clickable. Stations and
+industries are deliberately absent at 0.25x: 16.1 names terrain, network
+and vehicle dots, and the network lines pass through every platform anyway.
+
+**Day and night modulates both paths through one container.** `MapView.art`
+now holds chunks, network, tiles and dots, and the D-127 tint lands on IT -
+still a single change-detected assignment, and a baked chunk darkens exactly
+like the sprites it replaced. The overlay stays a sibling outside the tint:
+interface does not dim at night.
+
+The chunk-bake tripwire joined the D-136 suite with one deliberate
+difference: its 4 ms threshold is NOT a generous multiple but the M12
+acceptance number itself ("Chunk-Rebake gemessen <= 4 ms"), so the CI
+measurement doubles as the Fertig-wenn evidence. The proxy replays the
+digest, the full placement loop and the polyline extraction for the busy
+fixture chunk: measured p50 0.29 ms, p99 1.30 ms on the reference machine -
+a third of the budget, with the GPU pass outside what a proxy can see
+(stated, as D-136 demands). The atlas cell's headroom and skirt are exported
+constants now (`CELL_HEADROOM_STEPS`, `CELL_SKIRT_STEPS` in TerrainAtlas),
+because the chunk AABB must enclose everything a cell can draw and a margin
+that drifted from the cell would clip every tall building at a chunk edge -
+the D-117 anchorY lesson applied before it could happen a second time.

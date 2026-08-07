@@ -17,11 +17,12 @@ import {
   tileToWorld,
   vehicleDrawOrder,
 } from '../../src/render/projection';
+import { CHUNK_TILES, chunkChecksum, extractNetworkSegments } from '../../src/render/chunks';
 
 /**
- * The render CPU tripwire of SPEC2 6.3: Sprite-Pool-Rebuild-ms and
- * Draw-Prep-ms, held in CI before the M12/M13 art milestones start spending
- * against them.
+ * The render CPU tripwire of SPEC2 6.3: Sprite-Pool-Rebuild-ms, Draw-Prep-ms
+ * and - since M12 - Chunk-Bake-ms, held in CI before the M12/M13 art
+ * milestones start spending against them.
  *
  * The two frame-rate budgets of section 21 need a GPU and a compositor and
  * stay hand-measured (README.md). What CAN run headless is the CPU side of a
@@ -46,6 +47,17 @@ const REBUILD_P99_BUDGET_MS = 25;
 
 /** Tripwire: one frame of vehicle draw preparation at the snapshot cap. [ms] */
 const DRAW_PREP_P99_BUDGET_MS = 5;
+
+/**
+ * Tripwire: the CPU half of one 32x32 chunk rebake. [ms]
+ *
+ * NOT a generous D-136 multiple: 4 ms is the M12 acceptance number itself
+ * ("Chunk-Rebake gemessen <= 4 ms", SPEC2), so this measurement doubles as
+ * the Fertig-wenn evidence. The proxy replays the checksum that decides the
+ * rebake, the full-profile placement loop and the abstract-profile polyline
+ * extraction - a superset of what either profile pays per chunk.
+ */
+const CHUNK_BAKE_P99_BUDGET_MS = 4;
 
 /**
  * The measured window: 64x64 tiles is roughly what a 4K screen shows at zoom
@@ -228,6 +240,93 @@ function drawPrepProxy(map: TileMap, data: Int32Array, out: DrawList): number {
   return drawn;
 }
 
+/**
+ * The CPU of one `MapView.bakeChunk` plus its cache bookkeeping: the
+ * checksum over the chunk's static layers, the diagonal placement loop of
+ * the full profile (terrain, roads, track, signals, buildings - the same
+ * branches as the rebuild proxy, confined to one chunk), and the polyline
+ * extraction the abstract profile caches. The GPU RenderTexture pass is the
+ * one thing it cannot see, exactly as D-136 states for the other proxies.
+ */
+function chunkBakeProxy(
+  map: TileMap,
+  chunkX: number,
+  chunkY: number,
+  out: DrawList,
+  frames: Map<string, number>,
+): number {
+  const checksum = chunkChecksum(map, chunkX, chunkY, true);
+  let used = 0;
+  const place = (key: string, worldX: number, worldY: number, zIndex: number): void => {
+    let frame = frames.get(key);
+    if (frame === undefined) {
+      frame = frames.size;
+      frames.set(key, frame);
+    }
+    out.key[used] = zIndex;
+    out.frame[used] = frame;
+    out.x[used] = worldX - TILE_W / 2;
+    out.y[used] = worldY - HEIGHT_PX;
+    used++;
+  };
+
+  const x0 = chunkX * CHUNK_TILES;
+  const y0 = chunkY * CHUNK_TILES;
+  const xMax = Math.min(x0 + CHUNK_TILES - 1, map.size - 1);
+  const yMax = Math.min(y0 + CHUNK_TILES - 1, map.size - 1);
+
+  for (let sum = x0 + y0; sum <= xMax + yMax; sum++) {
+    const xStart = Math.max(x0, sum - yMax);
+    const xEnd = Math.min(xMax, sum - y0);
+
+    for (let x = xStart; x <= xEnd; x++) {
+      const y = sum - x;
+      const index = map.tileIndex(x, y);
+      const height = map.baseHeight(x, y);
+      const world = tileToWorld(x, y, height);
+
+      const terrain = map.terrain[index]!;
+      const slope = map.slopeAt(x, y);
+      place(`t${terrain}:${slope}`, world.x, world.y, drawOrder(x, y, height, DrawLayer.Ground));
+
+      if (map.structure[index] !== 0) continue;
+
+      const roadBits = map.roadBits[index]!;
+      if (roadBits !== 0) {
+        place(`r${roadBits}`, world.x, world.y, drawOrder(x, y, height, DrawLayer.Road));
+      }
+
+      const trackBits = map.trackBits[index]!;
+      if (trackBits !== 0) {
+        for (let direction = 0; direction < 8; direction++) {
+          if ((trackBits & (1 << direction)) === 0) continue;
+          place(`k${direction}`, world.x, world.y, drawOrder(x, y, height, DrawLayer.Track));
+        }
+      }
+
+      if (map.signal[index] !== 0) {
+        place('signal', world.x, world.y, drawOrder(x, y, height, DrawLayer.Signal));
+      }
+
+      const buildingKind = map.buildingKind[index]!;
+      if (buildingKind !== 0) {
+        const level = map.buildingLevel[index]!;
+        place(
+          `b${buildingKind}:${level}`,
+          world.x,
+          world.y,
+          drawOrder(x, y, height, DrawLayer.Building),
+        );
+      }
+    }
+  }
+
+  const segments = extractNetworkSegments(map, x0, y0, xMax, yMax);
+  // Fold the checksum into the result so neither half can be dead-code
+  // eliminated out of the measurement.
+  return used + segments.length + (checksum === 0 ? 1 : 0);
+}
+
 function percentile(samples: Float64Array, share: number): number {
   const sorted = Array.from(samples).sort((a, b) => a - b);
   return sorted[Math.floor(sorted.length * share)]!;
@@ -298,5 +397,35 @@ describe('render CPU tripwire (SPEC2 6.3)', () => {
 
     expect(drawn).toBe(SNAPSHOT_MAX_VEHICLES);
     expect(p99).toBeLessThan(DRAW_PREP_P99_BUDGET_MS);
+  });
+
+  it('rebakes one 32x32 chunk inside the M12 acceptance budget', () => {
+    const out: DrawList = {
+      key: new Float64Array(8_192),
+      frame: new Int32Array(8_192),
+      x: new Float64Array(8_192),
+      y: new Float64Array(8_192),
+    };
+    const frames = new Map<string, number>();
+    // Chunk (1,1) covers tiles 32..63, all inside the busy window.
+    const placed = chunkBakeProxy(map, 1, 1, out, frames);
+
+    const samples = new Float64Array(REBUILD_SAMPLES);
+    for (let i = 0; i < REBUILD_SAMPLES; i++) {
+      const started = performance.now();
+      chunkBakeProxy(map, 1, 1, out, frames);
+      samples[i] = performance.now() - started;
+    }
+
+    const p50 = percentile(samples, 0.5);
+    const p99 = percentile(samples, 0.99);
+    console.log(
+      `chunk bake: ${placed} placements+segments over one ${CHUNK_TILES}x${CHUNK_TILES} chunk, ` +
+        `p50 ${p50.toFixed(3)} ms, p99 ${p99.toFixed(3)} ms ` +
+        `(budget ${CHUNK_BAKE_P99_BUDGET_MS} ms)`,
+    );
+
+    expect(placed).toBeGreaterThan(CHUNK_TILES * CHUNK_TILES);
+    expect(p99).toBeLessThan(CHUNK_BAKE_P99_BUDGET_MS);
   });
 });
