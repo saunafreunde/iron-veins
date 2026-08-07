@@ -19,6 +19,8 @@
     "test:perf": "vitest run --no-file-parallelism tests/perf",
     "test:balance": "vitest run tests/balance",
     "icons": "node tools/make-icons.mjs",
+    "assets:fetch": "node tools/assets-fetch.ts",
+    "assets:bake": "node tools/assets-bake.ts",
     "record:fixture": "node tools/record-fixture.mjs",
     "tauri": "tauri",
     "version:sync": "node tools/sync-version.mjs",

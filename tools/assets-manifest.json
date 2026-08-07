@@ -1,0 +1,597 @@
+{
+  "comment": [
+    "Kenney asset manifest (SPEC2 M12 stage 0, E-14/D-140/D-160). Pure text:",
+    "pack URLs + SHA-256 pins for `npm run assets:fetch`, and the model-to-",
+    "game mapping `npm run assets:bake` rasterises. The zip URLs embed a CMS",
+    "media hash, so a Kenney re-upload changes URL AND checksum together -",
+    "re-pin both from the pack's page when a fetch 404s.",
+    "Mapping targets: `vehicle:<catalogId>` (8 facings),",
+    "`building:<zone>:<stage>[:<variant>]`, `industry:<TypeName>` and",
+    "`tree:<n>` (1 facing each). `scale` is model units to metres - an art",
+    "choice per entry (vehicles ride ~1.7x over their catalogue lengthM so",
+    "they read at 64 px/tile, the TTD convention). This M12 subset is",
+    "REPRESENTATIVE; M13 completes the catalogue coverage.",
+    "Company-colour zones (`tint`): `materials` lists glTF material names",
+    "(the older kits, e.g. Nature Kit, carry named materials);",
+    "`hues` marks every face whose resolved colour falls in a hue band,",
+    "because the colormap kits paint a livery as a RAMP of shades around one",
+    "hue inside a single 'colormap' material; `colors` pins exact #rrggbb",
+    "patches. The bake renders zone faces neutral grey in the base cell and",
+    "writes a mask cell whose grey value carries the NW shading - tinting",
+    "the mask with a company colour multiplies to a shaded livery.",
+    "Gaps stay procedural per E-14: aircraft (no Kenney 3D aircraft kit),",
+    "buses (no bus model in the Car Kit), coal-mine headframe and oil",
+    "derrick (no kit equivalent), and every dev build without a cache."
+  ],
+  "version": 1,
+  "license": "CC0-1.0",
+  "credits": "All 3D models by Kenney (kenney.nl), CC0. Credited in README and the credits screen although CC0 requires none.",
+  "packs": [
+    {
+      "id": "train-kit",
+      "name": "Kenney Train Kit",
+      "page": "https://kenney.nl/assets/train-kit",
+      "url": "https://kenney.nl/media/pages/assets/train-kit/cf8521d625-1727040883/kenney_train-kit.zip",
+      "sha256": "cf50d77e8cbacbf38dd50826d4bce5392db8e4f67373d3c4e583b0ed0e474475"
+    },
+    {
+      "id": "car-kit",
+      "name": "Kenney Car Kit",
+      "page": "https://kenney.nl/assets/car-kit",
+      "url": "https://kenney.nl/media/pages/assets/car-kit/1a312ec241-1775131960/kenney_car-kit.zip",
+      "sha256": "fac7dacac5c7874348cf19729af3ef205f3d366493edaf0a827d93f4fdf3d0c4"
+    },
+    {
+      "id": "watercraft-kit",
+      "name": "Kenney Watercraft Kit",
+      "page": "https://kenney.nl/assets/watercraft-kit",
+      "url": "https://kenney.nl/media/pages/assets/watercraft-kit/a335cfed49-1713519620/kenney_watercraft-pack.zip",
+      "sha256": "cd1470c1cf441c7f46d0944ae6d0d897242365dc97677c5079b3238965d659f3"
+    },
+    {
+      "id": "pirate-kit",
+      "name": "Kenney Pirate Kit",
+      "page": "https://kenney.nl/assets/pirate-kit",
+      "url": "https://kenney.nl/media/pages/assets/pirate-kit/e6d4bb1525-1771333093/kenney_pirate-kit.zip",
+      "sha256": "667ed2caf92954ddb98f7b7cede831fe99ab75063c26b25e23d32715bee9c943"
+    },
+    {
+      "id": "city-kit-roads",
+      "name": "Kenney City Kit Roads",
+      "page": "https://kenney.nl/assets/city-kit-roads",
+      "url": "https://kenney.nl/media/pages/assets/city-kit-roads/74288c9459-1741864740/kenney_city-kit-roads.zip",
+      "sha256": "2c1644a293a85d98837ef788b0cbc4b9d53dffb1280fbe9a4f927b644aaba4b0"
+    },
+    {
+      "id": "city-kit-commercial",
+      "name": "Kenney City Kit Commercial",
+      "page": "https://kenney.nl/assets/city-kit-commercial",
+      "url": "https://kenney.nl/media/pages/assets/city-kit-commercial/a742d900eb-1753115042/kenney_city-kit-commercial_2.1.zip",
+      "sha256": "f8b09b081c2bb88bcc126e2dec1cb40fd0dad7e7e591b6c26aaefe96fb35276b"
+    },
+    {
+      "id": "city-kit-suburban",
+      "name": "Kenney City Kit Suburban",
+      "page": "https://kenney.nl/assets/city-kit-suburban",
+      "url": "https://kenney.nl/media/pages/assets/city-kit-suburban/2c871b7af2-1745479373/kenney_city-kit-suburban_20.zip",
+      "sha256": "5869c35cf30b1c87bdb2d197b6d325eebadd2ef08ea27f04797e8e08d77a9a39"
+    },
+    {
+      "id": "city-kit-industrial",
+      "name": "Kenney City Kit Industrial",
+      "page": "https://kenney.nl/assets/city-kit-industrial",
+      "url": "https://kenney.nl/media/pages/assets/city-kit-industrial/5fcb837741-1750838303/kenney_city-kit-industrial_1.0.zip",
+      "sha256": "99a09ff148056678c0c3b7977ad9dbce55d2f243e06fbfc7c28642accef4dd9e"
+    },
+    {
+      "id": "factory-kit",
+      "name": "Kenney Factory Kit",
+      "page": "https://kenney.nl/assets/factory-kit",
+      "url": "https://kenney.nl/media/pages/assets/factory-kit/edaac9d4f6-1777639602/kenney_factory-kit_3.0.zip",
+      "sha256": "7e31fb2308e90304672bd15cd18fa9d9f02c03731a8cbc57a8e3e1c181dfb0a7"
+    },
+    {
+      "id": "building-kit",
+      "name": "Kenney Building Kit",
+      "page": "https://kenney.nl/assets/building-kit",
+      "url": "https://kenney.nl/media/pages/assets/building-kit/0de7aaa492-1743244741/kenney_building-kit.zip",
+      "sha256": "2740ef5772fb5fb3d7aab881db22d129f6b68afe711b1a79e6d5e9e19cf3eec6"
+    },
+    {
+      "id": "modular-buildings",
+      "name": "Kenney Modular Buildings",
+      "page": "https://kenney.nl/assets/modular-buildings",
+      "url": "https://kenney.nl/media/pages/assets/modular-buildings/3253b4219a-1707397411/kenney_modular-buildings.zip",
+      "sha256": "47e1614686b4c0fe55190e88b22ff2b8b10935edf61f37f478a9b6a99477edc6"
+    },
+    {
+      "id": "nature-kit",
+      "name": "Kenney Nature Kit",
+      "page": "https://kenney.nl/assets/nature-kit",
+      "url": "https://kenney.nl/media/pages/assets/nature-kit/37ac38a37b-1677698939/kenney_nature-kit.zip",
+      "sha256": "fa7974a0d342bfe63c38664ba9f8ec1a4aab8ea25f099bdc56870e33588c4d9d"
+    }
+  ],
+  "models": [
+    {
+      "target": "vehicle:1000",
+      "pack": "train-kit",
+      "file": "Models/GLB format/train-locomotive-a.glb",
+      "scale": 12,
+      "facings": 8,
+      "tint": {
+        "hues": [
+          {
+            "min": 138,
+            "max": 168,
+            "minSaturation": 0.3
+          }
+        ]
+      }
+    },
+    {
+      "target": "vehicle:1010",
+      "pack": "train-kit",
+      "file": "Models/GLB format/train-diesel-a.glb",
+      "scale": 12,
+      "facings": 8,
+      "tint": {
+        "hues": [
+          {
+            "min": 22,
+            "max": 48,
+            "minSaturation": 0.4
+          }
+        ]
+      }
+    },
+    {
+      "target": "vehicle:1030",
+      "pack": "train-kit",
+      "file": "Models/GLB format/train-electric-city-a.glb",
+      "scale": 12,
+      "facings": 8,
+      "tint": {
+        "hues": [
+          {
+            "min": 345,
+            "max": 15,
+            "minSaturation": 0.35
+          }
+        ]
+      }
+    },
+    {
+      "target": "vehicle:1050",
+      "pack": "train-kit",
+      "file": "Models/GLB format/train-electric-bullet-a.glb",
+      "scale": 12,
+      "facings": 8,
+      "tint": {
+        "hues": [
+          {
+            "min": 345,
+            "max": 15,
+            "minSaturation": 0.35
+          }
+        ]
+      }
+    },
+    {
+      "target": "vehicle:1060",
+      "pack": "train-kit",
+      "file": "Models/GLB format/train-diesel-b.glb",
+      "scale": 11,
+      "facings": 8,
+      "tint": {
+        "hues": [
+          {
+            "min": 22,
+            "max": 48,
+            "minSaturation": 0.4
+          }
+        ]
+      }
+    },
+    {
+      "target": "vehicle:1500",
+      "pack": "train-kit",
+      "file": "Models/GLB format/train-electric-city-c.glb",
+      "scale": 11,
+      "facings": 8,
+      "tint": {
+        "hues": [
+          {
+            "min": 345,
+            "max": 15,
+            "minSaturation": 0.35
+          }
+        ]
+      }
+    },
+    {
+      "target": "vehicle:1520",
+      "pack": "train-kit",
+      "file": "Models/GLB format/train-carriage-coal.glb",
+      "scale": 10,
+      "facings": 8
+    },
+    {
+      "target": "vehicle:1530",
+      "pack": "train-kit",
+      "file": "Models/GLB format/train-carriage-box.glb",
+      "scale": 10,
+      "facings": 8
+    },
+    {
+      "target": "vehicle:1540",
+      "pack": "train-kit",
+      "file": "Models/GLB format/train-carriage-tank.glb",
+      "scale": 10,
+      "facings": 8
+    },
+    {
+      "target": "vehicle:1570",
+      "pack": "train-kit",
+      "file": "Models/GLB format/train-carriage-container-red.glb",
+      "scale": 10,
+      "facings": 8,
+      "tint": {
+        "hues": [
+          {
+            "min": 345,
+            "max": 15,
+            "minSaturation": 0.35
+          }
+        ]
+      }
+    },
+    {
+      "target": "vehicle:1580",
+      "pack": "train-kit",
+      "file": "Models/GLB format/train-carriage-flatbed.glb",
+      "scale": 10,
+      "facings": 8
+    },
+    {
+      "target": "vehicle:200",
+      "pack": "car-kit",
+      "file": "Models/GLB format/van.glb",
+      "scale": 5,
+      "facings": 8,
+      "tint": {
+        "hues": [
+          {
+            "min": 210,
+            "max": 248,
+            "minSaturation": 0.3
+          }
+        ]
+      },
+      "note": "No bus model exists in the Car Kit (E-14 gap); the van stands in for the M12 subset, M13 decides kitbash vs. procedural."
+    },
+    {
+      "target": "vehicle:220",
+      "pack": "car-kit",
+      "file": "Models/GLB format/delivery.glb",
+      "scale": 4,
+      "facings": 8,
+      "tint": {
+        "hues": [
+          {
+            "min": 130,
+            "max": 170,
+            "minSaturation": 0.3
+          }
+        ]
+      }
+    },
+    {
+      "target": "vehicle:240",
+      "pack": "car-kit",
+      "file": "Models/GLB format/truck.glb",
+      "scale": 4.5,
+      "facings": 8,
+      "tint": {
+        "hues": [
+          {
+            "min": 130,
+            "max": 170,
+            "minSaturation": 0.3
+          }
+        ]
+      }
+    },
+    {
+      "target": "vehicle:250",
+      "pack": "car-kit",
+      "file": "Models/GLB format/delivery-flat.glb",
+      "scale": 4.5,
+      "facings": 8,
+      "tint": {
+        "hues": [
+          {
+            "min": 130,
+            "max": 170,
+            "minSaturation": 0.3
+          }
+        ]
+      }
+    },
+    {
+      "target": "vehicle:270",
+      "pack": "car-kit",
+      "file": "Models/GLB format/garbage-truck.glb",
+      "scale": 4.5,
+      "facings": 8,
+      "tint": {
+        "hues": [
+          {
+            "min": 130,
+            "max": 170,
+            "minSaturation": 0.3
+          }
+        ]
+      },
+      "note": "Closest enclosed-drum body the kit offers for a tanker; M13 revisits."
+    },
+    {
+      "target": "vehicle:280",
+      "pack": "car-kit",
+      "file": "Models/GLB format/truck-flat.glb",
+      "scale": 4.5,
+      "facings": 8,
+      "tint": {
+        "hues": [
+          {
+            "min": 130,
+            "max": 170,
+            "minSaturation": 0.3
+          }
+        ]
+      }
+    },
+    {
+      "target": "vehicle:290",
+      "pack": "car-kit",
+      "file": "Models/GLB format/truck.glb",
+      "scale": 4.5,
+      "facings": 8,
+      "note": "Livestock lorry shares the truck body untinted for the subset."
+    },
+    {
+      "target": "vehicle:291",
+      "pack": "car-kit",
+      "file": "Models/GLB format/tractor-shovel.glb",
+      "scale": 4.5,
+      "facings": 8,
+      "tint": {
+        "hues": [
+          {
+            "min": 20,
+            "max": 45,
+            "minSaturation": 0.5
+          }
+        ]
+      },
+      "note": "Site vehicle stands in for the cement lorry; M13 revisits."
+    },
+    {
+      "target": "vehicle:2000",
+      "pack": "watercraft-kit",
+      "file": "Models/GLB format/ship-cargo-a.glb",
+      "scale": 8,
+      "facings": 8,
+      "tint": {
+        "hues": [
+          {
+            "min": 4,
+            "max": 18,
+            "minSaturation": 0.4
+          }
+        ]
+      }
+    },
+    {
+      "target": "vehicle:2002",
+      "pack": "watercraft-kit",
+      "file": "Models/GLB format/ship-cargo-c.glb",
+      "scale": 8,
+      "facings": 8,
+      "tint": {
+        "hues": [
+          {
+            "min": 8,
+            "max": 25,
+            "minSaturation": 0.35
+          }
+        ]
+      },
+      "note": "ship-large.glb turned out to be a sailing galleon in the bake - it belongs to the pre-1920 eras (M23), not to the 1950 bulker."
+    },
+    {
+      "target": "vehicle:2010",
+      "pack": "watercraft-kit",
+      "file": "Models/GLB format/ship-cargo-b.glb",
+      "scale": 8,
+      "facings": 8,
+      "tint": {
+        "hues": [
+          {
+            "min": 8,
+            "max": 25,
+            "minSaturation": 0.35
+          }
+        ]
+      }
+    },
+    {
+      "target": "vehicle:2040",
+      "pack": "watercraft-kit",
+      "file": "Models/GLB format/ship-ocean-liner-small.glb",
+      "scale": 7,
+      "facings": 8
+    },
+    {
+      "target": "building:residential:0",
+      "pack": "city-kit-suburban",
+      "file": "Models/GLB format/building-type-a.glb",
+      "scale": 18,
+      "facings": 1
+    },
+    {
+      "target": "building:residential:0:1",
+      "pack": "city-kit-suburban",
+      "file": "Models/GLB format/building-type-b.glb",
+      "scale": 18,
+      "facings": 1
+    },
+    {
+      "target": "building:residential:0:2",
+      "pack": "city-kit-suburban",
+      "file": "Models/GLB format/building-type-c.glb",
+      "scale": 18,
+      "facings": 1
+    },
+    {
+      "target": "building:residential:1",
+      "pack": "city-kit-suburban",
+      "file": "Models/GLB format/building-type-g.glb",
+      "scale": 18,
+      "facings": 1
+    },
+    {
+      "target": "building:residential:1:1",
+      "pack": "city-kit-suburban",
+      "file": "Models/GLB format/building-type-h.glb",
+      "scale": 18,
+      "facings": 1
+    },
+    {
+      "target": "building:commercial:0",
+      "pack": "city-kit-commercial",
+      "file": "Models/GLB format/building-a.glb",
+      "scale": 16,
+      "facings": 1
+    },
+    {
+      "target": "building:commercial:0:1",
+      "pack": "city-kit-commercial",
+      "file": "Models/GLB format/building-b.glb",
+      "scale": 16,
+      "facings": 1
+    },
+    {
+      "target": "building:commercial:1",
+      "pack": "city-kit-commercial",
+      "file": "Models/GLB format/building-skyscraper-a.glb",
+      "scale": 16,
+      "facings": 1
+    },
+    {
+      "target": "building:commercial:1:1",
+      "pack": "city-kit-commercial",
+      "file": "Models/GLB format/building-skyscraper-b.glb",
+      "scale": 16,
+      "facings": 1
+    },
+    {
+      "target": "building:industrial:0",
+      "pack": "city-kit-industrial",
+      "file": "Models/GLB format/building-a.glb",
+      "scale": 16,
+      "facings": 1
+    },
+    {
+      "target": "building:industrial:1",
+      "pack": "city-kit-industrial",
+      "file": "Models/GLB format/building-h.glb",
+      "scale": 16,
+      "facings": 1
+    },
+    {
+      "target": "industry:PowerPlant",
+      "pack": "city-kit-industrial",
+      "file": "Models/GLB format/chimney-large.glb",
+      "scale": 16,
+      "facings": 1,
+      "anchors": {
+        "chimney": [
+          0,
+          1.7,
+          0
+        ]
+      }
+    },
+    {
+      "target": "industry:SteelMill",
+      "pack": "city-kit-industrial",
+      "file": "Models/GLB format/building-d.glb",
+      "scale": 16,
+      "facings": 1,
+      "anchors": {
+        "chimney": [
+          0,
+          1.4,
+          0
+        ]
+      }
+    },
+    {
+      "target": "industry:Sawmill",
+      "pack": "city-kit-industrial",
+      "file": "Models/GLB format/building-b.glb",
+      "scale": 16,
+      "facings": 1
+    },
+    {
+      "target": "industry:FoodFactory",
+      "pack": "city-kit-industrial",
+      "file": "Models/GLB format/building-g.glb",
+      "scale": 16,
+      "facings": 1,
+      "anchors": {
+        "chimney": [
+          0,
+          1.28,
+          0
+        ]
+      }
+    },
+    {
+      "target": "industry:CementWorks",
+      "pack": "city-kit-industrial",
+      "file": "Models/GLB format/building-t.glb",
+      "scale": 16,
+      "facings": 1
+    },
+    {
+      "target": "tree:0",
+      "pack": "nature-kit",
+      "file": "Models/GLTF format/tree_default.glb",
+      "scale": 8,
+      "facings": 1
+    },
+    {
+      "target": "tree:1",
+      "pack": "nature-kit",
+      "file": "Models/GLTF format/tree_oak.glb",
+      "scale": 8,
+      "facings": 1
+    },
+    {
+      "target": "tree:2",
+      "pack": "nature-kit",
+      "file": "Models/GLTF format/tree_cone.glb",
+      "scale": 8,
+      "facings": 1
+    },
+    {
+      "target": "tree:3",
+      "pack": "nature-kit",
+      "file": "Models/GLTF format/tree_palm.glb",
+      "scale": 8,
+      "facings": 1
+    }
+  ]
+}

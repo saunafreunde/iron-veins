@@ -41,12 +41,12 @@ no entry below. A number may appear under several topics.
 - **Competitors, AI & tenders:** D-107, D-108, D-109, D-115, D-116, D-121,
   D-122, D-147, D-152, D-153, D-154, D-155, D-156, D-158
 - **Rendering & art:** D-013, D-014, D-033, D-035, D-112, D-117, D-125, D-127,
-  D-136, D-140
+  D-136, D-140, D-160
 - **UI & input:** D-011, D-013, D-015, D-035, D-110, D-113, D-114, D-119,
   D-126, D-148
 - **Performance & measurement:** D-002, D-120, D-135, D-136
 - **Platform, tooling & build:** D-012, D-014, D-015, D-016, D-017, D-029,
-  D-030, D-031
+  D-030, D-031, D-160
 - **Crash safety:** D-132, D-139
 - **Testing method & fixtures:** D-010, D-038, D-072, D-074, D-084, D-133
 - **Process & specification:** D-070, D-123, D-129, D-133, D-138, D-140
@@ -3534,3 +3534,81 @@ a section-10.1 constant that every station on the map reads and
 scenarios 1-4 own, not a knob a takt band may turn. The 0.6 band stands
 with this entry as its justification; SPEC2's "halbierte Varianz"
 carries the bracketed amendment.
+
+## M12 - the stage, stage 0: the Kenney bake pipeline (2026-08-07)
+
+### D-160 The bake is a pure function from pinned kits to bit-identical atlases, and every gap falls back to procedural art
+
+E-14 as revised by the owner directive (D-140) ordered the mechanism; this
+entry records the shape it took and the four choices inside it that were not
+in the order.
+
+**The pipeline is fetch, then bake, and only the text manifest is committed.**
+`tools/assets-manifest.json` pins all twelve packs by kenney.nl URL AND
+SHA-256 - the URLs embed a CMS media hash, so an upstream re-upload changes
+both together and a stale pin fails loudly instead of baking unvetted
+geometry. `npm run assets:fetch` downloads, verifies and unpacks into
+`assets-cache/` (gitignored); a checksum mismatch is a hard error. `npm run
+assets:bake` rasterises the mapped GLB models into `public/assets-baked/`
+(gitignored, served statically by vite so the M13 renderer can fetch it) and
+is deliberately soft in the other direction: no cache means a warning and a
+clean exit, because E-14's floor is that the game always starts, on
+procedural art if it must. The E-14 glob test is real now:
+`tests/unit/repoAssets.spec.ts` walks the actual git index and fails on any
+binary extension outside `src-tauri/icons/` (committed because the Tauri
+bundler reads them from disk, still regenerable via `npm run icons`), and
+proves both pipeline directories are ignored by construction.
+
+**The rasteriser is ~400 lines of own code and shares its light and camera
+with the live renderer by coupling test.** GLB parsing (JSON + BIN chunk,
+accessors, node TRS/matrix composition), an own PNG codec, and a
+z-buffered triangle rasteriser through EXACTLY the 16.1 projection - the
+constants are restated in `tools/bake-lib.ts` because Node's type-stripping
+runtime cannot resolve the extensionless imports inside `src/` (that is also
+why `allowImportingTsExtensions` is now on: the tools import each other by
+real file name and run under plain `node`), and
+`tests/unit/assetsBake.spec.ts` asserts them equal to `projection.ts`,
+`constants.ts` and the `shapes.ts` face factors, the same device that keeps
+TerrainAtlas and MapView in step. Flat shading solves one linear light from
+the three box-face factors (base 0.44 + 0.08 x + 0.30 y + 0.62 up
+reproduces FACE_RIGHT/FACE_LEFT/FACE_TOP exactly), so a baked cell sits in
+the same NW light as every procedural cell beside it. Depth runs along the
+projection's null direction (1, 1, 0.32 in metres), which makes the
+z-buffer agree with `drawOrder()`'s painter ordering by construction.
+Vehicles bake eight facings in the FACING_DELTAS order the manifest also
+documents; zooms 1, 2 and 4 bake as separate pages (16.2's per-zoom
+atlases).
+
+**The PNG writer is fflate, not node:zlib, and not a new dependency.** The
+icon generator's node:zlib precedent was rejected for the atlases because
+native zlib output can legitimately differ between Node builds; fflate is
+pure JS, already a runtime dependency for saves, and makes "bake twice,
+bit-identical" hold across machines, not just across runs. The
+reproducibility test hashes a full synthetic bake twice; the same double
+bake was verified byte-identical on the real twelve kits.
+
+**Company colour is a hue-band tint zone rendered as two cells.** The recent
+kits carry one "colormap" material and paint a livery as a RAMP of shades
+around one hue inside a shared palette texture, so exact-colour lists fray;
+the manifest marks hue bands (min/max degrees, minimum saturation), older
+kits with named materials (Nature Kit) can mark material names instead. A
+zone face renders neutral grey in the base cell and opaque grey in the mask
+cell with the NW shading carried in the mask's grey VALUE - tinting the
+mask with a company colour therefore multiplies to a shaded livery, and an
+untinted draw shows an honest unliveried vehicle. Face colours come from
+one nearest-neighbour sample at the UV centroid, which is exact for
+palette-atlas art where every face maps inside one flat patch.
+
+**The M12 subset is representative and its gaps are named.** 43 mappings:
+11 rail vehicles, 8 road, 4 ships, 11 town buildings (zone x stage with
+variants), 5 industry structures with chimney anchor metadata, 4 trees.
+M13 completes the catalogue. Known gaps recorded in the manifest itself: no
+bus exists in the Car Kit (the van stands in), no Kenney 3D aircraft kit
+exists at all, coal-mine headframe and oil derrick have no kit equivalent -
+all stay procedural per E-14 - and `ship-large.glb` turned out to be a
+sailing galleon, filed for the pre-1920 eras rather than the 1950 bulker.
+The game consumes nothing yet: `src/render/bakedAtlas.ts` is the loader
+stub behind the feature check (`atlasSourceFor` - only a validated,
+non-empty manifest earns the baked path; absence, damage or an unknown
+version all mean procedural, decided by a pure function under unit test),
+and MapView switches over in M13.

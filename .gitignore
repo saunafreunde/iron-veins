@@ -5,3 +5,7 @@ coverage/
 .vite/
 src-tauri/target/
 src-tauri/gen/
+# Kenney asset pipeline (E-14/D-140): downloads and bake output are build
+# artifacts, never commits - the repo-assets glob test proves it stays that way.
+assets-cache/
+public/assets-baked/
