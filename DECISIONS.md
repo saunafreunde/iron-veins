@@ -23,9 +23,9 @@ no entry below. A number may appear under several topics.
 - **Save format, migrations & replays:** D-007, D-025, D-026, D-027, D-048,
   D-111, D-130, D-131, D-134, D-142, D-144, D-145, D-146, D-147, D-153
 - **Rail & track:** D-042, D-043, D-044, D-045, D-046, D-047, D-053, D-141,
-  D-153
+  D-153, D-157
 - **Signals & reservations:** D-054, D-055, D-056, D-057, D-058, D-059, D-060,
-  D-061, D-073, D-080, D-081, D-082, D-083
+  D-061, D-073, D-080, D-081, D-082, D-083, D-157
 - **Stations & catchment:** D-049, D-080, D-095, D-150
 - **Cargo, payment & routing:** D-036, D-037, D-065, D-067, D-075, D-077,
   D-078, D-118, D-142, D-151
@@ -36,7 +36,7 @@ no entry below. A number may appear under several topics.
 - **Balancing & scenarios:** D-038, D-039, D-040, D-041, D-066, D-087, D-088,
   D-116, D-151, D-152, D-156
 - **Vehicles & fleet:** D-043, D-044, D-045, D-068, D-076, D-089, D-093,
-  D-096, D-142, D-143, D-145, D-146, D-155
+  D-096, D-142, D-143, D-145, D-146, D-155, D-157
 - **Water & air:** D-094, D-095, D-096, D-097, D-098, D-099
 - **Competitors, AI & tenders:** D-107, D-108, D-109, D-115, D-116, D-121,
   D-122, D-147, D-152, D-153, D-154, D-155, D-156
@@ -3315,3 +3315,81 @@ building, a renewal that eats a company - goes red by name. The 25-year
 world is built once and shared across the file, which with the D-152
 scan backoff takes the file from ten minutes back to about seventy
 seconds.
+
+## M11 - the arrival-gate freeze (2026-08-07)
+
+### D-157 The last path boundary is where the remaining-distance accumulator runs out, not where a recomputed step says it is
+
+D-156's named bottleneck, reproduced, mechanised and fixed. The
+reproduction first (the method of D-109/D-121 - this file's history holds
+two plausible diagnoses that were wrong, so the signature was measured
+before any code moved): a railbus on a 31-node route whose last ten steps
+are diagonal, a breakdown written mid-brake exactly as `rollBreakdowns`
+writes it, scanned over 300 breakdown timings. One offset froze for ever
+and carried D-156's signature to the digit: state Braking, speed 0,
+`routeRemainingM - progressM` printing as 0 (actually -3.05e-5),
+`pathIndex` 29 of 31 - two short of `pathLength`, for ever.
+
+The mechanism is D-043's twin, one storage class down. `routeRemainingM`
+is a Float32 fed by repeated subtraction of float64 step lengths, so on
+any route that mixes 50 m and 70.71 m steps it drifts a few float ulps
+per tile crossed - measured 6.1e-5 m short of the exact final step on the
+31-node bench, and the drift grows with route length (centimetres on the
+eighty-tile lines of D-121). The arrival brake targets exactly
+`routeRemainingM - progressM = 0`; the tile-advance gate compared
+`progressM` against the freshly recomputed float64 `pathStepM`. Between
+the two numbers lies a sliver, and a vehicle at a dead stop inside it has
+`remaining <= 0` - so the state machine holds it in Braking, Braking cuts
+traction, speed stays zero, and nothing ever moves again. D-043's promise
+that "the two quantities are the same arithmetic and cannot disagree"
+held in float64 and was broken by the Float32 store. The mid-brake
+breakdown produces the landing reliably because the post-repair approach
+ends in a creep that crosses the target in accel*dt^2-sized quanta -
+millimetres for a railbus, and the heavier the train the smaller the
+quantum and the surer the landing; every arrival without a breakdown
+samples the same sliver at rolling speed and mostly clears it, which is
+why the defect presented as months-scale attrition rather than a red
+test.
+
+The fix makes the two numbers one: in the tile-advance loop the FINAL
+step's crossing threshold - and the amount subtracted on crossing - is
+`routeRemainingM` itself. The brake target and the arrival gate are now
+the same Float32 by construction, the sliver cannot exist, and
+`routeRemainingM` ends the route at exactly zero. Intermediate boundaries
+keep the recomputed step: nothing brakes to a target ON them (a signal
+stop stands `SIGNAL_STOP_OFFSET_M` short), and their thresholds must stay
+in step with the same `pathStepM` the reservations walk. The gate is in
+the mode-shared Driving/Braking case, so rail, road, water and air are
+all covered by the one change; roads alone cannot drift (4-directional,
+every step exactly 50 m, float-exact in a Float32) and get the contract
+test anyway. No state shape changed and no SAVE_VERSION moved (Z5): a
+save frozen mid-defect heals on its first tick after loading.
+
+The deadlock clock was blind to the frozen train, and that is the D-083
+lesson finishing its arc: the freeze stands at speed zero HOLDING its
+whole approach - `reservedToIndex` ahead of `pathIndex` - so the "holds
+nothing beyond its own body" test read it as fine, exactly as the
+boundary-only test of D-083 once read four shedbound trains as fine. The
+stall test is now "standing still mid-route, whatever it holds"; the
+end-of-route rollout is excluded, so the tick a train slows into its
+arrival is the tick the clock clears rather than the start of a false
+count through the station dwell (the old test could leave a stale clock
+set on the arrival tick, which a long full-load wait would eventually
+have turned into a phantom "train stuck" alarm).
+
+The v24 pins did NOT move, verified by the green suites rather than
+asserted from the armchair: the canonical cross-OS world (D-137) replays
+the ROAD fixture - no trains, float-exact 50 m steps, bit-identical
+behaviour before and after - and the corpus manifest (D-130) re-verified
+unchanged. The determinism fixtures assert cross-run and save/load
+equality, which the fix preserves; had a pinned hash contained a train
+mid-approach, re-recording under the documented protocol would have been
+the correct and expected act.
+
+`tests/unit/finalApproach.spec.ts` pins all of it: the dead stop exactly
+ON the brake target for a train and for an aircraft, the measured
+freezing breakdown offset, the widened clock, and the bus contract run -
+four of the five fail on the unfixed code. This closes the FIRST of
+D-156's two named walls; the second (a passenger pile a fleet merely
+matches pays the decay floor for ever) stands, and scenario 5 stays out
+of the suite until the AI runs are measured again against the band.

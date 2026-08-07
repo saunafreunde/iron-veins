@@ -1126,7 +1126,20 @@ function stepVehicle(world: World, id: number): void {
       for (;;) {
         const index = vehicles.pathIndex[id]!;
         if (index + 1 >= vehicles.pathLength[id]!) break;
-        const step = pathStepM(path, index, size);
+        // The FINAL boundary is where the remaining-distance accumulator runs
+        // out, not where a freshly recomputed step length says it is.
+        // `routeRemainingM` is a Float32 fed by repeated subtraction, so at
+        // the last node it sits a few float ulps off the exact step - and the
+        // arrival brake targets exactly `routeRemainingM - progressM = 0`.
+        // Crossing against the recomputed step reopens the D-043 gap between
+        // two measures of one distance: a vehicle forced to a dead stop ON
+        // its brake target (a mid-brake breakdown does it reliably) lands in
+        // the sliver between the two numbers, where `remaining <= 0` holds it
+        // in Braking at speed zero for ever (DECISIONS.md D-157).
+        const step =
+          index + 2 >= vehicles.pathLength[id]!
+            ? vehicles.routeRemainingM[id]!
+            : pathStepM(path, index, size);
         if (vehicles.progressM[id]! < step) break;
 
         // The gate: a train may cross into a section only while it holds it.
@@ -1149,23 +1162,25 @@ function stepVehicle(world: World, id: number): void {
         vehicles.tileIndex[id] = path[index + 1]!;
       }
       if (held) return;
+      const atEnd = vehicles.pathIndex[id]! + 1 >= vehicles.pathLength[id]!;
       if (train) {
-        // A train standing still that holds nothing beyond its own body is
-        // going nowhere, and the deadlock clock has to see it. Watching only
-        // the tile-advance gate misses this case entirely: a train whose
-        // section is never granted never crosses a tile boundary, so it stalls
-        // in DRIVING at zero speed and the clock never starts - which is how
-        // four trains sat in their sheds for a whole run with the warning
-        // reading zero (DECISIONS.md D-083).
-        const stalled =
-          vehicles.reservedToIndex[id]! <= vehicles.pathIndex[id]! &&
-          vehicles.speedMs[id]! < STOPPED_SPEED_MS;
+        // A train standing still mid-route is going nowhere WHATEVER it
+        // holds, and the deadlock clock has to see it. D-083 taught the clock
+        // the train that holds nothing beyond its own body - a section never
+        // granted - but the arrival-gate freeze (D-157) stood at speed zero
+        // HOLDING its whole approach, reservedToIndex ahead of pathIndex, and
+        // the clock read zero for ever. So does a train braked to a stand by
+        // the wall of its own claim while the extension keeps failing.
+        // Standing still is the signal, not what the train holds. The
+        // end-of-route rollout is excluded: the tick it slows below standing
+        // speed is the tick it arrives, and the clock must not run on into
+        // the station dwell.
+        const stalled = !atEnd && vehicles.speedMs[id]! < STOPPED_SPEED_MS;
         if (!stalled) vehicles.waitingSinceTick[id] = -1;
         else if (vehicles.waitingSinceTick[id]! < 0) vehicles.waitingSinceTick[id] = world.tick;
         releaseBehind(world, id);
       }
 
-      const atEnd = vehicles.pathIndex[id]! + 1 >= vehicles.pathLength[id]!;
       if (!atEnd) return;
 
       vehicles.progressM[id] = 0;

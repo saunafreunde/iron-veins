@@ -457,23 +457,29 @@ divergence between platforms is a law-#3 break and is never re-pinned.
 
 ## Still outstanding
 
-- **A train forced to a dead stop on its final approach never arrives.** THE
-  bottleneck under every rail number below, with a precise measured signature
-  (D-156): `routeRemainingM - progressM = 0`, `pathIndex` two short of
-  `pathLength`, Braking/Driving oscillating at speed ~0 for ever - a
-  mid-brake breakdown produces it reliably. It is a `vehicles/update.ts`
-  state-machine defect, not an AI one, and D-121's "two deliveries in six
-  months" carries the same signature. Every single-train railway dies of it
-  within months; fix this before touching any AI constant.
+- **The arrival-gate freeze is FIXED (D-157).** D-156's bottleneck - a
+  vehicle forced to a dead stop on its final approach never arrived - was
+  the Float32 `routeRemainingM` accumulator drifting a few ulps below the
+  freshly recomputed float64 step of the LAST path node: the brake curve
+  targets the accumulator, the tile advance compared against the recomputed
+  step, and a dead stop in the sliver between them (`remaining <= 0`,
+  `pathIndex` two short of `pathLength`) held Braking at speed zero for
+  ever. The final crossing threshold is now `routeRemainingM` itself - the
+  brake target and the arrival gate are one number, per D-043's own rule.
+  The deadlock clock also sees a standing train now WHATEVER it holds
+  (D-083's test was blind to a train holding its whole approach).
+  `tests/unit/finalApproach.spec.ts` pins train, aircraft, bus and clock;
+  the v24 pins did not move (road-only canonical fixture, verified green).
 - **Balancing scenario 5** of section 19.4 is still not met, and the test is
   still NOT in the suite (D-116's reasoning, extended by D-156). Stage C2's
   measured state on the 512 map: the road personality compounds to
   1 120 000 - from 433 000 and stalled - and survives its year-twenty fleet
   renewal; the rail personalities build and run profitable first lines (on
-  pace for the band) until the braking freeze above kills their trains. The
-  second measured wall: a passenger pile a fleet merely MATCHES pays the
-  decay floor for ever (oldest first), which holds even healthy bus lines an
-  order of magnitude below what the band assumes.
+  pace for the band) until the braking freeze - now fixed, D-157 - killed
+  their trains; the AI runs have not been re-measured against the band
+  since. The second measured wall stands: a passenger pile a fleet merely
+  MATCHES pays the decay floor for ever (oldest first), which holds even
+  healthy bus lines an order of magnitude below what the band assumes.
 - **What the AI does since stage C2** (D-152 to D-155): fleets sized with
   the 12.3 advisor from the demand interval; a takt ONLY on two-train
   railways (the fleet's own spacing - on roads the slot idle costs more than
