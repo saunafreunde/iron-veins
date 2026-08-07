@@ -394,8 +394,10 @@ Ryzen 5 7520U (4C/8T), 16 GB, Windows 11, Node 24 — schwächer als das
 SPEC-§21-Referenzsystem bewusst erlaubt. Render-Tripwire-Grundlinie (6.3):
 Sprite-Pool-Rebuild p99 4,3 ms bei 7 101 Sprites (64×64-Fenster), Draw-Prep
 p99 0,41 ms bei 1 500 Fahrzeugen (D-136). Cross-OS-Anker: kanonischer
-Welt-Hash `63ae5fd6b5d01190` (Seed 424242, Tick 10 000, v23), gepinnt in
-`tests/determinism/fixtures/canonical-hash.json` (D-137).
+Welt-Hash gepinnt in `tests/determinism/fixtures/canonical-hash.json`
+(D-137); die Datei ist die einzige Wahrheit — der Pin wandert mit jeder
+hash-relevanten Migration und wird dort re-recorded (M10-Erstwert war
+`63ae5fd6b5d01190` auf v23, seit v24 gilt der Datei-Stand).
 
 ### 6.2 Atlas-Seiten-Plan
 
