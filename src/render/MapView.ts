@@ -13,8 +13,10 @@ import {
 } from 'pixi.js';
 import type { IndustryMarker, StationMarker, TownMarker, VehicleMarker } from '../shared/protocol';
 import {
+  SNAPSHOT_FLOW_STRIDE,
   SNAPSHOT_RESERVED_STRIDE,
   SNAPSHOT_VEHICLE_STRIDE,
+  SnapshotFlow,
   SnapshotReserved,
   SnapshotVehicle,
   type VehicleFrame,
@@ -36,6 +38,19 @@ import {
 } from './projection';
 import { INDUSTRY_SPECS } from '../sim/industry/types';
 import { COMPANY_COLORS } from '../shared/palette';
+import {
+  FLOW_ARROWHEAD_MIN_ZOOM,
+  FLOW_ESTIMATE_ALPHA,
+  FLOW_HEAD_PX,
+  FLOW_MEASURED_ALPHA,
+  FLOW_TOP_N,
+  flowArcControl,
+  flowArrowWidth,
+  flowHash,
+  flowHead,
+  flowStrokeColor,
+  selectTopFlows,
+} from './flowAtlas';
 
 /** The company palette as Pixi tints, parsed once. */
 const COMPANY_TINTS: readonly number[] = COMPANY_COLORS.map((hex) =>
@@ -830,6 +845,37 @@ export class MapView {
   /** Frame counter, so the deadlock marker blinks without a wall clock. */
   private blink = 0;
 
+  /**
+   * The flow atlas of SPEC2 M14 (D-176/D-177): curved volume arrows over the
+   * measured station legs, drawn from the snapshot's FlowMarker block into
+   * an own world-space Graphics.
+   *
+   * A sibling of `art` OUTSIDE the D-127 tint - the atlas is an instrument,
+   * and instruments do not dim at night - and deliberately not part of any
+   * chunk bake: flows are dynamic, and D-161 bakes only what moves with the
+   * map revision. World-space drawing makes camera pans free; the layer is
+   * rebuilt only when the block's hash, the zoom or the station list moved -
+   * never per frame, and never per publish while nothing changed.
+   */
+  private readonly flowLayer = new Graphics();
+  private flowOverlay = false;
+  private flowSource: (() => { data: Int32Array; count: number; tick: number }) | null = null;
+  /** Row indices of the drawn legs, filled by `selectTopFlows`. */
+  private readonly flowScratch = new Int32Array(FLOW_TOP_N);
+  /** Hash of the newest published flow block, refreshed on publish edges. */
+  private flowHashCurrent = 0;
+  /** What the layer currently shows; -1 while it shows nothing. */
+  private flowDrawnHash = -1;
+  private flowDrawnZoom = -1;
+  private flowDrawnStations: readonly StationMarker[] | null = null;
+  /** Station markers by id, for joining flow rows to positions. */
+  private readonly stationById = new Map<number, StationMarker>();
+  /** Last published stats, so the callback fires only on a change. */
+  private sentFlowDrawn = -1;
+  private sentFlowOmitted = -1;
+  /** Drawn/omitted arrow counts for the honest "x weitere" indicator. */
+  onFlowStats: ((drawn: number, omitted: number) => void) | null = null;
+
   /** True once the WebGL context exists; false again after dispose. */
   private live = false;
   /** Set by dispose, so an attach that is still in flight cleans up after itself. */
@@ -1098,6 +1144,11 @@ export class MapView {
     }
     this.art.addChild(this.particleLayer);
     this.world.addChild(this.art);
+    // The flow atlas (M14) above the world art and outside its tint, below
+    // the selection overlay: an arrow must not cover the marker of the tile
+    // the player is pointing at.
+    this.flowLayer.eventMode = 'none';
+    this.world.addChild(this.flowLayer);
     this.world.addChild(this.overlay);
     // Badges above the overlay: a chip must not vanish under the selection
     // ring of the vehicle it warns about.
@@ -1170,6 +1221,11 @@ export class MapView {
   setStations(stations: readonly StationMarker[]): void {
     this.stations = stations;
     this.builtRevision = -1; // stations are drawn with the tiles
+    // The flow atlas joins its rows to these markers by id; a fresh list
+    // also fails the identity check in maintainFlow, so the arrows follow a
+    // renamed or demolished station on the next frame.
+    this.stationById.clear();
+    for (const station of stations) this.stationById.set(station.id, station);
   }
 
   setCompanyColor(hex: number): void {
@@ -1212,6 +1268,16 @@ export class MapView {
   /** Turn the block overlay on or off (F3). */
   setBlockOverlay(on: boolean): void {
     this.blockOverlay = on;
+  }
+
+  /** Turn the flow atlas overlay on or off (M14; the A key of D-114's table). */
+  setFlowOverlay(on: boolean): void {
+    this.flowOverlay = on;
+  }
+
+  /** Where the flow atlas reads the published FlowMarker block from (D-176). */
+  setFlowSource(source: () => { data: Int32Array; count: number; tick: number }): void {
+    this.flowSource = source;
   }
 
   /** Tiles of trains that have been stuck long enough to count (section 9.3). */
@@ -1644,6 +1710,7 @@ export class MapView {
     }
     this.drawVehicles(map, abstract);
     this.updateParticles(map, abstract);
+    this.maintainFlow(map, generationMoved);
     this.drawOverlay(map);
 
     // Map text (SPEC2 M12): re-laid-out only when zoom, lists or revision
@@ -3907,6 +3974,103 @@ export class MapView {
   /** Route the build preview is currently showing, drawn on the overlay. */
   setPreviewRoute(tiles: readonly number[] | null): void {
     this.previewRoute = tiles;
+  }
+
+  /**
+   * The flow atlas of SPEC2 M14 (D-177): the measured legs of the FlowMarker
+   * block as quadratic volume arrows between station centres.
+   *
+   * Event-driven, never per frame: the block's hash is refreshed on publish
+   * edges only (the 20 Hz ceiling), and the layer is rebuilt when the hash,
+   * the zoom or the station list actually moved. World-space geometry makes
+   * every camera pan free; widths and arrowheads are divided by the zoom so
+   * the atlas stays readable at 0.5x and 0.25x over the M12 chunks - it is
+   * an overlay diagram, not a world object, and it is never baked (D-161).
+   */
+  private maintainFlow(map: TileMap, generationMoved: boolean): void {
+    if (!this.flowOverlay || this.flowSource === null) {
+      if (this.flowDrawnHash !== -1) {
+        this.flowLayer.clear();
+        this.flowDrawnHash = -1;
+        this.publishFlowStats(0, 0);
+      }
+      return;
+    }
+
+    const flow = this.flowSource();
+    if (generationMoved || this.flowDrawnHash === -1) {
+      this.flowHashCurrent = flowHash(flow.data, flow.count);
+    }
+    if (
+      this.flowHashCurrent === this.flowDrawnHash &&
+      this.zoom === this.flowDrawnZoom &&
+      this.stations === this.flowDrawnStations
+    ) {
+      return;
+    }
+
+    const layer = this.flowLayer;
+    layer.clear();
+    const selection = selectTopFlows(flow.data, flow.count, FLOW_TOP_N, this.flowScratch);
+    const showHeads = this.zoom >= FLOW_ARROWHEAD_MIN_ZOOM;
+    const data = flow.data;
+    let drawn = 0;
+
+    for (let i = 0; i < selection.drawn; i++) {
+      const base = this.flowScratch[i]! * SNAPSHOT_FLOW_STRIDE;
+      const from = this.stationById.get(data[base + SnapshotFlow.FromStation]!);
+      const to = this.stationById.get(data[base + SnapshotFlow.ToStation]!);
+      // The exporter only writes legs whose stations exist, but the marker
+      // list here can lag the sim by a marker cadence - skip, never guess.
+      if (from === undefined || to === undefined) continue;
+
+      const volume = data[base + SnapshotFlow.VolumeUnits]!;
+      const measured = data[base + SnapshotFlow.Measured]! === 1;
+      const colour = flowStrokeColor(
+        data[base + SnapshotFlow.OwnerId]!,
+        data[base + SnapshotFlow.LineId]!,
+      );
+      const alpha = measured ? FLOW_MEASURED_ALPHA : FLOW_ESTIMATE_ALPHA;
+
+      const a = tileToWorld(from.x, from.y, map.baseHeight(from.x, from.y));
+      const b = tileToWorld(to.x, to.y, map.baseHeight(to.x, to.y));
+      const ax = a.x;
+      const ay = a.y + TILE_H / 2;
+      const bx = b.x;
+      const by = b.y + TILE_H / 2;
+      const ctrl = flowArcControl(ax, ay, bx, by);
+
+      layer.moveTo(ax, ay);
+      layer.quadraticCurveTo(ctrl.cx, ctrl.cy, bx, by);
+      layer.stroke({ width: flowArrowWidth(volume) / this.zoom, color: colour, alpha });
+
+      if (showHeads) {
+        const head = flowHead(ctrl.cx, ctrl.cy, bx, by, FLOW_HEAD_PX / this.zoom);
+        layer
+          .moveTo(bx, by)
+          .lineTo(head.leftX, head.leftY)
+          .lineTo(head.rightX, head.rightY)
+          .closePath();
+        layer.fill({ color: colour, alpha });
+      }
+      drawn++;
+    }
+
+    this.flowDrawnHash = this.flowHashCurrent;
+    this.flowDrawnZoom = this.zoom;
+    this.flowDrawnStations = this.stations;
+    // Honest bookkeeping for the "x weitere" indicator: omitted is every
+    // active leg that is NOT on screen as an arrow, including top-N rows
+    // whose station marker has not arrived yet.
+    this.publishFlowStats(drawn, flow.count - drawn);
+  }
+
+  /** Push the drawn/omitted counts to the interface, only on a change. */
+  private publishFlowStats(drawn: number, omitted: number): void {
+    if (drawn === this.sentFlowDrawn && omitted === this.sentFlowOmitted) return;
+    this.sentFlowDrawn = drawn;
+    this.sentFlowOmitted = omitted;
+    this.onFlowStats?.(drawn, omitted);
   }
 
   /** Cursor highlight, selection marker, build preview and the F3 overlay. */

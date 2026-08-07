@@ -172,6 +172,21 @@ export interface SimUiState extends SnapshotValues {
   isDesktop: boolean;
   sharedMemoryAvailable: boolean;
   showDebug: boolean;
+  /** The flow atlas overlay of SPEC2 M14; the A key toggles it (D-114). */
+  showFlow: boolean;
+  /**
+   * What the atlas currently shows against what the world measured: `drawn`
+   * arrows on screen, `omitted` active legs cut by the top-N cap - the
+   * honest "x weitere" indicator of the M14 order. Pushed change-detected
+   * by the map view, so an unchanged network writes nothing here.
+   */
+  flowStats: { readonly drawn: number; readonly omitted: number };
+  /**
+   * Where the minimap's Fluss mode reads the published FlowMarker block,
+   * wired by the map canvas from the SimClient (the setCentreOnTile
+   * pattern): the painter itself stays pure (D-112), the PANEL gathers.
+   */
+  flowSource: (() => { data: Int32Array; count: number; tick: number }) | null;
   /** Translation key of the last rejected command, shown as a toast. */
   rejectionKey: string | null;
   /** Bumped on every rejection so repeating the same mistake restarts the toast. */
@@ -273,6 +288,9 @@ export interface SimUiState extends SnapshotValues {
     offer: { readonly name: string; readonly summary: CrashBundleSummary } | null,
   ) => void;
   toggleDebug: () => void;
+  toggleFlow: () => void;
+  setFlowStats: (drawn: number, omitted: number) => void;
+  setFlowSource: (source: (() => { data: Int32Array; count: number; tick: number }) | null) => void;
 }
 
 export const useSimStore = create<SimUiState>((set) => ({
@@ -334,6 +352,9 @@ export const useSimStore = create<SimUiState>((set) => ({
   isDesktop: false,
   sharedMemoryAvailable: typeof SharedArrayBuffer !== 'undefined',
   showDebug: false,
+  showFlow: false,
+  flowStats: { drawn: 0, omitted: 0 },
+  flowSource: null,
   rejectionKey: null,
   rejectionSeq: 0,
   fatalError: null,
@@ -427,6 +448,7 @@ export const useSimStore = create<SimUiState>((set) => ({
       openList: null,
       mapBuffer: null,
       mapSize: 0,
+      flowStats: { drawn: 0, omitted: 0 },
     }),
   setCompany: (name, colorIndex) => set({ companyName: name, companyColorIndex: colorIndex }),
   setPlatform: (appVersion, isDesktop) => set({ appVersion, isDesktop }),
@@ -438,4 +460,7 @@ export const useSimStore = create<SimUiState>((set) => ({
   setCrashBundleStored: (crashBundleStored) => set({ crashBundleStored }),
   setStoredCrashOffer: (storedCrashOffer) => set({ storedCrashOffer }),
   toggleDebug: () => set((state) => ({ showDebug: !state.showDebug })),
+  toggleFlow: () => set((state) => ({ showFlow: !state.showFlow })),
+  setFlowStats: (drawn, omitted) => set({ flowStats: { drawn, omitted } }),
+  setFlowSource: (flowSource) => set({ flowSource }),
 }));

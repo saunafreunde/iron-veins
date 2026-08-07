@@ -23,10 +23,19 @@ export const MinimapMode = {
   Owner: 2,
   CargoFlow: 3,
   Contours: 4,
+  /**
+   * The measured flow legs of the M14 FlowMarker block (D-176/D-177), drawn
+   * as lines between station pixels. Not the same question as CargoFlow:
+   * that mode shows where cargo PILES (stations by waiting, industries by
+   * level - what "Frachtfluss" could honestly mean before the measurement
+   * existed, D-112); this one shows what MOVES where, now that it is
+   * measured. The N key cycle picks it up through MINIMAP_MODE_COUNT.
+   */
+  Flow: 5,
 } as const;
 export type MinimapMode = (typeof MinimapMode)[keyof typeof MinimapMode];
 
-export const MINIMAP_MODE_COUNT = 5;
+export const MINIMAP_MODE_COUNT = 6;
 
 /** Translation keys for the mode buttons, indexed by MinimapMode. */
 export const MINIMAP_MODE_KEYS: readonly string[] = [
@@ -35,6 +44,7 @@ export const MINIMAP_MODE_KEYS: readonly string[] = [
   'ui.minimap.owner',
   'ui.minimap.cargo',
   'ui.minimap.contours',
+  'ui.minimap.flow',
 ];
 
 interface Rgb {
@@ -75,6 +85,36 @@ const NO_MARKERS: MinimapMarkers = {
 };
 
 /**
+ * The measured legs the Flow mode draws, gathered by the caller from the
+ * snapshot's FlowMarker block and the station markers (D-176): the painter
+ * stays a pure function of its arguments (D-112), so the same call keeps
+ * serving the save thumbnail. Index-parallel arrays, one entry per leg.
+ */
+export interface MinimapFlows {
+  /** Tile index of the station each leg leaves from. */
+  readonly fromTiles: readonly number[];
+  /** Tile index of the station each leg arrives at. */
+  readonly toTiles: readonly number[];
+  /** Recorded volume over the leg's sample window. [units] */
+  readonly volumes: readonly number[];
+  /** Company of the newest recorded trip, -1 for an estimate leg. */
+  readonly owners: readonly number[];
+}
+
+const NO_FLOWS: MinimapFlows = {
+  fromTiles: [],
+  toTiles: [],
+  volumes: [],
+  owners: [],
+};
+
+/** Colour of an estimate leg on the minimap - matches UNSERVED's family. */
+const FLOW_LINE_ESTIMATE: Rgb = { r: 130, g: 138, b: 146 };
+
+/** Brightness floor for the faintest leg, so a thin flow stays visible. */
+const FLOW_LINE_MIN_STRENGTH = 0.4;
+
+/**
  * Paint the whole map into an RGBA buffer, one pixel per tile.
  *
  * `out` must hold `size * size * 4` bytes. It is passed in rather than
@@ -86,11 +126,16 @@ export function paintMinimap(
   map: TileMap,
   mode: MinimapMode,
   out: Uint8ClampedArray,
-  options: { readonly colorBlind?: boolean; readonly markers?: MinimapMarkers } = {},
+  options: {
+    readonly colorBlind?: boolean;
+    readonly markers?: MinimapMarkers;
+    readonly flows?: MinimapFlows;
+  } = {},
 ): void {
   const size = map.size;
   const companies = options.colorBlind === true ? COMPANY_RGB_CVD : COMPANY_RGB;
   const markers = options.markers ?? NO_MARKERS;
+  const flows = options.flows ?? NO_FLOWS;
 
   for (let tile = 0; tile < size * size; tile++) {
     const colour = colourFor(map, tile, mode, companies);
@@ -108,6 +153,7 @@ export function paintMinimap(
   }
 
   if (mode === MinimapMode.CargoFlow) paintMarkers(map, out, markers);
+  if (mode === MinimapMode.Flow) paintFlows(map, out, flows, companies);
 }
 
 /** North corner of a tile, which is the height the ground reads as. */
@@ -137,8 +183,9 @@ function colourFor(map: TileMap, tile: number, mode: MinimapMode, companies: rea
     }
 
     case MinimapMode.CargoFlow:
-      // The markers are painted over this; the ground behind them is dimmed so
-      // they are the only bright thing in the view.
+    case MinimapMode.Flow:
+      // The markers respectively the flow lines are painted over this; the
+      // ground behind them is dimmed so they are the only bright thing.
       return dim(terrain);
 
     case MinimapMode.Contours: {
@@ -163,10 +210,11 @@ function dim(colour: Rgb): Rgb {
 /**
  * Stations and industries, brightest where most is happening.
  *
- * This is what "Frachtfluss" can honestly mean with the data the game keeps: a
- * flow needs two endpoints and a rate, and the simulation measures neither per
- * tile. What it does know is where cargo is piling up and how hard each works
- * is running, and that is the same question answered from the other side.
+ * This was what "Frachtfluss" could honestly mean before M14: a flow needs
+ * two endpoints and a rate, and until D-176 the simulation measured neither.
+ * Now that it does, the measured legs live in their own Flow mode; THIS mode
+ * keeps answering the question it always answered - where cargo piles up and
+ * how hard each works is running - which is why both exist (D-177).
  */
 function paintMarkers(map: TileMap, out: Uint8ClampedArray, markers: MinimapMarkers): void {
   for (let i = 0; i < markers.industryTiles.length; i++) {
@@ -186,6 +234,85 @@ function paintMarkers(map: TileMap, out: Uint8ClampedArray, markers: MinimapMark
       g: 230 - strength * 190,
       b: 60,
     });
+  }
+}
+
+/**
+ * The measured legs as lines between station pixels (SPEC2 M14, D-177).
+ *
+ * Straight lines rather than the map view's arcs: at one pixel per tile the
+ * two directions of a pair land on the same pixels anyway, and a curve would
+ * cost precision without adding a fact. Brightness carries the volume - the
+ * brightest leg is the biggest flow in the picture, everything else scales
+ * against it with a floor so a thin flow stays visible. Colour is the owning
+ * company's; a leg nobody drove yet is a faint neutral grey. Station
+ * endpoints are blotted last so the nodes of the network sit over the lines.
+ */
+function paintFlows(
+  map: TileMap,
+  out: Uint8ClampedArray,
+  flows: MinimapFlows,
+  companies: readonly Rgb[],
+): void {
+  let maxVolume = 1;
+  for (let i = 0; i < flows.volumes.length; i++) {
+    if (flows.volumes[i]! > maxVolume) maxVolume = flows.volumes[i]!;
+  }
+
+  for (let i = 0; i < flows.fromTiles.length; i++) {
+    const owner = flows.owners[i] ?? -1;
+    const base =
+      owner >= 0 ? (companies[owner % companies.length] ?? FLOW_LINE_ESTIMATE) : FLOW_LINE_ESTIMATE;
+    const strength =
+      FLOW_LINE_MIN_STRENGTH + (1 - FLOW_LINE_MIN_STRENGTH) * ((flows.volumes[i] ?? 0) / maxVolume);
+    const colour: Rgb = { r: base.r * strength, g: base.g * strength, b: base.b * strength };
+    drawTileLine(map, out, flows.fromTiles[i]!, flows.toTiles[i]!, colour);
+  }
+
+  for (let i = 0; i < flows.fromTiles.length; i++) {
+    blot(map, out, flows.fromTiles[i]!, 1, { r: 240, g: 244, b: 248 });
+    blot(map, out, flows.toTiles[i]!, 1, { r: 240, g: 244, b: 248 });
+  }
+}
+
+/** Bresenham between two tile indices, writing one pixel per visited tile. */
+function drawTileLine(
+  map: TileMap,
+  out: Uint8ClampedArray,
+  fromTile: number,
+  toTile: number,
+  colour: Rgb,
+): void {
+  const size = map.size;
+  let x0 = fromTile % size;
+  let y0 = (fromTile / size) | 0;
+  const x1 = toTile % size;
+  const y1 = (toTile / size) | 0;
+
+  const dx = Math.abs(x1 - x0);
+  const dy = -Math.abs(y1 - y0);
+  const sx = x0 < x1 ? 1 : -1;
+  const sy = y0 < y1 ? 1 : -1;
+  let err = dx + dy;
+
+  for (;;) {
+    if (x0 >= 0 && y0 >= 0 && x0 < size && y0 < size) {
+      const base = (y0 * size + x0) * 4;
+      out[base] = colour.r;
+      out[base + 1] = colour.g;
+      out[base + 2] = colour.b;
+      out[base + 3] = 255;
+    }
+    if (x0 === x1 && y0 === y1) break;
+    const doubled = 2 * err;
+    if (doubled >= dy) {
+      err += dy;
+      x0 += sx;
+    }
+    if (doubled <= dx) {
+      err += dx;
+      y0 += sy;
+    }
   }
 }
 

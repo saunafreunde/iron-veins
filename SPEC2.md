@@ -492,7 +492,7 @@ Ledger-Verstoß.
 | lint+types | M10 | unverändert |
 | determinism | M10 | Runner parst ALLE CommandKinds; ab M10 zusätzlich **ubuntu-latest** (erste Cross-OS-Hash-Evidenz) |
 | balance | M10 | jedes Szenario 2× mit Hash-Assertion (ab M16 verbindlich); Referenzläufe mit allen Regeln „aus" |
-| perf | M10 | 1500-Fzg.-Fixture p99; Render-Tripwire (Sprite-Pool-Rebuild-ms, Draw-Prep-ms; ab M12 Chunk-Bake-ms; ab M13 Partikel-ms) |
+| perf | M10 | 1500-Fzg.-Fixture p99; Render-Tripwire (Sprite-Pool-Rebuild-ms, Draw-Prep-ms; ab M12 Chunk-Bake-ms; ab M13 Partikel-ms; ab M14 Flow-Export-ms je Publish + Flow-Prep-ms am 4096-Leg-Megagraph) |
 | desktop-smoke | M25 | wöchentlich, Rust gecacht; release.yml auf Tag |
 
 ---

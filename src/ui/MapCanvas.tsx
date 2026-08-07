@@ -169,6 +169,7 @@ export function MapCanvas({ client }: { readonly client: SimClient }): ReactElem
 
   const mapBuffer = useSimStore((s) => s.mapBuffer);
   const showDebug = useSimStore((s) => s.showDebug);
+  const showFlow = useSimStore((s) => s.showFlow);
   const fleet = useSimStore((s) => s.fleet);
   const mapSize = useSimStore((s) => s.mapSize);
   const towns = useSimStore((s) => s.towns);
@@ -394,6 +395,13 @@ export function MapCanvas({ client }: { readonly client: SimClient }): ReactElem
     // copies the block when the generation moves and lerps between the copies.
     view.setVehicleSource(() => client.readVehicleFrame());
     view.setReservedSource(() => client.readReserved());
+    // The M14 flow atlas reads the published FlowMarker block (D-176); its
+    // drawn/omitted counts feed the honest "x weitere" indicator. The same
+    // reader is registered in the store for the minimap's Fluss mode - the
+    // painter there stays pure, the panel gathers (D-112).
+    view.setFlowSource(() => client.readFlow());
+    view.onFlowStats = (drawn, omitted) => useSimStore.getState().setFlowStats(drawn, omitted);
+    useSimStore.getState().setFlowSource(() => client.readFlow());
     // The day/night curve reads the published tick, never the wall clock.
     view.setTickSource(() => client.readTick());
     view.setDayNight(useSimStore.getState().settings.dayNight);
@@ -456,6 +464,10 @@ export function MapCanvas({ client }: { readonly client: SimClient }): ReactElem
   useEffect(() => {
     viewRef.current?.setBlockOverlay(showDebug);
   }, [showDebug]);
+
+  useEffect(() => {
+    viewRef.current?.setFlowOverlay(showFlow);
+  }, [showFlow]);
 
   useEffect(() => {
     viewRef.current?.setDayNight(dayNight);

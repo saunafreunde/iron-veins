@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, type ReactElement } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
 import { t } from '../i18n';
 import {
   MINIMAP_MODE_COUNT,
@@ -6,8 +6,11 @@ import {
   MinimapMode,
   minimapViewQuad,
   paintMinimap,
+  type MinimapFlows,
   type MinimapMarkers,
 } from '../render/Minimap';
+import { FLOW_TOP_N, selectTopFlows } from '../render/flowAtlas';
+import { SNAPSHOT_FLOW_STRIDE, SnapshotFlow } from '../shared/snapshot';
 import { TileMap } from '../sim/map/TileMap';
 import { useSimStore } from './store';
 
@@ -21,6 +24,14 @@ import { useSimStore } from './store';
 
 /** Largest edge the panel draws at. A 2048 map is scaled down to fit. */
 const PANEL_PX = 220;
+
+/**
+ * How often the Fluss mode re-reads the FlowMarker block. Flows change one
+ * completed trip at a time; a megapixel repaint every couple of seconds
+ * follows them closely enough, and per frame it would cost more than the
+ * map (the D-112 argument). Only runs while the mode is active. [ms]
+ */
+const FLOW_MINIMAP_REFRESH_MS = 2_000;
 
 export function Minimap(): ReactElement | null {
   useSimStore((s) => s.locale);
@@ -36,6 +47,19 @@ export function Minimap(): ReactElement | null {
   // the buttons here drive one and the same value.
   const mode = useSimStore((s) => s.minimapMode);
   const setMode = useSimStore((s) => s.setMinimapMode);
+  const flowSource = useSimStore((s) => s.flowSource);
+
+  // The Fluss mode's slow clock: bump an epoch every couple of seconds while
+  // the mode is active, so the gather below re-reads the published block.
+  const [flowEpoch, setFlowEpoch] = useState(0);
+  useEffect(() => {
+    if (mode !== MinimapMode.Flow) return undefined;
+    const id = window.setInterval(
+      () => setFlowEpoch((epoch) => epoch + 1),
+      FLOW_MINIMAP_REFRESH_MS,
+    );
+    return () => window.clearInterval(id);
+  }, [mode]);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const overlayRef = useRef<HTMLCanvasElement | null>(null);
@@ -53,6 +77,40 @@ export function Minimap(): ReactElement | null {
     [stations, industries, mapSize],
   );
 
+  /**
+   * The Fluss mode's legs, gathered HERE so `paintMinimap` stays the pure
+   * function D-112 demands: the panel joins the published FlowMarker rows to
+   * station tiles and caps them with the SAME top-N policy the map's flow
+   * atlas uses - the minimap never shows a flow the atlas would cut.
+   */
+  const flows: MinimapFlows | null = useMemo(() => {
+    if (mode !== MinimapMode.Flow || flowSource === null || mapSize === 0) return null;
+    void flowEpoch; // the re-read clock; the block itself is outside React
+    const frame = flowSource();
+
+    const stationTile = new Map<number, number>();
+    for (const station of stations) stationTile.set(station.id, station.y * mapSize + station.x);
+
+    const picked = new Int32Array(Math.min(frame.count, FLOW_TOP_N));
+    const selection = selectTopFlows(frame.data, frame.count, FLOW_TOP_N, picked);
+
+    const fromTiles: number[] = [];
+    const toTiles: number[] = [];
+    const volumes: number[] = [];
+    const owners: number[] = [];
+    for (let i = 0; i < selection.drawn; i++) {
+      const base = picked[i]! * SNAPSHOT_FLOW_STRIDE;
+      const from = stationTile.get(frame.data[base + SnapshotFlow.FromStation]!);
+      const to = stationTile.get(frame.data[base + SnapshotFlow.ToStation]!);
+      if (from === undefined || to === undefined) continue;
+      fromTiles.push(from);
+      toTiles.push(to);
+      volumes.push(frame.data[base + SnapshotFlow.VolumeUnits]!);
+      owners.push(frame.data[base + SnapshotFlow.OwnerId]!);
+    }
+    return { fromTiles, toTiles, volumes, owners };
+  }, [mode, flowSource, stations, mapSize, flowEpoch]);
+
   const paint = useCallback(() => {
     const canvas = canvasRef.current;
     if (canvas === null || mapBuffer === null || mapSize === 0) return;
@@ -65,14 +123,18 @@ export function Minimap(): ReactElement | null {
       // to be sure which kind TypeScript thinks it has.
       pixelsRef.current = new Uint8ClampedArray(new ArrayBuffer(needed));
     }
-    paintMinimap(map, mode, pixelsRef.current, { colorBlind, markers });
+    paintMinimap(map, mode, pixelsRef.current, {
+      colorBlind,
+      markers,
+      flows: flows ?? undefined,
+    });
 
     canvas.width = mapSize;
     canvas.height = mapSize;
     const context = canvas.getContext('2d');
     if (context === null) return;
     context.putImageData(new ImageData(pixelsRef.current, mapSize, mapSize), 0, 0);
-  }, [mapBuffer, mapSize, mode, colorBlind, revision, markers]);
+  }, [mapBuffer, mapSize, mode, colorBlind, revision, markers, flows]);
 
   useEffect(() => {
     paint();

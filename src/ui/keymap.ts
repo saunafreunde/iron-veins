@@ -52,6 +52,8 @@ export const KEY_BINDINGS: readonly KeyBinding[] = [
   { display: 'T', descriptionKey: 'ui.key.towns' },
   { display: 'I', descriptionKey: 'ui.key.industries' },
   { display: 'N', descriptionKey: 'ui.key.minimapMode' },
+  // The flow atlas of SPEC2 M14: A as in "Atlas", free in both languages.
+  { display: 'A', descriptionKey: 'ui.key.flowAtlas' },
   { display: 'F1', descriptionKey: 'ui.key.handbook' },
   { display: 'F3', descriptionKey: 'ui.key.debug' },
   { display: 'F5', descriptionKey: 'ui.key.quickSave' },

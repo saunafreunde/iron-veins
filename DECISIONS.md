@@ -42,11 +42,11 @@ no entry below. A number may appear under several topics.
   D-122, D-147, D-152, D-153, D-154, D-155, D-156, D-158
 - **Rendering & art:** D-013, D-014, D-033, D-035, D-112, D-117, D-125, D-127,
   D-136, D-140, D-160, D-161, D-162, D-163, D-164, D-165, D-166, D-169, D-170,
-  D-171, D-172, D-173, D-174, D-175
+  D-171, D-172, D-173, D-174, D-175, D-177
 - **UI & input:** D-011, D-013, D-015, D-035, D-110, D-113, D-114, D-119,
-  D-126, D-148, D-165, D-166
+  D-126, D-148, D-165, D-166, D-177
 - **Performance & measurement:** D-002, D-120, D-135, D-136, D-161, D-162,
-  D-163, D-164, D-167, D-170, D-171, D-172, D-173, D-174, D-176
+  D-163, D-164, D-167, D-170, D-171, D-172, D-173, D-174, D-176, D-177
 - **Platform, tooling & build:** D-012, D-014, D-015, D-016, D-017, D-029,
   D-030, D-031, D-160, D-168, D-169, D-170, D-172, D-175
 - **Crash safety:** D-132, D-139
@@ -4931,3 +4931,84 @@ reads them. The three-line transfer network of the Fertig-wenn sentence
 is a reusable helper (`tests/helpers/transferNetwork.ts`), built for
 bundle 2 to reuse on the same stations. No i18n: the block carries
 numbers, and every string above it belongs to the panel bundles.
+
+## M14 - instruments, bundle 2: the flow atlas rendered (2026-08-07)
+
+### D-177 The flow arrows are an event-driven vector layer outside the tint, the bow's fixed chirality separates every pair, and the minimap's Fluss mode is one more case of the one painter
+
+SPEC2 M14's render half of the flow atlas: curved company-coloured
+arrows over the measured legs of the D-176 block, width proportional to
+volume, a top-N cut with an honest remainder, and a minimap mode that
+inherits into the save thumbnail. Five decisions shaped it.
+
+**The layer is a world-space Graphics sibling of the art container -
+outside the D-127 tint, above the chunks, never baked.** The atlas is an
+instrument, and instruments do not dim at night (the F3 precedent);
+flows are dynamic, and D-161 bakes only what moves with the map
+revision, so the arrows live above the chunk path at every zoom and the
+chunk checksums never hear of them. Drawing in WORLD coordinates makes
+every camera pan free - the container transform moves the arrows - and
+zoom is the only camera fact that forces a redraw, because widths and
+arrowheads are screen-constant (divided by zoom), which is what keeps
+the diagram readable at 0.5x and 0.25x over the M12 chunks.
+
+**Redraws are decided by a checksum, never by a frame or a publish.**
+`flowHash` (FNV-1a 32 over the used rows plus the count) is refreshed on
+publish edges only - the 20 Hz ceiling - and the layer is rebuilt when
+the hash, the zoom or the station list moved: the D-161 pattern one size
+down. A completed trip somewhere redraws once; an idle world redraws
+never. The rebuild itself is priced in the render tripwire at the
+4,096-leg megagraph (hash + top-N cut + full arc geometry for the drawn
+set): p50 0.32 ms, p99 0.93 ms against a 3 ms median gate (D-167). The
+top-N cut is a bounded insertion selection rather than a sort - one pass,
+allocation-free, O(1) skip under the kept minimum; the sort it replaced
+measured 2.8 ms median at the megagraph, the selection 0.32 ms with a
+bit-identical result (same checksum), and the difference matters because
+a busy world can move the hash on every publish.
+
+**The bow direction is the perpendicular of travel, always the same
+rotation - pair order needs no bookkeeping.** A->B and B->A negate the
+travel direction, so one fixed +90-degree rotation puts their arcs on
+opposite sides BY CONSTRUCTION: no pair table, no tie to break, and the
+same leg always bows the same way in every save and on both minimap and
+map. The bow grows with the chord, clamped to a floor (short pairs still
+separate) and a ceiling (a cross-map leg does not swing over a region).
+Arrowheads are gated at 0.5x and above - at 0.25x a head is noise on a
+three-pixel arc (the D-165 zoom-gating argument); the tip's tangent is
+the quadratic's own (endpoint minus control), so the head lies exactly
+on the curve it finishes.
+
+**Colour is the company first, the line second, the estimate never
+either.** The Okabe-Ito company palette is deficiency-safe as a set
+(palette.ts), so the atlas needs no CVD variant of its own; lines of one
+company shade the base colour towards white in four deterministic steps
+of the line id - tellable apart at a junction, company still dominant.
+A leg nobody drove (OwnerId -1, the D-077 seed) draws at minimum width
+in the interface's muted grey at reduced alpha: an estimate must not be
+misreadable as anybody's traffic, the same honesty the Measured flag
+carries in the block. The cut set feeds the "x weitere" indicator
+through a change-detected callback into the store (the onCamera
+pattern): drawn arrows against active legs, so the player is told what
+the cap hid rather than shown a graph that quietly lies by omission.
+The A key toggles the overlay (D-114's table, "A" as in Atlas, free in
+both languages), with a chip in the app bar as the visible switch.
+
+**The minimap's Fluss mode is a new case of the ONE pure painter, and
+the panel gathers.** `paintMinimap` gains a flows argument - straight
+Bresenham lines between station pixels, brightness scaled by volume
+against the picture's own maximum, endpoints blotted - and stays a pure
+function of its inputs (D-112), which is exactly why the save thumbnail
+inherits the mode for free and the tests hold it byte for byte. The
+PANEL joins the block's rows to station tiles and caps them with the
+SAME `selectTopFlows` the map uses (the minimap never shows a flow the
+atlas would cut), re-reading the published block on a two-second clock
+that runs only while the mode is showing - the megapixel repaint
+follows completed trips closely enough, and per frame it would cost
+more than the map (the D-112 argument). The mode joins the N-key cycle
+by being under MINIMAP_MODE_COUNT - the M10 wiring needed no new code.
+The old CargoFlow mode STAYS: it answers "where does cargo pile"
+(stations by waiting, industries by level - what "Frachtfluss" could
+honestly mean before the measurement existed); Fluss answers "what
+moves where" now that it is measured. Two questions, two modes - not
+the Fehler-26 shape, and the entry says so where the next reader will
+look.

@@ -141,6 +141,11 @@ export class SimClient {
     return this.reader?.currentReserved() ?? { data: EMPTY_VEHICLES, count: 0 };
   }
 
+  /** Flow legs of the published tick, for the M14 flow atlas (D-176). */
+  readFlow(): { data: Int32Array; count: number; tick: number } {
+    return this.reader?.currentFlow() ?? { data: EMPTY_VEHICLES, count: 0, tick: 0 };
+  }
+
   /** Tick of the published snapshot, for the day/night curve. Render-only. */
   readTick(): number {
     return this.reader?.currentTick() ?? 0;

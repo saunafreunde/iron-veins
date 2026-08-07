@@ -1,8 +1,11 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import {
+  SNAPSHOT_FLOW_STRIDE,
+  SNAPSHOT_MAX_FLOW_LEGS,
   SNAPSHOT_MAX_VEHICLES,
   SNAPSHOT_RESERVED_STRIDE,
   SNAPSHOT_VEHICLE_STRIDE,
+  SnapshotFlow,
   SnapshotReserved,
   SnapshotVehicle,
 } from '../../src/shared/snapshot';
@@ -58,6 +61,16 @@ import {
 } from '../../src/render/particles';
 import { STATE_BROKEN_DOWN } from '../../src/render/badges';
 import { INDUSTRY_SMOKE_ANCHORS } from '../../src/render/industryArt';
+import {
+  FLOW_HEAD_PX,
+  FLOW_TOP_N,
+  flowArcControl,
+  flowArrowWidth,
+  flowHash,
+  flowHead,
+  flowStrokeColor,
+  selectTopFlows,
+} from '../../src/render/flowAtlas';
 
 /**
  * The render CPU tripwire of SPEC2 6.3: Sprite-Pool-Rebuild-ms, Draw-Prep-ms,
@@ -185,6 +198,21 @@ const EMISSIVE_WALK_P50_TRIPWIRE_MS = 2;
 
 /** p99 backstop for the emissive walk, the usual order of magnitude. [ms] */
 const EMISSIVE_WALK_P99_BACKSTOP_MS = 20;
+
+/**
+ * Median tripwire: one full flow-atlas refresh at the MEGAGRAPH - the
+ * snapshot cap of 4,096 legs, the case the top-N cut exists for (SPEC2 M14:
+ * "damit ein Megagraph den Frame nicht schmilzt - Budget im Tripwire").
+ * Priced per REDRAW, which is the atlas's worst honest cadence: the hash
+ * over the full block (also paid per publish edge without a redraw), the
+ * volume sort of all 4,096 rows, and arc/width/colour/head geometry for the
+ * FLOW_TOP_N drawn arrows. Measured clean well under 0.5 ms; the gate is
+ * the usual very generous multiple (D-167). [ms]
+ */
+const FLOW_PREP_P50_TRIPWIRE_MS = 3;
+
+/** p99 backstop for the flow prep, the usual order of magnitude. [ms] */
+const FLOW_PREP_P99_BACKSTOP_MS = 30;
 
 /**
  * The measured window: 64x64 tiles is roughly what a 4K screen shows at zoom
@@ -1209,6 +1237,74 @@ describe('render CPU tripwire (SPEC2 6.3)', () => {
     expect(touched).toBeGreaterThan(PARTICLE_CAP);
     expect(p50).toBeLessThan(PARTICLE_P50_TRIPWIRE_MS);
     expect(p99).toBeLessThan(PARTICLE_P99_BACKSTOP_MS);
+  });
+
+  it('prepares the flow atlas at the 4096-leg megagraph inside the tripwire (M14)', () => {
+    // A full snapshot block, deterministic LCG values: every row an active
+    // leg, volumes spread wide so the sort and the top-N cut do real work.
+    const block = new Int32Array(SNAPSHOT_MAX_FLOW_LEGS * SNAPSHOT_FLOW_STRIDE);
+    let lcg = 0x2f6e2b1;
+    const next = (): number => {
+      lcg = (Math.imul(lcg, 1103515245) + 12345) >>> 0;
+      return lcg;
+    };
+    for (let row = 0; row < SNAPSHOT_MAX_FLOW_LEGS; row++) {
+      const base = row * SNAPSHOT_FLOW_STRIDE;
+      block[base + SnapshotFlow.FromStation] = row & 1023;
+      block[base + SnapshotFlow.ToStation] = (row + 17) & 1023;
+      block[base + SnapshotFlow.VolumeUnits] = next() % 2_000;
+      block[base + SnapshotFlow.OldestTick] = row;
+      block[base + SnapshotFlow.MeanTicks] = 400 + (row % 800);
+      block[base + SnapshotFlow.Measured] = 1;
+      block[base + SnapshotFlow.OwnerId] = row % 8;
+      block[base + SnapshotFlow.LineId] = row % 24;
+    }
+
+    const scratch = new Int32Array(FLOW_TOP_N);
+    // The full redraw the MapView pays when the hash moved: hash, cut,
+    // geometry for every drawn arrow. The checksum keeps the loop honest
+    // against dead-code elimination.
+    const pass = (): number => {
+      let checksum = flowHash(block, SNAPSHOT_MAX_FLOW_LEGS);
+      const selection = selectTopFlows(block, SNAPSHOT_MAX_FLOW_LEGS, FLOW_TOP_N, scratch);
+      for (let i = 0; i < selection.drawn; i++) {
+        const base = scratch[i]! * SNAPSHOT_FLOW_STRIDE;
+        const fromStation = block[base + SnapshotFlow.FromStation]!;
+        const toStation = block[base + SnapshotFlow.ToStation]!;
+        // Synthetic station positions - the join itself is a Map lookup in
+        // MapView; the geometry is what costs.
+        const ax = (fromStation % 32) * 64;
+        const ay = ((fromStation / 32) | 0) * 32;
+        const bx = (toStation % 32) * 64;
+        const by = ((toStation / 32) | 0) * 32;
+        const ctrl = flowArcControl(ax, ay, bx, by);
+        const head = flowHead(ctrl.cx, ctrl.cy, bx, by, FLOW_HEAD_PX);
+        checksum ^=
+          (flowArrowWidth(block[base + SnapshotFlow.VolumeUnits]!) * 16) |
+          flowStrokeColor(block[base + SnapshotFlow.OwnerId]!, block[base + SnapshotFlow.LineId]!) |
+          (head.leftX | 0);
+      }
+      return checksum + selection.omitted;
+    };
+    const warm = pass();
+
+    const samples = new Float64Array(DRAW_PREP_SAMPLES);
+    for (let i = 0; i < DRAW_PREP_SAMPLES; i++) {
+      const started = performance.now();
+      pass();
+      samples[i] = performance.now() - started;
+    }
+
+    const p50 = percentile(samples, 0.5);
+    const p99 = percentile(samples, 0.99);
+    console.log(
+      `flow atlas prep: ${SNAPSHOT_MAX_FLOW_LEGS} legs cut to ${FLOW_TOP_N} arrows ` +
+        `(checksum ${warm}), p50 ${p50.toFixed(4)} ms, p99 ${p99.toFixed(4)} ms ` +
+        `(median tripwire ${FLOW_PREP_P50_TRIPWIRE_MS} ms, backstop ${FLOW_PREP_P99_BACKSTOP_MS} ms)`,
+    );
+
+    expect(p50).toBeLessThan(FLOW_PREP_P50_TRIPWIRE_MS);
+    expect(p99).toBeLessThan(FLOW_PREP_P99_BACKSTOP_MS);
   });
 
   it('rebakes one 32x32 chunk inside the tripwire', () => {

@@ -56,6 +56,9 @@ function MapGenProgress(): ReactElement {
 export function App({ client }: { readonly client: SimClient }): ReactElement {
   const locale = useSimStore((s) => s.locale);
   const toggleDebug = useSimStore((s) => s.toggleDebug);
+  const toggleFlow = useSimStore((s) => s.toggleFlow);
+  const showFlow = useSimStore((s) => s.showFlow);
+  const flowStats = useSimStore((s) => s.flowStats);
   const toggleList = useSimStore((s) => s.toggleList);
   const openList = useSimStore((s) => s.openList);
   const ready = useSimStore((s) => s.ready);
@@ -135,6 +138,11 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
         case 'N':
           cycleMinimapMode();
           return;
+        // The flow atlas overlay of SPEC2 M14 (D-114 table entry).
+        case 'a':
+        case 'A':
+          toggleFlow();
+          return;
         case '1':
         case '2':
         case '3':
@@ -175,7 +183,19 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [client, speedIndex, toggleDebug, toggleList, overlay, setOverlay, setTool, assistant, setAssistant, cycleMinimapMode]);
+  }, [
+    client,
+    speedIndex,
+    toggleDebug,
+    toggleFlow,
+    toggleList,
+    overlay,
+    setOverlay,
+    setTool,
+    assistant,
+    setAssistant,
+    cycleMinimapMode,
+  ]);
 
   // ------------------------------------------------------------- autosave
   //
@@ -304,6 +324,18 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
         <button type="button" className="chip" onClick={toggleDebug}>
           {t('ui.debug.toggle')}
         </button>
+        <button
+          type="button"
+          className={showFlow ? 'chip chip--active' : 'chip'}
+          onClick={toggleFlow}
+        >
+          {t('ui.flow.toggle')}
+        </button>
+        {/* The honest "x weitere" indicator of the M14 order: legs that
+            exist but were cut by the top-N cap of the flow atlas. */}
+        {showFlow && flowStats.omitted > 0 && (
+          <span className="appbar__label">{t('ui.flow.more', { omitted: flowStats.omitted })}</span>
+        )}
       </footer>
 
       {rejectionKey !== null && (
