@@ -15,6 +15,7 @@ import {
   SHADE_UP,
   SHADE_X,
   SHADE_Y,
+  SHADOW_ALPHA_MAX,
   applyRecolor,
   bakeAtlases,
   decodePng,
@@ -159,6 +160,43 @@ describe('the dimetric rasteriser', () => {
     const diagonal = renderSprite(wagon, { scale: 10, facing: 1, zoom: 1 });
     expect(diagonal.width).toBeGreaterThan(0);
     expect(diagonal.height).toBeGreaterThan(0);
+  });
+
+  it('stamps a soft contact shadow into the base cell, never over the model', () => {
+    // M13: "Kontaktschatten (NW-Licht) je Zelle". The shadow is
+    // semi-transparent black stamped only where the model left the cell
+    // empty - so every fully opaque pixel is still a model pixel (the
+    // shading assertions above depend on exactly that), and the mask cell
+    // stays untouched for the tint pass.
+    const sprite = renderSprite(cube, { scale: 10, facing: 0, zoom: 2 });
+    let shadowPixels = 0;
+    let below = 0;
+    for (let i = 0; i < sprite.base.length; i += 4) {
+      const alpha = sprite.base[i + 3]!;
+      if (alpha === 0 || alpha === 255) continue;
+      shadowPixels++;
+      expect(sprite.base[i]).toBe(0);
+      expect(sprite.base[i + 1]).toBe(0);
+      expect(sprite.base[i + 2]).toBe(0);
+      expect(alpha).toBeLessThanOrEqual(SHADOW_ALPHA_MAX);
+      // The mask never darkens: it is multiplied by the company colour.
+      expect(sprite.mask[i + 3]).toBe(0);
+      if (Math.floor(i / 4 / sprite.width) > sprite.anchorY) below++;
+    }
+    expect(shadowPixels).toBeGreaterThan(0);
+    // The patch hugs the ground line: a real share of it lies below the
+    // anchor, where the ground plane is.
+    expect(below).toBeGreaterThan(0);
+  });
+
+  it('keeps 180-degree facing pairs the same cell size, shadow and all', () => {
+    // The shadow is clipped to the model's own cell (see SHADOW_ALPHA_MAX
+    // in bake-lib), so the cell rectangle is still purely the geometry's -
+    // this equality held before the shadow and must survive it.
+    const sprite0 = renderSprite(cube, { scale: 10, facing: 0, zoom: 2 });
+    const sprite4 = renderSprite(cube, { scale: 10, facing: 4, zoom: 2 });
+    expect(sprite0.width).toBe(sprite4.width);
+    expect(sprite0.height).toBe(sprite4.height);
   });
 
   it('renders tint zones neutral in the base and shaded grey in the mask', () => {

@@ -58,6 +58,46 @@ export const SHADE_UP = 0.62;
 export const TINT_NEUTRAL_GREY = 190;
 
 /**
+ * The baked contact shadow (SPEC2 M13: "Kontaktschatten (NW-Licht) je
+ * Zelle"): every cell carries a soft dark patch at its ground line, so a
+ * baked object sits ON the terrain instead of floating over it. Baked
+ * rather than drawn live because it costs the runtime nothing per sprite,
+ * and stamped only where the model left the base cell transparent - the
+ * geometry always wins.
+ *
+ * The falloff runs from the FOOTPRINT outward, not from a centre: full
+ * strength anywhere over the ground rectangle (that is what darkens the
+ * gaps under a chassis, between bogies and wheels), fading quadratically
+ * over SHADOW_MARGIN_M beyond the silhouette. A centre-based ellipse was
+ * built first and produced nothing: over the body the geometry covers it,
+ * so only its outer rim ever shows, and a rim is exactly where a radial
+ * falloff is already zero.
+ *
+ * Two deliberate limits keep it honest against the ledger and the tests:
+ * the patch follows the footprint symmetrically (the NW light of
+ * SHADE_X/SHADE_Y/SHADE_UP would skew it screen-SE, but that skew is
+ * 0.25 m = under one pixel at every baked zoom, while an asymmetric patch
+ * breaks the exact width equality of 180-degree facing pairs the facing
+ * test pins), and it is CLIPPED to the model's own cell rectangle:
+ * extending every cell to the footprint's projected ground diamond was
+ * measured to push zoom 2 from one page to two and zoom 4 from four pages
+ * to six - a SPEC2 6.2 booking overrun (Fehlerkatalog 40) for pixels the
+ * edge fade below renders invisible anyway.
+ */
+/** Peak opacity of the contact shadow over the footprint. [0-255 alpha] */
+export const SHADOW_ALPHA_MAX = 88;
+
+/** Reach of the contact shadow beyond the model's ground footprint. [m] */
+export const SHADOW_MARGIN_M = 0.5;
+
+/**
+ * Fade band along the cell border, in zoom-1 pixels (scaled by zoom): the
+ * shadow's alpha ramps to zero over this distance so the cell clip never
+ * shows as a hard edge. [px at zoom 1]
+ */
+export const SHADOW_EDGE_FADE_PX = 3;
+
+/**
  * The eight travel directions a facing index encodes, as (dx, dy) tile
  * deltas in the map's axes (+x lower-right on screen, +y lower-left).
  * M13 derives the index from the (NextTile - Tile) delta; the bake and the
@@ -859,6 +899,11 @@ export function renderSprite(triangles: readonly BakeTriangle[], options: Render
   let screenMinY = Infinity;
   let screenMaxX = -Infinity;
   let screenMaxY = -Infinity;
+  // Ground-plane footprint of the whole model, for the contact shadow.
+  let groundMinX = Infinity;
+  let groundMinY = Infinity;
+  let groundMaxX = -Infinity;
+  let groundMaxY = -Infinity;
   for (const tri of triangles) {
     const screen = new Float64Array(9); // sx, sy, depth per vertex
     const ground = new Float64Array(9); // gx, gy, up per vertex
@@ -872,6 +917,10 @@ export function renderSprite(triangles: readonly BakeTriangle[], options: Render
       ground[v * 3] = gx;
       ground[v * 3 + 1] = gy;
       ground[v * 3 + 2] = up;
+      if (gx < groundMinX) groundMinX = gx;
+      if (gx > groundMaxX) groundMaxX = gx;
+      if (gy < groundMinY) groundMinY = gy;
+      if (gy > groundMaxY) groundMaxY = gy;
       const sx = (gx - gy) * pxPerMeterX;
       const sy = (gx + gy) * pxPerMeterY - up * pxPerMeterUp;
       screen[v * 3] = sx;
@@ -885,6 +934,16 @@ export function renderSprite(triangles: readonly BakeTriangle[], options: Render
     projected.push(screen);
     grounds.push(ground);
   }
+
+  // Contact shadow on the ground plane: full strength over the footprint
+  // rectangle, fading over SHADOW_MARGIN_M beyond it, clipped to the
+  // model's own cell (see SHADOW_ALPHA_MAX for all three) - the cell
+  // rectangle stays exactly the model's, so the atlas booking of SPEC2
+  // 6.2 does not move.
+  const shadowCx = (groundMinX + groundMaxX) / 2;
+  const shadowCy = (groundMinY + groundMaxY) / 2;
+  const shadowHalfW = (groundMaxX - groundMinX) / 2;
+  const shadowHalfH = (groundMaxY - groundMinY) / 2;
 
   const pad = 1;
   const originX = Math.floor(screenMinX) - pad;
@@ -974,6 +1033,38 @@ export function renderSprite(triangles: readonly BakeTriangle[], options: Render
           mask[at + 3] = 0;
         }
       }
+    }
+  }
+
+  // Stamp the contact shadow into the BASE cell only, where the model left
+  // it transparent - geometry always wins, the mask never darkens. The
+  // quadratic falloff keeps the patch soft, the border fade hides the cell
+  // clip, and the alpha never reaches 255, so "opaque pixel" keeps meaning
+  // "model pixel" for every downstream test.
+  const fadePx = SHADOW_EDGE_FADE_PX * options.zoom;
+  for (let py = 0; py < height; py++) {
+    for (let px = 0; px < width; px++) {
+      const at = (py * width + px) * 4;
+      if (base[at + 3] !== 0) continue;
+      const sx = px + 0.5 + originX;
+      const sy = py + 0.5 + originY;
+      // Back-projection at up = 0: the inverse of the vertex projection.
+      const gx = (sx / pxPerMeterX + sy / pxPerMeterY) / 2;
+      const gy = (sy / pxPerMeterY - sx / pxPerMeterX) / 2;
+      // Distance OUTSIDE the footprint rectangle; zero underneath it.
+      const ox = Math.max(0, Math.abs(gx - shadowCx) - shadowHalfW);
+      const oy = Math.max(0, Math.abs(gy - shadowCy) - shadowHalfH);
+      const outside = Math.sqrt(ox * ox + oy * oy);
+      if (outside >= SHADOW_MARGIN_M) continue;
+      const t = 1 - outside / SHADOW_MARGIN_M;
+      const edge = Math.min(px, width - 1 - px, py, height - 1 - py) + 0.5;
+      const fade = edge >= fadePx ? 1 : edge / fadePx;
+      const alpha = Math.round(SHADOW_ALPHA_MAX * t * t * fade);
+      if (alpha <= 0) continue;
+      base[at] = 0;
+      base[at + 1] = 0;
+      base[at + 2] = 0;
+      base[at + 3] = alpha;
     }
   }
 

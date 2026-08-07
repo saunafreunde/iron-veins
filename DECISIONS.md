@@ -41,13 +41,13 @@ no entry below. A number may appear under several topics.
 - **Competitors, AI & tenders:** D-107, D-108, D-109, D-115, D-116, D-121,
   D-122, D-147, D-152, D-153, D-154, D-155, D-156, D-158
 - **Rendering & art:** D-013, D-014, D-033, D-035, D-112, D-117, D-125, D-127,
-  D-136, D-140, D-160, D-161, D-162, D-163, D-164, D-165, D-166, D-169
+  D-136, D-140, D-160, D-161, D-162, D-163, D-164, D-165, D-166, D-169, D-170
 - **UI & input:** D-011, D-013, D-015, D-035, D-110, D-113, D-114, D-119,
   D-126, D-148, D-165, D-166
 - **Performance & measurement:** D-002, D-120, D-135, D-136, D-161, D-162,
-  D-163, D-164, D-167
+  D-163, D-164, D-167, D-170
 - **Platform, tooling & build:** D-012, D-014, D-015, D-016, D-017, D-029,
-  D-030, D-031, D-160, D-168, D-169
+  D-030, D-031, D-160, D-168, D-169, D-170
 - **Crash safety:** D-132, D-139
 - **Testing method & fixtures:** D-010, D-038, D-072, D-074, D-084, D-133,
   D-167
@@ -4238,3 +4238,103 @@ truth is 810 cells per zoom - z1 one 4092x1067 page, z2 one 4092x3609,
 z4 four pages under 4096 squared, with only ONE zoom's pages GPU-resident
 at a time. Render-only in the strictest sense: this bundle touches
 tools, manifest, tests and documentation - not one byte under `src/`.
+
+## M13 - living trains, bundle 2: vehicles from the bake (2026-08-07)
+
+### D-170 The catalogue drives baked, the white box retires to a fallback, and a sprite faces where it actually glides
+
+M13's second bundle puts the D-169 vehicle cells on the map: MapView draws
+every mapped catalogue entry from the baked pages, in eight facings, in
+company colours, over a shadow - and the M12 white boxes retire from the
+live path without being deleted, because they ARE the fallback (E-14).
+Six choices inside that, and one measured refusal.
+
+**The facing is the interpolated movement vector, not the tile step.**
+SPEC2 names the (NextTile - Tile) delta, and that delta alone would turn
+every sprite a quarter turn in the exact frame its vehicle crosses a tile
+edge - the one artifact 60 Hz motion (D-162) exists to remove. The facing
+therefore quantises the delta between the PREVIOUS and the CURRENT
+generation's fractional tile positions - the direction the sprite visibly
+glides, already computed for the E-05 lerp - so a corner blends through
+the diagonal facing mid-glide instead of snapping at the boundary. A
+standing vehicle (sub-epsilon movement) keeps the facing it last drove
+with from a per-id render-side cache rather than spinning to a default;
+a vehicle never seen moving reads its current tile step; the birth
+default is east. The quantiser, the epsilon and the cache sentinel live
+in `src/render/vehicleArt.ts` as pure functions under
+`tests/unit/vehicleArt.spec.ts`, and the facing order is the bake's own:
+the render side restates FACING_DELTAS and the coupling test asserts the
+two lists equal (the D-160 device).
+
+**Two-pass tint is two sprites, and the draw order costs no new key.** A
+baked vehicle is the base cell (authored colours, tint zones neutral)
+plus the mask cell (shaded grey livery) tinted with the owner's colour -
+D-160's convention consumed as designed, so an untinted hull never wears
+anybody's colours and a tinted one keeps its NW shading. Each vehicle
+slot is now three sprites in the SAME sorted container - soft ellipse,
+body, mask - sharing ONE `vehicleDrawOrder` zIndex, ordered within the
+tie by insertion (Pixi's sort is stable): the M10 painter path did not
+grow a layer, a hill still covers a train, and the 0.25x dots (D-161)
+are untouched. Baked cells are tight per-facing rectangles, so placement
+reads the cell's OWN `anchorX`/`anchorY` ground pivot - the D-117/D-163
+lesson, per cell this time; the white-box path keeps its fixed offset.
+
+**The fallback has two floors, and both are pure decisions.** Whether a
+baked path exists AT ALL is `atlasSourceFor` (D-160) inside the loader -
+no cache, damaged manifest, missing page all mean the procedural game
+that was already running, because the pages load in the background AFTER
+the first frame. Whether one VEHICLE draws baked is `vehicleVariantFor`:
+null for an unmapped catalogue id (aircraft stay procedural per E-14),
+for a vehicle the fleet markers have not named yet (specId -1), and for
+a variant that is missing any of its eight facings - dropped WHOLE at
+index time, because seven baked facings plus one white box is exactly
+the wrong-silhouette flicker D-117 forbids. Which catalogue entry a
+snapshot row IS travels on the low-frequency marker channel and is
+cached render-side per E-05; the 20 Hz stride stays eight ints.
+
+**Variance is an integer avalanche, not a stream.** `variantIndex` hashes
+the vehicle id (two xor-multiply rounds) modulo the manifest-declared
+variant count, so the same vehicle wears the same body on every machine,
+frame and reload - deterministic per-vehicle variance with zero contact
+to any RNG stream (Z3 untouched). The grammar `vehicle:<id>:<n>` is the
+building cells' own; the manifest declares no vehicle variants yet, and
+the mechanism is tested against synthetic manifests so declaring one is
+a data change.
+
+**The contact shadow is baked, its falloff runs from the silhouette
+outward, and it is clipped - both wrong versions were measured and
+refused.** Every cell now carries a soft dark ground patch: full
+strength over the footprint rectangle (which is what darkens the gaps
+under a chassis and between bogies), fading quadratically over 0.5 m
+beyond it, alpha capped at 88 so an opaque pixel still means a model
+pixel, stamped only where the model left the cell transparent. The
+first build was a centre-based ellipse: it produced NOTHING visible,
+because over the body the geometry covers it and its outer rim - the
+only part that shows - is where a radial falloff is already zero. The
+second was unclipped cells extended to the footprint's projected ground
+diamond: prettier, and it pushed zoom 2 from one page to two and zoom 4
+from four pages to six - a 6.2 booking overrun (Fehlerkatalog 40) for
+pixels a 3-px edge fade renders invisible. So the shadow clips to the
+model's own rectangle with that fade, the page dimensions are
+byte-identical to the D-169 booking, and the double-bake was
+re-verified bit-identical on the full twelve kits. The patch is
+symmetric, not skewed screen-SE with the NW light: the skew is
+sub-pixel at every baked zoom and an asymmetric patch breaks the
+180-degree facing pairs' exact width equality the tests pin. Under
+every vehicle the renderer additionally draws the M13 soft ellipse - a
+shared procedural gradient texture, tinted black at low alpha, sized
+from the baked cell (fixed sizes under the white box) - subtle enough
+that the two shadows compose.
+
+**The tripwire was re-measured with the new work priced in.** The
+draw-prep proxy now replays the facing decision (movement quantise,
+cache, tile-step fallback), the variant hash and the spec-map lookup per
+vehicle: measured p50 0.78 ms / p99 1.78 ms for the full 1,500-vehicle
+block against the unchanged 5 ms median gate and 30 ms backstop (D-167)
+- the facing atan2 and one Map hit per vehicle cost ~0.05 ms of median
+over the M12 acceptance measurement (0.73 / 1.58), noise-deep under the
+gate. Zoom selection stays out of the loop: the baked zoom index
+resolves once per frame (`bakedZoomFor` - largest baked zoom not above
+the display zoom, the D-163 no-upscale rule; the chunked zooms
+0.5x/0.25x downscale the z1 pages exactly as the procedural base page
+always has).

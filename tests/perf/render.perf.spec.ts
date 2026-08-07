@@ -19,6 +19,12 @@ import {
 } from '../../src/render/projection';
 import { CHUNK_TILES, chunkChecksum, extractNetworkSegments } from '../../src/render/chunks';
 import { sampleWorldX, sampleWorldY, shouldSnap } from '../../src/render/interpolation';
+import {
+  FACING_NONE,
+  facingFromDelta,
+  facingFromMovement,
+  variantIndex,
+} from '../../src/render/vehicleArt';
 import { coastEdgeMask, FOAM_EDGE_COUNT, foamVariant, isDeepWater } from '../../src/render/water';
 
 /**
@@ -32,7 +38,8 @@ import { coastEdgeMask, FOAM_EDGE_COUNT, foamVariant, isDeepWater } from '../../
  * builds up: the per-tile work of `MapView.rebuild` (diagonal iteration, layer
  * decisions, frame-cache lookups, draw-order keys) and the per-frame work of
  * `MapView.drawVehicles` (stride reads, height lookups, the E-05 generation
- * lerp, vehicle draw-order sort keys).
+ * lerp, vehicle draw-order sort keys, and since M13 the facing and variant
+ * decisions of the baked vehicle art).
  *
  * This is a PROXY, stated as one: it replays the same reads, the same key
  * arithmetic and the same frame-cache lookups as `MapView`, writing into flat
@@ -306,8 +313,11 @@ function syntheticPrevBlock(data: Int32Array): { prev: Int32Array; prevRowById: 
 /**
  * The CPU of `MapView.drawVehicles` for one frame: stride reads, tile
  * decomposition, `railHeight` at both ends, projection, the E-05 generation
- * lerp (previous-row lookup, snap check, both samples, alpha blend) and the
- * vehicle draw-order key - everything except the sprite it lands on.
+ * lerp (previous-row lookup, snap check, both samples, alpha blend), and -
+ * since M13 - the baked-art decisions per vehicle: facing from the
+ * interpolated movement vector with the standing-vehicle cache, the
+ * hash-picked variant and the specId-to-variants map lookup. Everything
+ * except the sprites it lands on.
  */
 function drawPrepProxy(
   map: TileMap,
@@ -316,6 +326,8 @@ function drawPrepProxy(
   prevRowById: Int32Array,
   alpha: number,
   out: DrawList,
+  specVariants: ReadonlyMap<number, number>,
+  facings: Uint8Array,
 ): number {
   const size = map.size;
   let drawn = 0;
@@ -340,6 +352,7 @@ function drawPrepProxy(
 
     let worldX = currX;
     let worldY = currY;
+    let facing = -1;
     const prevRow = vehicleId >= 0 && vehicleId < prevRowById.length ? prevRowById[vehicleId]! : -1;
     if (alpha < 1 && prevRow >= 0) {
       const prevBase = prevRow * SNAPSHOT_VEHICLE_STRIDE;
@@ -368,11 +381,31 @@ function drawPrepProxy(
         );
         worldX = prevX + (currX - prevX) * alpha;
         worldY = prevY + (currY - prevY) * alpha;
+        facing = facingFromMovement(
+          prevFromX + (prevToX - prevFromX) * prevProgress,
+          prevFromY + (prevToY - prevFromY) * prevProgress,
+          fromX + (toX - fromX) * progress,
+          fromY + (toY - fromY) * progress,
+        );
       }
     }
 
+    // The M13 facing cache and variant pick, exactly as MapView runs them.
+    if (facing < 0) {
+      const cached = facings[vehicleId]!;
+      if (cached !== FACING_NONE) {
+        facing = cached;
+      } else {
+        facing = facingFromDelta(toX - fromX, toY - fromY);
+        if (facing < 0) facing = 0;
+      }
+    }
+    facings[vehicleId] = facing;
+    const variants = specVariants.get(1000 + (vehicleId % 40)) ?? 0;
+    const variant = variantIndex(vehicleId, variants);
+
     out.key[drawn] = vehicleDrawOrder(fromX, fromY, fromHeight, toX, toY, toHeight, progress);
-    out.frame[drawn] = data[base + SnapshotVehicle.Kind]!;
+    out.frame[drawn] = data[base + SnapshotVehicle.Kind]! + facing * 8 + variant * 64;
     out.x[drawn] = worldX - TILE_W / 2;
     out.y[drawn] = worldY - HEIGHT_PX;
     drawn++;
@@ -527,12 +560,17 @@ describe('render CPU tripwire (SPEC2 6.3)', () => {
     // Alpha one half: the E-05 lerp branch runs on EVERY vehicle, which is
     // the worst frame - alpha 1 (a settled frame) skips the branch wholesale.
     const { prev, prevRowById } = syntheticPrevBlock(data);
-    const drawn = drawPrepProxy(map, data, prev, prevRowById, 0.5, out);
+    // The M13 spec lookup: forty mapped catalogue ids with 1-3 variants,
+    // the shape of the real bySpec map, plus the per-vehicle facing cache.
+    const specVariants = new Map<number, number>();
+    for (let spec = 0; spec < 40; spec++) specVariants.set(1000 + spec, 1 + (spec % 3));
+    const facings = new Uint8Array(SNAPSHOT_MAX_VEHICLES).fill(FACING_NONE);
+    const drawn = drawPrepProxy(map, data, prev, prevRowById, 0.5, out, specVariants, facings);
 
     const samples = new Float64Array(DRAW_PREP_SAMPLES);
     for (let i = 0; i < DRAW_PREP_SAMPLES; i++) {
       const started = performance.now();
-      drawPrepProxy(map, data, prev, prevRowById, 0.5, out);
+      drawPrepProxy(map, data, prev, prevRowById, 0.5, out, specVariants, facings);
       samples[i] = performance.now() - started;
     }
 

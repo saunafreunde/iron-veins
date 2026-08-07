@@ -9,7 +9,7 @@ import {
   Sprite,
   Texture,
 } from 'pixi.js';
-import type { IndustryMarker, StationMarker, TownMarker } from '../shared/protocol';
+import type { IndustryMarker, StationMarker, TownMarker, VehicleMarker } from '../shared/protocol';
 import {
   SNAPSHOT_RESERVED_STRIDE,
   SNAPSHOT_VEHICLE_STRIDE,
@@ -17,7 +17,7 @@ import {
   SnapshotVehicle,
   type VehicleFrame,
 } from '../shared/snapshot';
-import { MAX_HEIGHT } from '../sim/constants';
+import { MAX_HEIGHT, MAX_VEHICLES } from '../sim/constants';
 import type { TileMap } from '../sim/map/TileMap';
 import { SLOPE_COUNT, Terrain } from '../sim/map/terrain';
 import { BlockIndex } from '../sim/signals/blocks';
@@ -41,6 +41,48 @@ const COMPANY_TINTS: readonly number[] = COMPANY_COLORS.map((hex) =>
 
 /** How close a click has to land to count as hitting a vehicle. [world px] */
 const VEHICLE_PICK_PX = 14;
+
+/**
+ * The soft ellipse under every vehicle sprite (SPEC2 M13: "weiche Ellipse
+ * unter Fahrzeugen"): a shared radial-gradient texture, tinted black and
+ * drawn at the vehicle's ground point, under the body by insertion order.
+ * The baked cells additionally carry their own contact shadow (bake-lib
+ * SHADOW_ALPHA_MAX); both are deliberately subtle so they compose instead
+ * of doubling into a stain.
+ */
+/** Opacity of the ellipse. [0-1; render-side judgment, M13] */
+const VEHICLE_SHADOW_ALPHA = 0.18;
+/** Ellipse width as a share of the baked cell's world width. */
+const VEHICLE_SHADOW_WIDTH_SHARE = 0.85;
+/** Ellipse width under the white-box fallback frames. [world px] */
+const FALLBACK_SHADOW_ROAD_PX = 22;
+const FALLBACK_SHADOW_TRAIN_PX = 34;
+/** Ellipse height over width - the 16.1 tile foreshortening (32/64). */
+const VEHICLE_SHADOW_RATIO = TILE_H / TILE_W;
+/** Pixel size of the shared gradient texture; scaled per vehicle. [px] */
+const SHADOW_TEX_W = 64;
+const SHADOW_TEX_H = 32;
+
+/**
+ * The gradient ellipse the vehicle shadows share: white core fading to a
+ * transparent rim, so a black tint at low alpha reads as soft ground
+ * contact. Drawn once at attach - procedural, no binary asset (E-14).
+ */
+function makeShadowTexture(): Texture {
+  const canvas = document.createElement('canvas');
+  canvas.width = SHADOW_TEX_W;
+  canvas.height = SHADOW_TEX_H;
+  const ctx = canvas.getContext('2d')!;
+  ctx.translate(SHADOW_TEX_W / 2, SHADOW_TEX_H / 2);
+  ctx.scale(1, SHADOW_TEX_H / SHADOW_TEX_W);
+  const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, SHADOW_TEX_W / 2);
+  gradient.addColorStop(0, 'rgba(255,255,255,1)');
+  gradient.addColorStop(0.7, 'rgba(255,255,255,0.55)');
+  gradient.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = gradient;
+  ctx.fillRect(-SHADOW_TEX_W / 2, -SHADOW_TEX_W / 2, SHADOW_TEX_W, SHADOW_TEX_W);
+  return Texture.from(canvas);
+}
 
 /** One vehicle as the audio engine wants it; reused between frames. */
 export interface VehicleAudioInput {
@@ -84,6 +126,17 @@ import {
 } from './chunks';
 import { DAY_TINT_NEUTRAL, dayNightTint } from './dayNight';
 import { sampleWorldX, sampleWorldY, shouldSnap, SnapshotInterpolator } from './interpolation';
+import { loadBakedAtlas } from './bakedAtlas';
+import {
+  bakedZoomFor,
+  buildVehicleIndex,
+  FACING_NONE,
+  facingFromDelta,
+  facingFromMovement,
+  vehicleVariantFor,
+  type VehicleFacingCell,
+  type VehicleZoomIndex,
+} from './vehicleArt';
 import {
   cullLabels,
   LABEL_FONT_BASE_PX,
@@ -274,6 +327,27 @@ interface FrameHandle {
   readonly invScale: number;
 }
 
+/**
+ * A baked vehicle cell resolved for placement (M13): both passes of the
+ * two-pass tint (D-160) plus the world-space placement facts. `anchorXPx`
+ * and `anchorYPx` are the cell's own ground pivot - baked cells are tight
+ * rectangles around each facing, so unlike the procedural frames there is
+ * no shared cell geometry to assume.
+ */
+interface BakedVehicleHandle {
+  /** The hull: authored colours, tint zones in neutral grey. */
+  readonly base: Texture;
+  /** The livery: grey-shaded tint zones, multiplied by the company colour. */
+  readonly mask: Texture;
+  /** Ground-pivot position inside the cell. [world px] */
+  readonly anchorXPx: number;
+  readonly anchorYPx: number;
+  /** Cell width, sizing the soft ellipse. [world px] */
+  readonly widthPx: number;
+  /** Sprite scale mapping the baked page's pixels to world px. */
+  readonly invScale: number;
+}
+
 /** One baked chunk: its texture and the checksum of what was baked into it. */
 interface ChunkEntry {
   readonly texture: RenderTexture;
@@ -455,6 +529,38 @@ export class MapView {
   private previewRoute: readonly number[] | null = null;
   private readonly vehicleSprites: Sprite[] = [];
   /**
+   * The company-colour pass of the two-pass tint (D-160) and the soft
+   * ground ellipse (M13), parallel to `vehicleSprites` slot for slot. Per
+   * slot the container holds shadow, base, mask in that insertion order;
+   * they share one zIndex, and Pixi's stable sort keeps the order.
+   */
+  private readonly vehicleMaskSprites: Sprite[] = [];
+  private readonly vehicleShadowSprites: Sprite[] = [];
+  /** Gradient ellipse the shadows share; built once at attach. */
+  private shadowTexture: Texture | null = null;
+  /**
+   * Baked vehicle art (SPEC2 M13, E-14/D-160): the per-zoom cell indexes
+   * and one GPU texture per baked page. Null until the background load
+   * lands - and forever, in a build without a bake: the white-box frames
+   * below are the fallback the game always starts on.
+   */
+  private bakedVehicleZooms: readonly VehicleZoomIndex[] | null = null;
+  private bakedVehiclePages: ReadonlyMap<string, Texture> | null = null;
+  private bakedZoomList: readonly number[] = [];
+  private readonly bakedVehicleFrameCache = new Map<string, BakedVehicleHandle>();
+  /**
+   * specId per vehicle id, from the fleet markers: which catalogue entry a
+   * snapshot row IS travels on the low-frequency marker channel and is
+   * cached render-side (E-05) - the 20 Hz stride stays eight ints. -1 until
+   * the markers name the vehicle; the white box covers the gap.
+   */
+  private readonly vehicleSpecIds = new Int32Array(MAX_VEHICLES).fill(-1);
+  /**
+   * Last facing drawn per vehicle id, so a vehicle that stops keeps
+   * pointing where it was going instead of spinning to a default.
+   */
+  private readonly vehicleFacings = new Uint8Array(MAX_VEHICLES).fill(FACING_NONE);
+  /**
    * Which vehicle each sprite is drawing, this frame.
    *
    * Parallel to `vehicleSprites` and rebuilt every frame, because the snapshot
@@ -510,6 +616,12 @@ export class MapView {
     }
     this.basePage = makeAtlasPage(baseAtlas, ATLAS_SCALE, 'b');
     this.detailPage = makeAtlasPage(detailAtlas, DETAIL_ATLAS_SCALE, 'd');
+    this.shadowTexture = makeShadowTexture();
+
+    // The baked Kenney pages load in the background (M13): the game is
+    // already running on procedural art, swaps to the baked cells the frame
+    // the pages arrive - or never does, in a build without a cache (E-14).
+    void this.loadBakedVehicleArt();
 
     // One sorted container for tiles AND vehicles: correct occlusion needs the
     // vehicle sprites interleaved into the tile sequence by their drawOrder
@@ -629,6 +741,87 @@ export class MapView {
     this.deadlockTiles = tiles;
   }
 
+  /**
+   * The fleet markers, read for exactly one fact: which catalogue entry a
+   * vehicle id is (a train's leading unit). Everything else the markers
+   * carry stays the panels' business.
+   */
+  setFleet(vehicles: readonly VehicleMarker[]): void {
+    this.vehicleSpecIds.fill(-1);
+    for (const vehicle of vehicles) {
+      if (vehicle.id >= 0 && vehicle.id < MAX_VEHICLES) {
+        this.vehicleSpecIds[vehicle.id] = vehicle.specId;
+      }
+    }
+  }
+
+  /**
+   * Fetch the baked atlas output and index its vehicle cells (M13).
+   * Whether a baked path exists at all is `atlasSourceFor`'s decision
+   * inside `loadBakedAtlas` (D-160); a null is simply the procedural game
+   * that is already running - the E-14 floor, not an error path.
+   */
+  private async loadBakedVehicleArt(): Promise<void> {
+    const atlas = await loadBakedAtlas();
+    if (atlas === null || !this.live || this.discarded) return;
+    const pages = new Map<string, Texture>();
+    for (const [file, bitmap] of atlas.pages) {
+      const texture = Texture.from(bitmap);
+      // Nearest, like every atlas page: pixels are the look.
+      texture.source.scaleMode = 'nearest';
+      pages.set(file, texture);
+    }
+    const zoomIndexes = buildVehicleIndex(atlas.manifest);
+    if (zoomIndexes.length === 0) return;
+    this.bakedVehiclePages = pages;
+    this.bakedVehicleZooms = zoomIndexes;
+    this.bakedZoomList = zoomIndexes.map((entry) => entry.zoom);
+  }
+
+  /** The baked vehicle index serving the current zoom, or null while procedural. */
+  private bakedIndexForZoom(): VehicleZoomIndex | null {
+    const zooms = this.bakedVehicleZooms;
+    if (zooms === null) return null;
+    const zoom = bakedZoomFor(this.zoom, this.bakedZoomList);
+    for (const entry of zooms) {
+      if (entry.zoom === zoom) return entry;
+    }
+    return null;
+  }
+
+  /**
+   * Resolve one facing cell to its two sub-textures and placement facts,
+   * cached per cell - the baked twin of `frameTexture`. `invScale` is a
+   * property of the cell's page zoom, so it belongs to the cached handle.
+   */
+  private bakedVehicleHandle(
+    entry: VehicleFacingCell,
+    invScale: number,
+  ): BakedVehicleHandle | null {
+    const key = `${entry.page}:${entry.cell.x}:${entry.cell.y}`;
+    const cached = this.bakedVehicleFrameCache.get(key);
+    if (cached !== undefined) return cached;
+    const pageTexture = this.bakedVehiclePages?.get(entry.page);
+    if (pageTexture === undefined) return null;
+    const cell = entry.cell;
+    const handle: BakedVehicleHandle = {
+      base: new Texture({
+        source: pageTexture.source,
+        frame: new Rectangle(cell.x, cell.y, cell.width, cell.height),
+      }),
+      mask: new Texture({
+        source: pageTexture.source,
+        frame: new Rectangle(cell.maskX, cell.maskY, cell.width, cell.height),
+      }),
+      anchorXPx: cell.anchorX * invScale,
+      anchorYPx: cell.anchorY * invScale,
+      widthPx: cell.width * invScale,
+      invScale,
+    };
+    this.bakedVehicleFrameCache.set(key, handle);
+    return handle;
+  }
+
   get zoom(): number {
     return ZOOM_LEVELS[this.zoomIndex]!;
   }
@@ -659,6 +852,16 @@ export class MapView {
     this.freeTerrainTextures.length = 0;
     this.app.destroy(true, { children: true });
     this.frameCache.clear();
+    // The baked pages and the shadow gradient own their texture sources
+    // (ImageBitmap / canvas); the app's destroy never saw them.
+    if (this.bakedVehiclePages !== null) {
+      for (const texture of this.bakedVehiclePages.values()) texture.destroy(true);
+    }
+    this.bakedVehiclePages = null;
+    this.bakedVehicleZooms = null;
+    this.bakedVehicleFrameCache.clear();
+    this.shadowTexture?.destroy(true);
+    this.shadowTexture = null;
     // The BitmapText objects died with the stage; the pool must not hand
     // out corpses to a later attach. The FONT stays installed: it is
     // page-global by design (see LABEL_FONT_NAME).
@@ -1916,8 +2119,17 @@ export class MapView {
     const size = map.size;
     this.drawnVehicles = 0;
 
+    // The baked art of the current zoom (M13), resolved once per frame -
+    // null in every build without a bake, and then per VEHICLE the variant
+    // lookup answers null again for any unmapped catalogue id (E-14's
+    // per-entry fallback: aircraft, ids the markers have not named yet).
+    const bakedIndex = abstract ? null : this.bakedIndexForZoom();
+    const bakedInvScale = bakedIndex === null ? 1 : 1 / bakedIndex.zoom;
+
     if (abstract && !this.vehicleSpritesHidden) {
       for (const sprite of this.vehicleSprites) sprite.visible = false;
+      for (const sprite of this.vehicleMaskSprites) sprite.visible = false;
+      for (const sprite of this.vehicleShadowSprites) sprite.visible = false;
       this.vehicleSpritesHidden = true;
     }
     if (!abstract) this.vehicleSpritesHidden = false;
@@ -1953,6 +2165,13 @@ export class MapView {
       // at the current position outright.
       let worldX = currX;
       let worldY = currY;
+      // Facing from the INTERPOLATED movement vector between the two
+      // generation samples (M13): the direction the sprite actually glides,
+      // so a corner blends through the diagonal facing instead of snapping
+      // a quarter turn at the tile edge. -1 until the glide branch below
+      // measures it; the sprite path then falls back to the cached facing
+      // and last of all to the (NextTile - Tile) delta.
+      let facing = -1;
       if (alpha < 1) {
         const prevRow = interp.prevRowOf(vehicleId);
         if (prevRow >= 0) {
@@ -1982,40 +2201,123 @@ export class MapView {
             );
             worldX = prevX + (currX - prevX) * alpha;
             worldY = prevY + (currY - prevY) * alpha;
+            facing = facingFromMovement(
+              prevFromX + (prevToX - prevFromX) * prevProgress,
+              prevFromY + (prevToY - prevFromY) * prevProgress,
+              fromX + (toX - fromX) * progress,
+              fromY + (toY - fromY) * progress,
+            );
           }
         }
       }
 
       if (!abstract) {
         let sprite = this.vehicleSprites[i];
-        if (sprite === undefined) {
-          sprite = new Sprite();
-          this.vehicleSprites.push(sprite);
+        let maskSprite = this.vehicleMaskSprites[i];
+        let shadowSprite = this.vehicleShadowSprites[i];
+        if (sprite === undefined || maskSprite === undefined || shadowSprite === undefined) {
           // Into the SAME sorted container as the tiles: the drawOrder key is
           // what lets a hill in front of a train draw over it (section 16.1).
+          // Per slot the insertion order is shadow, body, mask - the three
+          // share one zIndex and Pixi's stable sort keeps the ellipse under
+          // the body and the company colour over it.
+          shadowSprite = new Sprite();
+          this.vehicleShadowSprites.push(shadowSprite);
+          this.tiles.addChild(shadowSprite);
+          sprite = new Sprite();
+          this.vehicleSprites.push(sprite);
           this.tiles.addChild(sprite);
+          maskSprite = new Sprite();
+          this.vehicleMaskSprites.push(maskSprite);
+          this.tiles.addChild(maskSprite);
         }
+
+        // Facing: the measured glide direction first; a standing or settled
+        // vehicle keeps the facing it last drove with; a vehicle never seen
+        // moving reads its current tile step, east as the birth default.
+        if (facing < 0) {
+          const cached =
+            vehicleId >= 0 && vehicleId < MAX_VEHICLES
+              ? this.vehicleFacings[vehicleId]!
+              : FACING_NONE;
+          if (cached !== FACING_NONE) {
+            facing = cached;
+          } else {
+            facing = facingFromDelta(toX - fromX, toY - fromY);
+            if (facing < 0) facing = 0;
+          }
+        }
+        if (vehicleId >= 0 && vehicleId < MAX_VEHICLES) this.vehicleFacings[vehicleId] = facing;
+
+        // Every company's own colour, so a competitor's train is recognisable
+        // as one at a glance rather than only in a list.
+        const ownerTint =
+          owner === 0 ? this.companyTint : (COMPANY_TINTS[owner] ?? this.companyTint);
+        const zIndex = vehicleDrawOrder(fromX, fromY, fromHeight, toX, toY, toHeight, progress);
 
         // A sprite is reused for whatever vehicle lands in its slot, so the
         // texture is set every frame rather than once at creation - and the
         // scale with it, because a zoom flip swaps the atlas page under the
-        // same sprite. Both setters are change-detected by Pixi.
-        const handle =
-          kind === TRAIN_KIND
-            ? this.frameTexture(page, 'train', atlas.trainFrame())
-            : this.frameTexture(page, 'vehicle', atlas.vehicleFrame());
-        sprite.texture = handle.texture;
-        sprite.scale.set(handle.invScale);
+        // same sprite. All setters are change-detected by Pixi.
+        const specId =
+          vehicleId >= 0 && vehicleId < MAX_VEHICLES ? this.vehicleSpecIds[vehicleId]! : -1;
+        const variant = vehicleVariantFor(bakedIndex, specId, vehicleId);
+        const baked =
+          variant === null ? null : this.bakedVehicleHandle(variant.cells[facing]!, bakedInvScale);
+        let shadowW: number;
+        if (baked !== null) {
+          // The Kenney cell (M13): untinted body plus the company-colour
+          // mask on top - the two-pass tint of D-160. Placed by the cell's
+          // OWN ground pivot; baked cells are tight per-facing rectangles.
+          sprite.texture = baked.base;
+          sprite.scale.set(baked.invScale);
+          sprite.tint = 0xffffff;
+          sprite.position.set(worldX - baked.anchorXPx, worldY - baked.anchorYPx);
+          maskSprite.texture = baked.mask;
+          maskSprite.scale.set(baked.invScale);
+          maskSprite.tint = ownerTint;
+          maskSprite.position.set(worldX - baked.anchorXPx, worldY - baked.anchorYPx);
+          maskSprite.zIndex = zIndex;
+          maskSprite.visible = true;
+          shadowW = baked.widthPx * VEHICLE_SHADOW_WIDTH_SHARE;
+        } else {
+          // The M10 white box retires from the live path but stays the
+          // fallback (E-14): an unmapped id (aircraft stay procedural), an
+          // id the markers have not named yet, every build without a bake.
+          const handle =
+            kind === TRAIN_KIND
+              ? this.frameTexture(page, 'train', atlas.trainFrame())
+              : this.frameTexture(page, 'vehicle', atlas.vehicleFrame());
+          sprite.texture = handle.texture;
+          sprite.scale.set(handle.invScale);
+          sprite.tint = ownerTint;
+          // The fixed one-step offset assumes the vehicle cell's world
+          // geometry; the detail page's tall cells are world-identical to
+          // the base page's by construction (tests/unit/terrainAtlas.spec.ts).
+          sprite.position.set(worldX - TILE_W / 2, worldY - HEIGHT_PX);
+          maskSprite.visible = false;
+          shadowW = kind === TRAIN_KIND ? FALLBACK_SHADOW_TRAIN_PX : FALLBACK_SHADOW_ROAD_PX;
+        }
         sprite.visible = true;
-        // Every company's own colour, so a competitor's train is recognisable
-        // as one at a glance rather than only in a list.
-        sprite.tint = owner === 0 ? this.companyTint : (COMPANY_TINTS[owner] ?? this.companyTint);
+        sprite.zIndex = zIndex;
 
-        sprite.zIndex = vehicleDrawOrder(fromX, fromY, fromHeight, toX, toY, toHeight, progress);
-        // The fixed one-step offset assumes the vehicle cell's world geometry;
-        // the detail page's tall cells are world-identical to the base page's
-        // by construction (pinned in tests/unit/terrainAtlas.spec.ts).
-        sprite.position.set(worldX - TILE_W / 2, worldY - HEIGHT_PX);
+        // The soft ellipse under the vehicle (M13), at the ground point the
+        // sprite is anchored to.
+        if (this.shadowTexture !== null) {
+          shadowSprite.texture = this.shadowTexture;
+          shadowSprite.width = shadowW;
+          shadowSprite.height = shadowW * VEHICLE_SHADOW_RATIO;
+          shadowSprite.alpha = VEHICLE_SHADOW_ALPHA;
+          shadowSprite.tint = 0x000000;
+          shadowSprite.position.set(
+            worldX - shadowW / 2,
+            worldY - (shadowW * VEHICLE_SHADOW_RATIO) / 2,
+          );
+          shadowSprite.zIndex = zIndex;
+          shadowSprite.visible = true;
+        } else {
+          shadowSprite.visible = false;
+        }
       }
 
       this.vehicleIds[this.drawnVehicles] = vehicleId;
@@ -2032,6 +2334,8 @@ export class MapView {
     } else {
       for (let i = count; i < this.vehicleSprites.length; i++) {
         this.vehicleSprites[i]!.visible = false;
+        this.vehicleMaskSprites[i]!.visible = false;
+        this.vehicleShadowSprites[i]!.visible = false;
       }
     }
   }
