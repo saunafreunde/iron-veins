@@ -1,9 +1,10 @@
 import type { ReactElement } from 'react';
 import { formatGameDate, formatMoney, t } from '../i18n';
 import { COMPANY_COLORS } from '../shared/palette';
-import { SPEED_FACTORS } from '../sim/constants';
+import { BANKRUPTCY_MONTHS, BANKRUPTCY_WARNING_MONTHS, SPEED_FACTORS } from '../sim/constants';
 import type { SimClient } from './SimClient';
 import { useSimStore } from './store';
+import { Tooltip } from './Tooltip';
 
 const SPEED_LABEL_KEYS = [
   'ui.speed.pause',
@@ -45,11 +46,22 @@ export function StatusBar({ client }: { readonly client: SimClient }): ReactElem
         </div>
         <div>
           <dt>{t('ui.status.cash')}</dt>
-          <dd className={cashCt < 0 ? 'value value--danger' : 'value'}>{formatMoney(cashCt)}</dd>
+          <Tooltip
+            textKey="ui.tooltip.status.cash"
+            params={{ warn: BANKRUPTCY_WARNING_MONTHS, end: BANKRUPTCY_MONTHS }}
+          >
+            <dd tabIndex={0} className={cashCt < 0 ? 'value value--danger' : 'value'}>
+              {formatMoney(cashCt)}
+            </dd>
+          </Tooltip>
         </div>
         <div>
           <dt>{t('ui.status.loan')}</dt>
-          <dd className={loanCt > 0 ? 'value value--warning' : 'value'}>{formatMoney(loanCt)}</dd>
+          <Tooltip textKey="ui.tooltip.status.loan">
+            <dd tabIndex={0} className={loanCt > 0 ? 'value value--warning' : 'value'}>
+              {formatMoney(loanCt)}
+            </dd>
+          </Tooltip>
         </div>
       </dl>
 

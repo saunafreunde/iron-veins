@@ -6,6 +6,7 @@ import {
   CANOPY_COST_CT,
   AIRPORT_COST_CT,
   INDUSTRY_CLOSURE_MONTHS,
+  INDUSTRY_STOCK_MONTHS,
   QUAY_COST_CT,
   SHIP_DEPOT_COST_CT,
   INDUSTRY_WARNING_MONTHS,
@@ -41,33 +42,8 @@ import { DeliveryPanel } from './DeliveryPanel';
 import { StationXray } from './StationPanel';
 import type { SimClient } from './SimClient';
 import { useSimStore, type Tool } from './store';
-
-/** Tools of M1 and M2. Rail, water and air join the list with their milestones. */
-const TOOLS: ReadonlyArray<{ readonly id: Tool; readonly labelKey: string }> = [
-  { id: 'none', labelKey: 'ui.tool.select' },
-  { id: 'road', labelKey: 'ui.tool.road' },
-  { id: 'track', labelKey: 'ui.tool.track' },
-  { id: 'connect', labelKey: 'ui.tool.connect' },
-  { id: 'stop', labelKey: 'ui.tool.stop' },
-  { id: 'depot', labelKey: 'ui.tool.depot' },
-  { id: 'platform', labelKey: 'ui.tool.platform' },
-  { id: 'raildepot', labelKey: 'ui.tool.railDepot' },
-  { id: 'quay', labelKey: 'ui.tool.quay' },
-  { id: 'airstrip', labelKey: 'ui.tool.airstrip' },
-  { id: 'airport', labelKey: 'ui.tool.airport' },
-  { id: 'intlairport', labelKey: 'ui.tool.intlAirport' },
-  { id: 'shipdepot', labelKey: 'ui.tool.shipDepot' },
-  { id: 'freightterminal', labelKey: 'ui.tool.freightTerminal' },
-  { id: 'canopy', labelKey: 'ui.tool.canopy' },
-  { id: 'coldstore', labelKey: 'ui.tool.coldStore' },
-  { id: 'signal', labelKey: 'ui.tool.signal' },
-  { id: 'pathsignal', labelKey: 'ui.tool.pathSignal' },
-  { id: 'waypoint', labelKey: 'ui.tool.waypoint' },
-  { id: 'demolish', labelKey: 'ui.tool.demolish' },
-  { id: 'raise', labelKey: 'ui.tool.raise' },
-  { id: 'lower', labelKey: 'ui.tool.lower' },
-  { id: 'level', labelKey: 'ui.tool.level' },
-];
+import { TOOL_REGISTRY } from './tools';
+import { Tooltip } from './Tooltip';
 
 /**
  * Price shown under the active tool, so the cost is known before the click.
@@ -190,15 +166,16 @@ export function TilePanel({ client }: { readonly client: SimClient }): ReactElem
       <h2 className="panel__title">{t('ui.tile.title')}</h2>
 
       <div className="button-row">
-        {TOOLS.map((entry) => (
-          <button
-            key={entry.id}
-            type="button"
-            className={entry.id === tool ? 'button button--active' : 'button'}
-            onClick={() => setTool(entry.id)}
-          >
-            {t(entry.labelKey)}
-          </button>
+        {TOOL_REGISTRY.map((entry) => (
+          <Tooltip key={entry.id} textKey={entry.tooltipKey}>
+            <button
+              type="button"
+              className={entry.id === tool ? 'button button--active' : 'button'}
+              onClick={() => setTool(entry.id)}
+            >
+              {t(entry.labelKey)}
+            </button>
+          </Tooltip>
         ))}
       </div>
       <p className="panel__hint">{priceHint(tool, year)}</p>
@@ -332,9 +309,11 @@ export function TilePanel({ client }: { readonly client: SimClient }): ReactElem
             </div>
             <div>
               <dt>{t('ui.station.rating')}</dt>
-              <dd className={station.rating < 40 ? 'value value--warning' : 'value'}>
-                {station.rating}
-              </dd>
+              <Tooltip textKey="ui.tooltip.station.rating">
+                <dd tabIndex={0} className={station.rating < 40 ? 'value value--warning' : 'value'}>
+                  {station.rating}
+                </dd>
+              </Tooltip>
             </div>
             <div>
               <dt>{t('ui.station.modules')}</dt>
@@ -381,17 +360,33 @@ export function TilePanel({ client }: { readonly client: SimClient }): ReactElem
             </div>
             <div>
               <dt>{t('ui.industry.level')}</dt>
-              <dd className="value value--mono">{industry.level} %</dd>
+              <Tooltip textKey="ui.tooltip.industry.level">
+                <dd tabIndex={0} className="value value--mono">
+                  {industry.level} %
+                </dd>
+              </Tooltip>
             </div>
             <div>
               <dt>{t('ui.industry.stock')}</dt>
-              <dd className="value value--mono">{industry.stock}</dd>
+              <Tooltip
+                textKey="ui.tooltip.industry.stock"
+                params={{ months: INDUSTRY_STOCK_MONTHS }}
+              >
+                <dd tabIndex={0} className="value value--mono">
+                  {industry.stock}
+                </dd>
+              </Tooltip>
             </div>
             <div>
               <dt>{t('ui.industry.service')}</dt>
-              <dd className={industry.service < 50 ? 'value value--warning' : 'value'}>
-                {industry.service} %
-              </dd>
+              <Tooltip textKey="ui.tooltip.industry.service">
+                <dd
+                  tabIndex={0}
+                  className={industry.service < 50 ? 'value value--warning' : 'value'}
+                >
+                  {industry.service} %
+                </dd>
+              </Tooltip>
             </div>
           </dl>
           {!industry.open && <p className="panel__hint value--danger">{t('ui.industry.closed')}</p>}

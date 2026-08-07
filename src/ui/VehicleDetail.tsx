@@ -2,11 +2,12 @@ import type { ReactElement } from 'react';
 import { formatMoney, t } from '../i18n';
 import type { OrderMarker, VehicleMarker } from '../shared/protocol';
 import { CommandKind } from '../sim/commands/types';
-import { RELIABILITY_MAX } from '../sim/constants';
+import { OBSOLETE_UPKEEP_FACTOR, RELIABILITY_MAX } from '../sim/constants';
 import { OrderTarget } from '../sim/vehicles/VehicleStore';
 import { manifestDisplayRows } from './manifest';
 import type { SimClient } from './SimClient';
 import { useSimStore } from './store';
+import { Tooltip } from './Tooltip';
 
 /**
  * The vehicle detail of the M14 statistics centre (SPEC2 M14): age against
@@ -59,19 +60,23 @@ export function VehicleDetail({
       <dl className="readout">
         <div>
           <dt>{t('ui.vehicle.age')}</dt>
-          <dd className={obsolete ? 'value value--warning' : 'value'}>
-            {t('ui.vehicle.ageValue', {
-              age: vehicle.ageYears.toFixed(1),
-              life: vehicle.lifetimeYears,
-            })}
-            {obsolete && ` ${t('ui.vehicle.obsolete')}`}
-          </dd>
+          <Tooltip textKey="ui.tooltip.vehicle.age" params={{ factor: OBSOLETE_UPKEEP_FACTOR }}>
+            <dd tabIndex={0} className={obsolete ? 'value value--warning' : 'value'}>
+              {t('ui.vehicle.ageValue', {
+                age: vehicle.ageYears.toFixed(1),
+                life: vehicle.lifetimeYears,
+              })}
+              {obsolete && ` ${t('ui.vehicle.obsolete')}`}
+            </dd>
+          </Tooltip>
         </div>
         <div>
           <dt>{t('ui.vehicle.reliability')}</dt>
-          <dd className="value value--mono">
-            {Math.round((vehicle.reliability / RELIABILITY_MAX) * 100)} %
-          </dd>
+          <Tooltip textKey="ui.tooltip.vehicle.reliability">
+            <dd tabIndex={0} className="value value--mono">
+              {Math.round((vehicle.reliability / RELIABILITY_MAX) * 100)} %
+            </dd>
+          </Tooltip>
         </div>
         <div>
           <dt>{t('ui.vehicle.breakdowns')}</dt>
@@ -83,11 +88,13 @@ export function VehicleDetail({
         </div>
         <div>
           <dt>{t('ui.vehicle.earned')}</dt>
-          <dd className="value">
-            {formatMoney(vehicle.earnedCt)}
-            {perYearCt !== null &&
-              ` (${t('ui.vehicle.earnedPerYear', { amount: formatMoney(perYearCt) })})`}
-          </dd>
+          <Tooltip textKey="ui.tooltip.vehicle.earned">
+            <dd tabIndex={0} className="value">
+              {formatMoney(vehicle.earnedCt)}
+              {perYearCt !== null &&
+                ` (${t('ui.vehicle.earnedPerYear', { amount: formatMoney(perYearCt) })})`}
+            </dd>
+          </Tooltip>
         </div>
         {current !== undefined && (
           <div>

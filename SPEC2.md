@@ -386,6 +386,7 @@ Headroom und lehrt, ein rotes Gate zu ignorieren (D-136).
 | M11 | 2026-08-07 | **1,20 ms / 2,54 ms** (max 36,0 ms über 6 500 Ticks) | **−0,72 ms** (Budget +0,20; die Halt-Checks/Slot-Logik verschwinden im Messrauschen — kein Mehrverbrauch nachweisbar) | D-141–D-159 |
 | M12 | 2026-08-07 | **1,46 ms / 3,69 ms** (max 19,1 ms über 6 500 Ticks; Zweitlauf 1,34 / 3,19) | **+0,00 ms belegt** (render-only, kein Byte unter `src/sim` verändert; die zwei Läufe messen +0,43 und −0,07 gegen die Grundlinie — sie STRADDELN sie, das ist das ±0,7-ms-Laufrauschen dieser Maschine, das schon die M11-Zeile dokumentiert) | D-160–D-166 |
 | M13 | 2026-08-07 | **1,27 ms / 2,92 ms** (max 17,4 ms über 6 500 Ticks) | **+0,00 ms belegt** (render-only; gemessen −0,34 gegen die Grundlinie — dasselbe ±0,7-ms-Laufrauschen; der einzige Sim-seitige Diff ist die wörtliche Marker-Assembly-Extraktion nach `src/sim/markers.ts`, D-174) | D-167–D-174 |
+| M14 | 2026-08-07 | **1,48 ms / 3,17 ms** (max 19,8 ms über 6 500 Ticks; Abschlusslauf nach allen fünf Bundles) | **−0,09 ms** (Budget-Zeile Tick +0,00 eingehalten; die Bundle-Läufe 1,393/3,232 in B1 (D-176) und 1,490/3,339 in B3 (D-178) STRADDELN die Grundlinie exakt wie die M12-Zeile — das dokumentierte ±0,7-ms-Laufrauschen; der Publish-Mehrpreis steht als eigene Messung im Detail) | D-175–D-183 |
 
 M11-Zeile im Detail: **SAVE_VERSION v24** — genau EIN Bump für alle drei
 Stufen (Z5; Order-Grammatik-Stride, LineStore, Takt-Felder,
@@ -459,6 +460,44 @@ boomende vs. schlafende Industrie im Standbild unterscheidbar ✓
 D-174), Partikel-CPU gemessen ≤ 2 ms ✓, kein Binärbild im Repo
 (Glob-Test) ✓. Dazu die Status-Badges (stuck/Panne/ohne Aufträge) aus dem
 State-Feld im Stride mit der EINEN Stuck-Definition der 9.3-Uhr (D-174).
+
+M14-Zeile im Detail: **SAVE_VERSION v25 — genau EIN Bump (Z5),** Besitzer
+der Stations-Frachthistorie-Ring (B3); B4 erweiterte die v24→v25-Migration
+IN PLACE um `breakdownCount` + `depotCall` statt eine v26 anzulegen. Der
+kanonische Pin wanderte nach D-137-Protokoll zweimal mit
+(`bbe572afe2880243` nach B3, `8146983bca3a6f92` nach B4, Datei-Stand
+gilt); Korpus in B3 re-recorded (`v25-played.ironsave`), in B4 geprüft
+unverändert gültig (fahrzeuglose Korpus-Welt). **Snapshot-Layout 6 → 7 —
+genau EIN Bump** (B1: FlowCount-Feld + Stride-8-FlowMarker-Block, Cap
+4 096 Legs). Abnahme-Messwerte (Referenzmaschine, `npm run test:perf`
+2026-08-07): **Flow-Export median 0,057 / p99 0,241 ms je Publish bei 420
+aktiven Legs** (B1-Abnahmelauf 0,060/0,285) **gegen die
+≤-0,5-ms-Zusage** — im SELBEN Publish-Pass wie `structureSignature`
+(Fehler 33), Tripwire gated den Median auf der Zusage selbst mit
+5-ms-p99-Backstop (der M13-Partikel-Fall: das Gate IST das Budget, mit
+Headroom, D-176/D-167); **Flow-Overlay-Prep am 4 096-Leg-Megagraph p50
+0,296 / p99 0,750 ms** (B2-Abnahmelauf 0,32/0,93) gegen das
+3-ms-Median-Gate — die gebundene Insertion-Selektion statt Sort, 128
+gezeichnete Bögen, Checksummen-identisch (D-177). **Ring-Speicher:** 648
+Int32 + 54 Float64 = 3 024 B je Station (12 Monate × 18 Frachten × 3
+Zähler + Monatsakkumulatoren), ~1,2 MiB im Speicher der
+420-Stationen-Referenzflotte; gehasht NUR im Voll-Digest
+(Kachel-Layer-Präzedenz, D-178), Save der großen Welt unverändert
+0,18 MB. Übrige Tripwires nach allen Bundles grün (Sprite-Pool Median
+1,8, Draw-Prep 2,6, Chunk-Bake 0,55, Partikel 0,30, Aspekt 0,03,
+Emissive 0,07 ms). Atlas: 0 wie zugesagt — die Pfeile sind
+Vektor-Graphics, der Minimap-Fluss ist ein Fall des EINEN reinen
+Painters (D-112/D-177). Fertig-wenn-Posten der M14-Sektion: jeder
+gemessene Leg im 3-Linien-Transfernetz als Pfeil mit Breite ∝ Volumen ✓
+(`tests/helpers/transferNetwork.ts` + Overlay-Test, D-177), alle fünf
+10.1-Terme einzeln beziffert + dominanter Verlustterm benannt ✓
+(`ratingTerms`-Summentest, D-179), Flow-Export ≤ 0,5 ms ✓ (gemessen
+0,057 median, Gate hält die Zusage), Firmenwert-Graph aus
+Jahresarchiv + Heute ✓ (D-180, `chart.spec.ts`), **alle 22 Werkzeuge mit
+wirkungserklärendem Tooltip ✓** — aus dem Tool-Registry AUFGEZÄHLT
+statt gezählt: Compile-Time-Abdeckung der Tool-Union in `ui/tools.ts`,
+Kopplungstest über beide Locales in `tests/unit/tooltips.spec.ts`
+(D-183).
 
 Die M10-Grundlinie liegt UNTER der linearen Extrapolation (~3–4 ms) — der
 Eskalationspfad (Kanten-Graph vor M14) ist nicht ausgelöst. Referenzmaschine:

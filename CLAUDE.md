@@ -674,6 +674,76 @@ perf and environment notes above.
   A dormant and a booming works differ in a STILL image: plume density
   by day, `industryGlowFactor` on the window twin by night.
 
+## M14 - instruments: flow atlas, station x-ray, statistics, tooltips
+
+Instruments BEFORE dynamics: the diagnosis tools M18-M21 will be
+balanced with. ONE save bump (v24 -> v25, owned by the station
+cargo-history ring, extended in place by the vehicle fields - the pin
+moved twice under the D-137 protocol, `8146983bca3a6f92` is current);
+ONE snapshot-layout bump (6 -> 7, the FlowMarker block). Ledger row
+6.1.1 closed: tick 1.48/3.17 on the M10 baseline, flow export
+0.057/0.241 ms per publish against the 0.5 ms promise.
+
+- **The flow block rides the one publish pass and nothing sim-side may
+  read it back** (D-176). Volumes live in the link graph's own
+  eight-trip ring (one staleness rule with the leg times; at most eight
+  trips lost on load - the honest price), exported in the SAME pass as
+  `structureSignature` (Fehler 33), stride 8, cap 4,096 legs, owner and
+  line aboard because the arrows colour by them. A test walks `src/sim`
+  and fails the day a pathfinder reads the flow vocabulary.
+- **The arrows are an event-driven vector layer outside the tint**
+  (D-177). Redraw only when `flowHash`, zoom or stations move; top-N by
+  bounded insertion selection (the sort it replaced was 9x dearer at
+  the megagraph); bow side = fixed +90-degree rotation of travel, so
+  A->B and B->A separate BY CONSTRUCTION; unmeasured legs draw
+  estimate-grey, never a company colour; the cut feeds an honest
+  "x more" chip. Minimap Fluss = one more case of the ONE pure painter,
+  so the save thumbnail inherits it (D-112). A toggles the overlay.
+- **The cargo-history ring counts three VERDICTS per cargo and month**
+  (D-178): Collected (left ON A VEHICLE, the D-085 measure), Delivered
+  (arrived as destination), Expired (decay + write-off + turned away).
+  A transfer set-down is deliberately none of them. Events add onto
+  Float64 accumulators; the monthly hook rounds into the Int32 ring.
+  Accumulators are saved AND hashed like the ring - but full digest
+  only (the tile-layer precedent; the live digest already moves via
+  waiting/overflow). 3,024 B per station.
+- **The x-ray displays the simulation's own terms** (D-179).
+  `stationRating` IS now the sum of `ratingTerms` (test: sum = rating);
+  the warning names `dominantLossTerm`, ties to the lower index, gated
+  at 5 points. The catchment preview composes the build command's own
+  `joinTargetIdFor` + D-095 centre + radius rule - the circle before
+  the click IS the catchment after it. Station markers join the fleet
+  cadence (one post per game day); history rows travel sparse.
+- **The value graph is the yearly archive plus today** (D-180) - a
+  monthly value series is NOT honestly derivable (construction moves
+  value outside the accounts), so the 24-month detail stays the
+  cash-flow bars. Axis scaling is pure in `ui/chart.ts`.
+- **The vehicle detail displays what the sim computes** (D-181):
+  per-vehicle upkeep factored OUT of the fleet bill (one term),
+  manifest rows ARE the merged stacks with paid-up-to distance by the
+  payment formula's own measure. `breakdownCount` + `depotCall` joined
+  the v25 payload (saved + hashed; the flag is Z4 routing state). A
+  depot call is a ONE-SHOT flag beside the schedule - `orderTargetTile`
+  answers with the shed while it stands, the arrival services, parks
+  and clears; the abandoned trip measures nothing (D-077) and stopping
+  the vehicle cancels the call. Follow camera is a render fact.
+- **Notification routing is presentation over the news delta** (D-182):
+  off/ticker/toast/pause per category, a pure `routeNotification`
+  table, pause = `setSpeed(0)` (control traffic, never a command,
+  D-004), pause never a default. Fresh = identity-delta plus a
+  two-game-day age cap, so a loaded backlog can never flood the stack.
+- **Tooltips: the registry is the enumeration** (D-183). `ui/tools.ts`
+  carries label + tooltip key per tool, a compile-time
+  `Exclude<Tool, RegisteredTool>` check covers the union, and the
+  coupling test holds both locales - "all 22" is proven, not counted.
+  The module clones its trigger (no layout change), places by a pure
+  headless-tested function, shows on focus IMMEDIATELY (hover waits
+  450 ms), and lets Escape keep propagating to the 17.2 ladder. Texts
+  carry the MECHANISM, parameterised from the sim's constants; the
+  price line keeps the exact inflated figures (D-119). Major readouts
+  (cash/loan, station rating, x-ray terms, industry, vehicle, value
+  graph) wear the same module with `tabIndex` 0.
+
 ## Still outstanding
 
 - **The two named walls of D-158.** A passenger pile a fleet merely

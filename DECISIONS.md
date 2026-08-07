@@ -47,14 +47,14 @@ no entry below. A number may appear under several topics.
   D-136, D-140, D-160, D-161, D-162, D-163, D-164, D-165, D-166, D-169, D-170,
   D-171, D-172, D-173, D-174, D-175, D-177, D-179
 - **UI & input:** D-011, D-013, D-015, D-035, D-110, D-113, D-114, D-119,
-  D-126, D-148, D-165, D-166, D-177, D-179, D-180, D-181, D-182
+  D-126, D-148, D-165, D-166, D-177, D-179, D-180, D-181, D-182, D-183
 - **Performance & measurement:** D-002, D-120, D-135, D-136, D-161, D-162,
   D-163, D-164, D-167, D-170, D-171, D-172, D-173, D-174, D-176, D-177
 - **Platform, tooling & build:** D-012, D-014, D-015, D-016, D-017, D-029,
   D-030, D-031, D-160, D-168, D-169, D-170, D-172, D-175
 - **Crash safety:** D-132, D-139
 - **Testing method & fixtures:** D-010, D-038, D-072, D-074, D-084, D-133,
-  D-167
+  D-167, D-183
 - **Process & specification:** D-070, D-123, D-129, D-133, D-138, D-140
 
 ---
@@ -5260,3 +5260,60 @@ alone. `shared/settings.ts` may not import the sim, so the category
 count is repeated there - and `tests/unit/notifications.spec.ts`
 carries the coupling assertion that fails the build the day the news
 log grows a sixth category the options screen would silently not show.
+
+## M14 - instruments, bundle 5: tooltips over the 22 tools + milestone closure (2026-08-07)
+
+### D-183 The tooltip clones its trigger and answers to focus at once, the registry is the enumeration of the 22 tools, and the text carries the mechanism while the price line keeps the number
+
+The last M14 order: an effect-explaining tooltip on every build tool and
+the major panel readouts. Four decisions shaped the module.
+
+**One component, no wrapper element, a pure placement.** `Tooltip` takes
+exactly one child and injects its handlers with `cloneElement` - wrapping
+a toolbar button changes not a pixel of the flex layout - and the bubble
+renders through a portal at the body, `position: fixed`, placed by
+`placeTooltip` in `ui/tooltipLayout.ts`: a pure function of rectangles
+(the `labels.ts`/`chart.ts` split), so the headless suite pins the
+centre-above preference, the flip below a top-edge trigger, the viewport
+clamp with the left edge winning, and the roomier-side rule when neither
+side fits whole. The bubble is `pointer-events: none` and
+`aria-describedby`-linked: it can never trap the cursor it explains.
+
+**Focus never waits; hover does; Escape is dismissed but not eaten.**
+Hover shows after TOOLTIP_DELAY_MS (450 ms - the desktop convention),
+because a passing cursor is not a question. Keyboard focus shows
+IMMEDIATELY: a Tab onto the element is deliberate (section 17.4's full
+keyboard operation - the readout tooltips carry `tabIndex` 0 for the
+same reason). Escape hides the bubble and deliberately keeps
+propagating: the 17.2 escape ladder (disarm the tool, open the menu)
+must see the same key, and the running app confirmed both happen - a
+tooltip that swallowed Escape would cost the player the game's own
+escape hatch for a hint box.
+
+**The registry is the enumeration - "all 22" is proven, not counted.**
+The toolbar's tool list left `TilePanel` for `ui/tools.ts` and carries
+label AND tooltip key per row; a compile-time
+`Exclude<Tool, RegisteredTool>` check makes a `Tool` union member
+without a registry row a type error, and `tests/unit/tooltips.spec.ts`
+walks the registry against BOTH catalogues - key present, non-empty,
+and meaningfully LONGER than the label it hangs on, which is as close
+as a test can come to rejecting a tooltip that merely repeats the
+button. The 22 of the Fertig-wenn is asserted as `BUILD_TOOLS.length`
+(the registry minus the select pseudo-tool, which explains itself all
+the same).
+
+**The tooltip explains the mechanism; the price line keeps the exact
+figure.** The toolbar's price hint already runs every number through
+the inflation the bill charges (17.3, D-119) - duplicating figures into
+tooltip prose would give them a second place to go stale. So the texts
+state what the tool DOES, what its cost scales with and what it
+affects ("the first road on open land claims the tile", "+8 rating
+points and cargo spoils a third slower", "the rating out of 100 IS the
+share of cargo that appears"), and every number a sentence does carry
+is a `t()` parameter fed from the sim's own constants
+(RATING_WAIT_GOOD_DAYS, INDUSTRY_STOCK_MONTHS, OBSOLETE_UPKEEP_FACTOR,
+BANKRUPTCY_MONTHS) - a rebalanced constant rewrites the sentence by
+construction. Beyond the tools: status cash/loan, the station rating
+(the 10.1 death-spiral sentence at the number itself), the five x-ray
+terms, industry level/stock/service, vehicle age/reliability/earnings
+and the value-graph heading got the same module, de+en.

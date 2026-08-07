@@ -2,7 +2,15 @@ import type { ReactElement } from 'react';
 import { t } from '../i18n';
 import type { StationHistoryMarker, StationMarker } from '../shared/protocol';
 import { CARGO_SPECS } from '../sim/cargo/types';
-import { RATING_XRAY_WARN_LOSS, STATION_RATING_BASE } from '../sim/constants';
+import {
+  RATING_CANOPY_BONUS,
+  RATING_FREQUENCY_SATURATION_VISITS,
+  RATING_FREQUENCY_WINDOW_DAYS,
+  RATING_WAIT_BAD_DAYS,
+  RATING_WAIT_GOOD_DAYS,
+  RATING_XRAY_WARN_LOSS,
+  STATION_RATING_BASE,
+} from '../sim/constants';
 import {
   dominantLossTerm,
   RATING_TERM_MAX,
@@ -10,6 +18,7 @@ import {
   RatingTermIndex,
   type RatingTerms,
 } from '../sim/station/types';
+import { Tooltip } from './Tooltip';
 
 /**
  * The station x-ray of SPEC2 M14.
@@ -39,6 +48,29 @@ const TERM_WHY_KEYS: readonly string[] = [
   'ui.station.why.overflow',
 ];
 
+/**
+ * One tooltip per term (SPEC2 M14): what FEEDS the term and how to recover
+ * it - the mechanism behind the meter, parameterised from the very
+ * constants the simulation computes with so the sentences can never quote
+ * stale numbers.
+ */
+const TERM_TIP_KEYS: readonly string[] = [
+  'ui.tooltip.term.wait',
+  'ui.tooltip.term.frequency',
+  'ui.tooltip.term.equipment',
+  'ui.tooltip.term.reliability',
+  'ui.tooltip.term.overflow',
+];
+
+/** The `t()` parameters each term tooltip needs, by RatingTermIndex. */
+const TERM_TIP_PARAMS: readonly Readonly<Record<string, string | number>>[] = [
+  { good: RATING_WAIT_GOOD_DAYS, bad: RATING_WAIT_BAD_DAYS },
+  { window: RATING_FREQUENCY_WINDOW_DAYS, visits: RATING_FREQUENCY_SATURATION_VISITS },
+  { canopy: RATING_CANOPY_BONUS },
+  {},
+  {},
+];
+
 /** The five term values in RatingTermIndex order, overflow as the malus. */
 function termValues(terms: RatingTerms): readonly number[] {
   return [terms.wait, terms.frequency, terms.equipment, terms.reliability, terms.overflow];
@@ -57,19 +89,21 @@ function TermRow({
   const max = RATING_TERM_MAX[index]!;
   const share = max <= 0 ? 0 : (value / max) * 100;
   return (
-    <div className="xray-term">
-      <span className="xray-term__label">{t(TERM_LABEL_KEYS[index]!)}</span>
-      <span className="xray-term__meter">
-        <span
-          className={malus ? 'xray-term__fill xray-term__fill--malus' : 'xray-term__fill'}
-          style={{ width: `${share}%` }}
-        />
-      </span>
-      <span className="value value--mono xray-term__value">
-        {malus ? '−' : ''}
-        {value.toFixed(1)}/{max}
-      </span>
-    </div>
+    <Tooltip textKey={TERM_TIP_KEYS[index]!} params={TERM_TIP_PARAMS[index]}>
+      <div className="xray-term" tabIndex={0}>
+        <span className="xray-term__label">{t(TERM_LABEL_KEYS[index]!)}</span>
+        <span className="xray-term__meter">
+          <span
+            className={malus ? 'xray-term__fill xray-term__fill--malus' : 'xray-term__fill'}
+            style={{ width: `${share}%` }}
+          />
+        </span>
+        <span className="value value--mono xray-term__value">
+          {malus ? '−' : ''}
+          {value.toFixed(1)}/{max}
+        </span>
+      </div>
+    </Tooltip>
   );
 }
 

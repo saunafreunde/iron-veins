@@ -1072,3 +1072,25 @@ body {
   color: var(--success);
   text-decoration: line-through;
 }
+
+/*
+ * The tooltip bubble of SPEC2 M14. Positioned fixed by the pure placement
+ * in tooltip.ts; pointer-events off so the bubble can never trap the cursor
+ * that is hovering the trigger it explains. Above the toast stack (10):
+ * a tooltip is the answer to where the pointer IS right now.
+ */
+.tooltip {
+  position: fixed;
+  z-index: 20;
+  max-width: 22rem;
+  padding: 6px 10px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 45%);
+  color: var(--text);
+  font-size: 0.85rem;
+  line-height: 1.4;
+  pointer-events: none;
+  white-space: normal;
+}

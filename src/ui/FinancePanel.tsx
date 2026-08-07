@@ -13,6 +13,7 @@ import {
 import { niceScale, seriesPoints, valueToY } from './chart';
 import type { SimClient } from './SimClient';
 import { useSimStore } from './store';
+import { Tooltip } from './Tooltip';
 
 export function FinancePanel({ client }: { readonly client: SimClient }): ReactElement {
   useSimStore((s) => s.locale);
@@ -260,7 +261,11 @@ function ValueGraph({ report }: { readonly report: FinanceReport }): ReactElemen
 
   return (
     <>
-      <span className="field__label field__label--spaced">{t('ui.finance.valueGraph')}</span>
+      <Tooltip textKey="ui.tooltip.finance.valueGraph">
+        <span tabIndex={0} className="field__label field__label--spaced">
+          {t('ui.finance.valueGraph')}
+        </span>
+      </Tooltip>
       <svg
         className="valuechart"
         viewBox={`0 0 ${VALUE_MARGIN_LEFT + VALUE_PLOT_W} ${VALUE_PLOT_H + VALUE_MARGIN_BOTTOM}`}
