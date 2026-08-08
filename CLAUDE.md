@@ -1163,6 +1163,54 @@ assertions were non-empty, under the length cap, and de !== en.
   went in through `fromGenerated`. The size is refused first now, and the test
   goes through `create` on every refused size.
 
+### M17 acceptance pass 3 - the names beside the numbers (D-199)
+
+The same verifier defeated the numeral guard twice more: a briefing's PLACE
+NAMES were bound to nothing (Rosenburg -> Rosenheim, Ahorngrund -> Ahornthal in
+the German briefing alone, English left true, build green), and the catalogue's
+DOC COMMENTS are read back by nothing at all. One was closed, one was refused
+with a measurement. Read D-199 before touching a briefing or that table.
+
+- **A place name in shipped TEXT is a town of that scenario's world.**
+  `tests/unit/briefingPlaceNames.ts` builds its pattern out of the map
+  generator's own exported syllable tables - a name is exactly `Root + Suffix`,
+  optionally behind `Prefix-` - so the audit widens the day the generator does
+  (the D-174/D-183 shape). `WorldClaim.briefingTowns` declares the ids a
+  briefing names IN READING ORDER, both locales against the one sequence: an
+  invented name that the generator COULD have made is extracted and rejected, one
+  it could not have made drops the declared name and shortens the list, two real
+  towns swapped fail on order, and an addition fails on length. Captions are
+  compared as a SET against the towns their own DESCRIPTOR addresses - no
+  declaration, and word order stays the translator's. Both falsifications were
+  planted in the real source and the red build watched.
+- **The audit reads text a PLAYER sees; doc comments are a named residual.**
+  Measured before it was refused: the eight scenario comments plus the catalogue
+  header carry 236 numerals against the briefings' 58, and they are not one kind
+  of claim - 10 decision references, 6 coordinate pairs the extractor reads as
+  ONE number and the wrong one, some fifteen measurements taken in OTHER
+  worlds, the seed-scan provenance, and figures the comments quote BECAUSE they
+  are false (the header narrates D-198's falsification; Frachtrausch records that
+  "three of the four" was wrong by one). Pinning that would need an allowlist of
+  over a hundred, and the allowlist discipline that makes the briefing audit
+  worth having could not survive it. What holds a doc comment is the claims table
+  beside it.
+- **Two figures that rested on nothing are pinned** (both measured true, so this
+  is durability): Gebirgslogistik's "spans heights 2 to 13" (`CorridorClaim.heights`
+  - the table pinned only the difference, which would have held from 5 to 16),
+  and Frachtrausch's "57 from 155,112 against 66 from 148,83" (the mine joined
+  `industriesAt`, the comparison is a fifth corridor at 65.8 tiles). Every new
+  pin was perturbed and the red build watched, one at a time.
+- **The documented insertion hole is closed for four words and refused for
+  three.** Dutzend, Handvoll, dozen and handful are SUSPICIOUS (`NUMERAL_SHAPED`)
+  and deliberately carry no value - a briefing that wants a quantity writes the
+  figure. Paar, couple and score are refused with their reasons, as green test
+  cases: "Staedtepaar" is in a shipped briefing today, and "score" is this
+  project's own end-screen noun.
+- **Two documentation overclaims are gone.** The claims table said it held "each
+  scenario's briefing AND DOC COMMENT" and `catalog.ts` said "every load-bearing
+  claim each entry makes"; both now say exactly what holds, with the residual
+  named.
+
 ## Still outstanding
 
 - **The two named walls of D-158.** A passenger pile a fleet merely

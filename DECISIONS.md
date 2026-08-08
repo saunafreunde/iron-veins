@@ -20,7 +20,7 @@ no entry below. A number may appear under several topics.
 - **Lines & timetables:** D-145, D-146, D-147, D-148, D-149, D-150, D-151,
   D-152, D-155, D-159
 - **Map generation & terrain:** D-018, D-019, D-020, D-021, D-022, D-023,
-  D-025, D-027, D-197, D-198
+  D-025, D-027, D-197, D-198, D-199
 - **Terraforming & structures:** D-028, D-034, D-050, D-051, D-052, D-124,
   D-141
 - **Save format, migrations & replays:** D-007, D-025, D-026, D-027, D-048,
@@ -41,7 +41,7 @@ no entry below. A number may appear under several topics.
   D-180, D-193, D-196
 - **Balancing & scenarios:** D-038, D-039, D-040, D-041, D-066, D-087, D-088,
   D-116, D-151, D-152, D-156, D-158, D-159, D-187, D-190, D-194, D-195,
-  D-196, D-197, D-198
+  D-196, D-197, D-198, D-199
 - **Vehicles & fleet:** D-043, D-044, D-045, D-068, D-076, D-089, D-093,
   D-096, D-142, D-143, D-145, D-146, D-155, D-157, D-171, D-174, D-181, D-185
 - **Water & air:** D-094, D-095, D-096, D-097, D-098, D-099
@@ -61,9 +61,9 @@ no entry below. A number may appear under several topics.
 - **Crash safety:** D-132, D-139, D-190
 - **Testing method & fixtures:** D-010, D-038, D-072, D-074, D-084, D-133,
   D-167, D-183, D-186, D-188, D-189, D-190, D-191, D-192, D-193, D-194,
-  D-195, D-196, D-197, D-198
+  D-195, D-196, D-197, D-198, D-199
 - **Process & specification:** D-070, D-123, D-129, D-133, D-138, D-140,
-  D-185, D-191, D-197, D-198
+  D-185, D-191, D-197, D-198, D-199
 
 ---
 
@@ -7581,3 +7581,209 @@ desert growth run is 0.5 s of it and replaced nothing), 26 -> 41 cases;
 `mapSize.spec.ts` 0.1 s, 5 -> 7 cases. Suite after: 114 files, **1,270 passing
 plus 2 skipped** against D-197's 1,253 + 2, and the 13 perf tests - all green,
 `npm run typecheck` and `npm run lint` clean.
+
+## M17 - the acceptance pass after that one: the names beside the numbers (2026-08-08)
+
+### D-199 The two text surfaces the numeral guard did not reach
+
+D-198 bound every NUMBER a shipped briefing says out loud to the world it
+describes. The verifier who confirmed all seven M17 Fertig-wenn criteria, and
+confirmed that the numeral guard works down to the spelled-out German numerals,
+then defeated it twice more. Both are recorded here with what was done about
+them, and one of the two was deliberately NOT closed - with the measurement that
+decided it.
+
+**1. A briefing's PLACE NAMES were bound to nothing.**
+
+He renamed Passagiernetz's `Rosenburg` to `Rosenheim` and `Ahorngrund` to
+`Ahornthal` in the GERMAN briefing alone - two towns that map does not carry,
+with the English briefing left saying the real ones - and the build stayed
+GREEN. `SCENARIO_WORLD_CLAIMS.towns` had pinned the real names against the world
+since D-197; nothing read them back out of the prose. The pattern existed one
+field away: a goal CAPTION has had to contain the name of the town its
+descriptor addresses since D-195. A briefing has no descriptor to appeal to,
+which is the whole reason it needed a declaration of its own.
+
+*The grammar is the generator's, not a heuristic.* `tests/unit/briefingPlaceNames.ts`
+builds its pattern out of `PLACE_NAME_PREFIXES` / `_ROOTS` / `_SUFFIXES`, now
+exported from `src/sim/mapgen/names.ts` - the very tables
+`PlaceNameGenerator.compose` draws from. A place name is exactly
+`Root + Suffix`, optionally behind `Prefix-`; a syllable added to the generator
+widens the audit on the same commit. That is the D-174 / D-183 shape (the
+drawings consume the smoke-anchor table; the tooltip audit consumes the tool
+registry) applied to prose.
+
+*Two halves, because two different edits have to be caught.* `WorldClaim.briefingTowns`
+is the town ids the briefing names IN READING ORDER - required on all eight, `[]`
+for the five that name none, because an absent optional field would read as "this
+briefing names nobody" for a briefing nobody had looked at. The audit resolves
+each id to the name in the generated world and compares the extracted SEQUENCE,
+per locale:
+
+- a name the generator could have made, swapped in (`Rosenheim` = `Rosen` +
+  `heim`), is EXTRACTED and is then not the declared one;
+- a name it could not have made (`Ahornthal` - there is no `thal` suffix) is not
+  extracted at all, and the declared `Ahorngrund` has vanished from the sequence,
+  which is one shorter;
+- a real town of that very map put in another's place fails on ORDER rather than
+  on membership, which a set comparison would have missed;
+- an addition that removes nothing fails on length.
+
+All four are in the meta-test with the verifier's own two edits at its head, and
+the converse beside them - the untouched briefing passes the same comparison.
+
+*Captions are compared as a SET, and against the descriptor rather than a table.*
+Which towns a goal is about is machine-readable (`ConnectStations.subjectA/B`,
+`TownPopulationReach.subjectA`), so no new declaration is needed and the binding
+is stronger than one. The order is the translator's - "Verbinde A mit B" against
+"Connect B to A" is not a defect - and a briefing has no such authority to appeal
+to, which is why only there the sequence is pinned.
+
+**The proof was performed, not asserted.** The falsification was planted in
+`src/scenarios/catalog.ts` itself and the red build watched: the German rename of
+both towns fails two tests (*"passagiernetz/de: the places the briefing names:
+expected [ 'Nieder-Weidengrund', ...(2) ] to deeply equal [ 'Nieder-Weidengrund',
+...(3) ]"*), and the ENGLISH-only rename of one town fails on its own - the guard
+is symmetric, which is exactly what the original defeat exploited. Both plants
+were reverted.
+
+**2. The DOC COMMENTS are NOT scanned, and that is a decision with a
+measurement behind it.**
+
+The same verifier falsified five figures in the catalogue's doc comments at once
+- a plant coordinate, a distance list, a gradient, a town count, a land-mass size
+- and all 41 cases stayed green. True, and worth stating precisely: every one of
+those five is pinned against the WORLD in `SCENARIO_WORLD_CLAIMS`
+(`industriesAt`, `nearestPlantOfMine`, a corridor's `climb`, `citiesAt8000`,
+`landmassTiles`). What was defeated is not the truth about the world - it is the
+agreement between the table and the prose beside it.
+
+Extending the D-198 scanner to that prose was measured before it was refused.
+The eight scenario doc comments plus the catalogue header carry **236 numerals**
+(56 in the header, 180 in the eight) against the **58** declared figures that
+cover both locales of all eight briefings. They are not one kind of claim:
+
+- **10 are decision references** (`D-197`, `D-158`, `D-109`, ...) and one is a
+  SPEC section (`13.3`). The extractor reads the digits of both.
+- **6 are coordinate pairs**, and the extractor reads each as ONE number and the
+  wrong one, in two different ways: `148,83` parses as one hundred forty-eight
+  point eight three and `155,112` as one hundred fifty-five thousand one hundred
+  twelve. A coordinate family would have to be invented for prose no player sees.
+- **~15 are measurements taken in OTHER worlds** - the M6 bus world's 21,393 and
+  64,893, the M6 coal world's 1,400-2,000 and 16,360, D-158's 840,000 / 1.12 M /
+  500,000, the growth multipliers 1.55 and 0.35. No property of any of these
+  eight maps can justify one of them.
+- **~10 are provenance of the seed scan** - four hundred seeds, exactly three of
+  them, two hundred scanned seeds.
+- and a family that settles it: **figures the comments quote BECAUSE THEY ARE
+  FALSE.** The header narrates D-198's falsification verbatim ("Acht ... 8.000
+  ... siebzehn" became "Neun ... 9.000 ... vierzig"), and Frachtrausch's comment
+  records that the M17 pass said "three of the four" and was wrong by one. A
+  scanner demanding each numeral be pinned or allowlisted would have to
+  allowlist the lies - which is the guard switched off one number at a time, and
+  `SCENARIO_BRIEFING_FIGURES` already refuses that in so many words (eight
+  allowlisted figures in total, each with a reason, and the world-bound ones
+  outnumbering the free ones in every scenario). That property could not
+  survive; a doc-comment allowlist would run to well over a hundred entries.
+
+So the line is drawn where the readership changes: **the audit reads text a
+PLAYER sees.** Briefings and goal captions are content that ships with the
+scenario; a doc comment is developer prose whose job is provenance - why this
+seed, what was measured elsewhere, what an earlier pass got wrong. What holds a
+doc comment is that the figures worth pinning are in the claims table, so a seed
+or mapgen change turns the TABLE red and whoever fixes it has the comment in
+front of them. This is a named residual, not a claim of coverage, and the
+documentation says so in both places (below).
+
+**3. Two places described the guard as covering more than it does.**
+
+`shippedScenarios.spec.ts` opened the claims table with "What each scenario's
+briefing and doc comment CLAIM about its own world", and `catalog.ts` said
+"every load-bearing claim each entry below makes about its own world is pinned
+there" - where an "entry" includes its doc comment. Both are now the exact
+sentence: the table pins every world property a briefing or caption quotes (and
+those are read back out of the prose, numbers by D-198 and names by this entry),
+PLUS the doc-comment figures that were worth pinning - and nothing reads a doc
+comment back, which is stated with the reason. A guard's documentation
+describing exactly what it guards is a rule of this project; these two were
+describing the intention.
+
+**4. Two doc-comment figures were unpinned even indirectly. Both measured true
+today; this is about durability.**
+
+- *Gebirgslogistik's "spans heights 2 to 13".* The table pinned the DIFFERENCE
+  (`levels: 11`), which would have held unchanged over a corridor running from 5
+  to 16. `CorridorClaim.heights` pins the band, asserts it against the world, and
+  asserts it against `levels` - measured 2 and 13, unmoved.
+- *Frachtrausch's "57 tiles from 155,112 against 66 from 148,83".*
+  `nearestPlantOfMine` pinned the 57 and that plant 5 wins for all four mines; it
+  did not pin the mine's own position, nor the 66 the win is measured by. The
+  mine joined `industriesAt` (`[1, CoalMine, 101, 129]`) and the comparison is
+  the fifth corridor (`industry 1 -> industry 0`), measured 65.8 tiles - which
+  rounds to the 66 the sentence quotes - climb 20, water 5, levels 11. Each new
+  pin was perturbed in the table and the red build watched, one at a time, so no
+  assertion is claimed to run that has not been seen to.
+
+**5. The insertion hole `briefingNumerals.ts` documented, closed as far as it
+pays to.**
+
+A REPLACED numeral was always caught: the figure list is positional and compared
+whole, so any edit to a recognised numeral moves a value or the length. What
+could be INSERTED was a quantity word the table had never seen - "ein Dutzend
+Busse" carried a claim past a scanner looking only for numerals. Four words
+joined the SUSPICION list `NUMERAL_SHAPED` and deliberately not the value table
+`NUMERAL_WORDS`: **Dutzend, Handvoll, dozen, handful.** There is no honest value
+to give them ("Dutzende" is not twelve), and a briefing whose numbers are audited
+should write the figure - which the audit then has to justify like every other.
+Planted in the real Frachtrausch briefing and watched: *"frachtrausch/de: unknown
+numeral: expected [ 'Dutzend' ] to deeply equal []"*, then reverted.
+
+Three more were considered and REFUSED, because each fires on prose that is
+already shipped or already ambiguous: **"Paar"** (capitalised a pair, lower case
+"a few" - and Passagiernetz says "vier Busse auf einem Staedtepaar" as it
+stands), **"couple"** (the same ambiguity without even the case to separate the
+two), **"score"** (twenty in one register and this project's own end-screen noun
+in every other). All three are in the test as cases that must stay green, so the
+refusal cannot quietly become an oversight.
+
+**Named residuals.** Each is genuinely out of scope, non-material, and written
+here rather than into the code:
+
+- *Doc comments are unscanned* (2 above) - the one that matters, and the one a
+  later pass would revisit if the comments ever became a shipped surface.
+- *A false red is possible on the name grammar.* Any German compound the
+  generator COULD have made is read as a place: "Eichenwald" in a sentence about
+  oak woods would redden the build. That costs a rewording and can never hide
+  anything; the eight briefings were read for it and none hits it. The
+  near-misses are worth knowing - "Startkapital" ends in the suffix `tal` and
+  "Strassenstau" in `au`, and both are safe only because `Startkapi` and
+  `Strassenst` are not roots. The grammar is `Root + Suffix`, never a suffix
+  alone.
+- *A disambiguated name would fail loudly rather than silently.* The generator's
+  collision path produces "Rosenburg 2"; the extractor reads "Rosenburg" and the
+  comparison against the town's real name fails. No shipped scenario names such a
+  town.
+- *`title` and `author` are not scanned.* Neither is a claim about a world; the
+  eight titles contain no composable name.
+- *A quantity with no number in it at all* ("zahlreiche Orte", "several trains" -
+  the latter is in Frachtrausch's briefing today) is not a figure and is not
+  caught by anything. It states no number, so there is nothing to falsify.
+
+**Ledger.** No `SAVE_VERSION` bump - v28 stands, M17 owns it and it is shipped.
+No migration, no snapshot byte, no protocol field, no atlas cell, no constant
+added or moved. Nothing here is hashed world state: the only `src/sim` change is
+three `const` arrays becoming `export const` in `src/sim/mapgen/names.ts`, with
+`compose()` reading the same tables under their new names - not a byte of
+generated output moves, which the eight scenario worlds re-measured in this run
+confirm (every figure in `SCENARIO_WORLD_CLAIMS` still holds). Canonical cross-OS
+pin `4dff3f3f216385e6`, corpus manifest `f1dcab2a374ab728` and soak fixture
+`ed8ac72cd1d6284d` untouched. Bundle measured with `npm run build` on this build:
+main chunk **924,308 B against the 930,000 B budget**, headroom **5,692 B** -
+zero change, and so are the scenario catalogue's own chunk (13,205 B), the worker
+(324,367 B), `replay` (198,264 B) and the CSS. Everything added this pass is
+comment or test. Test cost measured on this machine: `shippedScenarios.spec.ts`
+6.76 -> **6.8-7.0 s** across runs (the twelve new cases share the eight worlds
+the file already generates and play nothing), **41 -> 53 cases**. Suite after:
+114 files, **1,282 passing plus 2 skipped**
+against D-198's 1,270 + 2, and the 13 perf tests - all green, `npm run typecheck`
+and `npm run lint` clean.

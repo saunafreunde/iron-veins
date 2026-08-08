@@ -38,6 +38,29 @@
  * {@link unrecognisedNumeralWords} finds anything that looks like one and was
  * not extracted, so "einundvierzig" is a red build rather than an invisible
  * claim.
+ *
+ * **The insertion hole, and how far it was closed** (D-199). A REPLACED numeral
+ * is always caught - the figure list is positional and compared as a whole, so
+ * any edit to a recognised numeral moves a value or the length. What could be
+ * INSERTED was a quantity word the table had never seen: "ein Dutzend Busse"
+ * carried a claim past a scanner that was only looking for numerals. Four such
+ * words joined {@link NUMERAL_SHAPED} - Dutzend, Handvoll, dozen, handful - as
+ * SUSPICION only, deliberately without values: "Dutzende" is not twelve, and a
+ * briefing whose numbers are audited should write the number. The effect is
+ * that a vague quantity in a briefing is a red build and the author replaces it
+ * with a figure the table then has to justify.
+ *
+ * Three more were considered and REFUSED, because each would fire on prose that
+ * is already shipped or already ambiguous:
+ *
+ *  - **"Paar" / "paar".** Capitalised it is a pair, lower case it means "a few",
+ *    and Passagiernetz already says "vier Busse auf einem Staedtepaar". A guard
+ *    that reddens a true sentence teaches people to weaken guards.
+ *  - **"couple".** The same ambiguity in English, without even the case to tell
+ *    the two apart.
+ *  - **"score".** Twenty in one register and the game's own end-screen noun in
+ *    every other. The value of catching a briefing that says "a score of towns"
+ *    does not pay for a word this project uses constantly.
  */
 
 /** One number as the briefing wrote it, with where it stood. */
@@ -153,9 +176,14 @@ const WORDS = new RegExp(
  * the table has never seen it. Checked against the extracted spans, this is
  * what stops a compound nobody listed ("einundvierzig") from being a claim no
  * test can read.
+ *
+ * The last four are the quantity words of D-199. They carry a quantity without
+ * being numerals, so they are suspicious here and absent from
+ * {@link NUMERAL_WORDS} - there is no value to give them, and a briefing that
+ * wants one is asking to write a figure instead.
  */
 const NUMERAL_SHAPED =
-  /(?<!\p{L})\p{L}*(?:zehn|zwanzig|dreissig|dreißig|vierzig|fuenfzig|fünfzig|sechzig|siebzig|achtzig|neunzig|hundert|tausend|million|teen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|thousand)\p{L}*(?!\p{L})/giu;
+  /(?<!\p{L})\p{L}*(?:zehn|zwanzig|dreissig|dreißig|vierzig|fuenfzig|fünfzig|sechzig|siebzig|achtzig|neunzig|hundert|tausend|million|teen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|thousand|dutzend|handvoll|dozen|handful)\p{L}*(?!\p{L})/giu;
 
 function valueOfDigits(text: string): number {
   if (/^\d{1,3}(?:\.\d{3})+$/.test(text)) return Number(text.replace(/\./g, ''));

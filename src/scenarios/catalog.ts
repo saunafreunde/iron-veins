@@ -61,22 +61,33 @@ import type { ShippedScenario } from './types';
  * What is NOT claimed: that every gold band has been played to. The bands are
  * anchored on those four measurements and on the structural checks in
  * `tests/unit/shippedScenarios.spec.ts` - every named town exists, every cargo
- * a goal counts has a producer and an acceptor on the map, no goal is decided
- * in the first game year by a player who does nothing, and every load-bearing
- * claim each entry below makes about its own world is pinned there against the
- * generated world (`SCENARIO_WORLD_CLAIMS`), so a seed or a mapgen change can
- * never silently make a briefing lie.
+ * a goal counts has a producer and an acceptor on the map, and no goal is
+ * decided in the first game year by a player who does nothing.
  *
- * **And since D-198 the briefings themselves are read.** Pinning the world was
- * only half of it: the sentences a PLAYER sees could still be falsified on
- * their own, and were - a verifier changed "Acht Grossstaedte zu je 8.000
- * Einwohnern und siebzehn Orte ab 2.500" into "Neun ... 9.000 ... vierzig" and
- * the suite stayed green. `SCENARIO_BRIEFING_FIGURES` now lists every number
- * each briefing says out loud, in order, each one either READ BACK from the
- * claims table (or from this entry's own rules, goals and constants) or named
- * on a short allowlist with the reason no world property can justify it. Both
- * languages are held to the same list, so a figure that changes in one
- * sentence and not in the other is a red build too.
+ * **The player-facing TEXT of these eight entries is bound to their worlds,
+ * and their doc comments are not.** That line is worth stating exactly, because
+ * an earlier wording of this paragraph claimed "every load-bearing claim each
+ * entry below makes about its own world is pinned" - which read as covering the
+ * comments too, and does not (D-199):
+ *
+ *  - **Briefings and goal captions are read back.** Every NUMBER, in reading
+ *    order, is either resolved out of `SCENARIO_WORLD_CLAIMS` (or out of this
+ *    entry's own rules, goals and constants) or on a short allowlist with the
+ *    reason no world property can justify it - `SCENARIO_BRIEFING_FIGURES`,
+ *    D-198. Every PLACE NAME is likewise a town of that scenario's own world,
+ *    matched by the map generator's own name grammar - D-199. Both languages
+ *    are held to the same list, so a figure or a town that changes in one
+ *    sentence and not in the other is a red build too.
+ *  - **These doc comments are not scanned.** They are developer prose, and they
+ *    mix measured world facts with the provenance of measurements taken in
+ *    OTHER worlds, with cross-references, and with history that deliberately
+ *    quotes figures now known to be WRONG. What holds them is that the figures
+ *    worth pinning are IN the claims table - industry positions, each mine's
+ *    nearest plant, the land mass under a named town, the passive growth
+ *    curves, a corridor's height band - so a seed or mapgen change moves the
+ *    table and the comment beside it is corrected by whoever fixes the table.
+ *    A comment that drifts on its own is caught by a reader, not by a build.
+ *    D-199 records why the scanner stops here and what it measured first.
  */
 
 /** The last tick of `year` - "by the end of 1958" as the hook measures it. */
@@ -109,6 +120,11 @@ const AUTHOR = 'Iron Veins';
  * second plant still - D-198.) The ground between them is gentle: the two
  * short corridors climb and fall 16 and 12 levels, the 70-tile one 12, the
  * long 106-tile one 25. A freight map.
+ *
+ * Both halves of the comparison in brackets are pinned since D-199: the mine's
+ * own position joined `industriesAt`, and the 66 is the fifth corridor in
+ * `SCENARIO_WORLD_CLAIMS` - before that the sentence rested on a coordinate and
+ * a distance nothing measured.
  */
 const FRACHTRAUSCH: ShippedScenario = {
   id: 'frachtrausch',
@@ -201,6 +217,13 @@ const FRACHTRAUSCH: ShippedScenario = {
  * names. Two true numbers joined by "und" state a partition; these two are a
  * set and a subset, and both languages say so now. The other seven briefings
  * were read for the same defect and none of them nests a set inside another.
+ *
+ * **And the four names in the pass after that one (D-199).** The same verifier
+ * renamed Rosenburg to Rosenheim and Ahorngrund to Ahornthal in the GERMAN
+ * briefing alone - two towns this map does not carry, with the English briefing
+ * left saying the real ones - and the build stayed green: the numbers were
+ * bound, the names beside them were not. The chain is a declared sequence now
+ * (`briefingTowns`), read back out of both briefings against the world.
  */
 const PASSAGIERNETZ: ShippedScenario = {
   id: 'passagiernetz',
@@ -297,6 +320,10 @@ const PASSAGIERNETZ: ShippedScenario = {
  * eight tiles of water. The steepest long corridor between two real towns in
  * two hundred scanned seeds. At this climate the map grows two coal mines and
  * nothing that accepts coal, so the tonnage goal here is passengers.
+ *
+ * The BAND 2 to 13 is pinned since D-199 (`CorridorClaim.heights`); the claims
+ * table held only the difference before, and "spans 2 to 13" would have read
+ * true over a corridor running from 5 to 16.
  */
 const GEBIRGSLOGISTIK: ShippedScenario = {
   id: 'gebirgslogistik',

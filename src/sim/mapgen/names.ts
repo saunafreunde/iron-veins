@@ -10,9 +10,18 @@ import type { Rng } from '../rng';
  * Names are part of the world state, so they are generated once from the world
  * seed and are the same in every UI language - a town cannot be called
  * Eichenfeld in German and something else in English.
+ *
+ * **The three tables are exported because a test reads them as a grammar**
+ * (D-199): a shipped scenario's briefing may only name places its own world
+ * contains, and "what a place name looks like" is not a heuristic anybody
+ * should write twice - it is exactly `Root + Suffix`, optionally behind
+ * `Prefix-`, which is what {@link PlaceNameGenerator.compose} produces. The
+ * audit builds its pattern from these arrays, so a new syllable widens the
+ * guard on the day it widens the generator.
  */
 
-const PREFIXES = [
+/** Optional leading syllable, always followed by a hyphen ("Nieder-"). */
+export const PLACE_NAME_PREFIXES = [
   'Alt',
   'Neu',
   'Ober',
@@ -31,7 +40,8 @@ const PREFIXES = [
   'Bad',
 ];
 
-const ROOTS = [
+/** The stem every name carries, capitalised. */
+export const PLACE_NAME_ROOTS = [
   'Adler',
   'Birken',
   'Buchen',
@@ -66,7 +76,8 @@ const ROOTS = [
   'Sonnen',
 ];
 
-const SUFFIXES = [
+/** The ending, always lower case - this is what makes a name look German. */
+export const PLACE_NAME_SUFFIXES = [
   'berg',
   'bach',
   'brueck',
@@ -123,10 +134,11 @@ export class PlaceNameGenerator {
   }
 
   private compose(): string {
-    const root = ROOTS[this.rng.nextInt(ROOTS.length)]!;
-    const suffix = SUFFIXES[this.rng.nextInt(SUFFIXES.length)]!;
+    const root = PLACE_NAME_ROOTS[this.rng.nextInt(PLACE_NAME_ROOTS.length)]!;
+    const suffix = PLACE_NAME_SUFFIXES[this.rng.nextInt(PLACE_NAME_SUFFIXES.length)]!;
     const wantsPrefix = this.rng.nextFloat() < PREFIX_PROBABILITY;
     if (!wantsPrefix) return root + suffix;
-    return `${PREFIXES[this.rng.nextInt(PREFIXES.length)]!}-${root}${suffix}`;
+    const prefix = PLACE_NAME_PREFIXES[this.rng.nextInt(PLACE_NAME_PREFIXES.length)]!;
+    return `${prefix}-${root}${suffix}`;
   }
 }

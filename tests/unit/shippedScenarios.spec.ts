@@ -17,6 +17,7 @@ import {
   TICKS_PER_YEAR,
 } from '../../src/sim/constants';
 import { numeralsIn, unrecognisedNumeralWords } from './briefingNumerals';
+import { placeNamesIn } from './briefingPlaceNames';
 import { GOAL_KIND_COUNT, GoalKind, GoalStatus } from '../../src/sim/goals/types';
 import { TOWN_CARGO } from '../../src/sim/industry/catchment';
 import { industrySpec, IndustryType } from '../../src/sim/industry/types';
@@ -90,6 +91,18 @@ interface CorridorClaim {
   readonly water: number;
   /** Highest minus lowest level on the line. [levels] */
   readonly levels: number;
+  /**
+   * The lowest and the highest level on the line, where a sentence names them
+   * (D-199). [levels]
+   *
+   * `levels` is the DIFFERENCE, and a difference is all Gebirgslogistik's
+   * briefing quotes ("elf Hoehenstufen"). Its doc comment says more - "spans
+   * heights 2 to 13" - and that sentence would still have read true over a
+   * corridor running from 5 to 16. Where a comment names the band, the band is
+   * pinned; where nothing names it, this stays absent rather than pinning a
+   * figure no sentence rests on.
+   */
+  readonly heights?: readonly [number, number];
 }
 
 /**
@@ -126,6 +139,18 @@ interface WorldClaim {
   readonly inhabitedLandmasses: number;
   /** Towns a caption or briefing names: id, name, starting population. */
   readonly towns: readonly (readonly [number, string, number])[];
+  /**
+   * The towns the BRIEFING names, in the order it names them (D-199).
+   *
+   * Required, and empty for the five briefings that name none, because an
+   * absent optional field would read as "this briefing names nobody" for a
+   * briefing nobody has looked at. Every id here has to appear in
+   * {@link WorldClaim.towns} as well, which is what pins the NAME the audit
+   * then looks for; both locales are held to this one sequence, so a town
+   * renamed in German alone is red - which is exactly how the guard was
+   * defeated.
+   */
+  readonly briefingTowns: readonly number[];
   /** Corridors a briefing quotes a distance or a gradient for. */
   readonly corridors?: readonly CorridorClaim[];
   /** Industry types a briefing counts. */
@@ -156,22 +181,36 @@ const CITY_POPULATION = 8_000;
 const TOWN_POPULATION = 2_500;
 
 /**
- * What each scenario's briefing and doc comment CLAIM about its own world.
+ * World properties the shipped scenarios rest on, pinned against the generated
+ * world.
  *
  * This table is the answer to the M17 acceptance defect (D-197): the
  * Passagiernetz briefing promised "eight cities of 8,000" over a world that had
  * seven, and nothing anywhere was able to notice. Every figure below was taken
- * by generating the world and reading it, and every one of them is a figure
- * some sentence a PLAYER reads depends on. They are pinned exactly rather than
+ * by generating the world and reading it. They are pinned exactly rather than
  * banded, because the generator is deterministic (law #3): a changed seed, a
  * changed mapgen constant or a changed climate table moves them, and moving
  * them silently is precisely what must not happen again.
  *
+ * **What the entries here are, exactly** - the honest scope, because an earlier
+ * wording said "every claim a briefing AND a doc comment makes" and that was
+ * more than holds (D-199):
+ *
+ *  - every world property any BRIEFING or goal CAPTION quotes. Those are read
+ *    back out of the prose as well, by `SCENARIO_BRIEFING_FIGURES` for the
+ *    numbers (D-198) and by `placeNamesIn` for the town names (D-199), so
+ *    neither end can move alone.
+ *  - plus the figures a catalogue DOC COMMENT quotes that were worth pinning:
+ *    industry positions, each mine's nearest plant, the land mass under a named
+ *    town, the passive growth curves, a corridor's height band. Those are held
+ *    against the WORLD, and nothing reads them back out of the comment - the
+ *    prose of `src/scenarios/catalog.ts` is not scanned. A doc comment that
+ *    drifts out of step with this table is caught by a reader, not by a build.
+ *    That line is drawn in D-199 with the measurement behind it.
+ *
  * When one of these goes red the fix is never the number alone. The number and
  * the sentence that quotes it are one claim, and both ends move together - or
- * the seed does. `SCENARIO_BRIEFING_FIGURES` below is the other half of that
- * sentence: since D-198 the prose is read back against this table, so a figure
- * cannot be changed in a briefing alone either.
+ * the seed does.
  */
 const SCENARIO_WORLD_CLAIMS: Readonly<Record<string, WorldClaim>> = {
   // "Zwei Staedte zu 8.000 Einwohnern, 29 Tiles auseinander, drei Hoehenstufen
@@ -186,6 +225,9 @@ const SCENARIO_WORLD_CLAIMS: Readonly<Record<string, WorldClaim>> = {
       [5, 'Nieder-Kaisershofen', 8_000],
       [18, 'Haselstadt', 8_000],
     ],
+    // Both towns are named in the CAPTION, which the goal's own descriptor
+    // binds; the briefing calls them "zwei Staedte" and names neither.
+    briefingTowns: [],
     corridors: [{ from: atTown(5), to: atTown(18), distance: 29.4, climb: 3, water: 0, levels: 3 }],
   },
   // "Vierzig Orte stehen auf der Karte, siebzehn davon haben 2.500 Einwohner
@@ -205,6 +247,10 @@ const SCENARIO_WORLD_CLAIMS: Readonly<Record<string, WorldClaim>> = {
       [18, 'Rosenburg', 8_000],
       [5, 'Ahorngrund', 8_000],
     ],
+    // The chain, in the order both briefings walk it. This is the sequence the
+    // verifier broke: he renamed the third and the fourth in German only
+    // (D-199).
+    briefingTowns: [17, 16, 18, 5],
     corridors: [
       { from: atTown(17), to: atTown(16), distance: 33.4, climb: 9, water: 0, levels: 4 },
       { from: atTown(16), to: atTown(18), distance: 36.9, climb: 7, water: 0, levels: 3 },
@@ -220,6 +266,7 @@ const SCENARIO_WORLD_CLAIMS: Readonly<Record<string, WorldClaim>> = {
     industries: 12,
     inhabitedLandmasses: 1,
     towns: [],
+    briefingTowns: [],
     industriesOfType: [
       [IndustryType.CoalMine, 4],
       [IndustryType.PowerPlant, 2],
@@ -227,6 +274,10 @@ const SCENARIO_WORLD_CLAIMS: Readonly<Record<string, WorldClaim>> = {
     industriesAt: [
       [0, IndustryType.PowerPlant, 148, 83],
       [5, IndustryType.PowerPlant, 155, 112],
+      // The mine the doc comment names by position, "the mine at 101,129"
+      // (D-199). Without this row the sentence that settled "all four, not
+      // three" named a place nothing held.
+      [1, IndustryType.CoalMine, 101, 129],
     ],
     nearestPlantOfMine: [
       [1, 5, 57],
@@ -239,6 +290,10 @@ const SCENARIO_WORLD_CLAIMS: Readonly<Record<string, WorldClaim>> = {
       { from: atIndustry(7), to: atIndustry(5), distance: 59.2, climb: 12, water: 0, levels: 8 },
       { from: atIndustry(10), to: atIndustry(5), distance: 70.4, climb: 12, water: 1, levels: 7 },
       { from: atIndustry(9), to: atIndustry(5), distance: 106.4, climb: 25, water: 0, levels: 6 },
+      // The comparison itself: "57 tiles from 155,112 against 66 from 148,83".
+      // `nearestPlantOfMine` pins the 57 and that plant 5 wins - it does not
+      // pin the 66 the sentence measures the win by (D-199).
+      { from: atIndustry(1), to: atIndustry(0), distance: 65.8, climb: 20, water: 5, levels: 11 },
     ],
   },
   // "Zwischen Silberheim und Ulmenburg liegen 60 Tiles Luftlinie - und elf
@@ -254,8 +309,18 @@ const SCENARIO_WORLD_CLAIMS: Readonly<Record<string, WorldClaim>> = {
       [3, 'Silberheim', 8_000],
       [18, 'Ulmenburg', 2_500],
     ],
+    briefingTowns: [3, 18],
     corridors: [
-      { from: atTown(3), to: atTown(18), distance: 59.5, climb: 27, water: 8, levels: 11 },
+      {
+        from: atTown(3),
+        to: atTown(18),
+        distance: 59.5,
+        climb: 27,
+        water: 8,
+        levels: 11,
+        // "spans heights 2 to 13" - the doc comment's own band (D-199).
+        heights: [2, 13],
+      },
     ],
     industriesOfType: [[IndustryType.CoalMine, 2]],
     cargoWithoutAcceptor: Cargo.Coal,
@@ -272,6 +337,8 @@ const SCENARIO_WORLD_CLAIMS: Readonly<Record<string, WorldClaim>> = {
       [23, 'Neu-Lindenried', 8_000],
       [8, 'Sandenheim', 8_000],
     ],
+    // The island first in both languages, the mainland second.
+    briefingTowns: [8, 23],
     corridors: [
       { from: atTown(23), to: atTown(8), distance: 51.6, climb: 13, water: 21, levels: 5 },
     ],
@@ -290,6 +357,7 @@ const SCENARIO_WORLD_CLAIMS: Readonly<Record<string, WorldClaim>> = {
     industries: 13,
     inhabitedLandmasses: 1,
     towns: [[32, 'Erlenbach', 8_000]],
+    briefingTowns: [32],
     industriesOfType: [
       [IndustryType.Farm, 3],
       [IndustryType.FoodFactory, 3],
@@ -317,6 +385,9 @@ const SCENARIO_WORLD_CLAIMS: Readonly<Record<string, WorldClaim>> = {
     industries: 11,
     inhabitedLandmasses: 1,
     towns: [[16, 'Falkenheim', 8_000]],
+    // Falkenheim is named in the CAPTION only; the briefing says "neun
+    // Staedte" and names none of them.
+    briefingTowns: [],
   },
   // "Wueste, zehn Industrien, zwei Grossstaedte", and the desert growth curve
   // the doc comment contrasts with the temperate one.
@@ -330,6 +401,9 @@ const SCENARIO_WORLD_CLAIMS: Readonly<Record<string, WorldClaim>> = {
       [8, 'Sandenwerder', 8_000],
       [13, 'Hinter-Falkenrode', 8_000],
     ],
+    // Neither is named anywhere in the scenario's text; both are pinned
+    // because the doc comment counts them.
+    briefingTowns: [],
     passiveGrowth: {
       townId: 8,
       samples: [
@@ -898,6 +972,13 @@ describe('every load-bearing claim a briefing makes is true of its world', () =>
         expect(measured.climb, `${where} climb`).toBe(line.climb);
         expect(measured.water, `${where} water`).toBe(line.water);
         expect(measured.maxH - measured.minH, `${where} levels`).toBe(line.levels);
+        if (line.heights !== undefined) {
+          // The absolute band, where a sentence names it. `levels` alone would
+          // hold over a corridor that ran from 5 to 16 (D-199), so the two are
+          // asserted against the world AND against each other.
+          expect([measured.minH, measured.maxH], `${where} heights`).toEqual([...line.heights]);
+          expect(line.heights[1] - line.heights[0], `${where} heights vs levels`).toBe(line.levels);
+        }
       }
 
       if (claim.landmassTiles !== undefined) {
@@ -1076,6 +1157,24 @@ describe('every number a briefing says out loud is justified', () => {
     expect(unrecognisedNumeralWords('einundvierzig Orte')).toEqual(['einundvierzig']);
   });
 
+  it('refuses a quantity word, which is the only claim that could be inserted', () => {
+    // The hole D-198 documented and D-199 closed. A REPLACED numeral was always
+    // caught - the list is positional and compared whole - but a quantity word
+    // the table had never seen carried a claim past the scanner entirely.
+    // Those four are suspicious now and have no value: a briefing that wants a
+    // quantity writes the figure, and the figure is then justified like every
+    // other.
+    expect(unrecognisedNumeralWords('Ein Dutzend Busse')).toEqual(['Dutzend']);
+    expect(unrecognisedNumeralWords('A dozen buses')).toEqual(['dozen']);
+    expect(unrecognisedNumeralWords('Eine Handvoll Orte')).toEqual(['Handvoll']);
+    expect(unrecognisedNumeralWords('a handful of towns')).toEqual(['handful']);
+    // And the three that were refused, because each fires on prose that is
+    // already shipped or already ambiguous - "Staedtepaar" is in the
+    // Passagiernetz briefing as it stands.
+    expect(unrecognisedNumeralWords('vier Busse auf einem Staedtepaar')).toEqual([]);
+    expect(unrecognisedNumeralWords('a couple of towns and the score')).toEqual([]);
+  });
+
   for (const scenario of SHIPPED_SCENARIOS) {
     it(`${scenario.id} says only numbers something else pins`, () => {
       const claim = SCENARIO_WORLD_CLAIMS[scenario.id]!;
@@ -1143,6 +1242,129 @@ describe('every number a briefing says out loud is justified', () => {
     // And the converse, because a guard that rejects everything is no guard:
     // the untouched sentence passes the same comparison.
     expect(numeralsIn(scenario.briefing.de).map((one) => one.value)).toEqual(honest);
+  });
+});
+
+// ---------------------------------- the places those sentences name (D-199)
+
+/** The towns a goal DESCRIPTOR addresses - the authority for a caption. */
+function goalTownIds(spec: ShippedScenario['goals'][number]['spec']): readonly number[] {
+  if (spec.kind === GoalKind.ConnectStations) return [spec.subjectA, spec.subjectB];
+  if (spec.kind === GoalKind.TownPopulationReach && spec.subjectA >= 0) return [spec.subjectA];
+  return [];
+}
+
+const sorted = (names: readonly string[]): string[] =>
+  [...names].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+
+describe('every place a scenario names is a town of its own world', () => {
+  it('reads the generator grammar, and only that', () => {
+    // The extractor on the shapes that occur, including the three a naive
+    // reading gets wrong. "Nieder-Weidengrund" is ONE name and not two;
+    // "Startkapital" ends in the suffix `tal` and is not a place, because
+    // `Startkapi` is not a root; "Rosenheim" IS a place the generator could
+    // have made, which is what lets an INSERTED name be caught at all.
+    expect(placeNamesIn('Nieder-Weidengrund und Kaiserskirchen').map((one) => one.text)).toEqual([
+      'Nieder-Weidengrund',
+      'Kaiserskirchen',
+    ]);
+    expect(placeNamesIn('250.000 EUR Startkapital').map((one) => one.text)).toEqual([]);
+    expect(placeNamesIn('Der Strassenstau kostet').map((one) => one.text)).toEqual([]);
+    expect(placeNamesIn('Rosenheim liegt weiter').map((one) => one.text)).toEqual(['Rosenheim']);
+    // And the half the extractor deliberately cannot do: `thal` is not a
+    // suffix the generator has, so "Ahornthal" is not a place name here. That
+    // edit is caught by the DECLARED name having vanished, never by this list.
+    expect(placeNamesIn('Ahornthal noch einmal 30').map((one) => one.text)).toEqual([]);
+  });
+
+  for (const scenario of SHIPPED_SCENARIOS) {
+    it(`${scenario.id} names in its briefing exactly the towns it declares`, () => {
+      const claim = SCENARIO_WORLD_CLAIMS[scenario.id]!;
+      const world = worldOf(scenario);
+      const expected = claim.briefingTowns.map((id) => {
+        // Reading the name out of the WORLD rather than out of the table is
+        // what makes this a binding: `claim.towns` pins the same name and is
+        // itself asserted against the world above, so the two agree or both
+        // tests are red.
+        expect(
+          claim.towns.filter((town) => town[0] === id),
+          `${scenario.id}: briefing town ${id} is not in the claims table`,
+        ).toHaveLength(1);
+        const town = world.towns[id];
+        expect(town, `${scenario.id}: town ${id}`).toBeDefined();
+        return town!.name;
+      });
+
+      for (const locale of ['de', 'en'] as const) {
+        expect(
+          placeNamesIn(scenario.briefing[locale]).map((one) => one.text),
+          `${scenario.id}/${locale}: the places the briefing names`,
+        ).toEqual(expected);
+      }
+    });
+  }
+
+  it('lets a caption name only the towns its own descriptor addresses', () => {
+    // A caption is compared as a SET rather than as a sequence: which towns a
+    // goal is about comes from the descriptor, and the order they are read in
+    // is the translator's ("Verbinde A mit B" against "Connect B to A" is not
+    // a defect). The briefing has no descriptor to appeal to, which is why it
+    // is the sequence that is pinned there.
+    for (const scenario of SHIPPED_SCENARIOS) {
+      const world = worldOf(scenario);
+      for (const goal of scenario.goals) {
+        const allowed = goalTownIds(goal.spec).map((id) => world.towns[id]!.name);
+        for (const locale of ['de', 'en'] as const) {
+          expect(
+            sorted(placeNamesIn(goal.caption[locale]).map((one) => one.text)),
+            `${scenario.id}/${locale}: caption of goal ${goal.spec.kind}`,
+          ).toEqual(sorted(allowed));
+        }
+      }
+    }
+  });
+
+  it('turns red on the two falsifications that defeated the numeral guard', () => {
+    // The verifier's own edit, kept as the meta-test (D-199). He renamed two of
+    // Passagiernetz's four cities in the GERMAN briefing only - to towns that
+    // do not exist on that map - left the claims table alone, and the build
+    // stayed green. Both halves of the mechanism are exercised here because
+    // they catch different edits.
+    const scenario = byId('passagiernetz');
+    const world = worldOf(scenario);
+    const claim = SCENARIO_WORLD_CLAIMS['passagiernetz']!;
+    const honest = claim.briefingTowns.map((id) => world.towns[id]!.name);
+    expect(placeNamesIn(scenario.briefing.de).map((one) => one.text)).toEqual(honest);
+
+    // Neither invented name is a town of this world - the sentence about the
+    // falsification is checked rather than asserted.
+    for (const invented of ['Rosenheim', 'Ahornthal']) {
+      expect(
+        world.towns.filter((town) => town.name === invented),
+        `${invented} is not on this map`,
+      ).toHaveLength(0);
+    }
+
+    // 1. A name the generator COULD have made, swapped in: extracted, and not
+    //    the declared one.
+    const renamed = scenario.briefing.de.replace('Rosenburg', 'Rosenheim');
+    expect(renamed).not.toBe(scenario.briefing.de);
+    expect(placeNamesIn(renamed).map((one) => one.text)).not.toEqual(honest);
+
+    // 2. A name the generator could NOT have made: not extracted at all, and
+    //    the declared name has gone - the sequence is one short.
+    const invented = scenario.briefing.de.replace('Ahorngrund', 'Ahornthal');
+    expect(invented).not.toBe(scenario.briefing.de);
+    expect(placeNamesIn(invented).map((one) => one.text)).toEqual(honest.slice(0, 3));
+
+    // 3. A real town of this very map, in the place of another: the sequence
+    //    is what refuses it, not membership.
+    const swapped = scenario.briefing.de.replace('Rosenburg', 'Kaiserskirchen');
+    expect(placeNamesIn(swapped).map((one) => one.text)).not.toEqual(honest);
+
+    // 4. And an addition that removes nothing at all.
+    const added = `${scenario.briefing.de} Rosenheim liegt weiter suedlich.`;
+    expect(placeNamesIn(added).map((one) => one.text)).not.toEqual(honest);
   });
 });
 
