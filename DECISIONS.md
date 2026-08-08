@@ -12,9 +12,9 @@ no entry below. A number may appear under several topics.
 
 - **Determinism, RNG & hashing:** D-001, D-002, D-003, D-004, D-009, D-010,
   D-024, D-093, D-106, D-128, D-137, D-142, D-145, D-146, D-149, D-153, D-178,
-  D-181, D-184, D-185, D-188
+  D-181, D-184, D-185, D-188, D-189
 - **Commands, snapshot & worker boundary:** D-004, D-005, D-006, D-011, D-032,
-  D-100, D-111, D-145, D-146, D-148, D-162, D-174, D-176, D-179, D-187
+  D-100, D-111, D-145, D-146, D-148, D-162, D-174, D-176, D-179, D-187, D-189
 - **Lines & timetables:** D-145, D-146, D-147, D-148, D-149, D-150, D-151,
   D-152, D-155, D-159
 - **Map generation & terrain:** D-018, D-019, D-020, D-021, D-022, D-023,
@@ -23,7 +23,7 @@ no entry below. A number may appear under several topics.
   D-141
 - **Save format, migrations & replays:** D-007, D-025, D-026, D-027, D-048,
   D-111, D-130, D-131, D-134, D-142, D-144, D-145, D-146, D-147, D-153, D-178,
-  D-181, D-184, D-185, D-188
+  D-181, D-184, D-185, D-188, D-189
 - **Rail & track:** D-042, D-043, D-044, D-045, D-046, D-047, D-053, D-141,
   D-153, D-157, D-184
 - **Signals & reservations:** D-054, D-055, D-056, D-057, D-058, D-059, D-060,
@@ -48,7 +48,7 @@ no entry below. A number may appear under several topics.
   D-171, D-172, D-173, D-174, D-175, D-177, D-179, D-186
 - **UI & input:** D-011, D-013, D-015, D-035, D-110, D-113, D-114, D-119,
   D-126, D-148, D-165, D-166, D-177, D-179, D-180, D-181, D-182, D-183, D-184,
-  D-186, D-187
+  D-186, D-187, D-189
 - **Performance & measurement:** D-002, D-120, D-135, D-136, D-161, D-162,
   D-163, D-164, D-167, D-170, D-171, D-172, D-173, D-174, D-176, D-177, D-184,
   D-185, D-186, D-187
@@ -56,7 +56,7 @@ no entry below. A number may appear under several topics.
   D-030, D-031, D-160, D-168, D-169, D-170, D-172, D-175
 - **Crash safety:** D-132, D-139
 - **Testing method & fixtures:** D-010, D-038, D-072, D-074, D-084, D-133,
-  D-167, D-183, D-186, D-188
+  D-167, D-183, D-186, D-188, D-189
 - **Process & specification:** D-070, D-123, D-129, D-133, D-138, D-140,
   D-185
 
@@ -6161,3 +6161,145 @@ is idempotent by tick, so adopting a world that stands exactly on a boundary
 can only ever ADD the checkpoint the file lacked. None of it lives inside
 `World.step`: encoding a world allocates, and law #7 does not bend for a
 recording.
+
+## M16 - the proof chain, bundle 2: the replay theatre (2026-08-08)
+
+### D-189 A recording plays through a sealed queue, scrubs on the ring, and is judged only as far as it committed - the exact tick when the bracket holds one command, the bracket honestly when it holds more
+
+Bundle 1 built the format; this is the theatre it is watched in. Four things
+had to be decided, and three of them turned out to be the same decision seen
+from different sides: **a recording is an input, never a place to write.**
+
+**Playback is the ordinary tick loop with a SEALED queue, and the seal is the
+whole design.** A replay is played by the scheduler that plays everything else
+- same `World.step`, same `SPEED_FACTORS`, same accumulator - because a second
+loop would be a second timing model to keep in step with the first, and the
+speed control the milestone asks for already exists. What differs is exactly
+one thing: `CommandQueue.seal()`, which makes `enqueue` drop what it is handed.
+Two callers write into a queue and both of them have to be stopped, for
+different reasons:
+
+- **the AI of section 15** enqueues its moves from inside `step` (D-108).
+  Those moves are ALREADY in the log - that is what makes an AI game
+  replayable at all - so re-deriving them would run every competitor command
+  twice. This is not a subtle corruption: `enqueue` refuses a tick older than
+  the last queued one, so the first AI move of a replay throws against a log
+  that already reaches the recorded end. Before the seal, a recorded AI game
+  could not be played back at all; `replayTheatre.spec.ts` plays a
+  twenty-thousand-tick game against one competitor through to the recorded
+  hash and asserts the log holds commands of a company that is not the
+  player's.
+- **the interface.** The refusal is layered on purpose. The queue is the
+  structural floor - a command that somehow reached it changes nothing. The
+  worker refuses `command` (and `requestSave`) by name while `replay` is set,
+  which is the AUTHORITY and the thing that produces a sentence on screen
+  (`ui.replay.readOnly`). And `SimClient.send` returns false before the
+  command leaves the main thread, which is the half a headless test can reach
+  and what keeps commands that never happened out of the D-132 crash log. The
+  interface then says the same thing by having nothing to offer: while a
+  recording plays, the sidebar IS the playback bar, the build tools are
+  unbound, autosave is off and F5/F9 do nothing.
+
+**Leaving replay mode restores the game that was put aside, because entering
+one REPLACES the world.** A replay swaps in a different world, tile layers and
+all - exactly what a load does - so the way back is the way a load comes back:
+the worker encodes the live game into `suspended` on the way in and loads those
+bytes on the way out, through the ordinary load path, which is the one piece of
+code that knows how to adopt a world completely. Only the FIRST entry saves a
+game, so watching a second recording from inside the first cannot make the
+first one the thing "leave" returns to. Any other world replacement - a load, a
+new game, a shutdown - drops the recording too, so replay mode cannot outlive
+the world it was watching.
+
+**Scrubbing is the ring, and that is what makes a jump EXACT.** A jump to a
+year restores that year's checkpoint and steps the remainder; a jump to a year
+boundary steps nothing, so it lands on that tick with the hash the recording
+committed to and not one tick either side of it (`restoreCheckpoint` verifies
+the digest, D-188). Between checkpoints the remainder is re-simulated, which is
+the same mechanism one step finer, and a recording with no usable checkpoint
+below the target falls back to decoding the container again and reconstructing
+the genesis - the fallback, never the rule, because it costs a full container
+decode. The scrub chips ARE the ring (`replayJumpTicks`), labelled with the
+calendar year rather than with a tick nobody can read.
+
+**"Replay pruefen" names the first divergent tick, and it says which of the two
+answers it is giving.** The running comparison at checkpoint granularity is
+bundle 1's; what bundle 2 adds is the narrowing, and the honest limit of it.
+Two facts do the work:
+
+1. Between two committed hashes the world is a pure function of the state at
+   the start (which MATCHED) and of the commands that ran. So a divergence
+   inside the bracket must begin at a COMMAND's tick. When the bracket holds
+   exactly one command tick, that tick IS the first divergent tick and `exact`
+   is true. The M16 fixture is built to have one: a repayment alone in the
+   second game year, tampered, is reported at tick 78,000 rather than at the
+   84,000 the running comparison found it at.
+2. That argument needs the log's own numbering to be truthful, so it is
+   CHECKED rather than assumed. `checkLogIntegrity` walks the retained log for
+   the two properties `CommandQueue` writes it with - `seq` contiguous, `tick`
+   non-decreasing, both preserved by a trim, which drops a prefix and
+   renumbers nothing (D-188). An entry inserted, removed or moved breaks one of
+   them and is named with its index, tick and number. A break also WITHDRAWS
+   the exactness claim: the executed sequence is then not the recorded one, so
+   the candidate rule does not hold.
+
+When the bracket holds several commands, the answer is the committed tick with
+`exact: false` and a sentence that says so. That is a floor, and it is stated
+rather than dressed up, because there is no honest way past it: the recording
+commits to a hash once a game year and to nothing in between, and a bisection
+needs a reference at the midpoint that simply does not exist - the end
+checkpoint is one bit, and a full replay of the bracket always fails it, so it
+carries no positional information at all. Naming the first command of the
+bracket would be a guess that is wrong whenever the tamper is the second one.
+What WOULD buy the exact tick in every case is a finer commitment IN THE FILE -
+a rolling digest per envelope, say - and that is a format change with a
+per-command cost, which belongs to a milestone that owns a save bump rather
+than to a UI bundle that owns none.
+
+The hash comparison stays the authority throughout: a log whose numbering is
+broken but that still reproduces every committed hash is reported as
+reproducing, because the hashes say the world is the recorded one and the break
+is then bookkeeping rather than history. Verification runs on a SECOND world
+decoded from the same bytes, so asking whether a recording is genuine does not
+move the playback the player is watching, and a scrub before the question does
+not turn the check into a check of the suffix.
+
+**A file this build had to MIGRATE is shelved as it stands, and makes no
+claim.** SPEC2 M16 wants old saves to stay watchable ("Resim ab Tick 0") and
+E-11 refuses cross-version verification. Both are met by NOT manufacturing a
+recording out of one: the save goes on the replay shelf unchanged, keeps its
+own version pair, plays from the reconstructed genesis (D-188), and is
+`verifiable: false` before the button is pressed - because the only end hash
+available for it would be one THIS build computed over a state the writing
+build never committed to, and a claim like that is a claim about nobody's
+world. A save of the CURRENT format is converted properly: it carries a ring
+and a log this build wrote, which is everything a claim needs to be honest. A
+file that is already a `.ironreplay` is passed through untouched, since
+re-encoding it would restamp somebody else's recording with this build's
+version. The rejected alternative was a claimless REPLAY container, and it is
+worth recording why: a replay holds the world at its BASE tick, so a container
+without a claim has nothing that says where the recording ends - the playback
+would start at the end of a recording of length zero.
+
+**The shelf is a second shelf, not a slot on the save shelf** - its own
+directory, its own index, its own metadata (the build that recorded it, the
+years it spans, the companies that played) and no `.bak` dance: a save is the
+only copy of somebody's game and is worth an atomic write, a recording is a
+copy of something else by construction. The metadata is frozen when the file is
+shelved, so the browser can grey out what the verifier would refuse without
+decoding a world to find out. A recording's companies read from its BASE world,
+which means a game renamed at tick 5,000 lists under the name it started with -
+the honest thing for a browser that is listing what was PLAYED.
+
+**Keyboard: F2** (D-114's table). Every letter with a mnemonic in either
+language is already a build tool or a list - R, S, W, A and U all went that way
+- and the F row is where the full-screen overlays live (F1 handbook, F5/F9 the
+save shelf's own keys).
+
+**Ledger.** No `SAVE_VERSION` bump: v27 is bundle 1's and this bundle changes
+no serialised shape, so the canonical cross-OS pin and the corpus manifest are
+untouched (nothing under `hashWorld` moved) and the field audit's two
+allowlists are unchanged. No snapshot-layout change, no atlas cell. Tick cost:
+none - a replay is stepped by the same loop, the seal is a boolean read on a
+path that already allocated an envelope, and the only new per-frame arithmetic
+is the `limit` comparison that stops a playback at the recorded end.

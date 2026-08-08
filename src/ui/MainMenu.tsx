@@ -37,6 +37,9 @@ export function MainMenu({
         <button type="button" className="button" onClick={() => onSelect('saves')}>
           {t('ui.menu.saveLoad')}
         </button>
+        <button type="button" className="button" onClick={() => onSelect('replays')}>
+          {t('ui.menu.replays')}
+        </button>
         <button type="button" className="button" onClick={() => onSelect('options')}>
           {t('ui.menu.options')}
         </button>

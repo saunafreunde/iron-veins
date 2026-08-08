@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactElement } from 'react';
 import { formatGameDate, formatMoney, t } from '../i18n';
-import { hasBackup } from '../platform/Storage';
+import { hasBackup, readSave } from '../platform/Storage';
 import { SaveSlotKind } from '../shared/protocol';
 import {
   exportNamed,
@@ -160,6 +160,21 @@ export function SaveLoadPanel({
                   onClick={() => void exportNamed(entry.name)}
                 >
                   {t('ui.save.export')}
+                </button>
+                {/* "Export replay from save" (SPEC2 M16): every save carries
+                    its own command log and, since v27, its checkpoint ring, so
+                    ANY save can become a recording. The conversion is the
+                    worker's - it is the only side that may decode a world. */}
+                <button
+                  type="button"
+                  className="button"
+                  onClick={() => {
+                    void readSave(entry.name).then((bytes) => {
+                      if (bytes !== null) client.makeReplay(bytes, entry.label);
+                    });
+                  }}
+                >
+                  {t('ui.save.exportReplay')}
                 </button>
                 <button
                   type="button"

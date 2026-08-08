@@ -1,6 +1,8 @@
 import type { Command } from '../sim/commands/types';
 import type { Difficulty, MapClimate } from '../sim/constants';
 import type { MapGenPhase } from '../sim/mapgen';
+import type { ReplayVerification } from '../sim/save/replay';
+import type { ReplayMeta } from '../sim/save/replaySession';
 
 /**
  * Message contract between the main thread and the simulation worker.
@@ -395,6 +397,28 @@ export type MainToWorkerMessage =
   | { readonly type: 'loadSave'; readonly bytes: Uint8Array }
   /** Throw the world away and generate a new one with these parameters. */
   | { readonly type: 'newGame'; readonly options: NewGameOptions }
+  /**
+   * Turn a file into a `.ironreplay` and describe it (SPEC2 M16). The bytes
+   * may be a save - that is the "export replay from save" button - or a
+   * recording already, which comes back unchanged. The answer is
+   * `replayWritten`; the main thread owns the shelf, as with every save
+   * (D-111).
+   */
+  | { readonly type: 'makeReplay'; readonly bytes: Uint8Array; readonly label: string }
+  /** The same, for the game the worker is running right now. */
+  | { readonly type: 'exportReplay'; readonly label: string }
+  /**
+   * Enter replay mode: put the running game aside, load the recording and
+   * play it. While this is in force the worker refuses commands - a replay
+   * the interface can write into is not evidence.
+   */
+  | { readonly type: 'enterReplay'; readonly bytes: Uint8Array }
+  /** Jump the playback to a tick; the ring makes a year boundary exact. */
+  | { readonly type: 'replaySeek'; readonly tick: number }
+  /** Re-simulate the recording and compare it against its own claims. */
+  | { readonly type: 'verifyReplay' }
+  /** Leave replay mode and restore the game that was put aside. */
+  | { readonly type: 'exitReplay' }
   | { readonly type: 'shutdown' };
 
 /** Everything the player chooses on the new-game screen (section 20, M9). */
@@ -506,4 +530,26 @@ export type WorkerToMainMessage =
       readonly message: string;
       readonly stack: string;
       readonly tick: number;
-    };
+    }
+  /**
+   * A `.ironreplay` the worker built or read, with everything the browser
+   * lists it by. The bytes travel back so the main thread can shelve them
+   * without a second round trip - the same split as `saveWritten` (D-111).
+   */
+  | {
+      readonly type: 'replayWritten';
+      readonly bytes: Uint8Array;
+      readonly meta: ReplayMeta;
+      readonly label: string;
+    }
+  /** Replay mode is now in force, with the recording it is playing. */
+  | { readonly type: 'replayStarted'; readonly meta: ReplayMeta }
+  /** Replay mode is over; the game that was put aside is running again. */
+  | { readonly type: 'replayEnded' }
+  /** What "Replay prüfen" found - a verdict, and where it diverged. */
+  | { readonly type: 'replayVerified'; readonly result: ReplayVerification }
+  /**
+   * A replay operation that could not be carried out, named by a translation
+   * key: a file that is not a recording, or one this build must not judge.
+   */
+  | { readonly type: 'replayFailed'; readonly reasonKey: string; readonly detail: string };

@@ -20,9 +20,46 @@ export class CommandQueue {
   private head = 0;
   private nextSeq = 0;
   private base = 0;
+  private sealedState = false;
+
+  /**
+   * True while this queue refuses new entries - the mark of a RECORDING being
+   * played back rather than a game being played (SPEC2 M16).
+   */
+  get sealed(): boolean {
+    return this.sealedState;
+  }
+
+  /**
+   * Seal the queue: from here on {@link enqueue} drops what it is handed.
+   *
+   * A replay's input is its LOG and nothing else, and two different callers
+   * would otherwise write into it while it is being played back:
+   *
+   *  - the AI of section 15 enqueues its moves from inside `step` (D-108).
+   *    Those moves are already in the log - that is what makes an AI build
+   *    replayable at all - so re-deriving them would run every competitor
+   *    command twice, and the monotonic-tick check would throw the moment the
+   *    first one was appended behind a log that already reaches the final tick;
+   *  - anything on the other side of the worker boundary. The seal is what
+   *    makes "the interface cannot inject a command into a replay" a property
+   *    of the mechanism rather than a rule three panels have to remember.
+   *
+   * One-way on purpose: a sealed queue belongs to a recording, and a recording
+   * that could be written to would stop being evidence.
+   */
+  seal(): void {
+    this.sealedState = true;
+  }
 
   /** Schedule `command` for the start of `tick`. */
   enqueue(command: Command, tick: number, companyId = 0): CommandEnvelope {
+    if (this.sealedState) {
+      // Handed back rather than thrown: the AI calls this from inside `step`
+      // and a throw there would stop a playback the recording is perfectly
+      // able to finish. `seq` is -1 because this envelope is in no recording.
+      return { tick, seq: -1, companyId, command };
+    }
     const last = this.entries[this.entries.length - 1];
     if (last !== undefined && tick < last.tick) {
       throw new Error(

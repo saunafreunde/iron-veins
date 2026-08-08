@@ -1,4 +1,5 @@
 import { CommandQueue } from '../commands/queue';
+import type { CommandEnvelope } from '../commands/types';
 import { hashWorld, World } from '../World';
 import { restoreCheckpoint, type CheckpointRing } from './checkpoints';
 import { SaveFormatError, SAVE_VERSION, type ReplayClaim } from './format';
@@ -136,6 +137,10 @@ export function replayStartAt(loaded: LoadedGame, targetTick: number): ReplaySta
   const queue = new CommandQueue();
   queue.loadLog(loaded.queue.log, 0, base);
   queue.seekToTick(world.tick);
+  // A playback reads its log and writes nothing back into it: the AI's own
+  // moves are already recorded there and the interface must not be able to
+  // add one (SPEC2 M16, D-189).
+  queue.seal();
   return { world, queue };
 }
 
@@ -161,6 +166,13 @@ function restoreFromBase(loaded: LoadedGame): World {
  * it already has - the log, the ring, and a base state that is either the
  * genesis checkpoint, the base checkpoint of a compacted log, or (for a game
  * that started before the ring existed) the reconstructed genesis.
+ *
+ * A save this build had to MIGRATE is deliberately NOT run through here: the
+ * only end hash available for one is a hash THIS build computed over a state
+ * the writing build never committed to, and a claim like that is a claim about
+ * nobody's world. Such a save is shelved as it stands and watched from its
+ * reconstructed genesis instead - playable, and honest about being unjudgeable
+ * (SPEC2 M16 B2, D-189).
  */
 export function encodeReplay(
   world: World,
@@ -191,13 +203,57 @@ export function encodeReplay(
   return encodeSave(baseWorld, replayQueue, gameVersion, ring, claim);
 }
 
+/**
+ * A recording whose command log contradicts its own bookkeeping.
+ *
+ * `CommandQueue.enqueue` stamps every envelope with the next sequence number
+ * and refuses a tick older than the last one, so within ONE recording the
+ * retained log is contiguous in `seq` and non-decreasing in `tick` by
+ * construction - a trim keeps both properties, because it drops a prefix and
+ * renumbers nothing (D-188). An entry inserted, removed or moved by hand
+ * breaks one of the two, and this is what says where.
+ *
+ * It is a LOCATOR, never the verdict: what decides whether a recording
+ * reproduces is the hash comparison, and this only ever explains a divergence
+ * the hashes already found.
+ */
+export interface ReplayLogBreak {
+  /** Index into the retained log of the first entry that breaks the order. */
+  readonly index: number;
+  readonly tick: number;
+  readonly seq: number;
+  /** Translation key naming what broke. */
+  readonly reasonKey: string;
+}
+
 /** What a verification found. */
 export interface ReplayVerification {
   /** True when every checkpoint and the final hash matched. */
   readonly ok: boolean;
-  /** First tick whose hash disagreed, or -1 when none did. */
+  /**
+   * The first tick at which the recording and this build provably differ, or
+   * -1 when nothing did. Exactly the tick when {@link exact} is true, and the
+   * first COMMITTED tick (a checkpoint, or the recorded end) that disagreed
+   * otherwise - see {@link exact} for what separates the two.
+   */
   readonly firstDivergentTick: number;
-  /** The hash the recording claims at {@link firstDivergentTick}. */
+  /**
+   * Whether {@link firstDivergentTick} is the exact tick or the upper bound of
+   * the bracket the recording committed to.
+   *
+   * A recording commits to a hash once a game year, so the running comparison
+   * alone can only ever name a year. Inside that bracket the world is a pure
+   * function of its start state - which matched - and of the commands that
+   * ran, so a divergence must begin at a COMMAND's tick; when the bracket
+   * holds exactly one such tick, that tick IS the answer. The argument needs
+   * the log's own numbering to be truthful, which {@link logBreak} is the
+   * check on: with an entry inserted or removed the executed sequence is not
+   * the recorded one and no exactness is claimed.
+   */
+  readonly exact: boolean;
+  /** Newest committed tick that still agreed - the floor of the bracket. */
+  readonly lastMatchingTick: number;
+  /** The hash the recording claims at the divergent committed tick. */
   readonly expectedHash: string;
   /** The hash this build reached there. */
   readonly actualHash: string;
@@ -205,16 +261,93 @@ export interface ReplayVerification {
   readonly checkedTicks: readonly number[];
   /** Where the re-simulation started from. */
   readonly startedAtTick: number;
+  /** The recording's own log order broken, or null. */
+  readonly logBreak: ReplayLogBreak | null;
+  /** Translation key of the sentence the panel prints for this verdict. */
+  readonly reasonKey: string;
+}
+
+/**
+ * Walk the retained log and return the first entry that breaks the order the
+ * queue writes it in, or null.
+ *
+ * The first entry sets the baseline: a trimmed recording legitimately starts
+ * at a sequence number well above zero (`trimBefore` deliberately does not
+ * renumber, D-188), so what is checked is the STEP from one entry to the next.
+ */
+export function checkLogIntegrity(log: readonly CommandEnvelope[]): ReplayLogBreak | null {
+  for (let i = 1; i < log.length; i++) {
+    const previous = log[i - 1]!;
+    const entry = log[i]!;
+    if (entry.tick < previous.tick) {
+      return {
+        index: i,
+        tick: entry.tick,
+        seq: entry.seq,
+        reasonKey: 'ui.replay.break.tickOrder',
+      };
+    }
+    if (entry.seq !== previous.seq + 1) {
+      return {
+        index: i,
+        tick: entry.tick,
+        seq: entry.seq,
+        reasonKey: 'ui.replay.break.sequence',
+      };
+    }
+  }
+  return null;
+}
+
+/** The ticks inside a bracket that carry a command - the only candidates. */
+function candidateTicks(
+  log: readonly CommandEnvelope[],
+  fromTick: number,
+  toTick: number,
+): number[] {
+  const ticks: number[] = [];
+  for (let i = 0; i < log.length; i++) {
+    const tick = log[i]!.tick;
+    // The floor is INCLUSIVE: a checkpoint holds the world before its own tick
+    // ran, so a command stamped with it is still ahead of the state that
+    // matched. The ceiling is exclusive for the same reason.
+    if (tick < fromTick || tick >= toTick) continue;
+    if (ticks[ticks.length - 1] !== tick) ticks.push(tick);
+  }
+  return ticks;
+}
+
+/**
+ * Narrow a divergence from the year the ring commits to down to the tick, when
+ * the recording allows it.
+ *
+ * Between two committed hashes only a command can move the world apart, so the
+ * candidates are the command ticks of the bracket. One candidate is an answer;
+ * several are a bracket, and saying which of them it was would be a guess. A
+ * broken log order withdraws the argument altogether - the executed sequence
+ * is then not the recorded one and even the candidate set is unreliable.
+ */
+export function narrowDivergence(
+  log: readonly CommandEnvelope[],
+  fromTick: number,
+  toTick: number,
+  logBreak: ReplayLogBreak | null,
+): { readonly tick: number; readonly exact: boolean } {
+  if (logBreak !== null) return { tick: toTick, exact: false };
+  const candidates = candidateTicks(log, fromTick, toTick);
+  if (candidates.length === 1) return { tick: candidates[0]!, exact: true };
+  return { tick: toTick, exact: false };
 }
 
 /**
  * Re-simulate a recording and compare it against what it claims.
  *
- * The comparison happens at every checkpoint the ring carries and at the final
- * tick, so a divergence is located to the year rather than only announced -
- * each checkpoint is a hash the recording committed to on the way. That is the
- * granularity the ring gives; narrowing it further inside a year is a
- * bisection over the same mechanism.
+ * The running comparison happens at every checkpoint the ring carries and at
+ * the final tick - each of those is a hash the recording committed to on the
+ * way, so a divergence is LOCATED rather than only announced. That is the
+ * granularity the ring gives; {@link narrowDivergence} then takes the bracket
+ * down to the tick wherever the recording's own log allows it, and says so
+ * through {@link ReplayVerification.exact} when it cannot.
  *
  * Refuses a recording from another version before touching a single command
  * (E-11, D-131).
@@ -235,6 +368,8 @@ export function verifyReplay(loaded: LoadedGame, currentGameVersion: string): Re
   const world = start.world;
   const queue = start.queue;
   const startedAtTick = world.tick;
+  const log = loaded.queue.log;
+  const logBreak = checkLogIntegrity(log);
 
   const marks: { tick: number; hash: string }[] = [];
   for (const entry of loaded.ring.all) {
@@ -243,28 +378,48 @@ export function verifyReplay(loaded: LoadedGame, currentGameVersion: string): Re
   marks.push({ tick: claim.finalTick, hash: claim.finalHash });
 
   const checkedTicks: number[] = [];
+  let lastMatchingTick = startedAtTick;
   for (const mark of marks) {
     while (world.tick < mark.tick) world.step(queue, null);
     checkedTicks.push(mark.tick);
     const actual = hashWorld(world);
     if (actual !== mark.hash) {
+      const narrowed = narrowDivergence(log, lastMatchingTick, mark.tick, logBreak);
       return {
         ok: false,
-        firstDivergentTick: mark.tick,
+        firstDivergentTick: narrowed.tick,
+        exact: narrowed.exact,
+        lastMatchingTick,
         expectedHash: mark.hash,
         actualHash: actual,
         checkedTicks,
         startedAtTick,
+        logBreak,
+        reasonKey:
+          logBreak !== null
+            ? 'ui.replay.verify.logBreak'
+            : narrowed.exact
+              ? 'ui.replay.verify.exact'
+              : 'ui.replay.verify.bracket',
       };
     }
+    lastMatchingTick = mark.tick;
   }
 
   return {
     ok: true,
     firstDivergentTick: -1,
+    exact: true,
+    lastMatchingTick,
     expectedHash: claim.finalHash,
     actualHash: claim.finalHash,
     checkedTicks,
     startedAtTick,
+    // A log whose own numbering is broken but that still reproduces every
+    // committed hash is reported as reproducing: the hashes are the authority
+    // and they say the world is the recorded one (the break is then the
+    // recording's bookkeeping, not its history).
+    logBreak,
+    reasonKey: 'ui.replay.verify.ok',
   };
 }

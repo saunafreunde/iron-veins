@@ -13,9 +13,11 @@ import type {
   TownMarker,
   VehicleMarker,
 } from '../shared/protocol';
-import type { SaveEntry } from '../platform/Storage';
+import type { ReplayEntry, SaveEntry } from '../platform/Storage';
 import { DEFAULT_SETTINGS, type AppSettings } from '../shared/settings';
 import type { MapGenPhase } from '../sim/mapgen';
+import type { ReplayVerification } from '../sim/save/replay';
+import type { ReplayMeta } from '../sim/save/replaySession';
 import type { ConnectPlan } from './connect';
 import type { CrashBundleSummary } from './crashBundle';
 
@@ -23,7 +25,8 @@ import type { CrashBundleSummary } from './crashBundle';
  * The full-screen panels of M9. One at a time, because each of them wants the
  * whole window and two of them at once would mean deciding which is on top.
  */
-export type OverlayKind = 'menu' | 'newGame' | 'options' | 'saves' | 'handbook' | 'tutorial' | null;
+export type OverlayKind =
+  'menu' | 'newGame' | 'options' | 'saves' | 'replays' | 'handbook' | 'tutorial' | null;
 
 /** What a left click on the map does. */
 export type Tool =
@@ -135,6 +138,24 @@ export interface SimUiState extends SnapshotValues {
   settings: AppSettings;
   /** Saves on the shelf, newest first (section 19.1). */
   saves: readonly SaveEntry[];
+  /** Recordings on the replay shelf, newest first (SPEC2 M16). */
+  replays: readonly ReplayEntry[];
+  /**
+   * The recording being watched, or null in an ordinary game.
+   *
+   * This one field is what puts the interface into replay mode: the build
+   * tools disappear, the sidebar becomes the playback bar, and `SimClient`
+   * refuses to send a command at all. The worker refuses too - that is the
+   * authority - but a screen full of armed tools that all bounce would be a
+   * lie about what the player can do.
+   */
+  replay: ReplayMeta | null;
+  /** What the last "Replay prüfen" found, or null. */
+  replayVerification: ReplayVerification | null;
+  /** True while a verification is re-simulating in the worker. */
+  replayChecking: boolean;
+  /** Why the last replay operation failed, as a translation key, or null. */
+  replayError: { readonly reasonKey: string; readonly detail: string } | null;
   /**
    * What the last load said when it failed, or null. A raw exception message
    * from the format layer is the wrong thing to show, so the key is the
@@ -252,6 +273,11 @@ export interface SimUiState extends SnapshotValues {
   setContracts: (contracts: readonly ContractMarker[]) => void;
   setSettings: (settings: AppSettings) => void;
   setSaves: (saves: readonly SaveEntry[]) => void;
+  setReplays: (replays: readonly ReplayEntry[]) => void;
+  setReplay: (meta: ReplayMeta | null) => void;
+  setReplayVerification: (result: ReplayVerification | null) => void;
+  setReplayChecking: (checking: boolean) => void;
+  setReplayError: (error: { readonly reasonKey: string; readonly detail: string } | null) => void;
   setLoadError: (
     error: {
       readonly reasonKey: string;
@@ -350,6 +376,11 @@ export const useSimStore = create<SimUiState>((set) => ({
   contracts: [],
   settings: DEFAULT_SETTINGS,
   saves: [],
+  replays: [],
+  replay: null,
+  replayVerification: null,
+  replayChecking: false,
+  replayError: null,
   loadError: null,
   overlay: null,
   openList: null,
@@ -421,6 +452,14 @@ export const useSimStore = create<SimUiState>((set) => ({
   setContracts: (contracts) => set({ contracts }),
   setSettings: (settings) => set({ settings, locale: settings.locale === 'en' ? 'en' : 'de' }),
   setSaves: (saves) => set({ saves }),
+  setReplays: (replays) => set({ replays }),
+  // Entering, seeking and leaving all land here, and all three drop the last
+  // verdict: a verification is about one recording at one moment, and a stale
+  // "geprüft, identisch" beside a different recording would be a lie.
+  setReplay: (replay) => set({ replay, replayVerification: null, replayChecking: false }),
+  setReplayVerification: (replayVerification) => set({ replayVerification, replayChecking: false }),
+  setReplayChecking: (replayChecking) => set({ replayChecking }),
+  setReplayError: (replayError) => set({ replayError, replayChecking: false }),
   setLoadError: (loadError) => set({ loadError }),
   setOverlay: (overlay) => set({ overlay }),
   toggleList: (list) => set((state) => ({ openList: state.openList === list ? null : list })),

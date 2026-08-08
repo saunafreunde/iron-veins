@@ -156,14 +156,72 @@ export class SimClient {
     this.post({ type: 'setSpeed', speedIndex });
   }
 
-  /** Queue a state changing command (architecture law #6). */
-  send(command: Command): void {
+  /**
+   * Queue a state changing command (architecture law #6).
+   *
+   * Returns false when the command was refused before it left this side. That
+   * happens for exactly one reason: a recording is playing, and a replay the
+   * interface can write into is not evidence of anything (SPEC2 M16, D-189).
+   * The worker refuses the same command as well and says so in words - this is
+   * the cheaper half of the same rule, and the half a test can reach.
+   */
+  send(command: Command): boolean {
+    if (useSimStore.getState().replay !== null) return false;
     // Mirrored into the main thread's rolling crash log BEFORE it crosses the
     // boundary: if this very command kills the worker, the copy over there
     // dies with it (D-132).
     recordCommand(command);
     this.post({ type: 'command', command });
+    return true;
   }
+
+  // ------------------------------------------------------------ the replay
+  //
+  // Five verbs over the theatre of SPEC2 M16. All of them are questions for
+  // the worker: it is the only side that may decode a world, and this side is
+  // the only one that may touch a file (D-111).
+
+  /** Turn a save (or a recording) into a `.ironreplay` and describe it. */
+  makeReplay(bytes: Uint8Array, label: string): void {
+    useSimStore.getState().setReplayError(null);
+    this.post({ type: 'makeReplay', bytes, label });
+  }
+
+  /** The same, for the game running right now. */
+  exportReplay(label: string): void {
+    useSimStore.getState().setReplayError(null);
+    this.post({ type: 'exportReplay', label });
+  }
+
+  /** Put the running game aside and watch a recording. */
+  enterReplay(bytes: Uint8Array): void {
+    useSimStore.getState().setReplayError(null);
+    recordWorldReplaced('replay');
+    this.post({ type: 'enterReplay', bytes });
+  }
+
+  /** Jump the playback; a year the ring holds is landed on exactly. */
+  seekReplay(tick: number): void {
+    this.post({ type: 'replaySeek', tick });
+  }
+
+  /** "Replay prüfen" - re-simulate and compare against the recorded claims. */
+  verifyReplay(): void {
+    const store = useSimStore.getState();
+    store.setReplayError(null);
+    store.setReplayChecking(true);
+    this.post({ type: 'verifyReplay' });
+  }
+
+  /** Leave replay mode; the game that was put aside comes back. */
+  exitReplay(): void {
+    recordWorldReplaced('replay');
+    this.post({ type: 'exitReplay' });
+  }
+
+  /** Called when the worker hands back a recording to shelve. */
+  onReplayWritten:
+    ((message: Extract<WorkerToMainMessage, { type: 'replayWritten' }>) => void) | null = null;
 
   /**
    * Ask the worker to encode the game. The bytes come back as a message and
@@ -290,6 +348,21 @@ export class SimClient {
           stack: message.stack,
           tick: message.tick,
         });
+        return;
+      case 'replayWritten':
+        this.onReplayWritten?.(message);
+        return;
+      case 'replayStarted':
+        store.setReplay(message.meta);
+        return;
+      case 'replayEnded':
+        store.setReplay(null);
+        return;
+      case 'replayVerified':
+        store.setReplayVerification(message.result);
+        return;
+      case 'replayFailed':
+        store.setReplayError({ reasonKey: message.reasonKey, detail: message.detail });
         return;
     }
   }

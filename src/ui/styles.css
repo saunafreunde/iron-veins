@@ -1094,3 +1094,25 @@ body {
   pointer-events: none;
   white-space: normal;
 }
+
+/* ------------------------------------ replay theatre (SPEC2 M16) ------- */
+
+/*
+ * The cast of a recording: one row per company, in its own livery. The swatch
+ * is the status bar's, deliberately - a competitor's colour on the map has to
+ * be the colour beside its name here.
+ */
+.replay-cast {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 4px 0;
+  padding: 0;
+  list-style: none;
+}
+
+.replay-cast__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}

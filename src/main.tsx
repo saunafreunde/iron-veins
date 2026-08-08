@@ -7,6 +7,7 @@ import { App } from './ui/App';
 import { startAudio } from './ui/audioBridge';
 import { recordSaveWritten, scanStoredCrashBundles } from './ui/crashReporter';
 import { captureThumbnail } from './ui/Minimap';
+import { refreshReplays, storeReplay } from './ui/replays';
 import { refreshSaves, storeSave } from './ui/saves';
 import { loadSettings } from './ui/settings';
 import { SimClient } from './ui/SimClient';
@@ -49,6 +50,16 @@ client.onSaveWritten = (message) => {
   });
 };
 
+/**
+ * A recording the worker built or read gets a name and a home, exactly like a
+ * save (SPEC2 M16). No thumbnail: the picture would be of the world the
+ * recording STARTS at, which for a replay is a map nobody has built anything
+ * on yet - the years and the companies are what tells two recordings apart.
+ */
+client.onReplayWritten = (message) => {
+  void storeReplay(message.bytes, message.meta, message.label, Date.now());
+};
+
 client.start({
   // Main-thread randomness is fine - the seed becomes part of the world state
   // and everything downstream of it is derived deterministically.
@@ -66,6 +77,7 @@ client.start({
 // start AFTER the crash (SPEC2 M10, D-139).
 void loadSettings()
   .then(() => refreshSaves())
+  .then(() => refreshReplays())
   .then(() => scanStoredCrashBundles());
 
 /**

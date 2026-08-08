@@ -58,6 +58,11 @@ export const KEY_BINDINGS: readonly KeyBinding[] = [
   // reading letter of "Auslastung" - free in both languages.
   { display: 'U', descriptionKey: 'ui.key.heatmap' },
   { display: 'F1', descriptionKey: 'ui.key.handbook' },
+  // The replay theatre of SPEC2 M16 sits on the F row rather than on a letter:
+  // every letter with a mnemonic in either language is already a build tool or
+  // a list (R, S, W, A and U all went that way), and the full-screen overlays
+  // are what the F row is for.
+  { display: 'F2', descriptionKey: 'ui.key.replays' },
   { display: 'F3', descriptionKey: 'ui.key.debug' },
   { display: 'F5', descriptionKey: 'ui.key.quickSave' },
   { display: 'F9', descriptionKey: 'ui.key.quickLoad' },

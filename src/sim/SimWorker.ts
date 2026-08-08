@@ -49,8 +49,15 @@ import { contractProgress, isOpen } from './economy/contracts';
 import { refusedTile } from './vehicles/reservations';
 import { writeVehicleBlock } from './vehicles/snapshot';
 import { VehicleKind } from './vehicles/spec';
-import { SaveCorruptionError, SaveFormatError } from './save/format';
+import { SaveCorruptionError, SaveFormatError, SAVE_VERSION } from './save/format';
 import { CheckpointRing } from './save/checkpoints';
+import { encodeReplay, ReplayVersionError } from './save/replay';
+import {
+  replayMeta,
+  ReplaySession,
+  REPLAY_COMMAND_REFUSAL,
+  REPLAY_NOT_A_RECORDING,
+} from './save/replaySession';
 import { decodeSave, encodeSave } from './save/serialize';
 import { councilRating, exclusiveRightsCostCt, TOWN_MEASURE_COUNT } from './town/council';
 import { calendarFromTick, hashWorldLive, World } from './World';
@@ -96,6 +103,24 @@ let queue = new CommandQueue();
 let checkpoints = new CheckpointRing();
 let writer: SnapshotWriter | null = null;
 let timer: ReturnType<typeof setInterval> | null = null;
+
+/**
+ * The recording being played back, or null while an ordinary game is running
+ * (SPEC2 M16). While it is set the scheduler drives the SESSION's world from
+ * the SESSION's sealed queue, records no checkpoints of its own - the ring
+ * belongs to the recording - and refuses every command that arrives.
+ */
+let replay: ReplaySession | null = null;
+
+/**
+ * The live game, encoded and put aside while a replay is watched.
+ *
+ * A replay REPLACES the world (the same swap a load does), so the way back is
+ * the same one: bytes the worker made before it left. Keeping the world object
+ * instead would mean two worlds alive at once, one of them a whole map's worth
+ * of layers that nothing is stepping.
+ */
+let suspended: Uint8Array | null = null;
 
 let speedIndex = 0;
 let accumulatorMs = 0;
@@ -536,20 +561,26 @@ function runFrame(): void {
   }
 
   accumulatorMs += elapsed * factor;
+  // A playback stops where the recording stops. Running past it would be
+  // inventing a future for a game that is over, at the exact moment the log
+  // ran out - so the clock stops there and the speed buttons keep working.
+  const limit = replay === null ? MAX_TICK : Math.min(MAX_TICK, replay.finalTick);
   let ticks = 0;
-  while (accumulatorMs >= TICK_MS && ticks < MAX_TICKS_PER_FRAME && current.tick < MAX_TICK) {
+  while (accumulatorMs >= TICK_MS && ticks < MAX_TICKS_PER_FRAME && current.tick < limit) {
     current.step(queue, outcomeSink);
     // Per STEP, not per frame: a frame runs up to 40 ticks and a year
     // boundary inside one of them is still a year boundary. The call is a
-    // modulo on every tick and an encode once a game year (SPEC2 M16).
-    checkpoints.record(current);
+    // modulo on every tick and an encode once a game year (SPEC2 M16). Not
+    // during a replay: the ring the file carries is the recording's own, and
+    // re-recording it would cost an encode a game year for nothing.
+    if (replay === null) checkpoints.record(current);
     accumulatorMs -= TICK_MS;
     ticks++;
   }
   // Drop whatever backlog is left instead of chasing it forever; the sim runs
   // slower than requested rather than freezing the worker.
   if (ticks >= MAX_TICKS_PER_FRAME) accumulatorMs = 0;
-  if (current.tick >= MAX_TICK) {
+  if (current.tick >= limit) {
     speedIndex = 0;
     accumulatorMs = 0;
   }
@@ -576,6 +607,8 @@ function startGame(message: Extract<MainToWorkerMessage, { type: 'init' }>): voi
   );
   queue = new CommandQueue();
   checkpoints = new CheckpointRing();
+  replay = null;
+  suspended = null;
   // Tick 0 is a year boundary, so the genesis of a game is a checkpoint like
   // any other - and it is the one that makes "replay this game from its first
   // day" a decode rather than a reconstruction (SPEC2 M16).
@@ -680,6 +713,168 @@ function restart(options: NewGameOptions): void {
   adoptWorld(world, sink);
 }
 
+// --------------------------------------------------------------- the replay
+//
+// The theatre of SPEC2 M16. Four operations, and the one property that holds
+// them together: while `replay` is set the world under the scheduler belongs
+// to a RECORDING, so nothing may author state into it - not the interface,
+// which is refused by name below, and not the competitors of section 15,
+// whose moves are in the log already and whose re-derived ones the sealed
+// queue drops (D-189).
+
+function postReplayFailure(reasonKey: string, error: unknown): void {
+  scope.postMessage({
+    type: 'replayFailed',
+    reasonKey,
+    detail: error instanceof Error ? error.message : String(error),
+  });
+}
+
+/**
+ * Turn bytes into a recording for the shelf and describe it.
+ *
+ * Two of the three cases hand the file back UNCHANGED, and both for the same
+ * reason - re-encoding it would restamp it with this build's version and turn
+ * somebody else's recording into one this build claims to have made:
+ *
+ *  - a file that already IS a `.ironreplay`;
+ *  - a save from an older format. It migrates and plays from its
+ *    reconstructed genesis (SPEC2 M16's "Alt-Saves bleiben abspielbar"), and
+ *    it makes no claim about its end, so verification refuses it by name
+ *    rather than reporting a divergence that is really a version gap (E-11).
+ *
+ * A save of THIS format is converted: it carries a ring and a log this build
+ * wrote, which is everything a claim needs to be honest (D-189).
+ */
+function makeReplay(bytes: Uint8Array, label: string): void {
+  try {
+    const loaded = decodeSave(bytes);
+    if (loaded.replay !== null || loaded.saveVersion !== SAVE_VERSION) {
+      scope.postMessage({
+        type: 'replayWritten',
+        bytes,
+        meta: replayMeta(loaded, __APP_VERSION__),
+        label,
+      });
+      return;
+    }
+    const replayBytes = encodeReplay(loaded.world, loaded.queue, loaded.ring, loaded.gameVersion);
+    scope.postMessage({
+      type: 'replayWritten',
+      bytes: replayBytes,
+      meta: replayMeta(decodeSave(replayBytes), __APP_VERSION__),
+      label,
+    });
+  } catch (error) {
+    postReplayFailure(REPLAY_NOT_A_RECORDING, error);
+  }
+}
+
+/** The same, for the game that is running right now. */
+function exportRunningReplay(label: string): void {
+  const current = world;
+  if (current === null || replay !== null) return;
+  try {
+    const bytes = encodeReplay(current, queue, checkpoints, __APP_VERSION__);
+    scope.postMessage({
+      type: 'replayWritten',
+      bytes,
+      meta: replayMeta(decodeSave(bytes), __APP_VERSION__),
+      label,
+    });
+  } catch (error) {
+    postReplayFailure(REPLAY_NOT_A_RECORDING, error);
+  }
+}
+
+/** Put the running game aside and start playing a recording. */
+function enterReplay(bytes: Uint8Array): void {
+  const sink = writer;
+  const current = world;
+  if (sink === null || current === null) return;
+
+  let session: ReplaySession;
+  try {
+    session = ReplaySession.open(bytes, __APP_VERSION__);
+  } catch (error) {
+    postReplayFailure(REPLAY_NOT_A_RECORDING, error);
+    return;
+  }
+
+  // Only the FIRST entry saves a game: watching a second recording from
+  // within the first must not put the first one aside as if it were the
+  // player's own (it would then be what "leave" restores).
+  if (replay === null) suspended = encodeSave(current, queue, __APP_VERSION__, checkpoints);
+  replay = session;
+  world = session.world;
+  queue = session.queue;
+  adoptWorld(session.world, sink);
+  scope.postMessage({ type: 'replayStarted', meta: session.meta });
+}
+
+/** Jump the playback; the ring makes a year boundary land exactly (D-188). */
+function seekReplay(tick: number): void {
+  const session = replay;
+  const sink = writer;
+  if (session === null || sink === null) return;
+  try {
+    session.seek(tick);
+  } catch (error) {
+    postReplayFailure(REPLAY_NOT_A_RECORDING, error);
+    return;
+  }
+  world = session.world;
+  queue = session.queue;
+  // The whole world was replaced, tile layers included - the same adoption a
+  // load performs, and for the same reason (the renderer holds the buffer).
+  // Deliberately WITHOUT a fresh `replayStarted`: the recording did not
+  // change, only the position did, and the position already travels in the
+  // snapshot. Re-announcing it would throw away a verification verdict that
+  // is about the whole recording and not about where the player is standing.
+  adoptWorld(session.world, sink);
+}
+
+/** "Replay prüfen": re-simulate on a second world and report the comparison. */
+function verifyRunningReplay(): void {
+  const session = replay;
+  if (session === null) return;
+  try {
+    scope.postMessage({ type: 'replayVerified', result: session.verify() });
+  } catch (error) {
+    postReplayFailure(
+      error instanceof ReplayVersionError ? 'ui.replay.versionRefused' : 'ui.replay.notVerifiable',
+      error,
+    );
+  }
+}
+
+/**
+ * Leave replay mode.
+ *
+ * The way out is the way in run backwards: the recording is dropped whole -
+ * session, log, ring and the claim - and the game that was put aside is loaded
+ * back through the ordinary load path, which is the one piece of code that
+ * knows how to adopt a world completely. What the player returns to is
+ * therefore the game they left, at the tick they left it, with a queue that
+ * accepts commands again.
+ */
+function exitReplay(): void {
+  if (replay === null) return;
+  replay = null;
+  const bytes = suspended;
+  suspended = null;
+  if (bytes !== null) loadSave(bytes);
+  scope.postMessage({ type: 'replayEnded' });
+}
+
+/** Any world replacement ends a replay - a load and a new game both do. */
+function abandonReplay(): void {
+  if (replay === null) return;
+  replay = null;
+  suspended = null;
+  scope.postMessage({ type: 'replayEnded' });
+}
+
 /**
  * Everything that has to be forgotten when the world underneath changes.
  *
@@ -737,20 +932,60 @@ function handleMessage(message: MainToWorkerMessage): void {
     case 'command': {
       const current = world;
       if (current === null) return;
+      // The one place a command can enter the simulation, and therefore the
+      // one place the replay has to be defended: a recording the interface
+      // can write into is not a recording. The queue is sealed underneath as
+      // well - this is what turns the silence into a sentence (D-189).
+      if (replay !== null) {
+        scope.postMessage({ type: 'commandRejected', reasonKey: REPLAY_COMMAND_REFUSAL });
+        return;
+      }
       queue.enqueue(message.command, current.tick);
       return;
     }
 
     case 'requestSave':
+      // A save taken during a replay would be a save of somebody else's game
+      // wearing the player's shelf.
+      if (replay !== null) {
+        scope.postMessage({ type: 'commandRejected', reasonKey: REPLAY_COMMAND_REFUSAL });
+        return;
+      }
       writeSave(message.slot, message.label);
       return;
 
     case 'loadSave':
+      abandonReplay();
       loadSave(message.bytes);
       return;
 
     case 'newGame':
+      abandonReplay();
       restart(message.options);
+      return;
+
+    case 'makeReplay':
+      makeReplay(message.bytes, message.label);
+      return;
+
+    case 'exportReplay':
+      exportRunningReplay(message.label);
+      return;
+
+    case 'enterReplay':
+      enterReplay(message.bytes);
+      return;
+
+    case 'replaySeek':
+      seekReplay(message.tick);
+      return;
+
+    case 'verifyReplay':
+      verifyRunningReplay();
+      return;
+
+    case 'exitReplay':
+      exitReplay();
       return;
 
     case 'shutdown':
@@ -758,6 +993,8 @@ function handleMessage(message: MainToWorkerMessage): void {
         clearInterval(timer);
         timer = null;
       }
+      replay = null;
+      suspended = null;
       world = null;
       writer = null;
       return;

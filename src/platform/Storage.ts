@@ -282,6 +282,179 @@ function downloadBytes(name: string, bytes: Uint8Array): void {
   URL.revokeObjectURL(url);
 }
 
+// -------------------------------------------------------------- the replays
+//
+// A second shelf beside the saves (SPEC2 M16). Deliberately its own directory
+// and its own index rather than a slot on the save shelf: a recording is not a
+// game to continue, it carries different metadata (the build that made it, how
+// many game years it spans, who played), and mixing the two would put files
+// the load screen must never load in the load screen's own list.
+//
+// There is no `.bak` dance here. A save is the only copy of somebody's game
+// and is worth an atomic write; a recording is a copy of something else by
+// construction, and the write that would need protecting is the save's.
+
+const REPLAY_DIR = 'replays';
+const REPLAY_INDEX_FILE = 'replays.json';
+const REPLAY_INDEX_KEY = 'ironveins.replays';
+
+/** In-memory replay shelf for the browser, mirroring {@link memorySaves}. */
+const memoryReplays = new Map<string, Uint8Array>();
+
+/** One recording on the shelf, as the replay browser lists it. */
+export interface ReplayEntry {
+  /** File name without the directory; the id everything else refers to. */
+  readonly name: string;
+  readonly label: string;
+  /** Build that recorded it - the version triple of E-11. */
+  readonly gameVersion: string;
+  /** Save format it was written in. */
+  readonly saveVersion: number;
+  /** Length of the recording in game years. */
+  readonly years: number;
+  readonly startYear: number;
+  readonly endYear: number;
+  /** Names of the companies in the recording, the player's first. */
+  readonly companies: readonly string[];
+  /** Whether THIS build may verify it (E-11), decided when it was shelved. */
+  readonly verifiable: boolean;
+  /** Wall-clock time it was shelved, as a number for sorting only. */
+  readonly writtenAt: number;
+}
+
+interface ReplayIndex {
+  readonly entries: ReplayEntry[];
+}
+
+async function readReplayIndex(): Promise<ReplayEntry[]> {
+  try {
+    if (hasTauriRuntime()) {
+      const { exists, readTextFile, BaseDirectory } = await import('@tauri-apps/plugin-fs');
+      if (!(await exists(REPLAY_INDEX_FILE, { baseDir: BaseDirectory.AppData }))) return [];
+      const text = await readTextFile(REPLAY_INDEX_FILE, { baseDir: BaseDirectory.AppData });
+      return (JSON.parse(text) as ReplayIndex).entries;
+    }
+    const text = window.localStorage.getItem(REPLAY_INDEX_KEY);
+    return text === null ? [] : (JSON.parse(text) as ReplayIndex).entries;
+  } catch {
+    return [];
+  }
+}
+
+async function writeReplayIndex(entries: readonly ReplayEntry[]): Promise<void> {
+  const text = JSON.stringify({ entries });
+  if (hasTauriRuntime()) {
+    const { mkdir, writeTextFile, BaseDirectory } = await import('@tauri-apps/plugin-fs');
+    await mkdir('', { baseDir: BaseDirectory.AppData, recursive: true });
+    await writeTextFile(REPLAY_INDEX_FILE, text, { baseDir: BaseDirectory.AppData });
+    return;
+  }
+  window.localStorage.setItem(REPLAY_INDEX_KEY, text);
+}
+
+/** Every recording on the shelf, newest first. */
+export async function listReplays(): Promise<ReplayEntry[]> {
+  const entries = await readReplayIndex();
+  return [...entries].sort((a, b) => {
+    if (a.writtenAt !== b.writtenAt) return b.writtenAt - a.writtenAt;
+    return a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
+  });
+}
+
+/** Put a recording on the shelf under an exact name, replacing what was there. */
+export async function writeReplay(entry: ReplayEntry, bytes: Uint8Array): Promise<void> {
+  if (hasTauriRuntime()) {
+    const { mkdir, writeFile, BaseDirectory } = await import('@tauri-apps/plugin-fs');
+    const baseDir = BaseDirectory.AppData;
+    await mkdir(REPLAY_DIR, { baseDir, recursive: true });
+    await writeFile(`${REPLAY_DIR}/${entry.name}`, bytes, { baseDir });
+  } else {
+    memoryReplays.set(entry.name, bytes);
+  }
+
+  const entries = (await readReplayIndex()).filter((existing) => existing.name !== entry.name);
+  entries.push(entry);
+  await writeReplayIndex(entries);
+}
+
+/** Read one back, or null when it is not there any more. */
+export async function readReplay(name: string): Promise<Uint8Array | null> {
+  try {
+    if (hasTauriRuntime()) {
+      const { readFile, BaseDirectory } = await import('@tauri-apps/plugin-fs');
+      return await readFile(`${REPLAY_DIR}/${name}`, { baseDir: BaseDirectory.AppData });
+    }
+    return memoryReplays.get(name) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Take one off the shelf. Already gone is the outcome that was wanted. */
+export async function deleteReplay(name: string): Promise<void> {
+  try {
+    if (hasTauriRuntime()) {
+      const { remove, BaseDirectory } = await import('@tauri-apps/plugin-fs');
+      await remove(`${REPLAY_DIR}/${name}`, { baseDir: BaseDirectory.AppData });
+    } else {
+      memoryReplays.delete(name);
+    }
+  } catch {
+    // Already gone is the outcome that was wanted.
+  }
+  await writeReplayIndex((await readReplayIndex()).filter((entry) => entry.name !== name));
+}
+
+/** Hand a recording to the player as a file of their own. */
+export async function exportReplay(name: string, bytes: Uint8Array): Promise<boolean> {
+  if (hasTauriRuntime()) {
+    const { save } = await import('@tauri-apps/plugin-dialog');
+    const path = await save({
+      defaultPath: name,
+      filters: [{ name: 'Iron Veins Replay', extensions: ['ironreplay'] }],
+    });
+    if (path === null) return false;
+    const { writeFile } = await import('@tauri-apps/plugin-fs');
+    await writeFile(path, bytes);
+    return true;
+  }
+
+  downloadBytes(name, bytes);
+  return true;
+}
+
+/**
+ * Take a recording - or a save to make one out of - from wherever the player
+ * keeps it. Null means they cancelled.
+ */
+export async function importReplay(): Promise<Uint8Array | null> {
+  if (hasTauriRuntime()) {
+    const { open } = await import('@tauri-apps/plugin-dialog');
+    const path = await open({
+      multiple: false,
+      filters: [{ name: 'Iron Veins', extensions: ['ironreplay', 'ironsave'] }],
+    });
+    if (typeof path !== 'string') return null;
+    const { readFile } = await import('@tauri-apps/plugin-fs');
+    return await readFile(path);
+  }
+
+  return await new Promise<Uint8Array | null>((resolve) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.ironreplay,.ironsave';
+    input.addEventListener('change', () => {
+      const file = input.files?.[0];
+      if (file === undefined) {
+        resolve(null);
+        return;
+      }
+      void file.arrayBuffer().then((buffer) => resolve(new Uint8Array(buffer)));
+    });
+    input.click();
+  });
+}
+
 // ------------------------------------------------------------- crash bundles
 
 /**

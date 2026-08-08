@@ -16,6 +16,7 @@ import { MainMenu } from './MainMenu';
 import { Minimap } from './Minimap';
 import { NewGameDialog } from './NewGameDialog';
 import { OptionsPanel } from './OptionsPanel';
+import { ReplayBar, ReplayBrowser } from './ReplayPanel';
 import { SaveLoadPanel } from './SaveLoadPanel';
 import { StoredCrashNotice } from './StoredCrashNotice';
 import { TutorialPanel } from './TutorialPanel';
@@ -80,6 +81,10 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
   const settings = useSimStore((s) => s.settings);
   const year = useSimStore((s) => s.year);
   const month = useSimStore((s) => s.month);
+  // Replay mode is one field (SPEC2 M16): while it is set the interface offers
+  // nothing that would author state, because a recording the player can build
+  // in is not the recording any more (D-189).
+  const replaying = useSimStore((s) => s.replay !== null);
 
   // Space toggles between pause and the speed that was running before.
   const lastRunningSpeed = useRef(1);
@@ -93,10 +98,12 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
       if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return;
 
       // A build tool the scheme assigns a letter to. Checked first so the
-      // list keys below cannot shadow one of them.
+      // list keys below cannot shadow one of them. Not while a recording is
+      // playing: arming a tool that cannot build anything is an invitation
+      // to click at a world that will refuse.
       const tool = TOOL_KEYS[event.key.toLowerCase()];
       if (tool !== undefined && !event.ctrlKey && !event.altKey) {
-        setTool(tool);
+        if (!replaying) setTool(tool);
         return;
       }
 
@@ -123,13 +130,22 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
           event.preventDefault();
           setOverlay(overlay === 'handbook' ? null : 'handbook');
           return;
+        // The replay shelf of SPEC2 M16, on the F row beside the save shelf's
+        // own keys: every letter with a mnemonic is a build tool or a list,
+        // and the overlays already live here (D-114's table).
+        case 'F2':
+          event.preventDefault();
+          setOverlay(overlay === 'replays' ? null : 'replays');
+          return;
         case 'F5':
           event.preventDefault();
-          client.save(SaveSlotKind.Quick, '');
+          // Saving a recording would put somebody else's game on the player's
+          // shelf; the worker refuses it too.
+          if (!replaying) client.save(SaveSlotKind.Quick, '');
           return;
         case 'F9':
           event.preventDefault();
-          void quickLoad(client);
+          if (!replaying) void quickLoad(client);
           return;
         // The route assistant toggle of the D-114 table. Auto-signalling has
         // its own checkbox on the track tool; it never had a key of its own.
@@ -205,7 +221,19 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
     assistant,
     setAssistant,
     cycleMinimapMode,
+    replaying,
   ]);
+
+  // Entering a replay disarms whatever the player was holding. The tool would
+  // otherwise survive the world swap and paint a preview over somebody else's
+  // game; `setTool` also clears the road anchor, the preview and the connect
+  // flow, which is exactly the half-finished build that must not follow.
+  useEffect(() => {
+    if (!replaying) return;
+    setTool('none');
+    useSimStore.getState().setFollowVehicle(null);
+    useSimStore.getState().setSelectedVehicle(null);
+  }, [replaying, setTool]);
 
   // ------------------------------------------------------------- autosave
   //
@@ -214,12 +242,14 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
   // autosaves, and giving it one would mean a second copy of the preference.
   const lastAutosave = useRef(-1);
   useEffect(() => {
-    if (!ready || !settings.autosave) return;
+    // Never during a replay: the months roll past at 20x and every one of them
+    // would put a recording of somebody else's game on the save shelf.
+    if (!ready || !settings.autosave || replaying) return;
     const months = year * 12 + month;
     if (months % AUTOSAVE_EVERY_MONTHS !== 0 || months === lastAutosave.current) return;
     lastAutosave.current = months;
     client.save(SaveSlotKind.Auto, '');
-  }, [client, ready, settings.autosave, year, month]);
+  }, [client, ready, settings.autosave, year, month, replaying]);
 
   useEffect(() => {
     if (rejectionKey === null) return;
@@ -263,6 +293,9 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
           {overlay === 'saves' && (
             <SaveLoadPanel client={client} onClose={() => setOverlay('menu')} />
           )}
+          {overlay === 'replays' && (
+            <ReplayBrowser client={client} onClose={() => setOverlay(null)} />
+          )}
           {overlay === 'handbook' && <HandbookPanel onClose={() => setOverlay(null)} />}
           {overlay === 'tutorial' && (
             <TutorialPanel client={client} onClose={() => setOverlay(null)} />
@@ -290,20 +323,26 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
           <MapCanvas client={client} />
           <Minimap />
           <aside className="sidebar">
+            {/* While a recording plays the sidebar IS the playback bar. Every
+                panel it replaces exists to issue commands, and a replay that
+                could be built in would stop being one (SPEC2 M16, D-189). The
+                map, the minimap and the camera stay exactly as free as they
+                are in a game. */}
+            {replaying && <ReplayBar client={client} />}
             {/* One list at a time, opened with V, L, H, T or I (section 17.2).
                 Five always-visible lists would not fit beside the map, and the
                 spec puts them behind keys for exactly that reason. */}
-            {openList === 'vehicles' && <VehicleList />}
-            {openList === 'lines' && <LinePanel client={client} />}
-            {openList === 'stations' && <StationList />}
-            {openList === 'towns' && <TownList />}
-            {openList === 'industries' && <IndustryList />}
-            <TilePanel client={client} />
-            <FleetPanel client={client} />
-            <CompanyPanel client={client} />
-            <FinancePanel client={client} />
-            <CompanyList />
-            <ContractPanel client={client} />
+            {!replaying && openList === 'vehicles' && <VehicleList />}
+            {!replaying && openList === 'lines' && <LinePanel client={client} />}
+            {!replaying && openList === 'stations' && <StationList />}
+            {!replaying && openList === 'towns' && <TownList />}
+            {!replaying && openList === 'industries' && <IndustryList />}
+            {!replaying && <TilePanel client={client} />}
+            {!replaying && <FleetPanel client={client} />}
+            {!replaying && <CompanyPanel client={client} />}
+            {!replaying && <FinancePanel client={client} />}
+            {!replaying && <CompanyList />}
+            {!replaying && <ContractPanel client={client} />}
             <NewsPanel />
             <SystemPanel />
           </aside>

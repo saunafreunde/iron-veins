@@ -146,7 +146,7 @@ describe('verification re-simulates and compares', () => {
     expect(result.actualHash).not.toBe(result.expectedHash);
   });
 
-  it('names the final tick when the manipulation is past the last checkpoint', () => {
+  it('catches a manipulation past the last checkpoint at the final tick', () => {
     const bytes = tampered((payload) => {
       const log = payload['commandLog'] as Record<string, unknown>[];
       const command = log[2]!['command'] as Record<string, unknown>;
@@ -155,7 +155,14 @@ describe('verification re-simulates and compares', () => {
     const result = verifyReplay(decodeSave(bytes), GAME_VERSION);
 
     expect(result.ok).toBe(false);
-    expect(result.firstDivergentTick).toBe(replayBytes().finalTick);
+    // The running comparison finds it at the recorded end - that is the last
+    // hash the recording commits to. The bracket back to the year checkpoint
+    // holds exactly one command, so B2's narrowing turns that into the tick
+    // the repayment actually runs at (D-189).
+    expect(result.checkedTicks).toContain(replayBytes().finalTick);
+    expect(result.lastMatchingTick).toBe(CHECKPOINT_INTERVAL_TICKS);
+    expect(result.firstDivergentTick).toBe(CHECKPOINT_INTERVAL_TICKS + 400);
+    expect(result.exact).toBe(true);
   });
 
   it('refuses a file that claims no end at all', () => {
