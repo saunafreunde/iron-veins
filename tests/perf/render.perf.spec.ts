@@ -9,6 +9,7 @@ import {
   SnapshotReserved,
   SnapshotVehicle,
 } from '../../src/shared/snapshot';
+import { MapClimate } from '../../src/sim/constants';
 import { TileMap } from '../../src/sim/map/TileMap';
 import { packSignal, signalKind, SignalKind } from '../../src/sim/map/signals';
 import { Terrain } from '../../src/sim/map/terrain';
@@ -40,6 +41,20 @@ import {
   placeConsist,
   type ConsistPlacement,
 } from '../../src/render/consistArt';
+import {
+  buildStaticIndex,
+  buildingTargetFor,
+  BUILDING_VARIANT_SALT,
+  FOREST_TREES_PER_TILE,
+  forestTreeOffset,
+  isWoodedTile,
+  staticVariantFor,
+  tileVariantSeed,
+  treeTargetFor,
+  TREE_VARIANT_SALT,
+  type StaticZoomIndex,
+} from '../../src/render/staticArt';
+import type { BakedCell } from '../../src/render/bakedAtlas';
 import { coastEdgeMask, FOAM_EDGE_COUNT, foamVariant, isDeepWater } from '../../src/render/water';
 import { lampOffsetForRoadTile } from '../../src/render/emissive';
 import { CATENARY_RAIL_TYPE, catenaryMastOffset } from '../../src/render/catenary';
@@ -125,9 +140,21 @@ import {
 
 /**
  * Median tripwire: one full sprite-pool rebuild of a big viewport. [ms]
- * 6x the clean median (1.63 ms), 3.6x the saturated-box median (D-167).
+ *
+ * Re-derived for M13's static-art bundle, the D-171 procedure: the scene grew
+ * the baked town cell and three baked TREES on every untouched tile - 9,832
+ * placements before, 14,746 now, half of them woodland - and the clean median
+ * on this machine went 2.2-2.9 -> 3.6-3.9 ms over three runs each. Leaving
+ * the 10 ms gate would have left 2.6x, which is exactly the zero-headroom
+ * trap D-167 exists to kill, so the gate is re-derived at 4x the new clean
+ * median (the same generosity it had over its own scene), not eaten.
+ *
+ * Worth knowing before the next scene grows: the first measurement was 9.7 ms,
+ * and the cost was not the trees but the STRINGS - one composed target key per
+ * tile. The targets are module-load tables now (staticArt.ts), and 27 % more
+ * sprites cost 5 % more time than the pre-tree scene.
  */
-const REBUILD_P50_TRIPWIRE_MS = 10;
+const REBUILD_P50_TRIPWIRE_MS = 15;
 
 /**
  * p99 backstop for the rebuild: above the worst observation ever taken on a
@@ -165,8 +192,15 @@ const DRAW_PREP_P99_BACKSTOP_MS = 60;
  * tripwire is a gate. The proxy still replays the checksum that decides the
  * rebake, the full-profile placement loop and the abstract-profile polyline
  * extraction - a superset of what either profile pays per chunk.
+ *
+ * Re-derived once more for M13's static-art bundle, for the same reason and
+ * by the same procedure as the rebuild gate above: baked town cells and
+ * baked trees now go INTO the chunk texture (they are static map art, unlike
+ * the industries and station modules that stay live sprites over it), so a
+ * chunk carries 4,273 placements against 3,046 and the clean median went
+ * 0.93-0.96 -> 1.11-1.39 ms. 5 ms is 4x the new clean median.
  */
-const CHUNK_BAKE_P50_TRIPWIRE_MS = 3;
+const CHUNK_BAKE_P50_TRIPWIRE_MS = 5;
 
 /** p99 backstop for the chunk bake: worst saturated observations 11-13 ms. [ms] */
 const CHUNK_BAKE_P99_BACKSTOP_MS = 30;
@@ -288,6 +322,14 @@ function buildBusyMap(): TileMap {
         map.buildingKind[index] = BuildingKind.Residential + ((x + y) % 3);
         map.buildingLevel[index] = 1 + (x % 3);
         map.terrain[index] = Terrain.TownGround;
+      } else {
+        // Every untouched tile is woodland, so M13's baked-tree branch fires
+        // at its worst case: `isWoodedTile`, a tile hash and a jittered
+        // offset per tree, {@link FOREST_TREES_PER_TILE} trees per tile. A
+        // temperate map really does grow forest on the ground nobody built
+        // on, and a tripwire has to catch the regression before a real scene
+        // shows it (the D-171 rule for the consist scene, applied to trees).
+        map.terrain[index] = Terrain.Forest;
       }
     }
   }
@@ -325,6 +367,111 @@ function waterProxy(
   }
   return deep;
 }
+
+/**
+ * A stand-in for the baked static index (M13): the real target grammar of the
+ * three families, one cell per declared variant, at zoom 1 - the index the
+ * chunked zooms and the 1x detail path both resolve to. Built once, like the
+ * real one, because `MapView` resolves it per rebuild and never per tile.
+ */
+function buildStaticArtIndex(): StaticZoomIndex {
+  const cells: BakedCell[] = [];
+  let column = 0;
+  const push = (target: string): void => {
+    cells.push({
+      target,
+      facing: 0,
+      x: column * 48,
+      y: 0,
+      width: 32,
+      height: 60,
+      anchorX: 16,
+      anchorY: 52,
+      maskX: column * 48 + 32,
+      maskY: 0,
+      ...(column % 3 === 0 ? { points: { chimney: [16, 4] as const } } : {}),
+    });
+    column++;
+  };
+  for (const zone of ['residential', 'commercial', 'industrial']) {
+    for (const stage of [0, 1]) {
+      push(`building:${zone}:${stage}`);
+      for (let variant = 1; variant <= 3; variant++) push(`building:${zone}:${stage}:${variant}`);
+    }
+  }
+  for (const climate of ['temperate', 'arctic', 'tropical', 'desert']) {
+    for (let variant = 0; variant < 4; variant++) push(`tree:${climate}:${variant}`);
+  }
+  const built = buildStaticIndex({
+    version: 2,
+    zooms: [1],
+    pages: [{ file: 'p0.png', zoom: 1, width: 4096, height: 4096, cells }],
+  });
+  return built[0]!;
+}
+
+const STATIC_ART = buildStaticArtIndex();
+
+/**
+ * The baked-static branch of `MapView.rebuild` and `MapView.bakeChunk`,
+ * shared by both proxies exactly as `placeBaked` is shared by the real paths:
+ * the town cell's target key, the per-tile variant hash and the index lookup
+ * for a built tile; `isWoodedTile`, the climate family, one hash and one
+ * jittered offset per tree for a wooded one. Placement is the anchor
+ * arithmetic of a baked cell, which is what a proxy can see of it.
+ */
+function staticArtProxy(
+  map: TileMap,
+  index: number,
+  x: number,
+  y: number,
+  world: { x: number; y: number },
+  height: number,
+  terrain: number,
+  buildingKind: number,
+  place: (key: string, worldX: number, worldY: number, zIndex: number) => void,
+): void {
+  if (buildingKind !== 0) {
+    const level = map.buildingLevel[index]!;
+    const variant = staticVariantFor(
+      STATIC_ART,
+      buildingTargetFor(buildingKind, level),
+      tileVariantSeed(x, y, BUILDING_VARIANT_SALT),
+    );
+    if (variant !== null) {
+      place(
+        variant.cell.target,
+        world.x - variant.cell.anchorX + TILE_W / 2,
+        world.y + TILE_H / 2 - variant.cell.anchorY + HEIGHT_PX,
+        drawOrder(x, y, height, DrawLayer.Building),
+      );
+    }
+    return;
+  }
+  if (!isWoodedTile(map, index, terrain)) return;
+  const order = drawOrder(x, y, height, DrawLayer.Building);
+  const family = treeTargetFor(MapClimate.Temperate);
+  for (let slot = 0; slot < FOREST_TREES_PER_TILE; slot++) {
+    const variant = staticVariantFor(
+      STATIC_ART,
+      family,
+      tileVariantSeed(x, y, TREE_VARIANT_SALT + slot),
+    );
+    if (variant === null) continue;
+    forestTreeOffset(x, y, slot, TREE_OFFSET_SCRATCH);
+    const u = TREE_OFFSET_SCRATCH[0]!;
+    const v = TREE_OFFSET_SCRATCH[1]!;
+    place(
+      variant.cell.target,
+      world.x + ((u - v) * TILE_W) / 2 - variant.cell.anchorX + TILE_W / 2,
+      world.y + TILE_H / 2 + ((u + v) * TILE_H) / 2 - variant.cell.anchorY + HEIGHT_PX,
+      order,
+    );
+  }
+}
+
+/** The one scratch tuple the tree placement writes into, as MapView keeps. */
+const TREE_OFFSET_SCRATCH = [0, 0];
 
 /**
  * The track furniture of M13 B5, shared by the rebuild and chunk-bake
@@ -435,16 +582,11 @@ function rebuildProxy(
         place(`sa${aspect}`, world.x, world.y, order);
       }
 
-      const buildingKind = map.buildingKind[index]!;
-      if (buildingKind !== 0) {
-        const level = map.buildingLevel[index]!;
-        place(
-          `b${buildingKind}:${level}`,
-          world.x,
-          world.y,
-          drawOrder(x, y, height, DrawLayer.Building),
-        );
-      }
+      // The baked town cell and the baked trees of M13, decided exactly as
+      // MapView decides them; the procedural building cell is what the same
+      // branch draws when a build has no bake at all (E-14), and is the
+      // cheaper of the two, so pricing the baked path is the honest gate.
+      staticArtProxy(map, index, x, y, world, height, terrain, map.buildingKind[index]!, place);
     }
   }
   return used + (deepFold === -1 ? 1 : 0);
@@ -787,16 +929,10 @@ function chunkBakeProxy(
         );
       }
 
-      const buildingKind = map.buildingKind[index]!;
-      if (buildingKind !== 0) {
-        const level = map.buildingLevel[index]!;
-        place(
-          `b${buildingKind}:${level}`,
-          world.x,
-          world.y,
-          drawOrder(x, y, height, DrawLayer.Building),
-        );
-      }
+      // The baked town cell and the baked trees, the same decision the
+      // detail path takes - a chunk that disagreed with it would make the
+      // overview a different world from the close-up (M13).
+      staticArtProxy(map, index, x, y, world, height, terrain, map.buildingKind[index]!, place);
     }
   }
 

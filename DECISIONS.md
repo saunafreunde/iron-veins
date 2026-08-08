@@ -35,8 +35,8 @@ no entry below. A number may appear under several topics.
 - **Cargo, payment & routing:** D-036, D-037, D-065, D-067, D-075, D-077,
   D-078, D-118, D-142, D-151, D-176, D-178, D-187
 - **Industry & production:** D-022, D-062, D-063, D-064, D-069, D-071, D-079,
-  D-085, D-086, D-174, D-201, D-202
-- **Towns, council & ownership:** D-101, D-102, D-103, D-104
+  D-085, D-086, D-174, D-201, D-202, D-205
+- **Towns, council & ownership:** D-101, D-102, D-103, D-104, D-205
 - **Economy, finance & emissions:** D-008, D-090, D-091, D-092, D-105, D-154,
   D-180, D-193, D-196
 - **Balancing & scenarios:** D-038, D-039, D-040, D-041, D-066, D-087, D-088,
@@ -50,21 +50,22 @@ no entry below. A number may appear under several topics.
   D-122, D-147, D-152, D-153, D-154, D-155, D-156, D-158
 - **Rendering & art:** D-013, D-014, D-033, D-035, D-112, D-117, D-125, D-127,
   D-136, D-140, D-160, D-161, D-162, D-163, D-164, D-165, D-166, D-169, D-170,
-  D-171, D-172, D-173, D-174, D-175, D-177, D-179, D-186, D-202
+  D-171, D-172, D-173, D-174, D-175, D-177, D-179, D-186, D-202, D-205
 - **UI & input:** D-011, D-013, D-015, D-035, D-110, D-113, D-114, D-119,
   D-126, D-148, D-165, D-166, D-177, D-179, D-180, D-181, D-182, D-183, D-184,
   D-186, D-187, D-189, D-191, D-192, D-193, D-194, D-195, D-196, D-200, D-202
 - **Performance & measurement:** D-002, D-120, D-135, D-136, D-161, D-162,
   D-163, D-164, D-167, D-170, D-171, D-172, D-173, D-174, D-176, D-177, D-184,
-  D-185, D-186, D-187, D-191, D-192, D-193, D-196, D-200, D-201, D-202
+  D-185, D-186, D-187, D-191, D-192, D-193, D-196, D-200, D-201, D-202, D-205
 - **Platform, tooling & build:** D-012, D-014, D-015, D-016, D-017, D-029,
   D-030, D-031, D-160, D-168, D-169, D-170, D-172, D-175, D-192
 - **Crash safety:** D-132, D-139, D-190
 - **Testing method & fixtures:** D-010, D-038, D-072, D-074, D-084, D-133,
   D-167, D-183, D-186, D-188, D-189, D-190, D-191, D-192, D-193, D-194,
-  D-195, D-196, D-197, D-198, D-199, D-200, D-201, D-202, D-203, D-204
+  D-195, D-196, D-197, D-198, D-199, D-200, D-201, D-202, D-203, D-204,
+  D-205
 - **Process & specification:** D-070, D-123, D-129, D-133, D-138, D-140,
-  D-185, D-191, D-197, D-198, D-199, D-203, D-204
+  D-185, D-191, D-197, D-198, D-199, D-203, D-204, D-205
 
 ---
 
@@ -8690,3 +8691,170 @@ documented +-0.7 ms run-to-run noise; the reference fleet runs the rule OFF,
 where the changed line is never reached at all, so the honest reading is noise
 rather than cost. The ON-path cost is one extra function call per game DAY,
 hoisted out of the region loop, and it is not measured on that fixture.
+
+## M13 - living trains, bundle 7: the static world from the bake (2026-08-08)
+
+### D-205 The bake's other 1,670 cells finally draw: buildings by zone and stage, industries by type, trees by climate - and M13's Fertig-wenn never asked
+
+M13's acceptance passed with a renderer that consumed a quarter of its own
+art. `public/assets-baked/baked-manifest.json` carries **2,430 cells** across
+ten pages; `MapView` read only the ones whose target began `vehicle:`. Every
+`building:`, `industry:` and `tree:` cell D-169 mapped and the bake rendered
+was fetched, decoded, uploaded to the GPU and never drawn - the world kept the
+procedural silhouettes of D-117, so a player with no vehicles yet saw **none**
+of the Kenney art and said so.
+
+**This is a spec gap, not a design choice.** SPEC2's M13 section orders
+"Gebaeude-, Stadt- und Industrie-Sprites aus dem Kenney-Bake (City Kits,
+Factory Kit, Building Kit, Nature Kit - E-14)" in its own MUSS bullet. Its
+**Fertig-wenn sentence lists six things** - catalogue entries in eight
+facings, a ten-wagon train as ten wagons, night windows and lamps, signal
+aspects without F3, a dormant works against a booming one, the particle CPU,
+and the repo glob - and **not one of them is a building, a town or a tree.**
+Bundles 2 to 6 each satisfied a clause of that sentence and the seventh clause
+did not exist, so nothing was red. What closes it is not a promise but
+`tests/unit/staticArt.spec.ts`: the three families' target grammars, the
+index, the per-tile variance and every fallback decision are pure functions
+under test, and the industry half is held against `tools/assets-manifest.json`
+in BOTH directions - a type that loses its model and a procedural-only type
+that gains one are equally red.
+
+**The architecture is D-170's, deliberately not a second one.**
+`staticArt.ts` is `vehicleArt.ts` for the things that stand still: page
+textures shared, one `BakedCellHandle` (the vehicle handle, renamed - a Kenney
+cell is a Kenney cell, and a second handle type would be a second place for
+the anchor rule to be wrong), the frame cache keyed by page and cell origin,
+placement from the cell's OWN `anchorX`/`anchorY` because baked cells are
+tight rectangles, `bakedZoomFor`'s no-upscale rule for the zoom, and the two
+floors of E-14 unchanged: `atlasSourceFor` decides whether a baked path exists
+AT ALL, and a null base target decides per entry. The whole of the fallback is
+one variable per rebuild - `statics === null` means the procedural game that
+was already running.
+
+**The key grammar was read out of the manifest, not guessed.** A town cell is
+`building:<zone>:<stage>` with `<zone>` from `BuildingKind` and `<stage>` the
+`level >= 2` split `TerrainAtlas.buildingFrame` has used since M1 - restated
+once and held to the procedural cell by a test through `emissiveBuildingFrame`,
+because a tile that draws the tall Kenney block while its fallback would draw
+the small procedural one is a silhouette that changes when a fetch completes.
+An industry is `industry:<TypeName>`, the enum read backwards so a new type
+needs no edit here. A tree is `tree:<climate>:<n>` - and here the trailing
+index is the VARIANT, not a stage, which is why the three families get three
+written-out regexes instead of one "strip a trailing number": `tree:temperate:0`
+and `building:x:0` end in the same shape and mean different things.
+
+**The three procedural-only industries are refused BEFORE the index, by
+name.** `industryTargetFor` answers null for CoalMine, OilWell and Farm
+whatever the manifest holds - the headframe, the derrick and the farmstead
+stay `shapes.ts`'s (E-14, D-169) - and the test plants all three in a
+synthetic manifest and requires them still refused. Aircraft never enter this
+file at all; they are vehicles and `vehicleVariantFor` already refuses them.
+The existing `assetsBake.spec.ts` coupling is untouched and green.
+
+**Both render paths, or the overview would be a different world.** Buildings
+and trees are static MAP art, so they go into the chunk textures at 0.5x and
+below exactly as roads and track do (D-161); industries and station modules
+stay live sprites above them, as they always have, because their markers move
+on their own channel. The chunk bake pins its static index to the CHUNK zoom
+rather than the live one - the same discipline that pins it to the base page -
+so a chunk holds the same pixels however the camera got there, and the detail
+path and the bake ask ONE function (`bakedBuildingHandle`) with ONE seed for
+every tile. **A chunk texture had to grow its headroom to make that true**:
+`chunkAabb` reserved `CELL_HEADROOM_STEPS` = 48 world px above the highest
+tile, and the tallest baked static cell (`building:commercial:1:2`) lifts
+**138 px** - a skyscraper guillotined at the chunk seam at 0.5x while drawing
+whole at 1x, the D-117 unwritten agreement one container out.
+`CHUNK_ART_HEADROOM_PX` is now the larger of the two (160 px, the measurement
+plus room for one taller kit model), and it is deliberately a CONSTANT rather
+than a reading of the loaded manifest: chunk RenderTextures are recycled
+between chunks, so a headroom that changed when the bake finished loading
+would hand a bake a texture of the wrong size. The price is ~8 % more chunk
+texture area in a build with no bake at all, and it is stated rather than
+hidden.
+
+**Night windows come from the cell that is actually drawn** (D-172). A baked
+building lights its own `emissivePage` twin and the procedural
+`emissiveBuildingFrame` is NOT placed beside it - the bake decided which
+pixels are glazing when it rasterised the model, so the lit windows sit on the
+dark ones by construction, while the procedural twin would light a facade that
+is no longer there. The same swap on the chunk path, into the chunk's own
+emissive twin, so the D-172 mechanism is untouched: content composites
+normally inside the twin and meets the ramp once, where the twin sprite meets
+the frame. Eighteen of the twenty-one town cells and four of the fourteen
+industry cells carry a twin; the rest simply do not glow, which is the honest
+answer for a warehouse at night. `industryGlowFactor` still scales the
+industry glow by the marker level, so M13's "dormant and booming tell apart in
+a still image" survives the swap unchanged.
+
+**Trees are the one thing here that did not exist at all.** A forest tile was
+green speckle and nothing else - a wood was a COLOUR - and the only tree in
+the game was the conifer primitive inside the Forestry silhouette. A wooded
+tile now grows `FOREST_TREES_PER_TILE` = 3 baked trees of its climate's
+family, each its own body and its own jitter from `tileVariantSeed(x, y,
+salt)` - the `speckleHash`/`hash(vehicleId)` device keyed by POSITION, so the
+same tile grows the same wood on every machine, after every reload and on both
+render paths, with zero contact to any RNG stream (Z3 untouched, Fehlerkatalog
+25/39). Three because a baked tree is 6-10 px against a 64 px tile and one
+reads as a lone shrub. The three share one `drawOrder` key - the key is per
+tile and per layer - so what orders them is Pixi's stable sort over insertion
+order, and the slot table is therefore written back to front with its depth
+sums 0.42 apart while the jitter can move one by at most 0.16: the bands are
+disjoint by construction and a test walks 576 tiles to say so. `isWoodedTile`
+reads terrain, roads, track and buildings and nothing else - **every one of
+those layers is in `chunkChecksum`'s full fold**, which is the rule and not a
+coincidence: a gate reading a layer outside the checksum would leave a wood
+standing on a factory until the camera happened to evict the chunk.
+
+**The smoke follows the drawn stack, which is D-174's own promise carried into
+the bake.** A baked industry emits from the cell's measured `points.chimney`
+anchors (D-169 read them off the models' top-vertex clusters) instead of from
+the procedural silhouette's table, which is somewhere else entirely on a
+different building. What does NOT change is the emitter SET: the cadence, the
+count and the tint stay `INDUSTRY_SMOKE_ANCHORS`'s, because those are the
+simulation's production level made visible. A baked cell that declares fewer
+stacks than its silhouette draws therefore smokes from fewer, and never from
+more - so the particle budget can only fall.
+
+**Found while measuring, and worth more than the feature:** the first tripwire
+run of the new scene read **9.7 ms** against a 10 ms gate, and the cost was not
+the 4,914 tree sprites but the STRINGS - one target key composed per tile,
+`building:<zone>:<stage>` and `tree:<climate>`. The targets are module-load
+tables now, and the same scene with 27 % MORE sprites than the pre-tree one
+costs 5 % more time. Law #7 is written for the simulation's tick, but a
+renderer that composes a string per tile per rebuild has the same disease.
+
+**Render-only in the strictest sense**: not one byte under `src/sim`,
+`SAVE_VERSION` unchanged at **29**, `SNAPSHOT_LAYOUT_VERSION` unchanged at
+**10**, no migration edit, no protocol field, no i18n string, no procedural
+atlas cell (the baked pages are a build artifact, and the repo-glob test is
+green - nothing binary entered the index).
+
+**Ledger.** Render tripwires re-derived by the D-171 procedure rather than
+eaten. The rebuild scene grew from 9,832 to **14,746 placements** - the perf
+fixture's untouched ground is all woodland now, the worst case for the new
+branch - and its clean median moved 2.2-2.9 -> **3.6-3.9 ms** over three runs
+each on this machine; leaving the 10 ms gate would have left 2.6x, so
+`REBUILD_P50_TRIPWIRE_MS` is re-derived at **15 ms** (4x the new clean median,
+the generosity it had over its own scene), backstop unchanged at 60. The chunk
+bake grew from 3,046 to **4,273 placements** and its median 0.93-0.96 ->
+**1.11-1.39 ms**, so `CHUNK_BAKE_P50_TRIPWIRE_MS` moves 3 -> **5 ms** (4x),
+backstop unchanged at 30. Every other tripwire unmoved and green on the same
+runs: draw prep median 2.96 (gate 10), E-18 full block 2.14, aspect refresh
+0.03, emissive twin walk 0.04, particles 0.40, weather particles 0.26, flow
+prep 0.27. **Main bundle measured 935,002 -> 940,149 B against the 950,000 B
+budget** (D-192's rule; headroom 9,851 B) - the +5,147 B are `staticArt.ts`
+and the MapView placement, the whole of it render code, no sim import chain;
+`SimWorker` 328,380 B and `replay` 200,050 B unchanged, as a render-only
+bundle must leave them. `npm run typecheck`, `npm run lint` and
+`npx vitest run tests/unit` all green: **101 files, 1,309 passing**, the 28
+new assertions of `staticArt.spec.ts` among them.
+
+**Not verified, and it says so.** The drawing itself was not seen. D-136's
+standing note applies unchanged - MapView's frame loop needs a GPU and a
+compositor and has never been headless - and this session's browser pane was
+hidden, so `requestAnimationFrame` never ran and every screenshot timed out.
+What WAS verified in the real browser is the load path: the dev server serves
+`baked-manifest.json` (version 2, ten pages, all four target families) and the
+running game fetched the manifest and all ten pages with 200. Everything
+downstream of that is held by the type checker, the pure halves' tests and the
+two tripwire proxies, which replay the new decisions literally.

@@ -21,7 +21,7 @@ import {
   SnapshotVehicle,
   type VehicleFrame,
 } from '../shared/snapshot';
-import { MAX_HEIGHT, MAX_VEHICLES, type MapClimate } from '../sim/constants';
+import { MapClimate, MAX_HEIGHT, MAX_VEHICLES } from '../sim/constants';
 import { signalKind } from '../sim/map/signals';
 import type { TileMap } from '../sim/map/TileMap';
 import { SLOPE_COUNT, Terrain } from '../sim/map/terrain';
@@ -428,7 +428,7 @@ import {
 } from './chunks';
 import { DAY_TINT_NEUTRAL, dayNightTint, emissiveIntensity } from './dayNight';
 import { sampleWorldX, sampleWorldY, shouldSnap, SnapshotInterpolator } from './interpolation';
-import { loadBakedAtlas } from './bakedAtlas';
+import { loadBakedAtlas, type BakedCell } from './bakedAtlas';
 import {
   bakedZoomFor,
   buildVehicleIndex,
@@ -440,6 +440,22 @@ import {
   type VehicleFacingCell,
   type VehicleZoomIndex,
 } from './vehicleArt';
+import {
+  bakedEmitterPoint,
+  buildStaticIndex,
+  buildingTargetFor,
+  BUILDING_VARIANT_SALT,
+  FOREST_TREES_PER_TILE,
+  forestTreeOffset,
+  industryTargetFor,
+  isWoodedTile,
+  staticVariantFor,
+  tileVariantSeed,
+  treeTargetFor,
+  TREE_VARIANT_SALT,
+  type StaticCellRef,
+  type StaticZoomIndex,
+} from './staticArt';
 import {
   BreadcrumbRing,
   consistFollowerDistances,
@@ -684,13 +700,17 @@ interface FrameHandle {
 }
 
 /**
- * A baked vehicle cell resolved for placement (M13): both passes of the
- * two-pass tint (D-160) plus the world-space placement facts. `anchorXPx`
- * and `anchorYPx` are the cell's own ground pivot - baked cells are tight
+ * A baked cell resolved for placement (M13): both passes of the two-pass
+ * tint (D-160) plus the world-space placement facts. `anchorXPx` and
+ * `anchorYPx` are the cell's own ground pivot - baked cells are tight
  * rectangles around each facing, so unlike the procedural frames there is
  * no shared cell geometry to assume.
+ *
+ * One shape for vehicles AND for the static art of buildings, industries and
+ * trees: a Kenney cell is a Kenney cell, and giving the statics a second
+ * handle type would be a second place for the anchor rule to be wrong.
  */
-interface BakedVehicleHandle {
+interface BakedCellHandle {
   /** The hull: authored colours, tint zones in neutral grey. */
   readonly base: Texture;
   /** The livery: grey-shaded tint zones, multiplied by the company colour. */
@@ -708,6 +728,12 @@ interface BakedVehicleHandle {
   readonly widthPx: number;
   /** Sprite scale mapping the baked page's pixels to world px. */
   readonly invScale: number;
+  /**
+   * The manifest cell itself, for the metadata a placement does not need but
+   * an emitter does: the measured chimney anchors of D-169 travel as
+   * `points`, in this cell's own pixels.
+   */
+  readonly cell: BakedCell;
 }
 
 /**
@@ -1116,15 +1142,26 @@ export class MapView {
   /** Gradient ellipse the shadows share; built once at attach. */
   private shadowTexture: Texture | null = null;
   /**
-   * Baked vehicle art (SPEC2 M13, E-14/D-160): the per-zoom cell indexes
-   * and one GPU texture per baked page. Null until the background load
-   * lands - and forever, in a build without a bake: the white-box frames
-   * below are the fallback the game always starts on.
+   * Baked Kenney art (SPEC2 M13, E-14/D-160): the per-zoom cell indexes -
+   * vehicles since D-170, the static world since M13's building bundle - and
+   * one GPU texture per baked page. Null until the background load lands -
+   * and forever, in a build without a bake: the procedural art the game is
+   * already running on is the fallback it started with.
    */
   private bakedVehicleZooms: readonly VehicleZoomIndex[] | null = null;
-  private bakedVehiclePages: ReadonlyMap<string, Texture> | null = null;
+  private bakedStaticZooms: readonly StaticZoomIndex[] | null = null;
+  private bakedPages: ReadonlyMap<string, Texture> | null = null;
   private bakedZoomList: readonly number[] = [];
-  private readonly bakedVehicleFrameCache = new Map<string, BakedVehicleHandle>();
+  private readonly bakedFrameCache = new Map<string, BakedCellHandle>();
+  /** Scratch for one tree's tile-space offset; the placement allocates none. */
+  private readonly treeOffset: number[] = [0, 0];
+  /**
+   * The world's climate (SPEC2 M18, D-202), as `setSeason` announced it -
+   * kept because it is also what decides WHICH tree family a forest tile
+   * grows (D-169: `tree:<climate>:<n>`, palms in the tropics, cacti in the
+   * desert). A world constant, so a change means a different world.
+   */
+  private climate: MapClimate = MapClimate.Temperate;
   /**
    * specId per vehicle id, from the fleet markers: which catalogue entry a
    * snapshot row IS travels on the low-frequency marker channel and is
@@ -1266,7 +1303,7 @@ export class MapView {
     // The baked Kenney pages load in the background (M13): the game is
     // already running on procedural art, swaps to the baked cells the frame
     // the pages arrive - or never does, in a build without a cache (E-14).
-    void this.loadBakedVehicleArt();
+    void this.loadBakedArt();
 
     // One sorted container for tiles AND vehicles: correct occlusion needs the
     // vehicle sprites interleaved into the tile sequence by their drawOrder
@@ -1399,6 +1436,14 @@ export class MapView {
     const look = seasonLookFor(month, climate);
     this.pendingSeason = look;
     this.pendingSeasonKey = seasonKeyOf(look);
+    // The climate also chooses the tree family (M13). It is a world constant,
+    // so this fires once per world - but when it does, every drawn tree is
+    // the wrong species and every chunk that holds one is stale.
+    if (climate !== this.climate) {
+      this.climate = climate;
+      this.builtRevision = -1;
+      this.clearChunkCaches();
+    }
   }
 
   /** Where the published weather field is read from (SPEC2 M18, E-01). */
@@ -1535,12 +1580,16 @@ export class MapView {
   }
 
   /**
-   * Fetch the baked atlas output and index its vehicle cells (M13).
-   * Whether a baked path exists at all is `atlasSourceFor`'s decision
-   * inside `loadBakedAtlas` (D-160); a null is simply the procedural game
-   * that is already running - the E-14 floor, not an error path.
+   * Fetch the baked atlas output and index it (M13): the vehicle cells of
+   * D-170 and the static world cells - town buildings, industry blocks and
+   * trees - of this bundle, both out of the SAME manifest and onto the same
+   * page textures.
+   *
+   * Whether a baked path exists at all is `atlasSourceFor`'s decision inside
+   * `loadBakedAtlas` (D-160); a null is simply the procedural game that is
+   * already running - the E-14 floor, not an error path.
    */
-  private async loadBakedVehicleArt(): Promise<void> {
+  private async loadBakedArt(): Promise<void> {
     const atlas = await loadBakedAtlas();
     if (atlas === null || !this.live || this.discarded) return;
     const pages = new Map<string, Texture>();
@@ -1551,10 +1600,23 @@ export class MapView {
       pages.set(file, texture);
     }
     const zoomIndexes = buildVehicleIndex(atlas.manifest);
-    if (zoomIndexes.length === 0) return;
-    this.bakedVehiclePages = pages;
-    this.bakedVehicleZooms = zoomIndexes;
-    this.bakedZoomList = zoomIndexes.map((entry) => entry.zoom);
+    const staticIndexes = buildStaticIndex(atlas.manifest);
+    if (zoomIndexes.length === 0 && staticIndexes.length === 0) return;
+    this.bakedPages = pages;
+    this.bakedVehicleZooms = zoomIndexes.length === 0 ? null : zoomIndexes;
+    this.bakedStaticZooms = staticIndexes.length === 0 ? null : staticIndexes;
+    this.bakedZoomList = (zoomIndexes.length === 0 ? staticIndexes : zoomIndexes).map(
+      (entry) => entry.zoom,
+    );
+    // The static art is TILE art: it lives in the sprite pool and inside the
+    // baked chunk textures, and both were built from the procedural cells a
+    // moment ago. Vehicles need neither invalidation - they are placed from
+    // scratch every frame - so this is the one thing the load has to say out
+    // loud. The chunk caches go whole: every chunk was baked without the
+    // Kenney buildings in it, so every checksum is honest and every texture
+    // is stale, which is exactly what a new world means (D-161).
+    this.builtRevision = -1;
+    this.clearChunkCaches();
   }
 
   /** The baked vehicle index serving the current zoom, or null while procedural. */
@@ -1569,25 +1631,50 @@ export class MapView {
   }
 
   /**
-   * Resolve one facing cell to its two sub-textures and placement facts,
-   * cached per cell - the baked twin of `frameTexture`. `invScale` is a
-   * property of the cell's page zoom, so it belongs to the cached handle.
+   * The baked static index serving `displayZoom`, or null while procedural.
+   *
+   * Taken at an EXPLICIT zoom rather than at `this.zoom`, because the chunk
+   * bake pins its own (the base page and the smallest baked zoom): a baked
+   * chunk must never depend on the zoom that happened to be live when it was
+   * rendered, or the same chunk would hold different pixels depending on how
+   * the camera got there.
    */
-  private bakedVehicleHandle(
-    entry: VehicleFacingCell,
+  private bakedStaticIndexAt(displayZoom: number): StaticZoomIndex | null {
+    const zooms = this.bakedStaticZooms;
+    if (zooms === null) return null;
+    const zoom = bakedZoomFor(displayZoom, this.bakedZoomList);
+    for (const entry of zooms) {
+      if (entry.zoom === zoom) return entry;
+    }
+    return null;
+  }
+
+  /** Sprite scale mapping a static index's page pixels to world pixels. */
+  private static staticInvScale(index: StaticZoomIndex | null): number {
+    return index === null ? 1 : 1 / index.zoom;
+  }
+
+  /**
+   * Resolve one cell - a vehicle facing or a static building, industry or
+   * tree - to its sub-textures and placement facts, cached per cell: the
+   * baked twin of `frameTexture`. `invScale` is a property of the cell's page
+   * zoom, so it belongs to the cached handle.
+   */
+  private bakedCellHandle(
+    entry: VehicleFacingCell | StaticCellRef,
     invScale: number,
-  ): BakedVehicleHandle | null {
+  ): BakedCellHandle | null {
     const key = `${entry.page}:${entry.cell.x}:${entry.cell.y}`;
-    const cached = this.bakedVehicleFrameCache.get(key);
+    const cached = this.bakedFrameCache.get(key);
     if (cached !== undefined) return cached;
-    const pageTexture = this.bakedVehiclePages?.get(entry.page);
+    const pageTexture = this.bakedPages?.get(entry.page);
     if (pageTexture === undefined) return null;
     const cell = entry.cell;
     // The emissive twin (M13): a third sub-texture on the cell's own
     // emissive page, when the model has glazing the depth pass let through.
     let glow: Texture | null = null;
     if (cell.emissivePage !== undefined) {
-      const emissivePageTexture = this.bakedVehiclePages?.get(cell.emissivePage);
+      const emissivePageTexture = this.bakedPages?.get(cell.emissivePage);
       if (emissivePageTexture !== undefined) {
         glow = new Texture({
           source: emissivePageTexture.source,
@@ -1595,7 +1682,7 @@ export class MapView {
         });
       }
     }
-    const handle: BakedVehicleHandle = {
+    const handle: BakedCellHandle = {
       base: new Texture({
         source: pageTexture.source,
         frame: new Rectangle(cell.x, cell.y, cell.width, cell.height),
@@ -1609,8 +1696,9 @@ export class MapView {
       anchorYPx: cell.anchorY * invScale,
       widthPx: cell.width * invScale,
       invScale,
+      cell,
     };
-    this.bakedVehicleFrameCache.set(key, handle);
+    this.bakedFrameCache.set(key, handle);
     return handle;
   }
 
@@ -1657,12 +1745,13 @@ export class MapView {
     this.frameCache.clear();
     // The baked pages and the shadow gradient own their texture sources
     // (ImageBitmap / canvas); the app's destroy never saw them.
-    if (this.bakedVehiclePages !== null) {
-      for (const texture of this.bakedVehiclePages.values()) texture.destroy(true);
+    if (this.bakedPages !== null) {
+      for (const texture of this.bakedPages.values()) texture.destroy(true);
     }
-    this.bakedVehiclePages = null;
+    this.bakedPages = null;
     this.bakedVehicleZooms = null;
-    this.bakedVehicleFrameCache.clear();
+    this.bakedStaticZooms = null;
+    this.bakedFrameCache.clear();
     this.shadowTexture?.destroy(true);
     this.shadowTexture = null;
     this.lampTexture?.destroy(true);
@@ -2351,6 +2440,8 @@ export class MapView {
    * has carried the level since M5; the smoke is that number made visible.
    */
   private spawnIndustrySmoke(map: TileMap): void {
+    const statics = this.bakedStaticIndexAt(this.zoom);
+    const staticInvScale = MapView.staticInvScale(statics);
     for (const industry of this.industries) {
       const anchors = INDUSTRY_SMOKE_ANCHORS[industry.type];
       if (anchors === undefined) continue;
@@ -2362,15 +2453,35 @@ export class MapView {
       if (wx < this.emitLeft || wx > this.emitRight || wy < this.emitTop || wy > this.emitBottom) {
         continue;
       }
+      // Which STACK the plume leaves depends on which drawing is on screen
+      // (D-174's "the drawings consume the same table, so smoke leaves the
+      // drawn stack by construction", carried into the bake): a baked block
+      // uses the cell's own measured anchor points (D-169), the procedural
+      // silhouette its own table. What does NOT depend on it is the emitter
+      // SET - the cadence and the tint are the sim's production level made
+      // visible - so a baked cell that declares fewer stacks than the
+      // silhouette draws simply smokes from fewer, and never from more.
+      const baked = this.bakedIndustryHandle(statics, staticInvScale, industry.type);
       for (let i = 0; i < anchors.length; i++) {
         const anchor = anchors[i]!;
+        let px: number;
+        let py: number;
+        if (baked !== null) {
+          const point = bakedEmitterPoint(baked.cell, i);
+          if (point === null) continue;
+          px = wx + (point[0] - baked.cell.anchorX) * baked.invScale;
+          py = wy + TILE_H / 2 + (point[1] - baked.cell.anchorY) * baked.invScale;
+        } else {
+          px = wx + ((anchor.u - anchor.v) * TILE_W) / 2;
+          py = wy + TILE_H / 2 + ((anchor.u + anchor.v) * TILE_H) / 2 - anchor.height;
+        }
         const seed = industry.id * 8 + i;
         if ((this.blink + emitterPhase(seed)) % period !== 0) continue;
         spawnPuff(
           this.particlePool,
           INDUSTRY_PUFF,
-          wx + ((anchor.u - anchor.v) * TILE_W) / 2,
-          wy + TILE_H / 2 + ((anchor.u + anchor.v) * TILE_H) / 2 - anchor.height,
+          px,
+          py,
           seed ^ Math.imul(this.blink, 0x85ebca6b),
           anchor.tint,
         );
@@ -2653,6 +2764,77 @@ export class MapView {
     sprite.position.set(worldX - TILE_W / 2, worldY - handle.anchorPx);
   }
 
+  /**
+   * Place one BAKED cell (M13): the static twin of {@link place}.
+   *
+   * Two differences, both of them D-170's rule for a Kenney cell restated for
+   * things that stand still. A baked cell is a tight rectangle around its own
+   * model, so the position comes from the cell's OWN `anchorX`/`anchorY`
+   * ground pivot instead of from a shared cell geometry - and that pivot sits
+   * at the TILE CENTRE, which is where `drawTownBuilding` and `drawIndustry`
+   * put their procedural twins (`IsoView.cx/cy`), so a bake and a fallback
+   * stand on the same spot. `texture` is passed in because the base pass and
+   * the emissive twin share one handle.
+   */
+  private placeBaked(
+    sprite: Sprite,
+    texture: Texture,
+    handle: BakedCellHandle,
+    worldX: number,
+    worldCentreY: number,
+    zIndex: number,
+  ): void {
+    sprite.texture = texture;
+    sprite.scale.set(handle.invScale);
+    sprite.tint = 0xffffff;
+    sprite.blendMode = 'normal';
+    sprite.alpha = 1;
+    sprite.zIndex = zIndex;
+    sprite.position.set(worldX - handle.anchorXPx, worldCentreY - handle.anchorYPx);
+  }
+
+  /**
+   * The baked cell a town tile draws, or null for the D-117 procedural cell.
+   * The variant is a hash of the TILE (D-170's device, keyed by position
+   * instead of by vehicle id), so a row of houses is a row of DIFFERENT
+   * houses and the same row after a reload.
+   */
+  private bakedBuildingHandle(
+    index: StaticZoomIndex | null,
+    invScale: number,
+    kind: number,
+    level: number,
+    x: number,
+    y: number,
+  ): BakedCellHandle | null {
+    const variant = staticVariantFor(
+      index,
+      buildingTargetFor(kind, level),
+      tileVariantSeed(x, y, BUILDING_VARIANT_SALT),
+    );
+    return variant === null ? null : this.bakedCellHandle(variant, invScale);
+  }
+
+  /**
+   * The baked cell a forest tile's `slot`-th tree draws, or null when there
+   * is no bake, no tree family for this climate, or the tile is not woodland.
+   * Pure lookup; the placement below owns the sprites.
+   */
+  private treeHandleFor(
+    index: StaticZoomIndex | null,
+    invScale: number,
+    x: number,
+    y: number,
+    slot: number,
+  ): BakedCellHandle | null {
+    const variant = staticVariantFor(
+      index,
+      treeTargetFor(this.climate),
+      tileVariantSeed(x, y, TREE_VARIANT_SALT + slot),
+    );
+    return variant === null ? null : this.bakedCellHandle(variant, invScale);
+  }
+
   private rebuild(
     map: TileMap,
     bounds: { minX: number; minY: number; maxX: number; maxY: number },
@@ -2660,6 +2842,12 @@ export class MapView {
     const page = this.activePage();
     const atlas = page.atlas;
     const detailed = this.zoom >= DETAIL_ZOOM_MIN;
+    // The baked static art of this zoom (M13), resolved once per rebuild -
+    // never per tile - exactly as the vehicle path resolves its own index
+    // once per frame (D-170). Null means the procedural cells below, which
+    // is the whole of E-14's floor in one variable.
+    const statics = this.bakedStaticIndexAt(this.zoom);
+    const staticInvScale = MapView.staticInvScale(statics);
     let used = 0;
 
     // Fresh water bookkeeping for the phase swaps (D-164): this rebuild
@@ -2906,35 +3094,99 @@ export class MapView {
         const buildingKind = map.buildingKind[index]!;
         if (buildingKind !== 0) {
           const level = map.buildingLevel[index]!;
-          this.place(
-            this.take(used++),
-            this.frameTexture(
-              page,
-              `b${buildingKind}:${level}`,
-              atlas.buildingFrame(buildingKind, level),
-            ),
-            world.x,
-            world.y,
-            drawOrder(x, y, height, DrawLayer.Building),
+          const buildingOrder = drawOrder(x, y, height, DrawLayer.Building);
+          // The Kenney town cell (M13), keyed by ZONE and expansion STAGE and
+          // varied by a hash of the TILE - so a street is a street and not one
+          // house repeated, and the same street after a reload. Null is the
+          // D-117 silhouette below, per entry (E-14).
+          const baked = this.bakedBuildingHandle(
+            statics,
+            staticInvScale,
+            buildingKind,
+            level,
+            x,
+            y,
           );
-          // The window twin (M13): the emissive cell drawn ADDITIVELY over
-          // its building, same zIndex, placed right after it so the stable
-          // sort keeps the glow on its own facade. Always from the BASE
-          // page - the emissive row exists there only, like the water rows.
-          if (this.dayNight) {
-            const glow = this.take(used++);
+          if (baked !== null) {
+            this.placeBaked(
+              this.take(used++),
+              baked.base,
+              baked,
+              world.x,
+              world.y + TILE_H / 2,
+              buildingOrder,
+            );
+            // Night windows from the cell's OWN emissive twin (D-172): the
+            // bake decided which pixels are glazing when it rasterised the
+            // model, so the lit windows sit on the dark ones by construction
+            // - the procedural twin below would light a facade that is no
+            // longer drawn.
+            if (this.dayNight && baked.glow !== null) {
+              const glow = this.take(used++);
+              this.placeBaked(
+                glow,
+                baked.glow,
+                baked,
+                world.x,
+                world.y + TILE_H / 2,
+                buildingOrder,
+              );
+              this.markEmissive(glow, used - 1);
+            }
+          } else {
             this.place(
-              glow,
+              this.take(used++),
               this.frameTexture(
-                this.basePage!,
-                `eb${buildingKind}:${level}`,
-                emissiveBuildingFrame(buildingKind, level),
+                page,
+                `b${buildingKind}:${level}`,
+                atlas.buildingFrame(buildingKind, level),
               ),
               world.x,
               world.y,
-              drawOrder(x, y, height, DrawLayer.Building),
+              buildingOrder,
             );
-            this.markEmissive(glow, used - 1);
+            // The window twin (M13): the emissive cell drawn ADDITIVELY over
+            // its building, same zIndex, placed right after it so the stable
+            // sort keeps the glow on its own facade. Always from the BASE
+            // page - the emissive row exists there only, like the water rows.
+            if (this.dayNight) {
+              const glow = this.take(used++);
+              this.place(
+                glow,
+                this.frameTexture(
+                  this.basePage!,
+                  `eb${buildingKind}:${level}`,
+                  emissiveBuildingFrame(buildingKind, level),
+                ),
+                world.x,
+                world.y,
+                buildingOrder,
+              );
+              this.markEmissive(glow, used - 1);
+            }
+          }
+        } else if (statics !== null && isWoodedTile(map, index, terrain)) {
+          // Trees (M13, D-169's `tree:<climate>:<n>`): the forest cell used to
+          // be green speckle and nothing else, so a wood was a colour. Three
+          // baked trees per tile, each its own body and jitter from the tile
+          // hash - back to front, sharing one drawOrder key, which is why the
+          // slot table is ordered (staticArt.ts). No bake means no trees and
+          // the speckled ground the game always had (E-14).
+          const treeOrder = drawOrder(x, y, height, DrawLayer.Building);
+          for (let slot = 0; slot < FOREST_TREES_PER_TILE; slot++) {
+            const tree = this.treeHandleFor(statics, staticInvScale, x, y, slot);
+            if (tree === null) continue;
+            forestTreeOffset(x, y, slot, this.treeOffset);
+            const u = this.treeOffset[0]!;
+            const v = this.treeOffset[1]!;
+            this.placeBaked(
+              this.take(used++),
+              tree.base,
+              tree,
+              world.x + ((u - v) * TILE_W) / 2,
+              world.y + TILE_H / 2 + ((u + v) * TILE_H) / 2,
+              treeOrder,
+            );
           }
         }
       }
@@ -3035,6 +3287,8 @@ export class MapView {
   ): number {
     const page = this.activePage();
     const atlas = page.atlas;
+    const statics = this.bakedStaticIndexAt(this.zoom);
+    const staticInvScale = MapView.staticInvScale(statics);
     for (const industry of this.industries) {
       if (
         industry.x < bounds.minX ||
@@ -3045,7 +3299,6 @@ export class MapView {
         continue;
       }
       const world = tileToWorld(industry.x, industry.y, map.baseHeight(industry.x, industry.y));
-      const sprite = this.take(used++);
       const footprint = INDUSTRY_SPECS[industry.type]?.footprint ?? 1;
       const zIndex = drawOrder(
         industry.x + footprint - 1,
@@ -3053,11 +3306,34 @@ export class MapView {
         map.baseHeight(industry.x, industry.y),
         DrawLayer.Building,
       );
+      // The Kenney industry block (M13). Fourteen of the seventeen types are
+      // mapped; the coal-mine headframe, the oil derrick and the farm are
+      // NOT, by name (E-14/D-169), and `industryTargetFor` answers null for
+      // them - so those three keep the D-117 silhouette below however the
+      // manifest changes. No variance seed: an industry is one works, not one
+      // of a street, and its silhouette is its identity.
+      const baked = this.bakedIndustryHandle(statics, staticInvScale, industry.type);
+      if (baked !== null) {
+        this.placeBaked(
+          this.take(used++),
+          baked.base,
+          baked,
+          world.x,
+          world.y + TILE_H / 2,
+          zIndex,
+        );
+        if (this.dayNight && baked.glow !== null) {
+          const glow = this.take(used++);
+          this.placeBaked(glow, baked.glow, baked, world.x, world.y + TILE_H / 2, zIndex);
+          this.markEmissive(glow, used - 1, industryGlowFactor(industry.level));
+        }
+        continue;
+      }
       // No tint. The industry is drawn in its own colours now - a tint
       // multiplies, and it flattened a coal heap and a chimney to the same
       // shade of whatever the tint was.
       this.place(
-        sprite,
+        this.take(used++),
         this.frameTexture(page, `i${industry.type}`, atlas.industryFrame(industry.type)),
         world.x,
         world.y,
@@ -3085,6 +3361,20 @@ export class MapView {
       }
     }
     return used;
+  }
+
+  /**
+   * The baked cell an industry block draws, or null for the D-117 silhouette:
+   * the three procedural-only types by name, and every type at all when there
+   * is no bake (E-14).
+   */
+  private bakedIndustryHandle(
+    index: StaticZoomIndex | null,
+    invScale: number,
+    type: number,
+  ): BakedCellHandle | null {
+    const variant = staticVariantFor(index, industryTargetFor(type), 0);
+    return variant === null ? null : this.bakedCellHandle(variant, invScale);
   }
 
   /**
@@ -3386,6 +3676,16 @@ export class MapView {
     const bakeEmissive = !abstract && this.dayNight && carryEmissive === undefined;
     let emissiveUsed = 0;
 
+    // The baked static art, pinned to the CHUNK zoom exactly as the page is
+    // pinned to the base page above: `bakedStaticIndexAt(scale)` resolves the
+    // smallest baked zoom at every chunked zoom (the D-163 no-upscale rule
+    // has nothing below 1x to choose), so a chunk holds the same pixels
+    // whatever the camera was doing when it was rendered. Without this the
+    // overview would disagree with the detail view about what a town is made
+    // of, which is the one thing a hybrid renderer may never do.
+    const statics = abstract ? null : this.bakedStaticIndexAt(scale);
+    const staticInvScale = MapView.staticInvScale(statics);
+
     const size = map.size;
     const x0 = chunkX * CHUNK_TILES;
     const y0 = chunkY * CHUNK_TILES;
@@ -3594,28 +3894,88 @@ export class MapView {
         const buildingKind = map.buildingKind[index]!;
         if (buildingKind !== 0) {
           const level = map.buildingLevel[index]!;
-          this.place(
-            this.bakeTake(used++),
-            this.frameTexture(
-              page,
-              `b${buildingKind}:${level}`,
-              atlas.buildingFrame(buildingKind, level),
-            ),
-            world.x,
-            world.y,
-            drawOrder(x, y, height, DrawLayer.Building),
+          const buildingOrder = drawOrder(x, y, height, DrawLayer.Building);
+          // The same decision, the same seed and the same anchor as the
+          // detail path (M13): a town seen at 0.5x is the town seen at 1x,
+          // house for house, because both ask `bakedBuildingHandle` with the
+          // tile's own hash.
+          const baked = this.bakedBuildingHandle(
+            statics,
+            staticInvScale,
+            buildingKind,
+            level,
+            x,
+            y,
           );
-          if (bakeEmissive) {
+          if (baked !== null) {
+            this.placeBaked(
+              this.bakeTake(used++),
+              baked.base,
+              baked,
+              world.x,
+              world.y + TILE_H / 2,
+              buildingOrder,
+            );
+            // Night windows into the chunk's emissive twin, from the cell's
+            // OWN glow (D-172): the twin is content on a transparent texture,
+            // so it composites normally here and meets the ramp once, where
+            // the twin sprite meets the frame.
+            if (bakeEmissive && baked.glow !== null) {
+              this.placeBaked(
+                this.emissiveBakeTake(emissiveUsed++),
+                baked.glow,
+                baked,
+                world.x,
+                world.y + TILE_H / 2,
+                buildingOrder,
+              );
+            }
+          } else {
             this.place(
-              this.emissiveBakeTake(emissiveUsed++),
+              this.bakeTake(used++),
               this.frameTexture(
-                this.basePage!,
-                `eb${buildingKind}:${level}`,
-                emissiveBuildingFrame(buildingKind, level),
+                page,
+                `b${buildingKind}:${level}`,
+                atlas.buildingFrame(buildingKind, level),
               ),
               world.x,
               world.y,
-              drawOrder(x, y, height, DrawLayer.Building),
+              buildingOrder,
+            );
+            if (bakeEmissive) {
+              this.place(
+                this.emissiveBakeTake(emissiveUsed++),
+                this.frameTexture(
+                  this.basePage!,
+                  `eb${buildingKind}:${level}`,
+                  emissiveBuildingFrame(buildingKind, level),
+                ),
+                world.x,
+                world.y,
+                buildingOrder,
+              );
+            }
+          }
+        } else if (statics !== null && isWoodedTile(map, index, terrain)) {
+          // Trees into the chunk (M13): woodland is static map art and
+          // belongs in the texture, unlike the industries and station
+          // modules above it. Every layer `isWoodedTile` reads is in this
+          // chunk's own checksum (D-161), so a road laid through a forest
+          // dirties exactly the chunks whose trees it felled.
+          const treeOrder = drawOrder(x, y, height, DrawLayer.Building);
+          for (let slot = 0; slot < FOREST_TREES_PER_TILE; slot++) {
+            const tree = this.treeHandleFor(statics, staticInvScale, x, y, slot);
+            if (tree === null) continue;
+            forestTreeOffset(x, y, slot, this.treeOffset);
+            const u = this.treeOffset[0]!;
+            const v = this.treeOffset[1]!;
+            this.placeBaked(
+              this.bakeTake(used++),
+              tree.base,
+              tree,
+              world.x + ((u - v) * TILE_W) / 2,
+              world.y + TILE_H / 2 + ((u + v) * TILE_H) / 2,
+              treeOrder,
             );
           }
         }
@@ -4196,7 +4556,7 @@ export class MapView {
     // same sprite. All setters are change-detected by Pixi.
     const variant = vehicleVariantFor(bakedIndex, specId, variantSeed);
     const baked =
-      variant === null ? null : this.bakedVehicleHandle(variant.cells[facing]!, bakedInvScale);
+      variant === null ? null : this.bakedCellHandle(variant.cells[facing]!, bakedInvScale);
     let shadowW: number;
     if (baked !== null) {
       // The Kenney cell (M13): untinted body plus the company-colour

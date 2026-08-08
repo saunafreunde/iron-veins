@@ -723,6 +723,29 @@ perf and environment notes above.
   (the 9.3 deadlock clock), gate at 1x, live outside the day/night tint.
   A dormant and a booming works differ in a STILL image: plume density
   by day, `industryGlowFactor` on the window twin by night.
+- **The static world draws from the bake too, and M13's Fertig-wenn never
+  asked** (D-205, bundle 7, 2026-08-08). The manifest carries 2,430 cells;
+  until this bundle `MapView` consumed only the `vehicle:` ones, so a
+  player with no vehicles saw NONE of the Kenney art. Buildings
+  (`building:<zone>:<stage>`, zone from `BuildingKind`, stage the
+  `level >= 2` split the procedural cell already used), industries
+  (`industry:<TypeName>`) and TREES (`tree:<climate>:<n>`, three per
+  wooded tile - a forest used to be a colour) now draw from
+  `staticArt.ts`, which is `vehicleArt.ts` for things that stand still:
+  same handle, same frame cache, same per-cell anchors, same two E-14
+  floors. CoalMine, OilWell and Farm are refused BEFORE the index, by
+  name, so the headframe, the derrick and the farmstead stay `shapes.ts`'s
+  whatever the manifest holds. Both render paths: buildings and trees go
+  INTO the chunk textures (industries stay live sprites over them), which
+  forced `CHUNK_ART_HEADROOM_PX` - a chunk reserved 48 world px and the
+  tallest baked cell lifts 138, so every skyscraper was one edit away from
+  being guillotined at a 0.5x chunk seam. Night windows come from the
+  cell's own emissive twin, smoke from its own measured chimney points
+  (D-174's promise carried into the bake), variance from
+  `tileVariantSeed(x, y, salt)` and never from a stream. **Read the
+  measurement note in D-205 before adding a per-tile string**: the first
+  tripwire run cost 9.7 ms and the cost was composing a target key per
+  tile, not the 4,914 new sprites.
 
 ## M14 - instruments: flow atlas, station x-ray, statistics, tooltips
 

@@ -3,6 +3,7 @@ import type { TileMap } from '../sim/map/TileMap';
 import { TRACK_DIR_COUNT, TRACK_DX, TRACK_DY } from '../sim/map/track';
 import { RoadBit } from '../sim/town/types';
 import { HEIGHT_PX, TILE_H, TILE_W } from './projection';
+import { BAKED_STATIC_MAX_LIFT_PX } from './staticArt';
 import { CELL_HEADROOM_STEPS, CELL_SKIRT_STEPS } from './TerrainAtlas';
 
 /**
@@ -18,6 +19,29 @@ import { CELL_HEADROOM_STEPS, CELL_SKIRT_STEPS } from './TerrainAtlas';
 
 /** Chunk edge length. [tiles] Origin: SPEC.md 16.1, "32x32-Tile-Chunks". */
 export const CHUNK_TILES = 32;
+
+/**
+ * World pixels a chunk texture reserves ABOVE the ground line of its highest
+ * tile, for whatever art stands on it. [px at zoom 1]
+ *
+ * The larger of the two things a chunk can bake: the procedural atlas cell's
+ * own headroom (`CELL_HEADROOM_STEPS` height steps, D-117's fix for the
+ * silently guillotined cooling tower) and the tallest BAKED static cell
+ * (`BAKED_STATIC_MAX_LIFT_PX`, M13's Kenney buildings). A chunk that reserved
+ * only the procedural 48 px would cut every skyscraper off at the chunk seam
+ * at 0.5x while the same building drew whole one zoom step up - the same
+ * unwritten agreement, one container further out.
+ *
+ * It is deliberately a CONSTANT rather than a measurement of the loaded
+ * manifest: chunk RenderTextures are recycled between chunks (see
+ * {@link chunkAabb}), so a headroom that changed when the bake finished
+ * loading would hand a bake a texture of the wrong size. The price of the
+ * constant is ~8 % more chunk texture area in a build with no bake at all.
+ */
+export const CHUNK_ART_HEADROOM_PX = Math.max(
+  CELL_HEADROOM_STEPS * HEIGHT_PX,
+  BAKED_STATIC_MAX_LIFT_PX,
+);
 
 /** How many chunks cover one map edge. */
 export function chunksPerSide(mapSize: number): number {
@@ -41,9 +65,10 @@ export interface ChunkAabb {
  * rebaked for any other chunk without a reallocation. Tiles outside the map
  * simply draw nothing into the margin.
  *
- * The vertical margins are the atlas cell's own headroom and skirt plus the
- * full height range: a tile at MAX_HEIGHT with a three-step building must
- * land inside the texture, and a sea-level skirt must not be cut.
+ * The vertical margins are {@link CHUNK_ART_HEADROOM_PX} and the cell skirt
+ * plus the full height range: a tile at MAX_HEIGHT carrying the tallest thing
+ * the renderer can put on it must land inside the texture, and a sea-level
+ * skirt must not be cut.
  */
 export function chunkAabb(chunkX: number, chunkY: number): ChunkAabb {
   const x0 = chunkX * CHUNK_TILES;
@@ -53,7 +78,7 @@ export function chunkAabb(chunkX: number, chunkY: number): ChunkAabb {
   return {
     minX: (x0 - y1) * (TILE_W / 2) - TILE_W / 2,
     maxX: (x1 - y0) * (TILE_W / 2) + TILE_W / 2,
-    minY: (x0 + y0) * (TILE_H / 2) - (MAX_HEIGHT + CELL_HEADROOM_STEPS) * HEIGHT_PX,
+    minY: (x0 + y0) * (TILE_H / 2) - MAX_HEIGHT * HEIGHT_PX - CHUNK_ART_HEADROOM_PX,
     maxY: (x1 + y1) * (TILE_H / 2) + TILE_H + CELL_SKIRT_STEPS * HEIGHT_PX,
   };
 }
@@ -76,7 +101,7 @@ export function visibleChunks(
   out: number[],
 ): number {
   const per = chunksPerSide(mapSize);
-  const headroom = (MAX_HEIGHT + CELL_HEADROOM_STEPS) * HEIGHT_PX;
+  const headroom = MAX_HEIGHT * HEIGHT_PX + CHUNK_ART_HEADROOM_PX;
   const skirt = TILE_H + CELL_SKIRT_STEPS * HEIGHT_PX;
   let count = 0;
   for (let chunkY = 0; chunkY < per; chunkY++) {
