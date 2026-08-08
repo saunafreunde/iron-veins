@@ -15,8 +15,12 @@ import {
   buildingTargetFor,
   BUILDING_STAGE_TWO_LEVEL,
   BUILDING_VARIANT_SALT,
-  FOREST_TREES_PER_TILE,
-  forestTreeOffset,
+  FOREST_DENSITY_SALT,
+  FOREST_STAND_TILES,
+  FOREST_TREE_SCALE_JITTER,
+  FOREST_TREE_SLOTS,
+  forestDensityAt,
+  forestTreeAt,
   industryTargetFor,
   isWoodedTile,
   PROCEDURAL_ONLY_INDUSTRIES,
@@ -339,16 +343,19 @@ describe('the per-tile variance is a hash, never a draw', () => {
 });
 
 describe('the trees on a forest tile', () => {
-  const out = [0, 0];
+  const out = [0, 0, 0];
 
   it('places its slots back to front, so insertion order IS the painter order', () => {
-    // The three trees share one drawOrder key - the key is per tile and per
-    // layer - so what orders them is Pixi's stable sort over insertion order.
+    // The trees of one tile share one drawOrder key - the key is per tile and
+    // per layer - so what orders them is Pixi's stable sort over insertion
+    // order. Every slot is checked whether or not it grows anything: a
+    // skipped slot leaves the order of the rest intact BY CONSTRUCTION, which
+    // is the whole reason the density of D-209 needed no reordering.
     for (let x = 0; x < 24; x++) {
       for (let y = 0; y < 24; y++) {
         let previous = -Infinity;
-        for (let slot = 0; slot < FOREST_TREES_PER_TILE; slot++) {
-          forestTreeOffset(x, y, slot, out);
+        for (let slot = 0; slot < FOREST_TREE_SLOTS; slot++) {
+          forestTreeAt(x, y, slot, 1, out);
           const depth = out[0]! + out[1]!;
           expect(depth, `tile ${x},${y} slot ${slot}`).toBeGreaterThan(previous);
           previous = depth;
@@ -360,8 +367,8 @@ describe('the trees on a forest tile', () => {
   it('keeps every tree inside its own tile', () => {
     for (let x = 0; x < 24; x++) {
       for (let y = 0; y < 24; y++) {
-        for (let slot = 0; slot < FOREST_TREES_PER_TILE; slot++) {
-          forestTreeOffset(x, y, slot, out);
+        for (let slot = 0; slot < FOREST_TREE_SLOTS; slot++) {
+          forestTreeAt(x, y, slot, 1, out);
           expect(Math.abs(out[0]!)).toBeLessThan(0.5);
           expect(Math.abs(out[1]!)).toBeLessThan(0.5);
         }
@@ -369,32 +376,53 @@ describe('the trees on a forest tile', () => {
     }
   });
 
+  it('has no net lateral bias, so a wood is not drawn off-centre everywhere', () => {
+    // The M13/D-206 slot table averaged (+0.08, -0.08): every wooded tile in
+    // the game drew its trees 5.1 world px right of the tile centre. A
+    // constant offset repeated across a continent is a lattice signature of
+    // its own, and it is a property of the TABLE, so it is checked at density
+    // 1 where every slot grows.
+    let sumU = 0;
+    let sumV = 0;
+    let count = 0;
+    for (let x = 0; x < 64; x++) {
+      for (let y = 0; y < 64; y++) {
+        for (let slot = 0; slot < FOREST_TREE_SLOTS; slot++) {
+          forestTreeAt(x, y, slot, 1, out);
+          sumU += out[0]!;
+          sumV += out[1]!;
+          count++;
+        }
+      }
+    }
+    expect(sumU / count).toBeCloseTo(0, 2);
+    expect(sumV / count).toBeCloseTo(0, 2);
+  });
+
   it('jitters deterministically and differently per tile', () => {
-    forestTreeOffset(5, 9, 0, out);
-    const first = [out[0]!, out[1]!] as const;
-    forestTreeOffset(5, 9, 0, out);
-    expect([out[0], out[1]]).toEqual([first[0], first[1]]);
-    forestTreeOffset(6, 9, 0, out);
-    expect([out[0], out[1]]).not.toEqual([first[0], first[1]]);
+    forestTreeAt(5, 9, 0, 1, out);
+    const first = [out[0]!, out[1]!, out[2]!] as const;
+    forestTreeAt(5, 9, 0, 1, out);
+    expect([out[0], out[1], out[2]]).toEqual([first[0], first[1], first[2]]);
+    forestTreeAt(6, 9, 0, 1, out);
+    expect([out[0], out[1], out[2]]).not.toEqual([first[0], first[1], first[2]]);
   });
 
   it('scatters far more ACROSS the depth axis than along it (D-206)', () => {
-    // The lattice is what made a forest read as wallpaper: three trees at
-    // three fixed slot centres on every wooded tile, moved by at most +-5
-    // world px. The depth key reads (u + v) and nothing else, so a
-    // displacement of +l on u and -l on v is invisible to the painter order
-    // - which is what lets the LATERAL scatter be much wider than the depth
-    // one without touching the disjoint-band proof above.
+    // The depth key reads (u + v) and nothing else, so a displacement of +l
+    // on u and -l on v is invisible to the painter order - which is what lets
+    // the LATERAL scatter be much wider than the depth one without touching
+    // the disjoint-band proof above.
     let lateralSpan = 0;
     let depthSpan = 0;
-    for (let slot = 0; slot < FOREST_TREES_PER_TILE; slot++) {
+    for (let slot = 0; slot < FOREST_TREE_SLOTS; slot++) {
       let lateralMin = Infinity;
       let lateralMax = -Infinity;
       let depthMin = Infinity;
       let depthMax = -Infinity;
       for (let x = 0; x < 48; x++) {
         for (let y = 0; y < 48; y++) {
-          forestTreeOffset(x, y, slot, out);
+          forestTreeAt(x, y, slot, 1, out);
           const lateral = out[0]! - out[1]!;
           const depth = out[0]! + out[1]!;
           if (lateral < lateralMin) lateralMin = lateral;
@@ -406,12 +434,190 @@ describe('the trees on a forest tile', () => {
       lateralSpan = Math.max(lateralSpan, lateralMax - lateralMin);
       depthSpan = Math.max(depthSpan, depthMax - depthMin);
     }
-    // 2 * 2 * 0.17 across against 2 * 2 * 0.08 along, both in tile units.
+    // 2 * 2 * 0.17 across against 2 * 2 * 0.06 along, both in tile units.
     expect(lateralSpan).toBeGreaterThan(0.6);
     expect(lateralSpan).toBeCloseTo(4 * 0.17, 2);
-    expect(depthSpan).toBeCloseTo(4 * 0.08, 2);
-    // The bands are 0.42 apart, so the depth span may not reach it.
-    expect(depthSpan).toBeLessThan(0.42);
+    expect(depthSpan).toBeCloseTo(4 * 0.06, 2);
+    // The narrowest gap between two slot bands is 0.34, so the depth span
+    // may not reach it or two trees of one tile could swap places.
+    expect(depthSpan).toBeLessThan(0.34);
+  });
+
+  it('sizes every instance off its cell, over a range that spans the jitter', () => {
+    let min = Infinity;
+    let max = -Infinity;
+    let sum = 0;
+    let count = 0;
+    for (let x = 0; x < 64; x++) {
+      for (let y = 0; y < 64; y++) {
+        for (let slot = 0; slot < FOREST_TREE_SLOTS; slot++) {
+          forestTreeAt(x, y, slot, 1, out);
+          const size = out[2]!;
+          if (size < min) min = size;
+          if (size > max) max = size;
+          sum += size;
+          count++;
+        }
+      }
+    }
+    expect(min).toBeGreaterThanOrEqual(1 - FOREST_TREE_SCALE_JITTER);
+    expect(max).toBeLessThanOrEqual(1 + FOREST_TREE_SCALE_JITTER);
+    // The whole point is that the range is USED - a jitter that never leaves
+    // the middle would be four rubber stamps again.
+    expect(max - min).toBeGreaterThan(2 * FOREST_TREE_SCALE_JITTER * 0.95);
+    expect(sum / count).toBeCloseTo(1, 2);
+  });
+});
+
+describe('the stand density that gives a wood clearings and edges (D-209)', () => {
+  const out = [0, 0, 0];
+
+  /** Trees actually placed on one tile, which is what the renderer draws. */
+  function treesOn(x: number, y: number): number {
+    const density = forestDensityAt(x, y);
+    let count = 0;
+    for (let slot = 0; slot < FOREST_TREE_SLOTS; slot++) {
+      if (forestTreeAt(x, y, slot, density, out)) count++;
+    }
+    return count;
+  }
+
+  it('stays inside its declared band and is a pure function of the tile', () => {
+    for (let x = 0; x < 200; x += 7) {
+      for (let y = 0; y < 200; y += 3) {
+        const density = forestDensityAt(x, y);
+        expect(density).toBeGreaterThanOrEqual(0);
+        expect(density).toBeLessThanOrEqual(1);
+        expect(forestDensityAt(x, y)).toBe(density);
+      }
+    }
+  });
+
+  it('is SMOOTH - neighbours are alike and distant tiles are not', () => {
+    // This is the difference between woodland and salt-and-pepper: a density
+    // that jumped per tile would scatter single empty tiles through the wood
+    // instead of opening clearings in it.
+    let nearSum = 0;
+    let farSum = 0;
+    let samples = 0;
+    for (let x = 1; x < 128; x++) {
+      for (let y = 1; y < 128; y++) {
+        const here = forestDensityAt(x, y);
+        nearSum += Math.abs(here - forestDensityAt(x + 1, y));
+        farSum += Math.abs(here - forestDensityAt(x + FOREST_STAND_TILES * 2, y));
+        samples++;
+      }
+    }
+    const near = nearSum / samples;
+    const far = farSum / samples;
+    expect(near).toBeLessThan(far / 4);
+  });
+
+  it('opens clearings and closes stands, over a scale a viewport can see', () => {
+    // A stand is FOREST_STAND_TILES across, so a 33-tile viewport at zoom 2
+    // holds about four of them: the wood in front of the player must contain
+    // both a thin patch and a thick one, or the carpet is back.
+    let min = Infinity;
+    let max = -Infinity;
+    for (let x = 0; x < 33; x++) {
+      for (let y = 0; y < 33; y++) {
+        const density = forestDensityAt(x, y);
+        if (density < min) min = density;
+        if (density > max) max = density;
+      }
+    }
+    expect(max - min).toBeGreaterThan(0.4);
+  });
+
+  it('draws FEWER trees than M13 did, and never the same number everywhere', () => {
+    // The measured mean is what makes this bundle cheaper than the constant
+    // three it replaces, and the histogram is what makes a wood a wood. Both
+    // are pinned: a future tweak that quietly doubles the placement count is
+    // a red test, not a slow frame nobody traced.
+    const histogram = new Array<number>(FOREST_TREE_SLOTS + 1).fill(0);
+    let total = 0;
+    let tiles = 0;
+    for (let x = 0; x < 256; x++) {
+      for (let y = 0; y < 256; y++) {
+        const count = treesOn(x, y);
+        histogram[count]!++;
+        total += count;
+        tiles++;
+      }
+    }
+    const mean = total / tiles;
+    expect(mean).toBeGreaterThan(2.0);
+    expect(mean).toBeLessThan(2.6);
+    // Strictly fewer placements than the three M13 put on every wooded tile.
+    expect(mean).toBeLessThan(3);
+    // Every count occurs, including the empty tile - a wood with no gaps in
+    // it is the wallpaper the owner reported.
+    for (let count = 0; count <= FOREST_TREE_SLOTS; count++) {
+      expect(histogram[count], `tiles carrying ${count} trees`).toBeGreaterThan(0);
+    }
+    // ... and no single count owns the map the way 3 owned it before.
+    for (let count = 0; count <= FOREST_TREE_SLOTS; count++) {
+      expect(histogram[count]! / tiles, `share carrying ${count}`).toBeLessThan(0.5);
+    }
+  });
+
+  it('makes a thin patch measurably thinner than a thick one', () => {
+    // The property that matters is CORRELATION: the tiles around a
+    // low-density lattice cell must be emptier than the tiles around a high
+    // one, or the variance is just noise with extra steps.
+    let thinnest = { x: 0, y: 0, density: Infinity };
+    let thickest = { x: 0, y: 0, density: -Infinity };
+    for (let x = 0; x < 256; x += FOREST_STAND_TILES) {
+      for (let y = 0; y < 256; y += FOREST_STAND_TILES) {
+        const density = forestDensityAt(x, y);
+        if (density < thinnest.density) thinnest = { x, y, density };
+        if (density > thickest.density) thickest = { x, y, density };
+      }
+    }
+    function patchMean(cx: number, cy: number): number {
+      let sum = 0;
+      let n = 0;
+      for (let x = cx - 2; x <= cx + 2; x++) {
+        for (let y = cy - 2; y <= cy + 2; y++) {
+          if (x < 0 || y < 0) continue;
+          sum += treesOn(x, y);
+          n++;
+        }
+      }
+      return sum / n;
+    }
+    expect(patchMean(thickest.x, thickest.y)).toBeGreaterThan(
+      patchMean(thinnest.x, thinnest.y) * 2,
+    );
+  });
+
+  it('gives one tile a hundred thousand possible woods, where M13 gave it one', () => {
+    // The wallpaper was that every wooded tile drew the SAME three slot
+    // centres. What a tile draws now is a subset of four slots, each with its
+    // own body, size and place - so two neighbouring tiles agreeing is an
+    // event rather than the rule. Counted here on the two facts a screenshot
+    // shows at a glance: how many trees, and which slots they stand in.
+    const arrangements = new Set<number>();
+    for (let x = 0; x < 128; x++) {
+      for (let y = 0; y < 128; y++) {
+        const density = forestDensityAt(x, y);
+        let mask = 0;
+        for (let slot = 0; slot < FOREST_TREE_SLOTS; slot++) {
+          if (forestTreeAt(x, y, slot, density, out)) mask |= 1 << slot;
+        }
+        arrangements.add(mask);
+      }
+    }
+    expect(arrangements.size).toBe(1 << FOREST_TREE_SLOTS);
+  });
+
+  it('salts the field apart from the body and the jitter', () => {
+    // Three independent facts about a tile: which bodies, where they stand,
+    // and how many. Sharing a salt would tie them together and the eye finds
+    // that too.
+    expect(FOREST_DENSITY_SALT).not.toBe(TREE_VARIANT_SALT);
+    expect(FOREST_DENSITY_SALT).not.toBe(TREE_JITTER_SALT);
+    expect(FOREST_DENSITY_SALT).not.toBe(BUILDING_VARIANT_SALT);
   });
 });
 
@@ -525,6 +731,32 @@ describe('the static-art proportion rule (D-206)', () => {
       if (target.startsWith('building:')) tallestTown = Math.max(tallestTown, lift);
     }
     expect(tallestTown / TILE_H).toBeLessThanOrEqual(PROCEDURAL_TOWN_MAX_LIFT_TILE_HEIGHTS * 1.5);
+
+    // The trees are the one family the RENDERER resizes (D-209), so the rule
+    // has to survive the largest multiplier the size jitter can produce - the
+    // baker only ever sees the cell at 1.0. Measured on this bake: the
+    // tallest tree lifts 28.0 px, so the tallest one drawn is 32.2 of 64.
+    let tallestTree = 0;
+    for (const [target, lift] of liftsByTarget) {
+      if (target.startsWith('tree:')) tallestTree = Math.max(tallestTree, lift);
+    }
+    expect(tallestTree).toBeGreaterThan(0);
+    expect(tallestTree * (1 + FOREST_TREE_SCALE_JITTER)).toBeLessThanOrEqual(
+      BAKED_STATIC_MAX_LIFT_PX,
+    );
+
+    // Every climate must own enough bodies for the four slots to differ: a
+    // tile drawing the same model four times is the wallpaper one tile down.
+    const familySizes = new Map<string, number>();
+    for (const target of liftsByTarget.keys()) {
+      const family = /^tree:([a-z]+):\d+$/.exec(target);
+      if (family === null) continue;
+      familySizes.set(family[1]!, (familySizes.get(family[1]!) ?? 0) + 1);
+    }
+    expect(familySizes.size).toBeGreaterThanOrEqual(4);
+    for (const [climate, bodies] of familySizes) {
+      expect(bodies, `bodies in tree:${climate}`).toBeGreaterThanOrEqual(3);
+    }
   });
 });
 

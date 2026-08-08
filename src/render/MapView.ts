@@ -445,8 +445,9 @@ import {
   buildStaticIndex,
   buildingTargetFor,
   BUILDING_VARIANT_SALT,
-  FOREST_TREES_PER_TILE,
-  forestTreeOffset,
+  FOREST_TREE_SLOTS,
+  forestDensityAt,
+  forestTreeAt,
   industryTargetFor,
   isWoodedTile,
   staticVariantFor,
@@ -1154,7 +1155,8 @@ export class MapView {
   private bakedZoomList: readonly number[] = [];
   private readonly bakedFrameCache = new Map<string, BakedCellHandle>();
   /** Scratch for one tree's tile-space offset; the placement allocates none. */
-  private readonly treeOffset: number[] = [0, 0];
+  /** Scratch (u, v, scale) one tree placement writes into - see forestTreeAt. */
+  private readonly treeOffset: number[] = [0, 0, 0];
   /**
    * The world's climate (SPEC2 M18, D-202), as `setSeason` announced it -
    * kept because it is also what decides WHICH tree family a forest tile
@@ -2783,14 +2785,21 @@ export class MapView {
     worldX: number,
     worldCentreY: number,
     zIndex: number,
+    sizeFactor = 1,
   ): void {
     sprite.texture = texture;
-    sprite.scale.set(handle.invScale);
+    sprite.scale.set(handle.invScale * sizeFactor);
     sprite.tint = 0xffffff;
     sprite.blendMode = 'normal';
     sprite.alpha = 1;
     sprite.zIndex = zIndex;
-    sprite.position.set(worldX - handle.anchorXPx, worldCentreY - handle.anchorYPx);
+    // The ground pivot scales WITH the sprite, or a resized cell would stand
+    // off its own contact point. Everything but the trees passes 1 and pays
+    // one multiply for a parameter it does not use (D-209).
+    sprite.position.set(
+      worldX - handle.anchorXPx * sizeFactor,
+      worldCentreY - handle.anchorYPx * sizeFactor,
+    );
   }
 
   /**
@@ -3167,16 +3176,21 @@ export class MapView {
           }
         } else if (statics !== null && isWoodedTile(map, index, terrain)) {
           // Trees (M13, D-169's `tree:<climate>:<n>`): the forest cell used to
-          // be green speckle and nothing else, so a wood was a colour. Three
-          // baked trees per tile, each its own body and jitter from the tile
-          // hash - back to front, sharing one drawOrder key, which is why the
-          // slot table is ordered (staticArt.ts). No bake means no trees and
+          // be green speckle and nothing else, so a wood was a colour. Up to
+          // FOREST_TREE_SLOTS baked trees per tile, each its own body, place,
+          // size and presence from the tile hash - back to front, sharing one
+          // drawOrder key, which is why the slot table is ordered
+          // (staticArt.ts). How MANY grow is the stand density of D-209, one
+          // smooth field over the map, so the wood has clearings and edges
+          // rather than a constant three per tile. No bake means no trees and
           // the speckled ground the game always had (E-14).
           const treeOrder = drawOrder(x, y, height, DrawLayer.Building);
-          for (let slot = 0; slot < FOREST_TREES_PER_TILE; slot++) {
+          const density = forestDensityAt(x, y);
+          for (let slot = 0; slot < FOREST_TREE_SLOTS; slot++) {
+            // Presence first: an empty slot must not pay for an index lookup.
+            if (!forestTreeAt(x, y, slot, density, this.treeOffset)) continue;
             const tree = this.treeHandleFor(statics, staticInvScale, x, y, slot);
             if (tree === null) continue;
-            forestTreeOffset(x, y, slot, this.treeOffset);
             const u = this.treeOffset[0]!;
             const v = this.treeOffset[1]!;
             this.placeBaked(
@@ -3186,6 +3200,7 @@ export class MapView {
               world.x + ((u - v) * TILE_W) / 2,
               world.y + TILE_H / 2 + ((u + v) * TILE_H) / 2,
               treeOrder,
+              this.treeOffset[2]!,
             );
           }
         }
@@ -3961,12 +3976,16 @@ export class MapView {
           // belongs in the texture, unlike the industries and station
           // modules above it. Every layer `isWoodedTile` reads is in this
           // chunk's own checksum (D-161), so a road laid through a forest
-          // dirties exactly the chunks whose trees it felled.
+          // dirties exactly the chunks whose trees it felled. The stand
+          // density (D-209) is a pure function of the tile and needs no
+          // checksum entry at all: it cannot change without the map itself
+          // changing, and BOTH paths ask it the same question here.
           const treeOrder = drawOrder(x, y, height, DrawLayer.Building);
-          for (let slot = 0; slot < FOREST_TREES_PER_TILE; slot++) {
+          const density = forestDensityAt(x, y);
+          for (let slot = 0; slot < FOREST_TREE_SLOTS; slot++) {
+            if (!forestTreeAt(x, y, slot, density, this.treeOffset)) continue;
             const tree = this.treeHandleFor(statics, staticInvScale, x, y, slot);
             if (tree === null) continue;
-            forestTreeOffset(x, y, slot, this.treeOffset);
             const u = this.treeOffset[0]!;
             const v = this.treeOffset[1]!;
             this.placeBaked(
@@ -3976,6 +3995,7 @@ export class MapView {
               world.x + ((u - v) * TILE_W) / 2,
               world.y + TILE_H / 2 + ((u + v) * TILE_H) / 2,
               treeOrder,
+              this.treeOffset[2]!,
             );
           }
         }

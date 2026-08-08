@@ -45,8 +45,9 @@ import {
   buildStaticIndex,
   buildingTargetFor,
   BUILDING_VARIANT_SALT,
-  FOREST_TREES_PER_TILE,
-  forestTreeOffset,
+  FOREST_TREE_SLOTS,
+  forestDensityAt,
+  forestTreeAt,
   isWoodedTile,
   staticVariantFor,
   tileVariantSeed,
@@ -324,11 +325,12 @@ function buildBusyMap(): TileMap {
         map.terrain[index] = Terrain.TownGround;
       } else {
         // Every untouched tile is woodland, so M13's baked-tree branch fires
-        // at its worst case: `isWoodedTile`, a tile hash and a jittered
-        // offset per tree, {@link FOREST_TREES_PER_TILE} trees per tile. A
-        // temperate map really does grow forest on the ground nobody built
-        // on, and a tripwire has to catch the regression before a real scene
-        // shows it (the D-171 rule for the consist scene, applied to trees).
+        // at its worst case: `isWoodedTile`, the stand density, and a hash
+        // per slot deciding place, size and presence over
+        // {@link FOREST_TREE_SLOTS} slots. A temperate map really does grow
+        // forest on the ground nobody built on, and a tripwire has to catch
+        // the regression before a real scene shows it (the D-171 rule for the
+        // consist scene, applied to trees).
         map.terrain[index] = Terrain.Forest;
       }
     }
@@ -451,27 +453,32 @@ function staticArtProxy(
   if (!isWoodedTile(map, index, terrain)) return;
   const order = drawOrder(x, y, height, DrawLayer.Building);
   const family = treeTargetFor(MapClimate.Temperate);
-  for (let slot = 0; slot < FOREST_TREES_PER_TILE; slot++) {
+  const density = forestDensityAt(x, y);
+  for (let slot = 0; slot < FOREST_TREE_SLOTS; slot++) {
+    // Presence before the index lookup, exactly as MapView orders it: the
+    // stand density of D-209 is what turned a constant three placements per
+    // wooded tile into a measured mean of 2.30.
+    if (!forestTreeAt(x, y, slot, density, TREE_OFFSET_SCRATCH)) continue;
     const variant = staticVariantFor(
       STATIC_ART,
       family,
       tileVariantSeed(x, y, TREE_VARIANT_SALT + slot),
     );
     if (variant === null) continue;
-    forestTreeOffset(x, y, slot, TREE_OFFSET_SCRATCH);
     const u = TREE_OFFSET_SCRATCH[0]!;
     const v = TREE_OFFSET_SCRATCH[1]!;
+    const size = TREE_OFFSET_SCRATCH[2]!;
     place(
       variant.cell.target,
-      world.x + ((u - v) * TILE_W) / 2 - variant.cell.anchorX + TILE_W / 2,
-      world.y + TILE_H / 2 + ((u + v) * TILE_H) / 2 - variant.cell.anchorY + HEIGHT_PX,
+      world.x + ((u - v) * TILE_W) / 2 - variant.cell.anchorX * size + TILE_W / 2,
+      world.y + TILE_H / 2 + ((u + v) * TILE_H) / 2 - variant.cell.anchorY * size + HEIGHT_PX,
       order,
     );
   }
 }
 
 /** The one scratch tuple the tree placement writes into, as MapView keeps. */
-const TREE_OFFSET_SCRATCH = [0, 0];
+const TREE_OFFSET_SCRATCH = [0, 0, 0];
 
 /**
  * The track furniture of M13 B5, shared by the rebuild and chunk-bake

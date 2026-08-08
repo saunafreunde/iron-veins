@@ -772,6 +772,32 @@ perf and environment notes above.
   (which the depth key `u + v` cannot see) is 2.1x wider while D-205's
   band proof is untouched. Zero sim bytes, zero new cells, zero atlas
   booking; main bundle +10 B.
+- **A wood is a density, not a carpet** (D-209, bundle 9, 2026-08-09). D-206
+  fixed the SIZE of a tree and the countryside still read as wallpaper.
+  Measured: a default temperate 1024 map is **16.5 % forest** (172,966 tiles),
+  which at three trees a tile was 518,898 instances and about 501 tree sprites
+  on screen at zoom 1. The hash was NOT the fault - all 64 variant triples
+  occurred, the commonest on 1.9 % of tiles. The GEOMETRY was: a constant
+  three per tile (a carpet has no clearings, stands or edges), one fixed
+  triangle of slot centres stamped on every tile with only **5.1 px** of depth
+  jitter against a 32 px tile, and a slot table whose centroid sat **+5.1 px
+  right** on every wooded tile in the game. The cure is one smooth field -
+  `forestDensityAt`, value noise over an **8-tile (400 m)** lattice - deciding
+  per slot whether a tree grows at all: measured **2.223 trees per tile**
+  (8.4 % of tiles empty, up to four), so the maximum rose to four while the
+  placement count fell **26 %**. It costs no extra hashing: the one avalanche
+  M13 already spent on position now pays for position, presence AND a
+  per-instance **+-15 % size**, which turns the four-body ladder
+  (0.45/0.58/0.73/0.88 tile heights) into a continuum with no new atlas cell.
+  Four slots, symmetric, bands still disjoint by construction (0.10 of margin)
+  so D-205's insertion-order proof is untouched - skipping a slot preserves
+  the order of the rest. The tree cells' own size was measured and left alone:
+  6.0-14.0 m straddles the game's OWN procedural conifer at 8.5-13.0 m, so the
+  manifest was not touched and the bake is byte-identical. Cheaper, and the
+  counts say so: rebuild 14,746 -> **13,276** placements, chunk bake
+  4,273 -> **3,873**, p50 medians 8.378 -> 7.273 and 2.046 -> 1.963 ms on
+  interleaved A/B runs, no tripwire re-derived. Zero sim bytes, zero atlas
+  booking; main bundle +460 B.
 
 ## M14 - instruments: flow atlas, station x-ray, statistics, tooltips
 

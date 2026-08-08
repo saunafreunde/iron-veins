@@ -50,21 +50,22 @@ no entry below. A number may appear under several topics.
   D-122, D-147, D-152, D-153, D-154, D-155, D-156, D-158
 - **Rendering & art:** D-013, D-014, D-033, D-035, D-112, D-117, D-125, D-127,
   D-136, D-140, D-160, D-161, D-162, D-163, D-164, D-165, D-166, D-169, D-170,
-  D-171, D-172, D-173, D-174, D-175, D-177, D-179, D-186, D-202, D-205, D-206
+  D-171, D-172, D-173, D-174, D-175, D-177, D-179, D-186, D-202, D-205, D-206,
+  D-209
 - **UI & input:** D-011, D-013, D-015, D-035, D-110, D-113, D-114, D-119,
   D-126, D-148, D-165, D-166, D-177, D-179, D-180, D-181, D-182, D-183, D-184,
   D-186, D-187, D-189, D-191, D-192, D-193, D-194, D-195, D-196, D-200, D-202
 - **Performance & measurement:** D-002, D-120, D-135, D-136, D-161, D-162,
   D-163, D-164, D-167, D-170, D-171, D-172, D-173, D-174, D-176, D-177, D-184,
   D-185, D-186, D-187, D-191, D-192, D-193, D-196, D-200, D-201, D-202, D-205,
-  D-206
+  D-206, D-209
 - **Platform, tooling & build:** D-012, D-014, D-015, D-016, D-017, D-029,
   D-030, D-031, D-160, D-168, D-169, D-170, D-172, D-175, D-192, D-206
 - **Crash safety:** D-132, D-139, D-190
 - **Testing method & fixtures:** D-010, D-038, D-072, D-074, D-084, D-133,
   D-167, D-183, D-186, D-188, D-189, D-190, D-191, D-192, D-193, D-194,
   D-195, D-196, D-197, D-198, D-199, D-200, D-201, D-202, D-203, D-204,
-  D-205, D-206
+  D-205, D-206, D-209
 - **Process & specification:** D-070, D-123, D-129, D-133, D-138, D-140,
   D-185, D-191, D-197, D-198, D-199, D-203, D-204, D-205, D-206
 
@@ -9009,3 +9010,174 @@ taller than two of that tile's diamonds stacked; the tallest office block is
 taller than every ungrown one of the same zone at all three zooms; and a
 wooded tile carries three trees of visibly different heights spanning 2:1,
 scattered across the tile by up to a sixth of its width.
+
+## M13 - the static world, bundle 9: the wood (2026-08-09)
+
+### D-209 A wood is a density, not a carpet: the stand field, the four-slot table and the size jitter that ended the wallpaper
+
+D-206 corrected the SIZE of a tree and left the ARRANGEMENT alone, and the
+owner's second reading survived it: the countryside still read as a repeating
+wallpaper of identical small conifers rather than as woodland. The reading was
+correct, the cause was measurable, and it was none of the three things one
+would guess.
+
+**Measured first, on the world the game actually makes.** A default temperate
+1024 map (seed 4,711) has 737,380 land tiles of 1,048,576, and **172,966 of
+them are forest** - 16.5 % of the map, 23.5 % of the land - every one of them
+untouched and therefore wooded on day one. At `FOREST_TREES_PER_TILE` = 3 that
+was **518,898 tree instances on the map** and, on a 1920x1080 canvas, about
+**501 tree sprites on screen at zoom 1** (1,013 tiles visible, 167 of them
+wooded at the map's average), 125 at zoom 2 and 2,005 inside the chunk
+textures at 0.5x - and far more than that whenever the camera is parked over a
+wood, which is the shot the complaint came from.
+
+**The hash was NOT the problem, and that is worth writing down because it is
+the usual suspect.** Over a 64 x 64 patch the per-slot body pick produced
+**all 64 possible variant triples**, the most common on 79 of 4,096 tiles
+(1.9 %), and each slot's four bodies came up 1,003-1,078 times against an
+expected 1,024. There were plenty of effective states. What repeated was the
+GEOMETRY, in three ways a screenshot shows and a hash count does not:
+
+1. **A constant count.** Every wooded tile carried exactly three trees. A
+   constant density over a region is a carpet however varied its pile is: no
+   clearings, no stands, no edges, and a texture whose spatial frequency is
+   exactly the tile grid.
+2. **One triangle, stamped everywhere.** The three slot centres sat at
+   (0, -6.7), (+15.4, 0) and (0, +6.7) world px, so every tile in the game
+   drew the same motif, and the jitter that was meant to hide it moved a tree
+   over a span of 21.8 px across but only **5.1 px along the depth axis**,
+   against a tile 64 x 32 px. The three occupied x in [-10.9, +26.2] of 64 and
+   y in [-9.3, +9.3] of 32.
+3. **A lateral bias nobody had noticed.** The slot table averaged
+   (+0.08, -0.08) in tile space, which is **+5.1 world px to the right, on
+   every wooded tile of every map**. A constant offset repeated a hundred
+   thousand times is a lattice signature of its own.
+
+**The cure is a density, and it is the cheapest of the candidates rather than
+the most elaborate.** `forestDensityAt(x, y)` is smoothstep-interpolated value
+noise over a lattice of `FOREST_STAND_TILES` = 8 tiles - **400 m on the game's
+own 50 m tile, the scale of a stand or a clearing rather than of a tree** -
+banded into [0.12, 1.00]. Each of `FOREST_TREE_SLOTS` = 4 slots then draws or
+does not draw on a Bernoulli test against that density. Measured over 262,144
+tiles: **mean 2.223 trees per wooded tile** (8.4 % of tiles empty, then 20.5 /
+28.0 / 26.7 / 16.5 % carrying one to four), so the maximum went UP while the
+placement count went **DOWN by 26 %**. Smoothstep rather than raw bilinear
+because raw bilinear value noise creases along its lattice lines, and the
+creases would be a grid again; 8 tiles rather than 4 or 32 because a viewport
+at zoom 2 is about 33 tiles across and has to contain several stands.
+
+**It costs no extra hashing at all.** The M13 code already spent one
+`tileVariantSeed` per (tile, slot) on position and used sixteen of its
+thirty-two bits. `forestTreeAt` spends all four bytes of that same avalanche:
+lateral offset, depth offset, **presence**, and **size**. The density itself is
+four more hashes and three lerps, once per TILE. Presence is tested BEFORE the
+manifest lookup, so an empty slot never pays for a `Map.get` on a string key -
+which is why the branch got cheaper and not dearer.
+
+**The slot table is four wide, symmetric, and its bands are still disjoint by
+construction.** Centres (-0.26,-0.26), (+0.08,-0.26), (-0.08,+0.26),
+(+0.26,+0.26): depth sums -0.52, -0.18, +0.18, +0.52, summing to zero on both
+axes so the +5.1 px bias is gone. The depth jitter moves a sum by at most
++-0.12, so the bands are [-0.64,-0.40], [-0.30,-0.06], [+0.06,+0.30] and
+[+0.40,+0.64] - disjoint with 0.10 of margin, and D-205's proof that insertion
+order IS painter order therefore survives one more slot untouched. **Skipping
+a slot preserves the order of the rest**, which is the whole reason a variable
+count needed no sorting and no second pass. Containment stays a strict
+inequality: 0.26 + 0.17 (lateral jitter) + 0.06 (depth jitter) = 0.49 < 0.5,
+and the 576-tile walk still says so. `FOREST_JITTER_DEPTH_TILES` went
+0.08 -> 0.06 to buy the fourth band; the total depth footprint still GREW,
+18.6 -> 20.4 px of 32, because the centres spread further than the jitter
+shrank. Laterally the footprint went 37.1 -> **43.6 px of 64**, and symmetric.
+
+**And every instance is now its own size.** `FOREST_TREE_SCALE_JITTER` = 0.15
+is a per-instance multiplier from the fourth hash byte, applied by
+`placeBaked`'s new `sizeFactor` - which scales the ground pivot with the
+sprite, or a resized cell would stand off its own contact point. A climate
+owns three or four bodies in the bake, so without it a wood is built from four
+rubber stamps: the temperate family measures 0.45 / 0.58 / 0.73 / 0.88 tile
+heights and **nothing in between**. The multiplier turns that four-rung ladder
+into a continuum of 0.38-1.01 tile heights **without one new atlas cell**,
+which is what a fifth body would have cost (a SPEC2 6.2 booking,
+Fehlerkatalog 40). It is bounded above by D-206's rule: the tallest tree lifts
+28.0 px at zoom 1, so the tallest one drawable is 32.2 against the 64 px
+ceiling, and `staticArt.spec.ts` asserts that headroom against the real
+manifest - the baker only ever sees a cell at 1.0, so the RENDERER's
+multiplier has to be checked on the render side.
+
+**The tree cells' own size was measured and is RIGHT - no manifest change, no
+re-bake.** At zoom 2 the fifteen tree cells are 9-28 px wide and 26-59 px tall
+(median 41; the 48 px in circulation was the pre-D-206 bake). What matters is
+the lift: **0.375-0.875 tile heights, i.e. 6.0-14.0 m, median 9.3 m** on a
+50 m tile with 8 m per height step. The reference is not a preference but the
+game's own other tree: `shapes.ts`'s `conifer`, the one inside the Forestry
+silhouette, is drawn at **0.53 / 0.69 / 0.81 tile heights** (8.5 / 11.0 /
+13.0 m) with radii 0.17-0.22 tile widths. The baked family **straddles** it,
+and the size jitter widens the straddle to 0.38-1.01. A tree taller than an
+ungrown house (0.55-0.73) and shorter than a grown one (0.89-1.00) is the
+right answer, and the whole family sits at 19-50 % of the 2.00 static-art
+ceiling. The one residual is WIDTH - baked temperate 0.125-0.172 tile widths
+against the procedural conifer's 0.17-0.22 - and it is D-206's named,
+unchanged trade: `stretch [1.7, 1, 1.7]` widens the crown and the trunk
+together, so the last third of the correction would give every tree a fat
+bole. **Named residual, not an oversight.**
+
+**Both render paths ask the same two functions.** `MapView.rebuild` and
+`MapView.bakeChunk` each call `forestDensityAt` once per wooded tile and
+`forestTreeAt` once per slot, exactly as they already shared
+`bakedBuildingHandle` - so the map cannot change appearance as the camera
+crosses the 0.5x chunk threshold. The density needs **no `chunkChecksum`
+entry**, and that is a property rather than an omission: it is a pure function
+of the tile coordinates and cannot change without the map itself changing,
+while every layer `isWoodedTile` reads is already in the checksum's full fold
+(D-205's rule, unmoved). Determinism is `tileVariantSeed` throughout - no
+`Math.random`, no RNG stream, no wall clock (Z3 untouched, Fehlerkatalog
+25/39) - so the same tile grows the same wood on every machine, after every
+reload, and on both paths.
+
+**It got cheaper, and the placement counts are the evidence.** The render
+tripwire's fixture makes every untouched tile woodland, which is the worst
+case: the sprite-pool rebuild fell from **14,746 to 13,276 placements**
+(-10.0 % overall). The scene has 1,638 wooded tiles, so the TREE share alone
+went **4,914 -> 3,444, -29.9 %**, at a local mean of 2.103 - the field has its
+own mean over any particular patch, and 2.223 is the figure over a quarter
+million tiles. The chunk bake fell from **4,273 to 3,873** (-9.4 %). Timed five times alternating A/B on one
+machine to cancel drift: rebuild p50 medians **8.378 -> 7.273 ms** (gate 15,
+backstop 60), chunk bake **2.046 -> 1.963 ms** (gate 5, backstop 30). Every
+other tripwire unmoved and green on the same runs. **No tripwire was
+re-derived** - a bundle that makes a scene smaller does not get to raise its
+own gate.
+
+**What did not move.** Not one byte under `src/sim`; `SAVE_VERSION` unchanged,
+`SNAPSHOT_LAYOUT_VERSION` unchanged, no migration, no protocol field, no i18n
+string, no procedural atlas cell. `tools/assets-manifest.json` was **not
+touched**, so the bake is unchanged: re-run twice it reports 145 models -> 10
+pages, 2,430 cells, 6,275 KiB and all eleven output files are byte-identical
+to each other AND to the files D-206 left on disk (D-160's promise, re-proven
+on a bundle that deliberately spent nothing). The SPEC2 6.2 booking stays at
+810 cells per zoom. Main bundle **940,159 -> 940,619 B** against the 950,000 B
+budget (+460 B, headroom 9,381), measured as two builds of the same tree with
+and without the two changed render files.
+
+**The named next lever, deliberately not spent.** `tree:desert` has only three
+bodies (two cacti and one thin tree) against four elsewhere, so a desert tile
+that fills all four slots must repeat one - `staticArt.spec.ts` asserts the
+floor of three per climate and the ceiling is the booking. A fourth desert
+body is one model, three zooms, three new cells and a SPEC2 6.2 entry. So is
+any per-climate expansion. This bundle bought its variety from geometry and
+from a multiplier instead, because those are free.
+
+**What a human still has to confirm by eye**, because the browser pane here
+renders no frames (D-136, D-205, D-206). Checkable against a screenshot with
+a ruler: a wooded tile carries **nought to four** trees and not always three -
+count ten tiles and expect roughly one empty, two with one, three with two,
+three with three and one and a half with four; two adjacent wooded tiles do
+not show the same arrangement; a wood contains visibly thinner patches and
+thicker ones on a scale of about **eight tiles**; no tree stands outside its
+own tile diamond; the tallest tree is about **0.9 of a tile diamond's height**
+and the shortest about **0.38**, i.e. a range of 2.7:1 rather than the 1.9:1
+the four bodies alone gave; and the tallest tree is still shorter than a grown
+house. The one JUDGEMENT that cannot be measured from here is the one the
+owner has to make: does the countryside now read as woodland rather than as
+wallpaper. If it does not, the lever is more BODIES per climate and it costs
+a 6.2 booking; the density band and the slot table are two constants away
+from any other answer.

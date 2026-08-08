@@ -335,30 +335,52 @@ export const TREE_VARIANT_SALT = 0x54524545;
 export const TREE_JITTER_SALT = 0x4a495454;
 
 /**
- * Trees drawn on one forest tile. [count]
+ * How many trees a forest tile can carry at most - the SLOT table's length,
+ * not a per-tile count. [count]
  *
- * A baked tree is 6-10 px wide against a 64 px tile, so one tree per tile
- * reads as a lone shrub rather than as woodland; three fill the diamond and
- * still cost less than the four sprites a built-up town tile already places.
+ * A baked tree is 9-28 px wide against a 128 px tile at zoom 2, so one tree
+ * per tile reads as a lone shrub rather than as woodland. Until D-209 every
+ * wooded tile carried exactly three, which is the other failure: a constant
+ * count over a whole region is a CARPET, and a carpet of the same three slot
+ * centres is the wallpaper the owner reported. How many of these four slots a
+ * given tile actually grows is {@link forestTreeAt}'s answer, and it is
+ * usually fewer than three - measured mean 2.22 over a quarter million tiles
+ * (tests/unit/staticArt.spec.ts pins the band), so the maximum went UP while
+ * the placement count went DOWN by 26 %.
+ *
  * The number is a render budget, not a simulation fact - `Terrain.Forest` is
- * one bit and says nothing about how many trees stand on it.
+ * one bit and says nothing about how many trees stand on it. A real 50 m tile
+ * of woodland holds fifty mature trees; four is a symbol, not a census.
  */
-export const FOREST_TREES_PER_TILE = 3;
+export const FOREST_TREE_SLOTS = 4;
 
 /**
- * Slot centres of the three trees in tile space (u along +x, v along +y),
+ * Slot centres of the four trees in tile space (u along +x, v along +y),
  * ORDERED BACK TO FRONT by (u + v).
  *
- * The three share one `drawOrder` key - the key is per tile and per layer -
- * so what orders them is Pixi's stable sort over insertion order, which is
- * this table's order. The sums are -0.42, 0.00 and +0.42 and the jitter below
- * can move a sum by at most +-0.16, so the three bands stay disjoint and a
- * jittered tree can never overtake its neighbour.
+ * The four share one `drawOrder` key - the key is per tile and per layer - so
+ * what orders them is Pixi's stable sort over insertion order, which is this
+ * table's order. Skipping a slot preserves the order of the rest, so a tile
+ * that grows two trees is ordered by construction like one that grows four.
+ *
+ * The depth sums are -0.52, -0.18, +0.18 and +0.52; the depth jitter below
+ * moves a sum by at most +-0.12, so the four bands
+ * ([-0.64,-0.40], [-0.30,-0.06], [+0.06,+0.30], [+0.40,+0.64]) stay disjoint
+ * and a jittered tree can never overtake its neighbour. The two middle slots
+ * carry the lateral spread (+-0.34 in `u - v`, i.e. +-10.9 world px), the two
+ * end slots sit on the tile's centre line because that is where the diamond
+ * is narrow - which is what keeps every tree inside its own tile.
+ *
+ * The table sums to ZERO on both axes. The M13/D-206 table did not: its three
+ * centres averaged (+0.08, -0.08), so every tile in the game drew its wood
+ * 5.1 world px right of the tile centre - a constant offset repeated a
+ * hundred thousand times, which is a lattice signature in itself.
  */
 const FOREST_SLOT_OFFSETS: readonly (readonly [number, number])[] = [
-  [-0.21, -0.21],
-  [0.24, -0.24],
-  [0.21, 0.21],
+  [-0.26, -0.26],
+  [0.08, -0.26],
+  [-0.08, 0.26],
+  [0.26, 0.26],
 ];
 
 /**
@@ -385,49 +407,155 @@ export function isWoodedTile(map: TileMap, index: number, terrain: number): bool
  * Half-width of the per-tile jitter ALONG THE DEPTH axis (u + v). [tiles]
  *
  * This is the constrained one: the depth sum is what the back-to-front slot
- * order above rests on, and the slot sums are 0.42 apart, so a tree may move
- * by less than 0.21 along it or two trees can swap places within one tile.
- * A displacement of `d` on each axis moves the sum by `2d`, so the bound is
- * `d < 0.105`; 0.08 keeps the M13 margin exactly as D-205 measured it.
+ * order above rests on. A displacement of `d` on each axis moves the sum by
+ * `2d`, so two neighbouring bands stay disjoint exactly while `4d` is under
+ * the slot spacing. The narrowest spacing in the four-slot table is 0.34, so
+ * the bound is `d < 0.085`; 0.06 leaves a margin of 0.10 tile - two and a
+ * half times what the three-slot table had, on a table with one more slot.
  */
-const FOREST_JITTER_DEPTH_TILES = 0.08;
+const FOREST_JITTER_DEPTH_TILES = 0.06;
 
 /**
  * Half-width of the per-tile jitter ACROSS the depth axis (u - v). [tiles]
  *
  * The depth key reads `u + v` and nothing else, so a displacement of `+l` on
  * u and `-l` on v is invisible to the painter order BY CONSTRUCTION - which
- * is what lets the lateral scatter be two and a half times the depth one
- * without touching the disjoint-band proof. It is what breaks the lattice:
- * three trees at three fixed slot centres on every wooded tile is a wallpaper
- * pattern, and the M13 jitter of +-0.08 on each axis moved a tree by at most
- * +-5 world px across, against a 64 px tile.
+ * is what lets the lateral scatter be nearly three times the depth one
+ * without touching the disjoint-band proof.
  *
  * The value is the tile's own half-width less what is already spent:
- * `0.5 - 0.24 (the farthest slot centre) - 0.08 (the depth jitter) = 0.18`,
+ * `0.5 - 0.26 (the farthest slot centre) - 0.06 (the depth jitter) = 0.18`,
  * minus a hundredth so the containment test stays a STRICT inequality.
  * Lateral travel on screen is `2 * l * TILE_W / 2` = +-10.9 px at zoom 1.
  */
 const FOREST_JITTER_LATERAL_TILES = 0.17;
 
 /**
- * Tile-space offset of one tree on one forest tile, written into `out` as
- * (u, v) - allocation-free, because this runs once per tree per rebuild.
+ * How far a tree may fall short of, or overshoot, its baked cell's own size -
+ * a HALF-width, like the two jitters above. [fraction of 1]
  *
- * The jitter is the tile hash, not a random draw: the same tile grows the
- * same wood after a reload, a save/load and on another machine.
+ * A climate has only three or four bodies in the bake, so without this a wood
+ * is built from four rubber stamps and the eye finds them: the temperate
+ * family measures 0.45 / 0.58 / 0.73 / 0.88 tile heights and nothing in
+ * between. A per-INSTANCE multiplier turns that four-rung ladder into a
+ * continuum without a single new atlas cell - the SPEC2 6.2 booking a fifth
+ * body would cost (Fehlerkatalog 40) buys nothing this does not.
+ *
+ * Bounded from above by the proportion rule of D-206: the tallest tree in the
+ * bake lifts 28.0 px at zoom 1, so the tallest tree the renderer can draw is
+ * 32.2 px against {@link BAKED_STATIC_MAX_LIFT_PX} = 64. `staticArt.spec.ts`
+ * asserts that headroom against the real manifest, so a future tree model
+ * that eats it is a red test rather than a crown clipped at a chunk seam.
  */
-export function forestTreeOffset(x: number, y: number, slot: number, out: number[]): void {
-  const centre = FOREST_SLOT_OFFSETS[slot % FOREST_TREES_PER_TILE]!;
+export const FOREST_TREE_SCALE_JITTER = 0.15;
+
+/** Salt of the stand-density field, separate from body, jitter and buildings. */
+export const FOREST_DENSITY_SALT = 0x44454e53;
+
+/**
+ * Edge length of one cell of the stand-density lattice. [tiles]
+ *
+ * Eight tiles is 400 m on the game's own 50 m tile - the scale of a stand, a
+ * ride or a clearing rather than of a single tree. Smaller and the density
+ * field is per-tile noise again (salt and pepper, not woodland); larger and a
+ * whole viewport at zoom 2 - about 33 x 33 tiles - sits inside one gradient
+ * and the carpet is back.
+ */
+export const FOREST_STAND_TILES = 8;
+
+/** log2({@link FOREST_STAND_TILES}), so a lattice lookup is a shift. */
+const FOREST_STAND_SHIFT = 3;
+
+/**
+ * Density a tile of open clearing still carries, and the span from there to a
+ * full stand. [fraction of 1]
+ *
+ * The floor is deliberately not zero: a tile the field calls empty still has
+ * roughly a one-in-eight chance per slot, so a clearing keeps its stragglers
+ * instead of being a hard-edged hole. The ceiling is 1, so the densest stands
+ * really do fill all four slots. Together they set the measured distribution -
+ * 8.4 % of wooded tiles empty, 20.5 / 28.0 / 26.7 / 16.5 % carrying one to
+ * four, mean 2.22 - which `staticArt.spec.ts` bands.
+ */
+const FOREST_DENSITY_FLOOR = 0.12;
+const FOREST_DENSITY_SPAN = 0.88;
+
+/** One lattice corner of the density field, in [0, 1). */
+function forestStandValue(cellX: number, cellY: number): number {
+  return tileVariantSeed(cellX, cellY, FOREST_DENSITY_SALT) / 4294967296;
+}
+
+/**
+ * How dense the wood is at this tile - the field that gives a forest
+ * clearings, dense stands and therefore EDGES, instead of one uniform carpet
+ * of three trees per tile. [fraction of 1]
+ *
+ * Smoothstep-interpolated value noise over a lattice of
+ * {@link FOREST_STAND_TILES}: four tile hashes and three lerps, allocation
+ * free, no `Math.random`, no RNG stream (Z3 untouched, Fehlerkatalog 25/39) -
+ * so the same tile has the same density on every machine, after every reload
+ * and on BOTH render paths, which is what stops the map from changing
+ * appearance as the camera crosses the 0.5x chunk threshold.
+ *
+ * Smoothstep rather than raw bilinear because raw bilinear value noise creases
+ * along the lattice lines, and the creases would be a grid of their own.
+ */
+export function forestDensityAt(x: number, y: number): number {
+  const cellX = x >> FOREST_STAND_SHIFT;
+  const cellY = y >> FOREST_STAND_SHIFT;
+  const fx = (x & (FOREST_STAND_TILES - 1)) / FOREST_STAND_TILES;
+  const fy = (y & (FOREST_STAND_TILES - 1)) / FOREST_STAND_TILES;
+  const sx = fx * fx * (3 - 2 * fx);
+  const sy = fy * fy * (3 - 2 * fy);
+  const n00 = forestStandValue(cellX, cellY);
+  const n10 = forestStandValue(cellX + 1, cellY);
+  const n01 = forestStandValue(cellX, cellY + 1);
+  const n11 = forestStandValue(cellX + 1, cellY + 1);
+  const top = n00 + (n10 - n00) * sx;
+  const bottom = n01 + (n11 - n01) * sx;
+  return FOREST_DENSITY_FLOOR + FOREST_DENSITY_SPAN * (top + (bottom - top) * sy);
+}
+
+/**
+ * One tree slot of one forest tile: writes its tile-space offset (u, v) and
+ * its size multiplier into `out`, and RETURNS whether a tree stands there at
+ * all.
+ *
+ * `out` is always written, present or not, because the back-to-front proof
+ * above is a property of the SLOT and a test has to be able to walk every
+ * slot of every tile. Allocation-free - this runs once per slot per wooded
+ * tile per rebuild, and once more per chunk bake.
+ *
+ * ONE avalanche over the tile and the slot pays for all four decisions, a
+ * byte each: where across the depth axis (free), where along it (bounded by
+ * the slot bands), whether the slot grows anything, and how big it is. That
+ * is the same hash budget M13 spent on position alone, so the density and the
+ * size variance cost nothing on top of the lattice they replace.
+ *
+ * `density` is {@link forestDensityAt} for this tile, passed in rather than
+ * recomputed because it is a per-TILE fact and this is a per-SLOT call.
+ */
+export function forestTreeAt(
+  x: number,
+  y: number,
+  slot: number,
+  density: number,
+  out: number[],
+): boolean {
+  const centre = FOREST_SLOT_OFFSETS[slot % FOREST_TREE_SLOTS]!;
   const seed = tileVariantSeed(x, y, TREE_JITTER_SALT + slot);
-  // Two independent 8-bit fields of one avalanche, mapped to [-1, 1] - 255
-  // rather than 256 so the range is symmetric - and spent on the two axes
-  // that matter here: one ACROSS the depth axis (free, see above) and one
-  // ALONG it (bounded by the slot bands).
+  // Bytes 0 and 1 - position, mapped to [-1, 1]; 127.5 rather than 128 so the
+  // range is symmetric about the slot centre.
   const lateral = ((seed & 0xff) / 127.5 - 1) * FOREST_JITTER_LATERAL_TILES;
   const depth = (((seed >>> 8) & 0xff) / 127.5 - 1) * FOREST_JITTER_DEPTH_TILES;
   out[0] = centre[0] + lateral + depth;
   out[1] = centre[1] - lateral + depth;
+  // Byte 3 - size, written whether or not the slot grows, like the offset.
+  out[2] = 1 + (((seed >>> 24) & 0xff) / 127.5 - 1) * FOREST_TREE_SCALE_JITTER;
+  // Byte 2 - presence, against the stand density. A Bernoulli draw per slot
+  // whose probability is a SMOOTH function of position, which is what makes
+  // the empty slots cluster into clearings instead of speckling the wood.
+  return ((seed >>> 16) & 0xff) / 256 < density;
 }
 
 /**
