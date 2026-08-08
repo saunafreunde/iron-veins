@@ -1,14 +1,38 @@
+import { ROAD_CONGESTION_COST_PER_UNIT } from '../constants';
 import type { TileMap } from '../map/TileMap';
 import { slopeRise } from '../map/terrain';
 import { RoadBit } from '../town/types';
 
 /**
- * A* over the road tile grid.
+ * A* over the road tile grid (SPEC.md 8.4).
  *
  * Iterative with an explicit binary heap (architecture law #8), and every
  * comparison falls back to the tile index so the result cannot depend on
  * insertion order (failure #14). All working arrays are allocated once and
  * reused, because pathfinding runs whenever a vehicle reaches a station.
+ *
+ * THE CONGESTION TERM (SPEC2 M15, closing D-129). 8.4 prices a road step by
+ * distance AND by "vehicles per tile in the last 200 ticks". That second term
+ * is `map.congestion`, the saved layer of net/congestion.ts, converted to the
+ * tile equivalents this search measures in by
+ * {@link ROAD_CONGESTION_COST_PER_UNIT}. It is charged on the tile being
+ * ENTERED, which is the tile the entry counter itself counts, so the cost a
+ * route pays and the traffic it caused are measured at the same place.
+ *
+ * The term is a WORLD RULE and off unless the world was started with it
+ * (SPEC2 Z2, the D-110/D-184 pattern), which is why `congestion` is a required
+ * argument rather than a flag read from somewhere: with it false the search is
+ * bit-identical to the M2 one, whatever the layer holds.
+ *
+ * The step cost stays at or above one tile equivalent, so the Manhattan
+ * heuristic remains a lower bound and A* stays admissible - the congestion
+ * term makes a route dearer, never the goal nearer.
+ *
+ * Four directions, not the eight of 8.4's table: a road tile carries four
+ * connection bits (see {@link RoadBit}) and there is no such thing as a
+ * diagonal road in this tile model, so the eighth-neighbour version of this
+ * search would be routing over connections the map cannot express. That
+ * departure predates M15 and is unchanged by it.
  */
 
 /** Search is abandoned beyond this many expanded nodes. */
@@ -103,8 +127,19 @@ export class RoadPathfinder {
    * Find a road route from `fromTile` to `toTile`, writing the tile sequence
    * into `out` (start tile first). Returns the number of tiles written, or 0
    * when there is no route.
+   *
+   * `congestion` is the world rule of SPEC2 M15, and it is REQUIRED rather
+   * than optional for the reason D-184 made the reservation table required on
+   * the rail search: a caller that could omit it would be a caller routing
+   * against a different world than the one the traffic is recorded in.
    */
-  find(map: TileMap, fromTile: number, toTile: number, out: Int32Array): number {
+  find(
+    map: TileMap,
+    fromTile: number,
+    toTile: number,
+    congestion: boolean,
+    out: Int32Array,
+  ): number {
     if (fromTile === toTile) {
       out[0] = fromTile;
       return 1;
@@ -146,7 +181,8 @@ export class RoadPathfinder {
         // Roads are only passable when both sides carry the connection.
         if ((map.roadBits[neighbour]! & OPPOSITE_BITS[direction]!) === 0) continue;
 
-        const step = 1 + slopeRise(map.slopeAt(nx, ny)) * SLOPE_PENALTY;
+        let step = 1 + slopeRise(map.slopeAt(nx, ny)) * SLOPE_PENALTY;
+        if (congestion) step += map.congestion[neighbour]! * ROAD_CONGESTION_COST_PER_UNIT;
         const tentative = this.gScore[current]! + step;
 
         const seen = this.visitStamp[neighbour] === stamp;

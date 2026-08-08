@@ -163,7 +163,8 @@ describe('performance budgets of section 21', () => {
 
     console.log(
       `save of a ${MEASURED_MAP_SIZE}^2 world with ${MEASURED_VEHICLES} vehicles: ` +
-        `${(bytes.byteLength / 1024 / 1024).toFixed(2)} MB, written in ${writeMs.toFixed(0)} ms, ` +
+        `${(bytes.byteLength / 1024 / 1024).toFixed(2)} MB (${bytes.byteLength} B), ` +
+        `written in ${writeMs.toFixed(0)} ms, ` +
         `read back in ${elapsed.toFixed(0)} ms (read budget ${LOAD_BUDGET_MS})`,
     );
 

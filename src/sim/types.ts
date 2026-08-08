@@ -157,4 +157,22 @@ export interface NewGameParams {
    * (SPEC2 M15's `signalStrafe`). Off when absent, for the reason above.
    */
   readonly signalPenalty?: boolean;
+  /**
+   * Whether road traffic is recorded and priced - SPEC.md 8.4's congestion
+   * term and the two road rules E-03 packages with it (SPEC2 M15).
+   *
+   * ONE flag for all three, because they are one delivery and one behaviour:
+   * the saved congestion layer feeds the road A* term, the speed cap a vehicle
+   * meets on a busy tile, and the level crossing that closes while a train
+   * holds it. A world with the rule off records nothing, so the layer stays
+   * zero and every road vehicle drives exactly the route and the speed it
+   * drove before M15.
+   *
+   * ABSENT MEANS OFF, and load-bearing for the same reason as the two rules
+   * above: every M6 band, every AI acceptance run and every determinism
+   * fixture was measured by a road pathfinder that had no congestion term, and
+   * a default of ON would re-band all of them inside the milestone that
+   * introduces the rule (SPEC2 Fehlerkatalog 34).
+   */
+  readonly roadCongestion?: boolean;
 }

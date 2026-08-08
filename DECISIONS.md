@@ -12,7 +12,7 @@ no entry below. A number may appear under several topics.
 
 - **Determinism, RNG & hashing:** D-001, D-002, D-003, D-004, D-009, D-010,
   D-024, D-093, D-106, D-128, D-137, D-142, D-145, D-146, D-149, D-153, D-178,
-  D-181, D-184
+  D-181, D-184, D-185
 - **Commands, snapshot & worker boundary:** D-004, D-005, D-006, D-011, D-032,
   D-100, D-111, D-145, D-146, D-148, D-162, D-174, D-176, D-179
 - **Lines & timetables:** D-145, D-146, D-147, D-148, D-149, D-150, D-151,
@@ -23,11 +23,11 @@ no entry below. A number may appear under several topics.
   D-141
 - **Save format, migrations & replays:** D-007, D-025, D-026, D-027, D-048,
   D-111, D-130, D-131, D-134, D-142, D-144, D-145, D-146, D-147, D-153, D-178,
-  D-181, D-184
+  D-181, D-184, D-185
 - **Rail & track:** D-042, D-043, D-044, D-045, D-046, D-047, D-053, D-141,
   D-153, D-157, D-184
 - **Signals & reservations:** D-054, D-055, D-056, D-057, D-058, D-059, D-060,
-  D-061, D-073, D-080, D-081, D-082, D-083, D-157, D-173, D-184
+  D-061, D-073, D-080, D-081, D-082, D-083, D-157, D-173, D-184, D-185
 - **Stations & catchment:** D-049, D-080, D-095, D-150, D-159, D-178, D-179
 - **Cargo, payment & routing:** D-036, D-037, D-065, D-067, D-075, D-077,
   D-078, D-118, D-142, D-151, D-176, D-178
@@ -39,7 +39,7 @@ no entry below. A number may appear under several topics.
 - **Balancing & scenarios:** D-038, D-039, D-040, D-041, D-066, D-087, D-088,
   D-116, D-151, D-152, D-156, D-158, D-159
 - **Vehicles & fleet:** D-043, D-044, D-045, D-068, D-076, D-089, D-093,
-  D-096, D-142, D-143, D-145, D-146, D-155, D-157, D-171, D-174, D-181
+  D-096, D-142, D-143, D-145, D-146, D-155, D-157, D-171, D-174, D-181, D-185
 - **Water & air:** D-094, D-095, D-096, D-097, D-098, D-099
 - **Competitors, AI & tenders:** D-107, D-108, D-109, D-115, D-116, D-121,
   D-122, D-147, D-152, D-153, D-154, D-155, D-156, D-158
@@ -49,13 +49,15 @@ no entry below. A number may appear under several topics.
 - **UI & input:** D-011, D-013, D-015, D-035, D-110, D-113, D-114, D-119,
   D-126, D-148, D-165, D-166, D-177, D-179, D-180, D-181, D-182, D-183, D-184
 - **Performance & measurement:** D-002, D-120, D-135, D-136, D-161, D-162,
-  D-163, D-164, D-167, D-170, D-171, D-172, D-173, D-174, D-176, D-177, D-184
+  D-163, D-164, D-167, D-170, D-171, D-172, D-173, D-174, D-176, D-177, D-184,
+  D-185
 - **Platform, tooling & build:** D-012, D-014, D-015, D-016, D-017, D-029,
   D-030, D-031, D-160, D-168, D-169, D-170, D-172, D-175
 - **Crash safety:** D-132, D-139
 - **Testing method & fixtures:** D-010, D-038, D-072, D-074, D-084, D-133,
   D-167, D-183
-- **Process & specification:** D-070, D-123, D-129, D-133, D-138, D-140
+- **Process & specification:** D-070, D-123, D-129, D-133, D-138, D-140,
+  D-185
 
 ---
 
@@ -5486,3 +5488,175 @@ have cited a magic number as its origin: `REPATH_INTERVAL_TICKS`, a local
 constant in `vehicles/update.ts` since M2, moved into `constants.ts` as
 `VEHICLE_REPATH_INTERVAL_TICKS` with its unit and origin. Same value, no
 behaviour change.
+
+## M15 - net value and road congestion, bundle 2: the road half of 8.4 (2026-08-08)
+
+### D-185 The road congestion layer is saved state, the leaders are the layer, and the crossing reads the one reservation table
+
+SPEC.md 8.4 has priced a road step by "vehicles per tile in the last 200
+ticks" since the first day, and `RoadPathfinder` has never charged it. D-129
+recorded that as a deferral with its fix already decided; this entry is the
+implementation, and with it the road half of 8.4 exists. Five decisions.
+
+**The layer is SAVED and HASHED, and that is the whole point.** Vehicles per
+tile over the last two hundred ticks is not reconstructible from the current
+state: it is history. Under Z4 a historical input to a simulation decision is
+save state, so `TileMap.congestion` is a Uint8 tile layer that travels in the
+file and enters `hashWorld` beside the terrain. A layer rebuilt empty on load
+would price the same roads differently after loading than before saving -
+different routes from the same state, architecture law #3 broken in silence,
+and no test in this repository would have seen it. Two of the five expansion
+drafts wrote "derived, no save change" for exactly this layer and two judges
+vetoed it by name (E-02); the Fertig-wenn of SPEC2 M15 asks for hash equality
+across a save/load round trip precisely because that is the property a derived
+layer cannot have, and `roadCongestion.spec.ts` asserts it byte for byte as
+well as by digest.
+
+It rides in the map's SharedArrayBuffer like every other tile layer, which is
+why the milestone's promised "Stau-Overlay-Block" in the snapshot costs ZERO
+bytes: the heat map will read the layer in place, exactly as the renderer
+already reads terrain and track. `SNAPSHOT_LAYOUT_VERSION` does not move -
+the D-171/D-174 pattern met a third time, booked honestly rather than as an
+empty version bump.
+
+**One WORLD RULE for all three of E-03's deliverables, and it is off.**
+`roadCongestion` is a `NewGameParams` field like `inflation` (D-110) and like
+the two rail terms of D-184: saved, hashed unconditionally, chosen once on the
+new-game screen, absent means OFF. It gates the recording, the A* term, the
+speed cap AND the level crossing, because they are one behaviour: what a road
+vehicle does about the traffic around it. Every band this game is measured
+against - the five M6 scenarios, the takt band of D-151, scenario 5 on the
+D-158 band, the AI acceptance run - was measured by a road pathfinder with no
+congestion term and by lorries that drove through trains. Shipping any of it
+on by default would re-band all of them inside the milestone that introduces
+the rule, which is Fehlerkatalog 34 by name. With the rule off NOTHING is
+recorded, so the layer stays zero, the sweep never runs and the search is
+bit-identical to the M2 one - inertness that is provable rather than hoped
+for, and the balance suite's figures are unchanged to the euro.
+
+The system draws NO randomness at all, not even a named stream: it is
+counting and integer decay (the D-093 posture, Z3).
+
+**The units are the specified quantity, and the decay is an epoch sweep over a
+dirty list.** One tile entry adds 16 units and every 20 ticks a tile loses
+`ceil(value / 11)`, which leaves 10/11 per epoch and therefore (10/11)^10 =
+0.386 - one over e - across the 200 ticks 8.4 names. The layer is an
+exponential window with a time constant of 210 ticks, so `value / 16` IS
+"vehicles per tile in the last 200 ticks" and there is no second definition
+anywhere. Measured on the fixture: a bottleneck crossed by one lorry per
+second settles at 176 units = 11.0 vehicles per window, which is the closed
+form of that steady state and not a number anybody tuned.
+
+Decaying a million tiles fifty times a game second for a layer with a few
+hundred non-zero entries is the map-scan E-02 forbids, so `RoadCongestion`
+keeps the tiles that carry something and the sweep walks that list. The list
+is DERIVED - it is exactly "the tiles above zero" - and is rebuilt from the
+layer on load beside the reservation table and the land masses (D-054). No
+duplicate flag array is needed: a tile is pushed exactly when its value rises
+FROM zero and dropped exactly when the sweep finds it back at zero, and
+rounding the loss UP is what makes a value reach zero in finite time so the
+list can ever drop it. The cap is a REFUSAL, not an eviction (the M13
+particle-pool precedent): recording a tile the sweep can never reach again
+would leave a phantom jam in the A* costs for the rest of the game.
+`MAX_CONGESTED_TILES` = 65,536 is three times what MAX_VEHICLES can physically
+keep alive, and the refusal is tested rather than assumed.
+
+The test measures the WORK, not the wall clock: over four hundred ticks the
+sweep is called exactly twenty times and touches tens of tiles, against the
+16,384-tile map it would scan per tick if it were written the obvious way.
+
+**The speed cap is the leader rule without a leader search.** E-03 asks for
+capping behind slower traffic on the same tile and vetoes car-following in the
+same breath, because a following model is O(vehicles x neighbours) in the hot
+path for an effect the cost term already delivers economically. The way out is
+that the layer ALREADY IS the leaders, aggregated: a vehicle entering a tile
+reads how much traffic went through it in the last window and caps its own top
+speed by it - one array read, no neighbour search, no overtaking, no following
+distance. The vehicle's own entry is subtracted first, which is what makes it
+a leader rule rather than a self-inflicted tax: a lone lorry on an empty road
+put one entry's worth of units there a moment ago and must not be slowed by
+its own trail. The floor is 0.35 of top speed, because a jam here is a queue
+and a price, never a standstill - there is no leader to wait for, so a factor
+of zero would strand a lorry for ever.
+
+**A level crossing closes on a claim, and the claim is the one the trains
+obey.** A tile carrying both road and track is shut to road traffic while
+`ReservationTable` shows an owner on it. That table is the single occupancy
+truth of this game (D-054, tile-keyed, derived, written by the claim logic
+that runs from where the train IS, D-060), and the crossing tile is a tile of
+the block a train claims: a block signal writes the whole block including the
+crossing, a plain claim writes the run the train will drive through it. So an
+O(1) read of that one tile IS reading the block's reservation, and a crossing
+on an unsignalled line closes only as the train's own body arrives - the reach
+of the claim, not a shorter or longer invention beside it.
+
+It is a delay, not a collision model. A road vehicle already standing on the
+crossing is not ejected, because nothing in this game has ever collided; the
+gate stops a vehicle ENTERING, in the same shape as the section gate three
+lines above it in `update.ts`. The held vehicle stays in `Driving` at speed
+zero rather than in `WaitingForPath`: that state is the trains' and runs
+`holdBody`, which would have a lorry claiming track.
+
+**The fixture is a ladder, and the two-route test measures real journeys.**
+The two ways round the middle are mirror images - one step off the main line,
+fourteen straight, one step back - so they cost the identical number of tile
+equivalents by construction, and nothing passes here because a detour was
+tuned to a constant (the D-184 diamond argument, applied to roads). The
+stretch west of the split is the bottleneck: every journey crosses it and no
+route avoids it.
+
+Two hundred lorries leave one real second apart, and the acceptance numbers
+are read off the running world. Congestion: the bottleneck peaks at 176 units
+= 11 vehicles per window while a road tile no journey uses stays at zero. The
+two-route proof is the same fixture with one flag flipped, counted per
+DIRECTION because a route is a pure function of its two ends: with the rule
+off every vehicle heading the same way is on the same branch (96/0 eastbound,
+103/0 westbound - the fleet has no choice), and with it on the journeys split
+across both (46/41 and 50/63). That is "rerouted journeys demonstrably take
+the alternative route" measured on journeys rather than on a probe search.
+
+**v26, extended in place.** M15's one bump (Z5) is D-184's; this bundle adds
+`roadCongestion` and the layer to the SAME `v25_to_v26` migration rather than
+opening a v27. A version 25 world enters with the rule off and a zeroed layer,
+which is what that world knew about its own past - the M11 waypoint and M14
+ring precedent. Values already present are kept, so the corpus trick of
+wrapping a current state in an old container cannot flatten a real rule or a
+real layer.
+
+Adding one hashed word and one hashed megabyte moves every world hash, which
+is the designed-for event with a written protocol. The canonical cross-OS pin
+was re-recorded under D-137 (v26, seed 424,242, tick 10,000:
+`50c7d6a38f6da052`) and the corpus manifest under D-130. The v26 fixture was
+REWRITTEN by this build, because the v26 payload gained a field inside its own
+milestone and no released build ever wrote the intermediate shape - that is
+what "every version writes its fixture with the encoder of its own build"
+means while a version is still open. The corpus is also the evidence that
+nothing but the new words moved: all five fixtures - v22, v23, v24 and v25
+written by their own builds, v26 by this one - decode to the identical world
+hash `17f7f507023b91d8`.
+
+**Measured on the reference machine** (Ryzen 5 7520U, `npm run test:perf`
+2026-08-08): tick p50 **1.351 ms** / p99 **2.985 ms** on the 1,500-vehicle
+fixture (max 19.4 ms over 6,500 ticks), against the M10 baseline of 1.45 /
+3.26 - a p99 delta of **-0.28 ms** where the M15 ledger row allows +0.50 ms
+for the whole milestone, and inside the documented +-0.7 ms run noise of this
+box either way. The reference fleet runs with the rule OFF, so the increment,
+the sweep and the two gates are branches never taken; with it on the tick cost
+is one clamped add per road vehicle per tile boundary plus a walk of the dirty
+list once per second. Render tripwires unchanged and green (sprite pool median
+1.71, draw prep 2.38, chunk bake 0.46, particles 0.32, aspect 0.03, emissive
+0.04 ms); flow export median 0.055 ms.
+
+**Save size, measured as an A/B on one world** rather than estimated: on a
+1024^2 map the all-zero layer costs **1,039 B** compressed against 1,048,576 B
+raw (0.1 %), and a heavily played layer with 25,000 congested tiles costs
+**20,023 B**. The ledger's "~1 MB, zlib-small because mostly zero" is
+therefore true with room to spare; the 1,500-vehicle reference save reads
+187,272 B. The corpus fixture on its 128^2 map grew from 10,294 to 10,385 B.
+
+**What this bundle deliberately did not change.** The road search remains
+four-connected where 8.4's table says eight: a road tile carries four
+connection bits and there is no diagonal road in this tile model, so an
+eight-neighbour search would route over connections the map cannot express.
+That departure predates M15 and is now written down rather than left as an
+undocumented one.

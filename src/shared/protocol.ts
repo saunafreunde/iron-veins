@@ -366,9 +366,11 @@ export interface NewGameOptions {
   readonly companyColorIndex: number;
   readonly inflation: boolean;
   readonly emissions: boolean;
-  /** The two route-cost rules of SPEC.md 8.4 (M15): saved, hashed, off by default. */
+  /** The route-cost rules of SPEC.md 8.4 (M15): saved, hashed, off by default. */
   readonly occupancyPenalty: boolean;
   readonly signalPenalty: boolean;
+  /** The road half of 8.4: congestion recorded, priced, capped and crossed. */
+  readonly roadCongestion: boolean;
   readonly aiCompanies: number;
 }
 

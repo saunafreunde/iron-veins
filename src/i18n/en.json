@@ -636,6 +636,7 @@
   "ui.newGame.emissions": "Carbon levy and grants from the year 2000",
   "ui.newGame.occupancyPenalty": "Occupancy penalty: trains route around claimed blocks (3 s per foreign reservation)",
   "ui.newGame.signalPenalty": "Signal penalty: on equal running time, trains prefer the route with fewer signals",
+  "ui.newGame.roadCongestion": "Road congestion: traffic is counted per tile - lorries and buses route around busy roads, slow down behind dense traffic and wait at a closed level crossing",
   "ui.newGame.seed": "Seed",
   "ui.newGame.reroll": "Reroll",
   "ui.newGame.start": "Start game",

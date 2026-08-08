@@ -636,6 +636,7 @@
   "ui.newGame.emissions": "CO₂-Abgabe und Förderung ab dem Jahr 2000",
   "ui.newGame.occupancyPenalty": "Belegungsstrafe: Züge weichen belegten Blöcken aus (3 s Aufschlag je fremder Reservierung)",
   "ui.newGame.signalPenalty": "Signalstrafe: Züge bevorzugen bei gleicher Fahrzeit die Route mit weniger Signalen",
+  "ui.newGame.roadCongestion": "Straßenstau: Verkehr wird je Feld gezählt - Lkw und Busse weichen vollen Straßen aus, werden hinter dichtem Verkehr langsamer und warten am geschlossenen Bahnübergang",
   "ui.newGame.seed": "Startwert",
   "ui.newGame.reroll": "Neu würfeln",
   "ui.newGame.start": "Spiel starten",

@@ -55,6 +55,7 @@ import { recordStationCargo, StationHistoryField } from '../station/history';
 import { deliverToIndustry } from '../industry/production';
 import { isOneWay, signalDirection, signalKind, SignalKind } from '../map/signals';
 import { flightPath } from '../net/airPath';
+import { roadSpeedFactor } from '../net/congestion';
 import {
   hasModule,
   isAirModule,
@@ -410,7 +411,13 @@ function routeTo(world: World, id: number, targetTile: number): boolean {
         ? world.waterPathfinder.find(world.map, vehicles.tileIndex[id]!, targetTile, path)
         : kind === VehicleKind.Train
           ? findRailRoute(world, id, vehicles.tileIndex[id]!, targetTile, path)
-          : world.roadPathfinder.find(world.map, vehicles.tileIndex[id]!, targetTile, path);
+          : world.roadPathfinder.find(
+              world.map,
+              vehicles.tileIndex[id]!,
+              targetTile,
+              world.roadCongestion,
+              path,
+            );
 
   if (length === 0) {
     vehicles.pathLength[id] = 0;
@@ -1070,6 +1077,48 @@ function claimAhead(world: World, id: number): void {
 }
 
 /**
+ * The speed a road vehicle may drive on the tile it is standing on: its own
+ * top speed, capped by the traffic that went through ahead of it (SPEC2 E-03).
+ *
+ * One array read per road vehicle per tick, and only while the world rule is
+ * on. This is the whole of E-03's "Geschwindigkeitskappung": there is no
+ * leader lookup, no following distance and no overtaking, because the
+ * congestion layer already IS the leaders, aggregated - which is what keeps
+ * the vetoed O(vehicles x neighbours) scan out of the hot path.
+ */
+function roadSpeedLimit(world: World, id: number): number {
+  const vehicles = world.vehicles;
+  const top = vehicles.maxSpeedMs[id]!;
+  if (!world.roadCongestion) return top;
+  const factor = roadSpeedFactor(world.map.congestion[vehicles.tileIndex[id]!]!);
+  return factor === 1 ? top : top * factor;
+}
+
+/**
+ * May this road vehicle move onto route node `next`?
+ *
+ * The level crossing of SPEC2 E-03: a tile that carries both road and track
+ * is closed to road traffic while a train holds it. The reservation table is
+ * asked directly, because it is the ONE occupancy truth in this game (D-054)
+ * and the crossing tile is a tile of the block a train claims - a block signal
+ * writes the whole block, a plain claim writes the run the train will drive
+ * through it, and either way the claim reaching the crossing is exactly the
+ * moment the barriers should come down. A crossing on an unsignalled line
+ * therefore closes only as the train's own body reaches it; that is the reach
+ * of the claim, and inventing a longer one would be inventing a second
+ * occupancy model beside the one the trains obey.
+ *
+ * It is a delay, not a collision model: a road vehicle already standing on the
+ * crossing is not ejected, because nothing in this game has ever collided.
+ */
+function mayCrossRoad(world: World, next: number): boolean {
+  if (!world.roadCongestion) return true;
+  const map = world.map;
+  if (map.trackBits[next] === 0) return true;
+  return world.reservations.ownerOf(next) === -1;
+}
+
+/**
  * May this train move onto route node `next`?
  *
  * Free unless the tile begins a new section - and then only if the train can
@@ -1313,12 +1362,17 @@ function stepVehicle(world: World, id: number): void {
       }
 
       const train = vehicles.kind[id] === VehicleKind.Train;
+      const road = vehicles.kind[id] === VehicleKind.Road;
       if (train) {
         claimAhead(world, id);
         // Whatever the signals say, the train owns the ground under itself.
         if (vehicles.reservedToIndex[id]! < 0) holdBody(world, id);
       }
-      const limit = train ? trainSpeedLimit(world, id) : vehicles.maxSpeedMs[id]!;
+      const limit = train
+        ? trainSpeedLimit(world, id)
+        : road
+          ? roadSpeedLimit(world, id)
+          : vehicles.maxSpeedMs[id]!;
 
       const remaining = remainingDistanceM(world, id);
       const braking = remaining <= brakingDistanceM(vehicles.speedMs[id]!, vehicles.brakeMs2[id]!);
@@ -1363,10 +1417,27 @@ function stepVehicle(world: World, id: number): void {
           break;
         }
 
+        // The level crossing gate, the road counterpart of the section gate
+        // above: a train holding the crossing keeps the road traffic waiting.
+        if (road && !mayCrossRoad(world, path[index + 1]!)) {
+          const stopAt = step - SIGNAL_STOP_OFFSET_M;
+          if (vehicles.progressM[id]! > stopAt) vehicles.progressM[id] = stopAt;
+          vehicles.speedMs[id] = 0;
+          held = true;
+          break;
+        }
+
         vehicles.progressM[id] = vehicles.progressM[id]! - step;
         vehicles.routeRemainingM[id] = vehicles.routeRemainingM[id]! - step;
         vehicles.pathIndex[id] = index + 1;
         vehicles.tileIndex[id] = path[index + 1]!;
+        // The 8.4 congestion window is fed HERE, on the tile a road vehicle
+        // has just entered - the same event the road A* prices, so what a
+        // route costs and what it causes are measured at one place. O(road
+        // vehicles) per tick and allocation free (law #7).
+        if (road && world.roadCongestion) {
+          world.congestion.note(world.map.congestion, path[index + 1]!);
+        }
       }
       if (held) return;
       const atEnd = vehicles.pathIndex[id]! + 1 >= vehicles.pathLength[id]!;

@@ -674,6 +674,7 @@ function restart(options: NewGameOptions): void {
       emissions: options.emissions,
       occupancyPenalty: options.occupancyPenalty,
       signalPenalty: options.signalPenalty,
+      roadCongestion: options.roadCongestion,
       aiCompanies: options.aiCompanies,
     },
     (phase, seedAttempt) => {

@@ -1523,6 +1523,101 @@ export const CURVE_LOOKAHEAD_MAX_NODES = 160;
  */
 export const STOPPED_SPEED_MS = 0.4;
 
+// -------------------------------------------------- road traffic (SPEC.md 8.4)
+
+/**
+ * What one road vehicle entering a tile adds to the congestion layer.
+ * [layer units per entry]
+ *
+ * The layer is a Uint8 and 8.4's quantity is "vehicles per tile in the last
+ * 200 ticks", which on a road tile is a small number: at 50 m tiles and
+ * 20 m/s a vehicle needs 2.5 s to cross one, so an unobstructed single lane
+ * passes about four vehicles per window. Counting one per entry would leave
+ * the whole layer living in the bottom four values of a byte. Sixteen units
+ * per entry spends the byte instead: a stored value divided by this constant
+ * IS the specified vehicle count, and the ceiling of 255 is reached at sixteen
+ * vehicles in the window - a tile nothing but a queue can produce.
+ */
+export const ROAD_CONGESTION_UNITS_PER_ENTRY = 16;
+
+/**
+ * How often the congestion layer decays. [ticks]
+ *
+ * One real second at 1x. Per-tick decay would be twenty times the sweeps for a
+ * quantity measured over two hundred ticks, and a coarser epoch would make the
+ * decay visibly stepped in the heat map. The phase is `tick % EPOCH`, so it is
+ * a pure function of the saved tick and survives a save/load round trip
+ * without a field of its own.
+ */
+export const ROAD_CONGESTION_EPOCH_TICKS = 20;
+
+/**
+ * Divisor of the per-epoch loss: a tile loses `ceil(value / DIVISOR)` units
+ * every epoch. [1]
+ *
+ * Eleven makes the surviving fraction 10/11 per epoch, which over the 200 tick
+ * window of 8.4 is (10/11)^10 = 0.386 - one over e, to two decimals. So the
+ * layer is an exponential window with a time constant of 210 ticks, which is
+ * the honest reading of "the last 200 ticks" for a quantity that has to decay
+ * smoothly rather than fall off a cliff. Rounding the loss UP is what makes a
+ * value reach zero in finite time instead of approaching it for ever, which is
+ * what lets the dirty list of net/congestion.ts ever drop a tile.
+ */
+export const ROAD_CONGESTION_DECAY_DIVISOR = 11;
+
+/**
+ * How many tiles may carry congestion at once. [tiles]
+ *
+ * The dirty list is capped so that a 2048^2 benchmark map does not pay four
+ * megabytes for a list that holds a few thousand entries, and the cap is a
+ * REFUSAL rather than an eviction (the M13 particle-pool precedent): recording
+ * a tile the sweep can never reach again would leave a phantom jam in the A*
+ * costs for the rest of the game.
+ *
+ * It is deliberately above what the fleet can physically keep alive. One entry
+ * decays to zero in eleven epochs, so a tile stays listed for at most about
+ * 220 ticks; a road vehicle crosses a tile in 50 ticks at speed, so it keeps
+ * at most five tiles alive at once. MAX_VEHICLES is 4_000, giving 20_000 tiles
+ * for a fleet of nothing but road vehicles - and this cap is three times that.
+ */
+export const MAX_CONGESTED_TILES = 65_536;
+
+/**
+ * What one unit of congestion adds to a road A* step.
+ * [tile equivalents per layer unit]
+ *
+ * The road pathfinder measures in tile equivalents (a flat tile is 1), so this
+ * is where 8.4's congestion term meets the distance it competes with. One
+ * sixteenth of a tile per vehicle in the window: four vehicles double the cost
+ * of the tile they are on, so a jammed lane is worth a detour of one tile per
+ * jammed tile, and a saturated tile is worth four. Exactly 1/64, which is a
+ * power of two and therefore bit-exact in the Float32 score arrays (law #4).
+ */
+export const ROAD_CONGESTION_COST_PER_UNIT = 0.015625;
+
+/**
+ * How much of its top speed a road vehicle loses per unit of congestion AHEAD
+ * of it. [fraction of top speed per layer unit]
+ *
+ * 0.0025 is four per cent per vehicle in the window - traffic a driver reacts
+ * to rather than a wall. The vehicle's own entry is subtracted before this is
+ * applied (net/congestion.ts), so a lone vehicle on an empty road is never
+ * slowed by its own trail.
+ */
+export const ROAD_CONGESTION_SPEED_LOSS_PER_UNIT = 0.0025;
+
+/**
+ * Slowest a congested road may make a vehicle, as a fraction of its top speed.
+ * [1]
+ *
+ * A jam in this game is a cost term and a queue, never a standstill: E-03
+ * vetoes car-following, so nothing here models the gap between two vehicles
+ * and a factor of zero would strand a lorry on a tile with no leader to wait
+ * for. Just over a third of top speed is walking pace for a lorry and is
+ * reached only where the layer is saturated.
+ */
+export const ROAD_CONGESTION_MIN_SPEED_FACTOR = 0.35;
+
 // ------------------------------------------------------------------ signals
 
 /**

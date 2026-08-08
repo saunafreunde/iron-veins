@@ -311,11 +311,15 @@ describe('the registered migrations', () => {
     // company-wide renewal flag went with them (per-line since M11).
     expect(state['lines']).toEqual([]);
     expect('autoRenew' in companies[0]!).toBe(false);
-    // v26 made the two 8.4 route-cost terms world rules (M15). A world driven
-    // by a pathfinder that had neither is a world with both switched off -
-    // any other default would re-route its whole fleet on the first departure.
+    // v26 made the 8.4 route costs world rules (M15). A world driven by
+    // pathfinders that had none of them is a world with all three switched
+    // off - any other default would re-route its whole fleet on the first
+    // departure - and its road traffic layer is empty, because nothing ever
+    // recorded a vehicle entering a tile.
     expect(state['occupancyPenalty']).toBe(false);
     expect(state['signalPenalty']).toBe(false);
+    expect(state['roadCongestion']).toBe(false);
+    expect(map['congestion']).toEqual(new Uint8Array(64 * 64));
     expect(migrated['saveVersion']).toBe(SAVE_VERSION);
   });
 
@@ -475,10 +479,12 @@ describe('the registered migrations', () => {
     expect('lineIndex' in project).toBe(false);
   });
 
-  it('enters a v25 world with both 8.4 rules off, and keeps a rule already set', () => {
-    // The M15 bump. A world driven by a pathfinder that had neither term is a
-    // world with both terms off - and a state that already carries them (the
-    // corpus wraps a CURRENT state in an old container) must not be flattened.
+  it('enters a v25 world with all three 8.4 rules off, and keeps a rule already set', () => {
+    // The M15 bump. A world driven by pathfinders that had none of the terms
+    // is a world with all of them off - and a state that already carries them
+    // (the corpus wraps a CURRENT state in an old container) must not be
+    // flattened. A payload with no map section is passed through rather than
+    // rejected here; the decoder is what refuses it.
     const fresh = migrateSavePayload(
       { magic: SAVE_MAGIC, saveVersion: 25, state: { mapSize: 64 } },
       25,
@@ -487,13 +493,37 @@ describe('the registered migrations', () => {
     const freshState = fresh['state'] as Record<string, unknown>;
     expect(freshState['occupancyPenalty']).toBe(false);
     expect(freshState['signalPenalty']).toBe(false);
+    expect(freshState['roadCongestion']).toBe(false);
+    expect(freshState['map']).toBeUndefined();
     expect(fresh['saveVersion']).toBe(26);
 
+    // With a map, the congestion layer of 8.4 arrives zeroed: a world with no
+    // congestion term recorded no traffic, and zero is what it knew.
+    const withMap = migrateSavePayload(
+      {
+        magic: SAVE_MAGIC,
+        saveVersion: 25,
+        state: { mapSize: 64, map: { terrain: new Uint8Array(64 * 64) } },
+      },
+      25,
+      26,
+    );
+    const layers = (withMap['state'] as Record<string, unknown>)['map'] as Record<string, unknown>;
+    expect(layers['congestion']).toEqual(new Uint8Array(64 * 64));
+
+    const played = new Uint8Array(64 * 64);
+    played[17] = 96;
     const carried = migrateSavePayload(
       {
         magic: SAVE_MAGIC,
         saveVersion: 25,
-        state: { mapSize: 64, occupancyPenalty: true, signalPenalty: true },
+        state: {
+          mapSize: 64,
+          occupancyPenalty: true,
+          signalPenalty: true,
+          roadCongestion: true,
+          map: { terrain: new Uint8Array(64 * 64), congestion: played },
+        },
       },
       25,
       26,
@@ -501,6 +531,8 @@ describe('the registered migrations', () => {
     const carriedState = carried['state'] as Record<string, unknown>;
     expect(carriedState['occupancyPenalty']).toBe(true);
     expect(carriedState['signalPenalty']).toBe(true);
+    expect(carriedState['roadCongestion']).toBe(true);
+    expect((carriedState['map'] as Record<string, unknown>)['congestion']).toBe(played);
   });
 
   it('migrates a v22 save to v23 without moving the world hash', () => {

@@ -6,6 +6,7 @@ import {
   DAYS_PER_MONTH,
   DAYS_PER_YEAR,
   MAX_COMPANIES,
+  ROAD_CONGESTION_EPOCH_TICKS,
   START_YEAR,
   TICKS_PER_DAY,
   TICKS_PER_MONTH,
@@ -33,6 +34,7 @@ import { costFactor, inflatedCostCt } from './cargo/payment';
 import { RailPathfinder } from './net/railPath';
 import { WaterPathfinder } from './net/waterPath';
 import { ReservationTable } from './net/reservations';
+import { RoadCongestion } from './net/congestion';
 import { BlockIndex } from './signals/blocks';
 import { RoadPathfinder } from './net/roadPath';
 import {
@@ -95,6 +97,8 @@ export interface WorldStateData {
   /** The two 8.4 route-cost rules of M15. Saved and hashed like inflation. */
   occupancyPenalty: boolean;
   signalPenalty: boolean;
+  /** The 8.4 road traffic rules of M15 (congestion, speed cap, crossings). */
+  roadCongestion: boolean;
   mapSize: number;
   rng: RngState;
   /** Every company, player first. */
@@ -136,6 +140,14 @@ export interface TileMapData {
   owner: Uint8Array;
   /** Waypoint marker per tile, see map/waypoints.ts (M11, section 12.1). */
   waypoint: Uint8Array;
+  /**
+   * Road traffic per tile, the congestion layer of SPEC.md 8.4 (M15).
+   *
+   * The one tile layer here that is NOT a description of what was built: it is
+   * history, and it is saved for exactly that reason (SPEC2 Z4, E-02). See
+   * TileMap.congestion.
+   */
+  congestion: Uint8Array;
 }
 
 /**
@@ -175,6 +187,14 @@ export class World {
   readonly occupancyPenalty: boolean;
   /** Whether `railPath` charges a small penalty for passing a signal. */
   readonly signalPenalty: boolean;
+  /**
+   * Whether road traffic is recorded and priced: the congestion layer of
+   * SPEC.md 8.4 with the road A* term, the speed cap and the level crossings
+   * E-03 packages with it (SPEC2 M15). Off unless the world was started with
+   * it - a world with it off records nothing at all, so the layer stays zero
+   * and the roads behave exactly as they did before M15.
+   */
+  readonly roadCongestion: boolean;
   readonly rng: Rng;
   /**
    * Every company in the game, index = id. Zero is the player, 1..n are the
@@ -229,6 +249,13 @@ export class World {
    * layers, rebuilt whenever the map revision moves, never serialised.
    */
   readonly blocks: BlockIndex;
+  /**
+   * Which road tiles currently carry traffic, so the decay of SPEC.md 8.4's
+   * congestion window is a walk over those tiles rather than over the map
+   * (SPEC2 E-02). The COUNTS live in the saved tile layer; this list is a pure
+   * function of it and is rebuilt on load, like the reservation table.
+   */
+  readonly congestion = new RoadCongestion();
   /**
    * How long cargo takes to get from any station to any other, measured from
    * the trips the fleet actually made (section 7.4).
@@ -323,6 +350,7 @@ export class World {
     // asymmetry with inflation and emissions is deliberate.
     this.occupancyPenalty = params.occupancyPenalty ?? false;
     this.signalPenalty = params.signalPenalty ?? false;
+    this.roadCongestion = params.roadCongestion ?? false;
     this.rng = Rng.fromSeed(gameplaySeed(this.seed));
     this.companies.push(
       createCompany(0, params.companyName, params.companyColorIndex, params.difficulty),
@@ -394,6 +422,13 @@ export class World {
    */
   step(queue: CommandQueue, sink: CommandOutcomeSink | null): void {
     this.drainCommands(queue, sink);
+    // Before the vehicles move, so the traffic a route is priced against is
+    // the window that ended with the last tick rather than a half-decayed
+    // one. Only on the epoch boundary, and only over the tiles that carry
+    // something - never a scan of the map (SPEC2 E-02).
+    if (this.roadCongestion && this.tick % ROAD_CONGESTION_EPOCH_TICKS === 0) {
+      this.congestion.decay(this.map.congestion);
+    }
     updateVehicles(this);
     // After the commands of this tick have run and before the clock moves, so
     // what a competitor sees is the world as it stands and what it orders runs
@@ -559,6 +594,7 @@ export class World {
       emissions: this.emissions,
       occupancyPenalty: this.occupancyPenalty,
       signalPenalty: this.signalPenalty,
+      roadCongestion: this.roadCongestion,
       mapSize: this.map.size,
       rng: this.rng.getState(),
       companies: this.companies.map((company) => ({ ...company })),
@@ -577,6 +613,7 @@ export class World {
         buildingLevel: this.map.buildingLevel,
         owner: this.map.owner,
         waypoint: this.map.waypoint,
+        congestion: this.map.congestion,
       },
       towns: this.towns.map((town) => ({ ...town })),
       industries: this.industries.map((industry) => ({ ...industry })),
@@ -614,6 +651,7 @@ export class World {
     map.buildingLevel.set(data.map.buildingLevel);
     map.owner.set(data.map.owner);
     map.waypoint.set(data.map.waypoint);
+    map.congestion.set(data.map.congestion);
     map.townId.set(new Int16Array(data.map.townId.slice().buffer));
     map.industryId.set(new Int16Array(data.map.industryId.slice().buffer));
 
@@ -631,6 +669,7 @@ export class World {
         emissions: data.emissions,
         occupancyPenalty: data.occupancyPenalty,
         signalPenalty: data.signalPenalty,
+        roadCongestion: data.roadCongestion,
         mapSize: data.mapSize,
         companyName: data.companies[0]!.name,
         companyColorIndex: data.companies[0]!.colorIndex,
@@ -661,6 +700,10 @@ export class World {
     }));
     world.cargoLinks.refreshLinks(world);
     rebuildReservations(world);
+    // The dirty list of the congestion layer, exactly as derived as the
+    // reservation table above: the layer came out of the file, the list of
+    // which tiles it touches is worked out again from it.
+    world.congestion.rebuild(map.congestion);
     // The constructor built the player from the parameters and the AI roster
     // from the RNG; the file says who they really are.
     world.companies.length = 0;
@@ -727,6 +770,8 @@ function hashDynamicState(h: Fnv1a64, world: World): void {
   // world hash once - re-recorded under the D-137/D-130 protocols.
   h.u32(world.occupancyPenalty ? 1 : 0);
   h.u32(world.signalPenalty ? 1 : 0);
+  // The road traffic rule of the same milestone, hashed on the same terms.
+  h.u32(world.roadCongestion ? 1 : 0);
 
   const rng = world.rng.getState();
   h.u32(rng[0]).u32(rng[1]).u32(rng[2]).u32(rng[3]);
@@ -1021,6 +1066,12 @@ export function hashWorld(world: World): string {
   h.intArray(map.buildingLevel);
   h.intArray(map.owner);
   h.intArray(map.waypoint);
+  // The congestion layer of 8.4 is saved state, so it is fingerprinted like
+  // every other tile layer - and like them in the FULL digest only: a
+  // megabyte that moves on every road vehicle's tile boundary would make the
+  // per-day live digest pay for what it exists to avoid (D-178's argument for
+  // the station rings, the tile-layer precedent it took it from).
+  h.intArray(map.congestion);
 
   return h.digest();
 }

@@ -63,9 +63,11 @@ export const SAVE_MAGIC = 'IRVN';
  * zeroed ring - which is exactly what that world knew. 26 is M15's one bump:
  * the two route-cost world rules of SPEC.md 8.4 - `occupancyPenalty` and
  * `signalPenalty` - which decide what `railPath` charges for an occupied
- * section and for a signal. A world that predates them was driven without
- * them, so the migration enters both as OFF, which is exactly what those
- * worlds did.
+ * section and for a signal, plus - extending the SAME v26 migration in place
+ * (SPEC2 Z5) - the road half of 8.4: the world rule `roadCongestion` and the
+ * saved Uint8 congestion layer it records into. A world that predates them was
+ * driven without them, so the migration enters all three rules as OFF and the
+ * layer as zeros, which is exactly what those worlds did and knew.
  */
 export const SAVE_VERSION = 26;
 
@@ -426,6 +428,7 @@ function parseTileMap(value: unknown, path: string, mapSize: number): TileMapDat
     buildingLevel: asBytes(raw['buildingLevel'], `${path}.buildingLevel`, tiles),
     owner: asBytes(raw['owner'], `${path}.owner`, tiles),
     waypoint: asBytes(raw['waypoint'], `${path}.waypoint`, tiles),
+    congestion: asBytes(raw['congestion'], `${path}.congestion`, tiles),
   };
 }
 
@@ -979,6 +982,7 @@ export function parseSaveFile(value: unknown): SaveFile {
     // that has lost one is a save whose trains would drive somewhere else.
     occupancyPenalty: asBoolean(stateRaw['occupancyPenalty'], 'save.state.occupancyPenalty'),
     signalPenalty: asBoolean(stateRaw['signalPenalty'], 'save.state.signalPenalty'),
+    roadCongestion: asBoolean(stateRaw['roadCongestion'], 'save.state.roadCongestion'),
     mapSize,
     rng: parseRngState(stateRaw['rng'], 'save.state.rng'),
     companies: parseCompanies(stateRaw['companies'], 'save.state.companies'),

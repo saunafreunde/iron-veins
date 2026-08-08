@@ -910,29 +910,56 @@ const v24_to_v25: SaveMigration = (payload) => {
 };
 
 /**
- * M15 made the two route-cost terms of SPEC.md 8.4 world rules (SPEC2 M15,
- * the milestone's one Z5 bump): `occupancyPenalty`, which charges the train
- * pathfinder for a section another train has claimed, and `signalPenalty`,
- * which charges it for passing a signal.
+ * M15 made the route costs of SPEC.md 8.4 world rules (SPEC2 M15, the
+ * milestone's one Z5 bump): `occupancyPenalty`, which charges the train
+ * pathfinder for a section another train has claimed, `signalPenalty`, which
+ * charges it for passing a signal, and - the road half of the same section,
+ * extending this migration IN PLACE rather than adding a v27 - the world rule
+ * `roadCongestion` with the Uint8 congestion layer it records into.
  *
- * Both enter a version 25 world as OFF, and that is not a convenient default
- * but the only true one: those worlds were driven by a pathfinder that had
- * neither term, so every route in the file was chosen without them. Turning
- * either on here would silently re-route a loaded save's whole fleet at the
- * first departure and move the balance bands of M6 under a player who changed
- * nothing (SPEC2 Fehlerkatalog 34).
+ * All three enter a version 25 world as OFF, and that is not a convenient
+ * default but the only true one: those worlds were driven by pathfinders that
+ * had none of the terms, so every route in the file was chosen without them.
+ * Turning any of them on here would silently re-route a loaded save's whole
+ * fleet at the first departure and move the balance bands of M6 under a player
+ * who changed nothing (SPEC2 Fehlerkatalog 34).
+ *
+ * The layer is zeroed for the same reason the M11 waypoints and the M14
+ * history rings were: a world with no congestion term recorded no traffic, so
+ * zero is what it knew about its own past rather than an invention.
  *
  * Fields already present are kept, so the corpus trick of wrapping a CURRENT
- * state in an old container cannot flatten a real rule back to off.
+ * state in an old container cannot flatten a real rule back to off or a real
+ * layer back to zeros. A payload with no map section is passed through as it
+ * is - the decoder is the one that refuses it (the v17_to_v18 precedent), and
+ * a migration must not turn a malformed save into an acceptable one.
  */
 const v25_to_v26: SaveMigration = (payload) => {
   const inner = state(payload);
+  const map = inner['map'];
+  const layers =
+    typeof map === 'object' && map !== null && !Array.isArray(map)
+      ? (map as Record<string, unknown>)
+      : null;
+
   return {
     ...payload,
     state: {
       ...inner,
       occupancyPenalty: inner['occupancyPenalty'] ?? false,
       signalPenalty: inner['signalPenalty'] ?? false,
+      roadCongestion: inner['roadCongestion'] ?? false,
+      ...(layers === null
+        ? {}
+        : {
+            map: {
+              ...layers,
+              congestion:
+                layers['congestion'] instanceof Uint8Array
+                  ? layers['congestion']
+                  : new Uint8Array(tileCount(payload)),
+            },
+          }),
     },
   };
 };

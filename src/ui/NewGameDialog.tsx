@@ -62,6 +62,7 @@ export function NewGameDialog({
   // on by default is a rule nobody chose (SPEC2 Fehlerkatalog 34).
   const [occupancyPenalty, setOccupancyPenalty] = useState(false);
   const [signalPenalty, setSignalPenalty] = useState(false);
+  const [roadCongestion, setRoadCongestion] = useState(false);
   const [aiCompanies, setAiCompanies] = useState(2);
 
   return (
@@ -181,6 +182,14 @@ export function NewGameDialog({
         />{' '}
         {t('ui.newGame.signalPenalty')}
       </label>
+      <label className="panel__hint">
+        <input
+          type="checkbox"
+          checked={roadCongestion}
+          onChange={(event) => setRoadCongestion(event.target.checked)}
+        />{' '}
+        {t('ui.newGame.roadCongestion')}
+      </label>
 
       <label className="field">
         <span className="field__label">{t('ui.newGame.seed')}</span>
@@ -217,6 +226,7 @@ export function NewGameDialog({
               emissions,
               occupancyPenalty,
               signalPenalty,
+              roadCongestion,
               aiCompanies,
             })
           }

@@ -85,6 +85,21 @@ export class TileMap {
   readonly waypoint: Uint8Array;
 
   /**
+   * Road traffic that has passed over this tile recently, in the units of
+   * `net/congestion.ts` - the congestion term of SPEC.md 8.4 (SPEC2 M15).
+   *
+   * SAVED and HASHED, never derived. The term is historical by definition
+   * ("vehicles per tile in the last 200 ticks"), and a historical input to a
+   * simulation decision is save state (SPEC2 Z4): a layer rebuilt empty on
+   * load would price the same roads differently after loading than before
+   * saving, which is different routes from the same state (D-129, E-02).
+   *
+   * The tiles that currently carry a value are tracked by `RoadCongestion`,
+   * which is derived and rebuilt from this layer on load.
+   */
+  readonly congestion: Uint8Array;
+
+  /**
    * Connected land component per tile, -1 for water. Derived - recomputed on
    * load rather than serialised.
    */
@@ -147,6 +162,10 @@ export class TileMap {
     offset += tiles;
     this.waypoint = new Uint8Array(this.buffer, offset, tiles);
     offset += tiles;
+    // In the shared buffer like every other tile layer, so the heat map of
+    // M15 reads it in place and the snapshot needs not one byte for it.
+    this.congestion = new Uint8Array(this.buffer, offset, tiles);
+    offset += tiles;
     this.oceanMask = new Uint8Array(this.buffer, offset, tiles);
 
     if (fresh) {
@@ -165,11 +184,11 @@ export class TileMap {
   static bufferBytes(size: number): number {
     const tiles = size * size;
     const corners = (size + 1) * (size + 1);
-    // 4-byte landmass, two 2-byte id layers, the corner heights, and twelve
+    // 4-byte landmass, two 2-byte id layers, the corner heights, and thirteen
     // single-byte layers: terrain, road, track, rail type, signal, structure,
     // structure height, building kind, building level, owner, waypoint,
-    // ocean mask.
-    return tiles * 8 + corners + tiles * 12;
+    // congestion, ocean mask.
+    return tiles * 8 + corners + tiles * 13;
   }
 
   /** Read-side view on a map the worker owns. */
