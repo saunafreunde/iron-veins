@@ -108,3 +108,22 @@ createRoot(container).render(
     <App client={client} />
   </StrictMode>,
 );
+
+/**
+ * A hot update that reaches this module runs it AGAIN: a second `createRoot`
+ * on the same container, a second `SimClient` and with it a second worker
+ * generating a second world. The page then shows two games stacked - two
+ * toolbars, two minimaps, two of everything - and the older worker keeps
+ * ticking behind the newer one.
+ *
+ * Nothing here is worth preserving across an update: the whole simulation
+ * lives in the worker and the shelf lives on disk, so a reload is both the
+ * correct answer and the cheap one. Accepting here also catches updates that
+ * PROPAGATE from the modules below (App, the panels): they stop at the first
+ * self-accepting module, which is this one.
+ */
+if (import.meta.hot) {
+  import.meta.hot.accept(() => {
+    window.location.reload();
+  });
+}
