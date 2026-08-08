@@ -746,6 +746,32 @@ perf and environment notes above.
   measurement note in D-205 before adding a per-tile string**: the first
   tripwire run cost 9.7 ms and the cost was composing a target key per
   tile, not the 4,914 new sprites.
+- **A tile's building may not stand taller than the cell the game reserves
+  for it** (D-206, bundle 8, 2026-08-09). D-205 drew the bake and never
+  asked how BIG it was: the tallest static cell was **4.30 tile heights**
+  (69 m on a 50 m tile) against the **1.12** of the D-117 procedural block
+  it falls back to, so a 1950 town was a skyline and the two render paths
+  drew two different towns. **The rule is the game's own reserved
+  headroom** - `CELL_HEADROOM_STEPS * HEIGHT_PX + TILE_H / 2` = 64 px =
+  2.00 tile heights = 4 height steps = 32 m - because that is what a
+  procedural cell can physically draw and what a chunk texture must
+  enclose; `BAKED_STATIC_MAX_LIFT_PX` 160 -> 64 takes 6.7 % off every
+  chunk bake. `tools/bake-lib.ts` REFUSES to bake a `building:`,
+  `industry:` or `tree:` cell over it, proven on synthetic geometry, so a
+  proportion break is a failed bake and not a needle in somebody's town.
+  Height is corrected with `stretch [1, y, 1]` (the authored footprint
+  survives, a `scale` cure would break the width instead), size with
+  `scale`, and the wrong BUILDING with a remap: the four skyscrapers and
+  `building-m` leave the mapping - stage 1 means "grown", not "1999" -
+  and **the era axis they belong to is M23's, named, with nothing here
+  making it harder**. Found on the way: `building:industrial:1` drew
+  SHORTER than the stage it outgrows. Trees: 0.11 tile widths against the
+  procedural conifer's 0.22 reads as a spike whatever the species, and
+  three trees at three fixed slot centres is a wallpaper - crowns widened,
+  a 2:1 size ladder per climate, and the jitter split so the LATERAL half
+  (which the depth key `u + v` cannot see) is 2.1x wider while D-205's
+  band proof is untouched. Zero sim bytes, zero new cells, zero atlas
+  booking; main bundle +10 B.
 
 ## M14 - instruments: flow atlas, station x-ray, statistics, tooltips
 

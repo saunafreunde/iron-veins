@@ -28,7 +28,9 @@ import {
   TREE_VARIANT_SALT,
 } from '../../src/render/staticArt';
 import { CHUNK_ART_HEADROOM_PX, chunkAabb } from '../../src/render/chunks';
-import { emissiveBuildingFrame } from '../../src/render/TerrainAtlas';
+import { CELL_HEADROOM_STEPS, emissiveBuildingFrame } from '../../src/render/TerrainAtlas';
+import { HEIGHT_PX, TILE_H } from '../../src/render/projection';
+import { HEIGHT_STEP_M } from '../../src/sim/constants';
 
 /**
  * The pure half of M13's static-art bundle: the target grammar the manifest
@@ -58,6 +60,30 @@ interface ManifestModel {
 const sourceManifest = JSON.parse(readFileSync(MANIFEST_PATH, 'utf8')) as {
   readonly models: readonly ManifestModel[];
 };
+
+/**
+ * The tallest thing `TerrainAtlas.drawTownBuilding` puts on a tile, measured
+ * from the tile centre in tile heights - the stage-1 commercial block, whose
+ * roof diamond's far corner is 71.56 atlas px above the centre at
+ * ATLAS_SCALE 2, i.e. 35.78 world px against TILE_H = 32.
+ *
+ * It is the REFERENCE the game was balanced and read against and it is still
+ * the fallback, so a baked town that runs away from it is a town that changes
+ * shape when a fetch completes (D-206). Analytic from `drawTownBuilding` plus
+ * `shapes.ts`'s own `box` geometry; the six procedural cells measure 0.62,
+ * 0.89 (residential), 0.72, 1.12 (commercial), 0.51 and 0.66 (industrial).
+ * [tile heights]
+ */
+const PROCEDURAL_TOWN_MAX_LIFT_TILE_HEIGHTS = 35.78 / 32;
+
+/** The bake on disk, or null - it is a gitignored build artifact (E-14). */
+function readBakedManifest(): BakedAtlasManifest | null {
+  try {
+    return JSON.parse(readFileSync(BAKED_MANIFEST_PATH, 'utf8')) as BakedAtlasManifest;
+  } catch {
+    return null;
+  }
+}
 
 function cell(target: string, over: Partial<BakedCell> = {}): BakedCell {
   return {
@@ -351,6 +377,42 @@ describe('the trees on a forest tile', () => {
     forestTreeOffset(6, 9, 0, out);
     expect([out[0], out[1]]).not.toEqual([first[0], first[1]]);
   });
+
+  it('scatters far more ACROSS the depth axis than along it (D-206)', () => {
+    // The lattice is what made a forest read as wallpaper: three trees at
+    // three fixed slot centres on every wooded tile, moved by at most +-5
+    // world px. The depth key reads (u + v) and nothing else, so a
+    // displacement of +l on u and -l on v is invisible to the painter order
+    // - which is what lets the LATERAL scatter be much wider than the depth
+    // one without touching the disjoint-band proof above.
+    let lateralSpan = 0;
+    let depthSpan = 0;
+    for (let slot = 0; slot < FOREST_TREES_PER_TILE; slot++) {
+      let lateralMin = Infinity;
+      let lateralMax = -Infinity;
+      let depthMin = Infinity;
+      let depthMax = -Infinity;
+      for (let x = 0; x < 48; x++) {
+        for (let y = 0; y < 48; y++) {
+          forestTreeOffset(x, y, slot, out);
+          const lateral = out[0]! - out[1]!;
+          const depth = out[0]! + out[1]!;
+          if (lateral < lateralMin) lateralMin = lateral;
+          if (lateral > lateralMax) lateralMax = lateral;
+          if (depth < depthMin) depthMin = depth;
+          if (depth > depthMax) depthMax = depth;
+        }
+      }
+      lateralSpan = Math.max(lateralSpan, lateralMax - lateralMin);
+      depthSpan = Math.max(depthSpan, depthMax - depthMin);
+    }
+    // 2 * 2 * 0.17 across against 2 * 2 * 0.08 along, both in tile units.
+    expect(lateralSpan).toBeGreaterThan(0.6);
+    expect(lateralSpan).toBeCloseTo(4 * 0.17, 2);
+    expect(depthSpan).toBeCloseTo(4 * 0.08, 2);
+    // The bands are 0.42 apart, so the depth span may not reach it.
+    expect(depthSpan).toBeLessThan(0.42);
+  });
 });
 
 describe('which tiles grow trees', () => {
@@ -391,6 +453,81 @@ describe('the emitter points a baked cell carries (D-169, D-174)', () => {
   });
 });
 
+describe('the static-art proportion rule (D-206)', () => {
+  it("IS the procedural atlas cell's own drawable headroom, not a taste", () => {
+    // The rule's whole authority is that it is a number the game already
+    // had: a procedural cell reserves CELL_HEADROOM_STEPS height steps above
+    // its tile diamond, and a baked cell's anchorY is measured from the tile
+    // CENTRE, half a diamond further down. Restating it here rather than
+    // importing TerrainAtlas into staticArt keeps the pure module pure - and
+    // this assertion is what stops the two from drifting (the D-160 device).
+    expect(BAKED_STATIC_MAX_LIFT_PX).toBe(CELL_HEADROOM_STEPS * HEIGHT_PX + TILE_H / 2);
+    // Read back in the three units a human can check against a screenshot.
+    expect(BAKED_STATIC_MAX_LIFT_PX / TILE_H).toBe(2);
+    expect(BAKED_STATIC_MAX_LIFT_PX / HEIGHT_PX).toBe(4);
+    expect((BAKED_STATIC_MAX_LIFT_PX / HEIGHT_PX) * HEIGHT_STEP_M).toBe(32);
+  });
+
+  it('leaves the D-117 procedural town INSIDE it, or the fallback would be clipped', () => {
+    // Every procedural building is drawn into a cell whose top is exactly
+    // this far above the tile centre, so a fallback silhouette physically
+    // cannot exceed the rule. Measured from `drawTownBuilding`: the tallest,
+    // a stage-1 commercial block, lifts 1.12 tile heights.
+    expect(PROCEDURAL_TOWN_MAX_LIFT_TILE_HEIGHTS).toBeLessThan(BAKED_STATIC_MAX_LIFT_PX / TILE_H);
+  });
+
+  it('holds every baked static cell to it, and holds the stage ladder, when a bake is on disk', () => {
+    // The bake output is a gitignored build artifact (E-14: no binary asset
+    // in the repository), so this can only be a DEVELOPER-machine check and
+    // says so. The rule itself is enforced where it cannot be skipped:
+    // tools/bake-lib.ts refuses to PRODUCE a cell above it, and
+    // tests/unit/assetsBake.spec.ts proves that refusal on synthetic
+    // geometry, with no cache and no bake in sight.
+    const baked = readBakedManifest();
+    if (baked === null) return;
+
+    const liftsByTarget = new Map<string, number>();
+    for (const bakedPage of baked.pages) {
+      if (bakedPage.kind === 'emissive') continue;
+      for (const bakedCell of bakedPage.cells) {
+        if (!/^(building|industry|tree):/.test(bakedCell.target)) continue;
+        const lift = bakedCell.anchorY / bakedPage.zoom;
+        expect(lift, `${bakedCell.target} at zoom ${bakedPage.zoom}`).toBeLessThanOrEqual(
+          BAKED_STATIC_MAX_LIFT_PX,
+        );
+        const previous = liftsByTarget.get(bakedCell.target) ?? 0;
+        if (lift > previous) liftsByTarget.set(bakedCell.target, lift);
+      }
+    }
+    if (liftsByTarget.size === 0) return;
+
+    // A grown building is a bigger building: every stage-1 cell of a zone
+    // must stand above every stage-0 cell of the same zone. Before D-206
+    // `building:industrial:1` lifted LESS than `building:industrial:0:2`,
+    // so the town shrank as it grew and nothing said so.
+    for (const zone of ['residential', 'commercial', 'industrial']) {
+      let ungrownMax = 0;
+      let grownMin = Infinity;
+      for (const [target, lift] of liftsByTarget) {
+        if (!target.startsWith(`building:${zone}:`)) continue;
+        if (target.startsWith(`building:${zone}:0`)) ungrownMax = Math.max(ungrownMax, lift);
+        else grownMin = Math.min(grownMin, lift);
+      }
+      expect(ungrownMax, `${zone} stage 0`).toBeGreaterThan(0);
+      expect(grownMin, `${zone} stage 1 over stage 0`).toBeGreaterThan(ungrownMax);
+    }
+
+    // And a town building is a town building: the tallest one may not run
+    // away from the procedural cell it falls back to. 1.5x is the honest
+    // margin for a modelled roof over a drawn box; the M13 bake was at 3.9x.
+    let tallestTown = 0;
+    for (const [target, lift] of liftsByTarget) {
+      if (target.startsWith('building:')) tallestTown = Math.max(tallestTown, lift);
+    }
+    expect(tallestTown / TILE_H).toBeLessThanOrEqual(PROCEDURAL_TOWN_MAX_LIFT_TILE_HEIGHTS * 1.5);
+  });
+});
+
 describe('the chunk headroom covers the tallest baked cell', () => {
   it('reserves at least the stated lift above the highest tile', () => {
     expect(CHUNK_ART_HEADROOM_PX).toBeGreaterThanOrEqual(BAKED_STATIC_MAX_LIFT_PX);
@@ -403,32 +540,11 @@ describe('the chunk headroom covers the tallest baked cell', () => {
     expect(topTileGround - aabb.minY).toBeGreaterThanOrEqual(BAKED_STATIC_MAX_LIFT_PX);
   });
 
-  it('holds the constant against the real bake when one is on disk', () => {
-    // The bake output is a gitignored build artifact (E-14: no binary asset
-    // in the repository), so this can only be a DEVELOPER-machine check and
-    // says so: on a machine with no `npm run assets:bake` behind it there is
-    // nothing to hold the constant to but the measurement in its own comment.
-    let baked: BakedAtlasManifest;
-    try {
-      baked = JSON.parse(readFileSync(BAKED_MANIFEST_PATH, 'utf8')) as BakedAtlasManifest;
-    } catch {
-      return;
-    }
-    let tallest = 0;
-    let tallestTarget = '';
-    for (const bakedPage of baked.pages) {
-      if (bakedPage.kind === 'emissive') continue;
-      for (const bakedCell of bakedPage.cells) {
-        if (!/^(building|industry|tree):/.test(bakedCell.target)) continue;
-        const lift = bakedCell.anchorY / bakedPage.zoom;
-        if (lift > tallest) {
-          tallest = lift;
-          tallestTarget = bakedCell.target;
-        }
-      }
-    }
-    expect(tallest, `tallest static cell ${tallestTarget}`).toBeLessThanOrEqual(
-      BAKED_STATIC_MAX_LIFT_PX,
-    );
+  it('is exactly the rule, so a chunk reserves what the baker guarantees', () => {
+    // Since D-206 the two are one number: the baker refuses a static cell
+    // above the rule, so reserving more than the rule would only make every
+    // chunk texture bigger for nothing. The reserve is still conservative by
+    // TILE_H / 2, the datum difference between the two measurements.
+    expect(CHUNK_ART_HEADROOM_PX).toBe(BAKED_STATIC_MAX_LIFT_PX);
   });
 });

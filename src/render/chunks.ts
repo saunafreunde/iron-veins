@@ -26,17 +26,27 @@ export const CHUNK_TILES = 32;
  *
  * The larger of the two things a chunk can bake: the procedural atlas cell's
  * own headroom (`CELL_HEADROOM_STEPS` height steps, D-117's fix for the
- * silently guillotined cooling tower) and the tallest BAKED static cell
- * (`BAKED_STATIC_MAX_LIFT_PX`, M13's Kenney buildings). A chunk that reserved
- * only the procedural 48 px would cut every skyscraper off at the chunk seam
- * at 0.5x while the same building drew whole one zoom step up - the same
+ * silently guillotined cooling tower) and the proportion rule every BAKED
+ * static cell is held to (`BAKED_STATIC_MAX_LIFT_PX`). A chunk that reserved
+ * only the procedural 48 px would cut a tall cell off at the chunk seam at
+ * 0.5x while the same building drew whole one zoom step up - the same
  * unwritten agreement, one container further out.
+ *
+ * Since D-206 the second term IS the rule rather than a measurement of the
+ * tallest model that happened to be mapped: 64 px, and the baker refuses to
+ * produce a static cell above it. That took the value from 160 px to 64 -
+ * the D-205 budget was sized for a 138 px skyscraper that no longer exists -
+ * and the reserve is still conservative by `TILE_H / 2`, because the rule is
+ * measured from the tile CENTRE and this margin from its north CORNER.
+ * Measured: a chunk texture is 1,440 -> 1,344 px tall at zoom 1, -6.7 % of
+ * its area, and every chunk in the cache is that much cheaper to bake.
  *
  * It is deliberately a CONSTANT rather than a measurement of the loaded
  * manifest: chunk RenderTextures are recycled between chunks (see
  * {@link chunkAabb}), so a headroom that changed when the bake finished
  * loading would hand a bake a texture of the wrong size. The price of the
- * constant is ~8 % more chunk texture area in a build with no bake at all.
+ * constant is now 1.2 % more chunk texture area in a build with no bake at
+ * all (1,344 against the 1,328 px the procedural cells alone would need).
  */
 export const CHUNK_ART_HEADROOM_PX = Math.max(
   CELL_HEADROOM_STEPS * HEIGHT_PX,

@@ -7,6 +7,7 @@ import {
   BAKE_HEIGHT_PX,
   BAKE_HEIGHT_STEP_M,
   BAKE_MANIFEST_VERSION,
+  BAKE_STATIC_MAX_LIFT_PX,
   BAKE_TILE_H,
   BAKE_TILE_M,
   BAKE_TILE_W,
@@ -32,6 +33,7 @@ import {
   syntheticWagonGlb,
 } from '../../tools/bake-lib.ts';
 import { BAKED_MANIFEST_VERSION } from '../../src/render/bakedAtlas';
+import { BAKED_STATIC_MAX_LIFT_PX } from '../../src/render/staticArt';
 import { EMISSIVE_WINDOW_HEX } from '../../src/render/emissive';
 import { HEIGHT_PX, TILE_H, TILE_W } from '../../src/render/projection';
 import { FACE_LEFT, FACE_RIGHT, FACE_TOP } from '../../src/render/shapes';
@@ -429,6 +431,49 @@ describe('the emissive pass of M13 (D-172)', () => {
     expect(BAKE_MANIFEST_VERSION).toBe(BAKED_MANIFEST_VERSION);
     const value = Number.parseInt(EMISSIVE_WINDOW_HEX.slice(1), 16);
     expect(EMISSIVE_LIT_RGB).toEqual([(value >> 16) & 0xff, (value >> 8) & 0xff, value & 0xff]);
+    expect(BAKE_STATIC_MAX_LIFT_PX).toBe(BAKED_STATIC_MAX_LIFT_PX);
+  });
+});
+
+describe('the static-art proportion rule is enforced by the baker (D-206)', () => {
+  // `scale` is metres per model unit and the camera draws 1 m of height at
+  // BAKE_HEIGHT_PX / BAKE_HEIGHT_STEP_M = 2 px, so the synthetic cube lifts
+  // 25 px at scale 10 and 71 px at scale 30 - inside the rule and over it.
+  const cube = extractTriangles(parseGlb(syntheticCubeGlb()));
+  const model = (target: string, scale: number) => ({
+    target,
+    triangles: cube,
+    scale,
+    facings: 1,
+  });
+
+  it('refuses a building, an industry and a tree that stand too tall', () => {
+    for (const target of ['building:commercial:1', 'industry:SteelMill', 'tree:temperate:0']) {
+      expect(() => bakeAtlases([model(target, 30)], [1])).toThrow(
+        /over the 64 px static-art rule/,
+      );
+      // The message carries the numbers, so a failed bake says how far out
+      // the model is rather than only that it is.
+      expect(() => bakeAtlases([model(target, 30)], [1])).toThrow(/tile heights/);
+    }
+  });
+
+  it('lets the same model through once it is in proportion', () => {
+    const result = bakeAtlases([model('building:commercial:1', 10)], [1]);
+    const cell = result.manifest.pages[0]!.cells[0]!;
+    expect(cell.anchorY).toBeLessThanOrEqual(BAKE_STATIC_MAX_LIFT_PX);
+  });
+
+  it('applies to every baked zoom, not just the one that happens to be first', () => {
+    // The rule is stated in zoom-1 pixels and a cell is `anchorY / zoom`, so
+    // a model that passes at zoom 1 by rounding must still be refused at 4.
+    expect(() => bakeAtlases([model('tree:arctic:0', 30)], [4])).toThrow(
+      /over the 64 px static-art rule/,
+    );
+  });
+
+  it('exempts vehicles - a train is bounded by its catalogue, not by a tile', () => {
+    expect(() => bakeAtlases([model('vehicle:1000', 30)], [1])).not.toThrow();
   });
 });
 

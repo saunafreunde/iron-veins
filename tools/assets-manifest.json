@@ -12,6 +12,17 @@
     "desert after MapClimate). `scale` is model units to metres - an art",
     "choice per entry (vehicles ride ~1.7x over their catalogue lengthM so",
     "they read at 64 px/tile, the TTD convention).",
+    "PROPORTION RULE (D-206): a `building:`, `industry:` or `tree:` cell may",
+    "lift at most 64 px at zoom 1 above its tile centre - 2.00 tile heights,",
+    "4 height levels, 32 m - which is the drawable headroom of a procedural",
+    "atlas cell (CELL_HEADROOM_STEPS * HEIGHT_PX + TILE_H / 2) and therefore",
+    "the tallest silhouette the E-14 fallback can express. `assets:bake`",
+    "REFUSES a static cell above it. The camera draws 1 m of height at 2 px",
+    "and 1 m of ground at 0.32-0.64 px, so a model at real-world proportions",
+    "draws three to six times too tall for its plan: correct the HEIGHT with",
+    "`stretch` [1, y, 1] (the plan stays the authored one) and the SIZE with",
+    "`scale`, and re-map to a lower kit body where the tall one is simply the",
+    "wrong building for a town tile.",
     "M13 completes the catalogue: every rail, road and water catalogue entry",
     "is mapped; a coupling test in tests/unit/assetsBake.spec.ts holds this",
     "file against the catalogues in both directions.",
@@ -1724,147 +1735,258 @@
       "pack": "city-kit-suburban",
       "file": "Models/GLB format/building-type-h.glb",
       "scale": 18,
-      "facings": 1
+      "facings": 1,
+      "stretch": [
+        1,
+        0.585,
+        1
+      ],
+      "note": "Proportion (D-206): stretch [1, 0.585, 1]. A Kenney suburban house is a realistic 13 m and the projection draws 1 m of height at 2 px against 0.32-0.64 px of ground, so real proportions read as towers; the D-117 procedural house is 0.62 tile heights and this family straddles it."
     },
     {
       "target": "building:residential:0:1",
       "pack": "city-kit-suburban",
       "file": "Models/GLB format/building-type-i.glb",
       "scale": 18,
-      "facings": 1
+      "facings": 1,
+      "stretch": [
+        1,
+        0.585,
+        1
+      ]
     },
     {
       "target": "building:residential:0:2",
       "pack": "city-kit-suburban",
       "file": "Models/GLB format/building-type-c.glb",
       "scale": 18,
-      "facings": 1
+      "facings": 1,
+      "stretch": [
+        1,
+        0.585,
+        1
+      ]
     },
     {
       "target": "building:residential:0:3",
       "pack": "city-kit-suburban",
       "file": "Models/GLB format/building-type-j.glb",
       "scale": 18,
-      "facings": 1
+      "facings": 1,
+      "stretch": [
+        1,
+        0.585,
+        1
+      ]
     },
     {
       "target": "building:residential:1",
       "pack": "city-kit-suburban",
       "file": "Models/GLB format/building-type-b.glb",
       "scale": 18,
-      "facings": 1
+      "facings": 1,
+      "stretch": [
+        1,
+        0.675,
+        1
+      ],
+      "note": "Proportion (D-206): stretch [1, 0.675, 1], the grown stage strictly above the ungrown one (0.89-1.00 against 0.55-0.73 tile heights)."
     },
     {
       "target": "building:residential:1:1",
       "pack": "city-kit-suburban",
       "file": "Models/GLB format/building-type-d.glb",
       "scale": 18,
-      "facings": 1
+      "facings": 1,
+      "stretch": [
+        1,
+        0.675,
+        1
+      ]
     },
     {
       "target": "building:residential:1:2",
       "pack": "city-kit-suburban",
       "file": "Models/GLB format/building-type-t.glb",
       "scale": 18,
-      "facings": 1
+      "facings": 1,
+      "stretch": [
+        1,
+        0.675,
+        1
+      ]
     },
     {
       "target": "building:residential:1:3",
       "pack": "city-kit-suburban",
       "file": "Models/GLB format/building-type-f.glb",
       "scale": 18,
-      "facings": 1
+      "facings": 1,
+      "stretch": [
+        1,
+        0.675,
+        1
+      ]
     },
     {
       "target": "building:commercial:0",
       "pack": "city-kit-commercial",
       "file": "Models/GLB format/building-e.glb",
       "scale": 16,
-      "facings": 1
+      "facings": 1,
+      "stretch": [
+        1,
+        0.49,
+        1
+      ],
+      "note": "Proportion (D-206): stretch [1, 0.49, 1] brings the high-street block into the 64 px static-art rule; the plan is the authored one, only the height is corrected."
     },
     {
       "target": "building:commercial:0:1",
       "pack": "city-kit-commercial",
-      "file": "Models/GLB format/building-k.glb",
+      "file": "Models/GLB format/building-c.glb",
       "scale": 16,
-      "facings": 1
+      "facings": 1,
+      "stretch": [
+        1,
+        0.49,
+        1
+      ]
     },
     {
       "target": "building:commercial:0:2",
       "pack": "city-kit-commercial",
-      "file": "Models/GLB format/building-j.glb",
+      "file": "Models/GLB format/building-k.glb",
       "scale": 16,
-      "facings": 1
+      "facings": 1,
+      "stretch": [
+        1,
+        0.49,
+        1
+      ]
     },
     {
       "target": "building:commercial:1",
       "pack": "city-kit-commercial",
-      "file": "Models/GLB format/building-skyscraper-a.glb",
+      "file": "Models/GLB format/building-f.glb",
       "scale": 16,
-      "facings": 1
+      "facings": 1,
+      "stretch": [
+        1,
+        0.54,
+        1
+      ],
+      "note": "Remap (D-206): the four skyscraper bodies were 3.1-4.3 tile heights and are the LATE-century commercial stage - they leave the mapping until M23 gives the bake an era axis. building-f/i/j/n are the kit's ordinary mid-rise blocks; stretch [1, 0.54, 1] lands the family at 1.05-1.36 tile heights against the procedural office's 1.12."
     },
     {
       "target": "building:commercial:1:1",
       "pack": "city-kit-commercial",
-      "file": "Models/GLB format/building-skyscraper-c.glb",
+      "file": "Models/GLB format/building-i.glb",
       "scale": 16,
-      "facings": 1
+      "facings": 1,
+      "stretch": [
+        1,
+        0.54,
+        1
+      ]
     },
     {
       "target": "building:commercial:1:2",
       "pack": "city-kit-commercial",
-      "file": "Models/GLB format/building-skyscraper-e.glb",
+      "file": "Models/GLB format/building-j.glb",
       "scale": 16,
-      "facings": 1
+      "facings": 1,
+      "stretch": [
+        1,
+        0.54,
+        1
+      ]
     },
     {
       "target": "building:commercial:1:3",
       "pack": "city-kit-commercial",
-      "file": "Models/GLB format/building-m.glb",
+      "file": "Models/GLB format/building-n.glb",
       "scale": 16,
-      "facings": 1
+      "facings": 1,
+      "stretch": [
+        1,
+        0.54,
+        1
+      ]
     },
     {
       "target": "building:industrial:0",
       "pack": "city-kit-industrial",
       "file": "Models/GLB format/building-h.glb",
       "scale": 16,
-      "facings": 1
+      "facings": 1,
+      "stretch": [
+        1,
+        0.62,
+        1
+      ],
+      "note": "Proportion (D-206): stretch [1, 0.62, 1]."
     },
     {
       "target": "building:industrial:0:1",
       "pack": "city-kit-industrial",
       "file": "Models/GLB format/building-i.glb",
       "scale": 16,
-      "facings": 1
+      "facings": 1,
+      "stretch": [
+        1,
+        0.62,
+        1
+      ]
     },
     {
       "target": "building:industrial:0:2",
       "pack": "city-kit-industrial",
       "file": "Models/GLB format/building-j.glb",
       "scale": 16,
-      "facings": 1
+      "facings": 1,
+      "stretch": [
+        1,
+        0.62,
+        1
+      ]
     },
     {
       "target": "building:industrial:1",
       "pack": "city-kit-industrial",
-      "file": "Models/GLB format/building-p.glb",
+      "file": "Models/GLB format/building-o.glb",
       "scale": 16,
-      "facings": 1
+      "facings": 1,
+      "stretch": [
+        1,
+        0.66,
+        1
+      ],
+      "note": "Remap (D-206): building-p lifted LESS than the ungrown stage it is supposed to outgrow. building-o/r/b are an ordered stage above building-h/i/j; stretch [1, 0.66, 1] holds the rule."
     },
     {
       "target": "building:industrial:1:1",
       "pack": "city-kit-industrial",
-      "file": "Models/GLB format/building-o.glb",
+      "file": "Models/GLB format/building-r.glb",
       "scale": 16,
-      "facings": 1
+      "facings": 1,
+      "stretch": [
+        1,
+        0.66,
+        1
+      ]
     },
     {
       "target": "building:industrial:1:2",
       "pack": "city-kit-industrial",
-      "file": "Models/GLB format/building-n.glb",
+      "file": "Models/GLB format/building-b.glb",
       "scale": 16,
-      "facings": 1
+      "facings": 1,
+      "stretch": [
+        1,
+        0.66,
+        1
+      ]
     },
     {
       "target": "industry:PowerPlant",
@@ -2049,84 +2171,145 @@
       "pack": "nature-kit",
       "file": "Models/GLTF format/tree_default.glb",
       "scale": 8,
-      "facings": 1
+      "facings": 1,
+      "stretch": [
+        1.7,
+        1,
+        1.7
+      ],
+      "note": "Proportion (D-206): stretch [1.7, 1, 1.7] widens the authored 5.5 m crown - at 64 px per tile a Kenney lollipop draws 1:4 and reads as a conifer spike whatever species it is; the procedural conifer of shapes.ts is 0.22 tile widths. Per-variant `scale` spreads the family over a 2:1 size ladder so a wood is not a hedge of clones."
     },
     {
       "target": "tree:temperate:1",
       "pack": "nature-kit",
       "file": "Models/GLTF format/tree_oak.glb",
-      "scale": 8,
-      "facings": 1
+      "scale": 6.9,
+      "facings": 1,
+      "stretch": [
+        1.7,
+        1,
+        1.7
+      ]
     },
     {
       "target": "tree:temperate:2",
       "pack": "nature-kit",
       "file": "Models/GLTF format/tree_detailed.glb",
       "scale": 8,
-      "facings": 1
+      "facings": 1,
+      "stretch": [
+        1.7,
+        1,
+        1.7
+      ]
     },
     {
       "target": "tree:temperate:3",
       "pack": "nature-kit",
       "file": "Models/GLTF format/tree_fat.glb",
-      "scale": 8,
-      "facings": 1
+      "scale": 5.9,
+      "facings": 1,
+      "stretch": [
+        1.7,
+        1,
+        1.7
+      ]
     },
     {
       "target": "tree:arctic:0",
       "pack": "nature-kit",
       "file": "Models/GLTF format/tree_pineDefaultA.glb",
       "scale": 8,
-      "facings": 1
+      "facings": 1,
+      "stretch": [
+        1.7,
+        1,
+        1.7
+      ]
     },
     {
       "target": "tree:arctic:1",
       "pack": "nature-kit",
       "file": "Models/GLTF format/tree_pineTallA.glb",
-      "scale": 8,
-      "facings": 1
+      "scale": 6.7,
+      "facings": 1,
+      "stretch": [
+        1.7,
+        1,
+        1.7
+      ]
     },
     {
       "target": "tree:arctic:2",
       "pack": "nature-kit",
       "file": "Models/GLTF format/tree_pineRoundA.glb",
-      "scale": 8,
-      "facings": 1
+      "scale": 6,
+      "facings": 1,
+      "stretch": [
+        1.7,
+        1,
+        1.7
+      ]
     },
     {
       "target": "tree:arctic:3",
       "pack": "nature-kit",
       "file": "Models/GLTF format/tree_pineSmallA.glb",
-      "scale": 8,
-      "facings": 1
+      "scale": 6.3,
+      "facings": 1,
+      "stretch": [
+        1.7,
+        1,
+        1.7
+      ]
     },
     {
       "target": "tree:tropical:0",
       "pack": "nature-kit",
       "file": "Models/GLTF format/tree_palm.glb",
       "scale": 8,
-      "facings": 1
+      "facings": 1,
+      "stretch": [
+        1.7,
+        1,
+        1.7
+      ]
     },
     {
       "target": "tree:tropical:1",
       "pack": "nature-kit",
       "file": "Models/GLTF format/tree_palmDetailedTall.glb",
-      "scale": 8,
-      "facings": 1
+      "scale": 6.9,
+      "facings": 1,
+      "stretch": [
+        1.7,
+        1,
+        1.7
+      ]
     },
     {
       "target": "tree:tropical:2",
       "pack": "nature-kit",
       "file": "Models/GLTF format/tree_palmShort.glb",
-      "scale": 8,
-      "facings": 1
+      "scale": 7.3,
+      "facings": 1,
+      "stretch": [
+        1.7,
+        1,
+        1.7
+      ]
     },
     {
       "target": "tree:tropical:3",
       "pack": "nature-kit",
       "file": "Models/GLTF format/tree_palmTall.glb",
-      "scale": 8,
-      "facings": 1
+      "scale": 4.4,
+      "facings": 1,
+      "stretch": [
+        1.7,
+        1,
+        1.7
+      ]
     },
     {
       "target": "tree:desert:0",
@@ -2147,7 +2330,12 @@
       "pack": "nature-kit",
       "file": "Models/GLTF format/tree_thin.glb",
       "scale": 8,
-      "facings": 1
+      "facings": 1,
+      "stretch": [
+        1.7,
+        1,
+        1.7
+      ]
     }
   ]
 }

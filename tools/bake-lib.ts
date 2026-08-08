@@ -38,6 +38,30 @@ export const BAKE_TILE_M = 50;
 export const BAKE_HEIGHT_STEP_M = 8;
 
 /**
+ * The static-art proportion rule, restated from src/render/staticArt.ts
+ * `BAKED_STATIC_MAX_LIFT_PX`. [px at zoom 1, measured above the tile centre]
+ *
+ * = CELL_HEADROOM_STEPS * HEIGHT_PX + TILE_H / 2 = 3 * 16 + 16 = 64, i.e.
+ * 2.00 tile heights, 4 height levels, 32 m: the drawable headroom of a
+ * procedural atlas cell, which is what the D-117 world was drawn against and
+ * what a fallback silhouette is physically clipped at. The coupling test in
+ * tests/unit/assetsBake.spec.ts asserts the two constants equal, the same
+ * device that keeps the camera and the light in step (D-160).
+ *
+ * {@link bakeAtlases} REFUSES a static cell above it rather than warning:
+ * an out-of-proportion model is a failed bake, never a grey needle four and
+ * a half tile heights tall standing over a 1950 town (D-206).
+ */
+export const BAKE_STATIC_MAX_LIFT_PX = 64;
+
+/**
+ * Targets the proportion rule applies to: the things that stand on ONE tile.
+ * Vehicles are exempt - a train is drawn along its own path and is bounded by
+ * the catalogue, not by a tile's headroom.
+ */
+const STATIC_TARGET = /^(building|industry|tree):/;
+
+/**
  * Flat-shading solved against the renderer's three box-face factors
  * (src/render/shapes.ts FACE_TOP/FACE_LEFT/FACE_RIGHT): factor(n) =
  * SHADE_BASE + n.x * SHADE_X + n.y * SHADE_Y + n.up * SHADE_UP reproduces
@@ -1303,15 +1327,28 @@ export function bakeAtlases(models: readonly BakeModelInput[], zooms = BAKE_ZOOM
     const owners: Array<{ target: string; facing: number }> = [];
     for (const model of models) {
       for (let facing = 0; facing < model.facings; facing++) {
-        renders.push(
-          renderSprite(model.triangles, {
-            scale: model.scale,
-            facing,
-            zoom,
-            anchors: model.anchors,
-            stretch: model.stretch,
-          }),
-        );
+        const render = renderSprite(model.triangles, {
+          scale: model.scale,
+          facing,
+          zoom,
+          anchors: model.anchors,
+          stretch: model.stretch,
+        });
+        // The proportion rule (D-206), enforced where it can be: a static
+        // cell that lifts more than a procedural atlas cell can draw is a
+        // building the fallback cannot express and a cell the 0.5x chunk
+        // texture would guillotine. Refused, with the numbers in the message.
+        const lift = render.anchorY / zoom;
+        if (STATIC_TARGET.test(model.target) && lift > BAKE_STATIC_MAX_LIFT_PX) {
+          throw new Error(
+            `${model.target}: lifts ${lift.toFixed(1)} px at zoom 1 ` +
+              `(${(lift / BAKE_TILE_H).toFixed(2)} tile heights, ` +
+              `${(lift / BAKE_HEIGHT_PX).toFixed(2)} height levels), ` +
+              `over the ${BAKE_STATIC_MAX_LIFT_PX} px static-art rule - ` +
+              `lower the model, or scale/stretch it into proportion`,
+          );
+        }
+        renders.push(render);
         owners.push({ target: model.target, facing });
       }
     }

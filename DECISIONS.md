@@ -36,7 +36,7 @@ no entry below. A number may appear under several topics.
   D-078, D-118, D-142, D-151, D-176, D-178, D-187
 - **Industry & production:** D-022, D-062, D-063, D-064, D-069, D-071, D-079,
   D-085, D-086, D-174, D-201, D-202, D-205
-- **Towns, council & ownership:** D-101, D-102, D-103, D-104, D-205
+- **Towns, council & ownership:** D-101, D-102, D-103, D-104, D-205, D-206
 - **Economy, finance & emissions:** D-008, D-090, D-091, D-092, D-105, D-154,
   D-180, D-193, D-196
 - **Balancing & scenarios:** D-038, D-039, D-040, D-041, D-066, D-087, D-088,
@@ -50,22 +50,23 @@ no entry below. A number may appear under several topics.
   D-122, D-147, D-152, D-153, D-154, D-155, D-156, D-158
 - **Rendering & art:** D-013, D-014, D-033, D-035, D-112, D-117, D-125, D-127,
   D-136, D-140, D-160, D-161, D-162, D-163, D-164, D-165, D-166, D-169, D-170,
-  D-171, D-172, D-173, D-174, D-175, D-177, D-179, D-186, D-202, D-205
+  D-171, D-172, D-173, D-174, D-175, D-177, D-179, D-186, D-202, D-205, D-206
 - **UI & input:** D-011, D-013, D-015, D-035, D-110, D-113, D-114, D-119,
   D-126, D-148, D-165, D-166, D-177, D-179, D-180, D-181, D-182, D-183, D-184,
   D-186, D-187, D-189, D-191, D-192, D-193, D-194, D-195, D-196, D-200, D-202
 - **Performance & measurement:** D-002, D-120, D-135, D-136, D-161, D-162,
   D-163, D-164, D-167, D-170, D-171, D-172, D-173, D-174, D-176, D-177, D-184,
-  D-185, D-186, D-187, D-191, D-192, D-193, D-196, D-200, D-201, D-202, D-205
+  D-185, D-186, D-187, D-191, D-192, D-193, D-196, D-200, D-201, D-202, D-205,
+  D-206
 - **Platform, tooling & build:** D-012, D-014, D-015, D-016, D-017, D-029,
-  D-030, D-031, D-160, D-168, D-169, D-170, D-172, D-175, D-192
+  D-030, D-031, D-160, D-168, D-169, D-170, D-172, D-175, D-192, D-206
 - **Crash safety:** D-132, D-139, D-190
 - **Testing method & fixtures:** D-010, D-038, D-072, D-074, D-084, D-133,
   D-167, D-183, D-186, D-188, D-189, D-190, D-191, D-192, D-193, D-194,
   D-195, D-196, D-197, D-198, D-199, D-200, D-201, D-202, D-203, D-204,
-  D-205
+  D-205, D-206
 - **Process & specification:** D-070, D-123, D-129, D-133, D-138, D-140,
-  D-185, D-191, D-197, D-198, D-199, D-203, D-204, D-205
+  D-185, D-191, D-197, D-198, D-199, D-203, D-204, D-205, D-206
 
 ---
 
@@ -8858,3 +8859,153 @@ What WAS verified in the real browser is the load path: the dev server serves
 running game fetched the manifest and all ten pages with 200. Everything
 downstream of that is held by the type checker, the pure halves' tests and the
 two tripwire proxies, which replay the new decisions literally.
+
+## M13 - the static world, bundle 8: proportion (2026-08-09)
+
+### D-206 A tile's building may not stand taller than the cell the game reserves for it - the rule, the remap, and the wood that stopped being wallpaper
+
+D-205 wired the bake's other 1,670 cells and never asked how BIG any of them
+was. The owner looked at a brand-new 1950 town and reported thin grey towers
+over a settlement of low houses, and a countryside of identical small spikes.
+Both readings were correct and both are measurable.
+
+**Measured first.** A tile at zoom 2 is 128x64 px and one height step is 32 px,
+so a cell's `anchorY / zoom / TILE_H` IS its height in tile heights. The M13
+bake's tallest static cell, `building:commercial:1:2`
+(`building-skyscraper-e`), was 53x289 px at zoom 2 with `anchorY` 275: **4.30
+tile heights, 8.6 height steps, 69 m** on a 50 m tile. Its three siblings were
+3.09, 3.17 and 4.16. The procedural cell the same tile falls back to - the
+D-117 three-shape town, `TerrainAtlas.drawTownBuilding` - lifts **1.12** tile
+heights for the same zone and stage (the six procedural cells measure 0.62 /
+0.89 residential, 0.72 / 1.12 commercial, 0.51 / 0.66 industrial). The bake
+was **3.8x** the reference the game was balanced and read against, so the two
+paths drew two different towns depending on whether a fetch completed.
+
+**The rule is the game's own reserved headroom, not a taste.** A procedural
+atlas cell reserves `CELL_HEADROOM_STEPS * HEIGHT_PX` = 3 x 16 = 48 px above
+its tile diamond - that reserve IS D-117: it was one step, and everything
+taller than a crate was silently cut off. A baked cell's `anchorY` is measured
+from the tile CENTRE, half a diamond further down, so the same ceiling on the
+same datum is
+
+    CELL_HEADROOM_STEPS * HEIGHT_PX + TILE_H / 2  =  48 + 16  =  64 px
+
+= **2.00 tile heights = 4 height steps = 32 m** at zoom 1. That is the tallest
+silhouette a fallback can physically draw, so it is the tallest a baked cell
+may be if the two paths are to stay interchangeable. It is bounded above by a
+correctness fact rather than by preference: a chunk texture reserves
+`CHUNK_ART_HEADROOM_PX`, and a cell over it is guillotined at a 0.5x chunk
+seam while drawing whole at 1x. `BAKED_STATIC_MAX_LIFT_PX` is now that one
+number (160 -> 64; D-205's budget was sized for a 138 px skyscraper that no
+longer exists), `CHUNK_ART_HEADROOM_PX` is exactly it, and a chunk texture
+fell from 1,440 to 1,344 px tall - **-6.7 % of every chunk bake**. The datum
+difference leaves that reserve conservative by `TILE_H / 2`, which is now
+written down rather than left as the 16 px lie it was.
+
+**Enforced by the baker, not by a comment.** `tools/bake-lib.ts` restates the
+rule as `BAKE_STATIC_MAX_LIFT_PX` (the D-160 coupling device; a test asserts
+the two equal) and `bakeAtlases` THROWS on a `building:`, `industry:` or
+`tree:` cell above it, with the numbers in the message. Run against the
+pre-change manifest it says exactly what is wrong: `building:commercial:1:
+lifts 100.0 px at zoom 1 (3.13 tile heights, 6.25 height levels), over the
+64 px static-art rule`. Vehicles are exempt - a train is bounded by its
+catalogue, not by a tile's headroom. `tests/unit/assetsBake.spec.ts` proves
+the refusal on synthetic geometry, so it holds on a machine with no cache and
+no bake; `tests/unit/staticArt.spec.ts` holds the arithmetic against
+`TerrainAtlas`'s own `CELL_HEADROOM_STEPS` and, when a bake IS on disk, holds
+every cell to the rule AND to the stage ladder.
+
+**Height was corrected with `stretch`, size with `scale`, and the wrong
+building with a remap.** The camera draws 1 m of height at
+`HEIGHT_PX / HEIGHT_STEP_M` = 2 px and 1 m of ground at 0.64 px across and
+0.32 px in depth, so a model at real-world proportions draws three to six
+times too tall for its own plan. Correcting the HEIGHT is what `stretch`
+exists for (D-169), and `[1, y, 1]` leaves the authored footprint alone - a
+building that keeps covering its tile. Scaling instead would have taken the
+plan with it: `building:residential:0` would have gone from 0.41 to 0.32 tile
+widths against the procedural 0.44, curing one axis by breaking the other.
+
+**The reuse register, amended (D-169's).** Town buildings, new lift bands in
+tile heights, with the procedural cell each family falls back to:
+
+| family | models (bold = remapped) | lift band | fallback |
+| --- | --- | --- | --- |
+| residential:0 | suburban type-h/i/c/j, `stretch [1, 0.585, 1]` | 0.55-0.73 | 0.62 |
+| residential:1 | suburban type-b/d/t/f, `stretch [1, 0.675, 1]` | 0.89-1.00 | 0.89 |
+| commercial:0 | commercial building-e/**c**/**k**, `stretch [1, 0.49, 1]` | 0.52-0.88 | 0.72 |
+| commercial:1 | commercial **f**/**i**/**j**/**n**, `stretch [1, 0.54, 1]` | 1.05-1.36 | 1.12 |
+| industrial:0 | industrial building-h/i/j, `stretch [1, 0.62, 1]` | 0.55-0.63 | 0.51 |
+| industrial:1 | industrial **o**/**r**/**b**, `stretch [1, 0.66, 1]` | 0.77-1.00 | 0.66 |
+
+- **The four skyscrapers and `building-m` leave the mapping entirely.** They
+  were not merely too tall, they were the wrong CENTURY: stage 1 means
+  "grown", not "1999", and a glass tower over a 1950 town is a wrong
+  silhouette in exactly the D-117 sense. `building-f/i/j/n` are the kit's
+  ordinary mid-rise blocks, which is what a town looks like in the MIDDLE of
+  the century the game plays. **The named handoff is M23**: an era axis is
+  where `building-skyscraper-a/b/c/d/e` and `building-m` belong, beside the
+  watercraft galleon and the Pirate Kit that D-160 already filed for the
+  pre-1920 eras. Nothing here builds it and nothing here makes it harder -
+  the target grammar is untouched, so an era becomes one more variant
+  dimension rather than a rewrite.
+- **`building:industrial:1` was drawing SHORTER than the stage it outgrows.**
+  `building-p` lifted 25.0 px against `building:industrial:0:2`'s 30.5, so an
+  industrial tile got smaller as the town grew and nothing said so. The stage
+  ladder is a test over the real bake now, per zone, both stages.
+- Industries are deliberately NOT remapped: the tallest,
+  `industry:CementWorks`, lifts 59.5 px = 1.86 tile heights, already inside
+  the rule, and a works that dominates a suburb is right. D-169's industry
+  register therefore stands exactly as written.
+
+**The wood was two defects, and neither of them was the tree count.**
+Measured: the temperate family drew 14-15 px wide against a 128 px tile at
+zoom 2 - **0.11 tile widths**, against the procedural conifer inside the
+Forestry silhouette at **0.22**. At that width a Kenney broadleaf lollipop is
+a 1:4 spike and reads as a conifer whatever species it is, which is what the
+owner saw. `stretch [1.7, 1, 1.7]` widens the authored 5.5 m crown to 9.4 m
+and takes the tallest temperate tree to 0.16 tile widths - half-way to the
+procedural reference, deliberately not all of it, because the full correction
+takes the trunk with it. Per-variant `scale` then spreads each climate over a
+**2:1 size ladder** (temperate 0.88 / 0.73 / 0.58 / 0.45 tile heights, where
+M13 had 0.88 / 0.72 / 0.66 / 0.59), so a wood has saplings in it.
+
+The second defect was a lattice: three trees at three fixed slot centres on
+every wooded tile, jittered by at most +-0.08 tiles per axis - +-5 world px -
+which over a forest is literally a repeating pattern. **The depth key reads
+`u + v` and nothing else**, so a displacement of `+l` on u and `-l` on v is
+invisible to the painter order BY CONSTRUCTION. The jitter is split:
+`FOREST_JITTER_LATERAL_TILES` = 0.17 across - free, and derived (the tile's
+half-width less the farthest slot centre 0.24 and the depth jitter 0.08, less
+a hundredth so the containment test stays a strict inequality) - and
+`FOREST_JITTER_DEPTH_TILES` = 0.08 along, unchanged, because the slot sums
+are 0.42 apart and D-205's disjoint-band proof rests on it. Lateral travel
+goes from +-5 to +-11 world px, 2.1x, at zero cost and with the ordering
+proof untouched. `FOREST_TREES_PER_TILE` stays 3 and not one tree variant was
+added: **more bodies is the next lever and it is not free** - every new cell
+is a SPEC2 6.2 booking (Fehlerkatalog 40), and this bundle deliberately spent
+none.
+
+**What did not move, verified by running.** Render- and asset-only in the
+strictest sense: not one byte under `src/sim`, `SAVE_VERSION` unchanged,
+`SNAPSHOT_LAYOUT_VERSION` unchanged, no migration, no protocol field, no i18n
+string, no procedural atlas cell, no new baked cell. The SPEC2 6.2 booking is
+untouched at 810 cells per zoom, and the atlas pages come out at the same
+DIMENSIONS as the D-175 measurement (z1 4096x1057, z2 4092x3606, z4
+4056x4015 + 4096x4089 + 4056x3858 + 4060x1333) because the shelf heights are
+set by the vehicle cells rather than by the buildings; the z1 emissive page
+SHRANK, 4096x568 -> 4096x491. Two consecutive bakes are byte-identical on all
+eleven files (D-160's promise re-proven on the changed set): 145 models,
+2,430 cells, 6,275 KiB. Main bundle 940,149 -> **940,159 B** against the
+950,000 B budget - **+10 B**, measured against a build of the same tree
+without these two render files, because the rest of the working tree belonged
+to another milestone at the time.
+
+**What a human still has to confirm by eye**, because the browser pane here
+renders no frames (D-136, D-205): that a 1950 town now reads as a town rather
+than as a skyline, and that a forest reads as woodland. Everything that CAN
+be checked against a screenshot is a number: nothing standing on a tile is
+taller than two of that tile's diamonds stacked; the tallest office block is
+1.36 tile diamonds and the tallest house 1.00; a grown building of a zone is
+taller than every ungrown one of the same zone at all three zooms; and a
+wooded tile carries three trees of visibly different heights spanning 2:1,
+scattered across the tile by up to a sixth of its width.

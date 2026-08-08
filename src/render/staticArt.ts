@@ -32,23 +32,45 @@ import { variantIndex } from './vehicleArt';
 export const STATIC_FACING = 0;
 
 /**
- * World pixels a baked static cell may reach ABOVE the ground line it stands
- * on. [px at zoom 1]
+ * The proportion rule: world pixels a baked static cell may reach ABOVE the
+ * TILE CENTRE it stands on. [px at zoom 1]
  *
- * Measured on the M13 bake, the tallest static cell of all 50: the commercial
- * skyscraper `building:commercial:1:2` lifts 138 px (146 px tall, anchorY 138)
- * at zoom 1, and 137.5 / 137.0 px at zooms 2 and 4. The value is that
- * measurement rounded up with room for one taller kit model, in the D-136
- * spirit - it is a chunk-texture BUDGET, not a promise about any one model.
+ * Origin - the procedural atlas cell's own drawable headroom, which is the
+ * ceiling every D-117 silhouette has been drawn against since M1 and the
+ * ceiling any fallback is physically clipped at:
  *
- * It exists because a chunk texture reserves its headroom from a constant
- * (chunks.ts `CHUNK_ART_HEADROOM_PX`): the procedural cell needed
- * `CELL_HEADROOM_STEPS` = 3 height steps = 48 px, and a 138 px skyscraper
- * baked into a chunk with 48 px of headroom is silently guillotined at the
- * chunk seam - exactly the unwritten-agreement failure D-117 fixed with
- * `anchorY`, one container up.
+ *     CELL_HEADROOM_STEPS * HEIGHT_PX  +  TILE_H / 2
+ *          3 steps * 16 px = 48 px        16 px      =  64 px
+ *
+ * The first term is what `TerrainAtlas` reserves above a cell's tile diamond
+ * (`CELL_TOP`); the second is the half diamond from that line down to the
+ * tile centre, because a baked cell's `anchorY` is measured from the tile
+ * CENTRE while `CELL_TOP` is measured from the tile's north corner. The two
+ * datums differ by exactly `TILE_H / 2` and confusing them is a 16 px lie.
+ * `tests/unit/staticArt.spec.ts` holds the arithmetic against
+ * `TerrainAtlas`'s own exports, so the two cannot drift.
+ *
+ * Read in the projection's units (SPEC.md 16.1: TILE_W 64, TILE_H 32,
+ * HEIGHT_PX 16) that ceiling is **2.00 tile heights = 4 height steps = 32 m**.
+ * A single 50 m tile carrying a building taller than 32 m is a building that
+ * no procedural fallback can express, so the baked and the procedural world
+ * would be two different towns depending on whether a fetch completed.
+ *
+ * It is also the chunk-texture BUDGET: a chunk reserves its headroom from a
+ * constant (chunks.ts `CHUNK_ART_HEADROOM_PX`, which reads this one), and a
+ * cell taller than that is silently guillotined at a 0.5x chunk seam while
+ * drawing whole at 1x - the unwritten-agreement failure D-117 fixed with
+ * `anchorY`, one container out. That half is correctness, not taste.
+ *
+ * Enforced where it can actually be enforced: `tools/bake-lib.ts` restates it
+ * as `BAKE_STATIC_MAX_LIFT_PX` and REFUSES to bake a `building:`, `industry:`
+ * or `tree:` cell that breaks it (the D-160 coupling device), so an
+ * out-of-proportion model is a failed bake rather than a tall grey needle in
+ * somebody's town. Measured maxima on the M13 bake after D-206: the tallest
+ * town cell `building:commercial:1:3` lifts 43.8 px (1.37 tile heights) and
+ * the tallest cell of all, `industry:CementWorks`, 59.5 px (1.86).
  */
-export const BAKED_STATIC_MAX_LIFT_PX = 160;
+export const BAKED_STATIC_MAX_LIFT_PX = 64;
 
 /** One resolved static cell: the cell and the atlas page file it lives on. */
 export interface StaticCellRef {
@@ -359,8 +381,34 @@ export function isWoodedTile(map: TileMap, index: number, terrain: number): bool
   );
 }
 
-/** Half-width of the per-tile jitter applied to a slot centre. [tiles] */
-const FOREST_JITTER_TILES = 0.08;
+/**
+ * Half-width of the per-tile jitter ALONG THE DEPTH axis (u + v). [tiles]
+ *
+ * This is the constrained one: the depth sum is what the back-to-front slot
+ * order above rests on, and the slot sums are 0.42 apart, so a tree may move
+ * by less than 0.21 along it or two trees can swap places within one tile.
+ * A displacement of `d` on each axis moves the sum by `2d`, so the bound is
+ * `d < 0.105`; 0.08 keeps the M13 margin exactly as D-205 measured it.
+ */
+const FOREST_JITTER_DEPTH_TILES = 0.08;
+
+/**
+ * Half-width of the per-tile jitter ACROSS the depth axis (u - v). [tiles]
+ *
+ * The depth key reads `u + v` and nothing else, so a displacement of `+l` on
+ * u and `-l` on v is invisible to the painter order BY CONSTRUCTION - which
+ * is what lets the lateral scatter be two and a half times the depth one
+ * without touching the disjoint-band proof. It is what breaks the lattice:
+ * three trees at three fixed slot centres on every wooded tile is a wallpaper
+ * pattern, and the M13 jitter of +-0.08 on each axis moved a tree by at most
+ * +-5 world px across, against a 64 px tile.
+ *
+ * The value is the tile's own half-width less what is already spent:
+ * `0.5 - 0.24 (the farthest slot centre) - 0.08 (the depth jitter) = 0.18`,
+ * minus a hundredth so the containment test stays a STRICT inequality.
+ * Lateral travel on screen is `2 * l * TILE_W / 2` = +-10.9 px at zoom 1.
+ */
+const FOREST_JITTER_LATERAL_TILES = 0.17;
 
 /**
  * Tile-space offset of one tree on one forest tile, written into `out` as
@@ -372,12 +420,14 @@ const FOREST_JITTER_TILES = 0.08;
 export function forestTreeOffset(x: number, y: number, slot: number, out: number[]): void {
   const centre = FOREST_SLOT_OFFSETS[slot % FOREST_TREES_PER_TILE]!;
   const seed = tileVariantSeed(x, y, TREE_JITTER_SALT + slot);
-  // Two independent 8-bit fields of one avalanche: an axis each, mapped to
-  // [-1, 1) and scaled. 255 rather than 256 so the range is symmetric.
-  const u = ((seed & 0xff) / 127.5 - 1) * FOREST_JITTER_TILES;
-  const v = (((seed >>> 8) & 0xff) / 127.5 - 1) * FOREST_JITTER_TILES;
-  out[0] = centre[0] + u;
-  out[1] = centre[1] + v;
+  // Two independent 8-bit fields of one avalanche, mapped to [-1, 1] - 255
+  // rather than 256 so the range is symmetric - and spent on the two axes
+  // that matter here: one ACROSS the depth axis (free, see above) and one
+  // ALONG it (bounded by the slot bands).
+  const lateral = ((seed & 0xff) / 127.5 - 1) * FOREST_JITTER_LATERAL_TILES;
+  const depth = (((seed >>> 8) & 0xff) / 127.5 - 1) * FOREST_JITTER_DEPTH_TILES;
+  out[0] = centre[0] + lateral + depth;
+  out[1] = centre[1] - lateral + depth;
 }
 
 /**
