@@ -181,6 +181,15 @@ rewrites nothing - the cached-rm is what forces the re-checkout.
   floors. SPEC.md's 5-25 M was measured against the map's physical offer
   and is not real - read D-158 before touching that band.
 
+  Scenario "Punktzahl" is SPEC2 M17's own (`tests/balance/gameScore.spec.ts`)
+  and it is the only one that pins a FORMULA rather than a tariff: the wood
+  chain played a quarter century with two goals over it, scored by the end
+  screen's own function. Band: total 3,000-7,000 AND no quarter over 45 % or
+  under 5 % of it - the second half is the one worth having. Measured 5,747
+  (goals 37 %, value 26 %, network 25 %, cargo 12 %). It owns the four
+  full-mark constants of the score; freight tariffs, upkeep, the network value
+  of D-187 and the medal bands of D-193 all land here when they move (D-196).
+
   Scenario "Netzdesign" is SPEC2 M15's own, and it is the only one that
   measures the NETWORK rather than a tariff: identical traffic over a
   botched and a well designed railway, compared by network value (earned
@@ -971,7 +980,14 @@ worker shelve and enter in the same round trip.
 
 The game gets an end, goals and provable medals. ONE save bump (v27 -> v28,
 owned by the goal machine and extended in place afterwards); snapshot
-layout 8 -> 9 for the goal block.
+layout 8 -> 9 for the goal block. Measured on the reference machine (ledger
+6.1.1): tick p50 1.241 / p99 2.564 ms against the M10 baseline 1.45 / 3.26
+on a row that allows +0.05, and the daily hook allocates 0.17-0.71 B per
+game day. **The main bundle finished the milestone at 924,276 B against the
+930,000 B budget** - 5,724 B of headroom left, all of the growth interface
+(50 new sentences in two languages) and none of it a sim import chain. The
+next milestone that adds a panel books a raise with its own measurement
+(D-192's rule); this one stayed under the line.
 
 - **A goal is the tutorial's predicate moved into the daily hook** (D-193).
   The vocabulary is D-113's and not one new signal was invented; what
@@ -1023,6 +1039,31 @@ layout 8 -> 9 for the goal block.
   **The briefing goes through the metadata block, never `t()`** - chrome is
   interface, a briefing is content that travels with the scenario, and a
   test asserts neither catalogue contains one.
+- **The game ends on ONE screen with four reasons, and the score is a
+  reading rather than a record** (D-196). Won, Bankrupt, Lost, Century -
+  the bankruptcy dialog is one of them, which closes the M8 hole where a
+  wound-up company got a news entry and a red line and no ending. Every
+  input to the score is already hashed (goal verdicts, the books, the
+  lifetime tonnage, D-187's network value), so storing it would only make
+  a second place for it to be wrong - and would cost a save bump v28 does
+  not have to give. Four quarters of 2,500, each a SHARE of its own
+  measured full mark, so a very rich company with a bad network cannot
+  out-score one that did all four: `tests/balance/gameScore.spec.ts`
+  measures **5,747 - goals 2,125 (37 %), value 1,477 (26 %), network 1,437
+  (25 %), cargo 708 (12 %)** and bands the SPREAD, not the total.
+  **Hash-verified medals are end to end**: a played two-year recording
+  verifies, and re-simulating it - from the last checkpoint AND from
+  genesis - reproduces the scoreboard field by field, with the converse
+  proved too (one changed medal moves the world hash). The panel names a
+  goal from its DESCRIPTOR, never a briefing (a loaded save has goals and
+  no metadata block); its bar is the snapshot goal block's one consumer,
+  change-detected in `SimClient`, while the exact figures ride the marker
+  channel once a game day - thousandths cannot say "1,234,567 of
+  2,000,000". Won beats Bankrupt beats Lost, because a verdict is final
+  and a winding-up leaves every goal but `SurviveUntil` Open for ever.
+  Found and fixed on the way: `goalProgressMilli` divided a rating hold's
+  DAYS by its RATING, so the bar read one sixth full on the day the goal
+  was met.
 
 ## Still outstanding
 

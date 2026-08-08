@@ -173,17 +173,32 @@ function bestRating(world: World, ownerId: number, townId: number, tick: number)
 }
 
 /**
- * Progress towards the threshold in thousandths, clamped to 0..1000 - the
- * figure the snapshot carries and the panel draws.
+ * The figure `progress` is measured AGAINST, in progress's own unit.
  *
- * A pure function of the store, so the block writer, the tests and any later
+ * For five of the six kinds that is the threshold, and the two are the same
+ * number. `StationRatingHold` is the exception and it is the reason this
+ * function exists: its threshold is a RATING and its progress is a run of
+ * DAYS, so dividing one by the other compares points with days and produced a
+ * bar that read half full at the moment the goal was met (found while building
+ * the M17 panel). The required run of days is `subjectB`, which is what the
+ * hook itself compares against.
+ */
+export function goalTarget(store: GoalStore, at: number): number {
+  return store.kind[at] === GoalKind.StationRatingHold ? store.subjectB[at]! : store.threshold[at]!;
+}
+
+/**
+ * Progress towards the target in thousandths, clamped to 0..1000 - the figure
+ * the snapshot carries and the panel draws.
+ *
+ * A pure function of the store, so the block writer, the tests and the goal
  * panel all read one definition.
  */
 export function goalProgressMilli(store: GoalStore, at: number): number {
   if (store.status[at] === GoalStatus.Achieved) return GOAL_PROGRESS_SCALE;
-  const threshold = store.threshold[at]!;
-  if (threshold <= 0) return 0;
-  const milli = Math.round((store.progress[at]! / threshold) * GOAL_PROGRESS_SCALE);
+  const target = goalTarget(store, at);
+  if (target <= 0) return 0;
+  const milli = Math.round((store.progress[at]! / target) * GOAL_PROGRESS_SCALE);
   if (milli < 0) return 0;
   return milli > GOAL_PROGRESS_SCALE ? GOAL_PROGRESS_SCALE : milli;
 }

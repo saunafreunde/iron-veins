@@ -12,10 +12,11 @@ no entry below. A number may appear under several topics.
 
 - **Determinism, RNG & hashing:** D-001, D-002, D-003, D-004, D-009, D-010,
   D-024, D-093, D-106, D-128, D-137, D-142, D-145, D-146, D-149, D-153, D-178,
-  D-181, D-184, D-185, D-188, D-189, D-190, D-191, D-193, D-194, D-195
+  D-181, D-184, D-185, D-188, D-189, D-190, D-191, D-193, D-194, D-195,
+  D-196
 - **Commands, snapshot & worker boundary:** D-004, D-005, D-006, D-011, D-032,
   D-100, D-111, D-145, D-146, D-148, D-162, D-174, D-176, D-179, D-187, D-189,
-  D-192, D-193
+  D-192, D-193, D-196
 - **Lines & timetables:** D-145, D-146, D-147, D-148, D-149, D-150, D-151,
   D-152, D-155, D-159
 - **Map generation & terrain:** D-018, D-019, D-020, D-021, D-022, D-023,
@@ -36,9 +37,10 @@ no entry below. A number may appear under several topics.
   D-085, D-086, D-174
 - **Towns, council & ownership:** D-101, D-102, D-103, D-104
 - **Economy, finance & emissions:** D-008, D-090, D-091, D-092, D-105, D-154,
-  D-180, D-193
+  D-180, D-193, D-196
 - **Balancing & scenarios:** D-038, D-039, D-040, D-041, D-066, D-087, D-088,
-  D-116, D-151, D-152, D-156, D-158, D-159, D-187, D-190, D-194, D-195
+  D-116, D-151, D-152, D-156, D-158, D-159, D-187, D-190, D-194, D-195,
+  D-196
 - **Vehicles & fleet:** D-043, D-044, D-045, D-068, D-076, D-089, D-093,
   D-096, D-142, D-143, D-145, D-146, D-155, D-157, D-171, D-174, D-181, D-185
 - **Water & air:** D-094, D-095, D-096, D-097, D-098, D-099
@@ -49,16 +51,16 @@ no entry below. A number may appear under several topics.
   D-171, D-172, D-173, D-174, D-175, D-177, D-179, D-186
 - **UI & input:** D-011, D-013, D-015, D-035, D-110, D-113, D-114, D-119,
   D-126, D-148, D-165, D-166, D-177, D-179, D-180, D-181, D-182, D-183, D-184,
-  D-186, D-187, D-189, D-191, D-192, D-193, D-194, D-195
+  D-186, D-187, D-189, D-191, D-192, D-193, D-194, D-195, D-196
 - **Performance & measurement:** D-002, D-120, D-135, D-136, D-161, D-162,
   D-163, D-164, D-167, D-170, D-171, D-172, D-173, D-174, D-176, D-177, D-184,
-  D-185, D-186, D-187, D-191, D-192, D-193
+  D-185, D-186, D-187, D-191, D-192, D-193, D-196
 - **Platform, tooling & build:** D-012, D-014, D-015, D-016, D-017, D-029,
   D-030, D-031, D-160, D-168, D-169, D-170, D-172, D-175, D-192
 - **Crash safety:** D-132, D-139, D-190
 - **Testing method & fixtures:** D-010, D-038, D-072, D-074, D-084, D-133,
   D-167, D-183, D-186, D-188, D-189, D-190, D-191, D-192, D-193, D-194,
-  D-195
+  D-195, D-196
 - **Process & specification:** D-070, D-123, D-129, D-133, D-138, D-140,
   D-185, D-191
 
@@ -7052,3 +7054,134 @@ names rather than assumed (D-191/D-192). `replay` 198.15 -> 198.03 kB, worker
 twice and played a game year each, all eight hash-identical across the two runs
 and all eight hashing differently from one another, which is "genuinely
 different" as a number rather than as a promise.
+
+### D-196 The end of the game is one screen with four reasons, and the score is a reading of hashed state rather than a number that is stored
+
+SPEC2 M17's last three MUSS items are a `GoalPanel`, a `GameEndScreen` "mit
+Punktformel, Punktformel bekommt ein Balance-Band", and a
+"Bankrott-Game-Over-Dialog". Read literally that is three screens; built
+literally it would be two screens saying the same thing in different words,
+because a winding-up IS an ending and the thing a player wants at either of
+them is the same sentence and the same scoreboard. So there is ONE end screen
+with four reasons - Won, Bankrupt, Lost, Century - and the bankruptcy dialog is
+one of them. What the milestone actually closes there is an M8 hole: since M8 a
+wound-up company produced a news entry and a red line in the finance panel,
+which is a footnote and not an ending.
+
+**The score is computed, never stored, and that is what keeps M17 at one save
+bump.** Every input is already saved and hashed - the goal verdicts of D-193,
+the company's books, the lifetime tonnage of `cargoDeliveredUnits`, the network
+value of D-187 - so the score is the same number on every machine that holds
+that state. Writing it down would create a second place for it to be wrong and
+would cost a `SAVE_VERSION` bump Z5 does not have to give: v28 is M17's one
+bump and it belongs to the goal machine. `sim/goals/score.ts` is therefore a
+pure reading, called once a game day from the worker's publish pass beside
+`postMonthly` - never from inside `tick()` (law #7), and nothing under
+`src/sim` reads it back.
+
+**Four quarters, each a SHARE of its own full mark, and the full marks are
+measured.** Goals (medals earned against every goal at gold), company value at
+the first year's prices, network value, and units delivered - 2,500 points
+each, so a perfect game is 10,000. The saturation is the design: a player who
+is very rich and ran a bad network cannot out-score a player who did all four
+adequately, because the value term stops paying. The value is deflated by
+`world.costFactor` for D-187's own reason - a company would otherwise read as
+improving simply because the century wore on. The cargo term counts a passenger
+and a tonne alike, deliberately: what the freight was WORTH is already the
+value term's job, and a per-cargo weight here would be a second tariff table
+standing beside `cargoSpec.baseRateCt` and free to disagree with it.
+
+**The band is about the FORMULA, not about a good player.**
+`tests/balance/gameScore.spec.ts` plays balancing scenario 3's wood chain a
+quarter century with two goals over it and asserts two things: the total lands
+in 3,000-7,000, and no single quarter is more than 45 % of it or less than 5 %.
+The second is the one worth having - a score whose value term is nine tenths of
+the total only asks how rich the player is, and the other three are decoration.
+Measured: **5,747 points - goals 2,125 (37 %), value 1,477 (26 %), network
+1,437 (25 %), cargo 708 (12 %)**, from 2 of 2 goals at silver overall,
+2,362,704 EUR at first-year prices, 20.1 % of the closed-form ceiling and
+70,800 units delivered. The scenario prints all of it. `SCORE_NETWORK_FULL_SHARE`
+was set FROM that measurement rather than guessed: three point-to-point shuttles
+that are almost never idle reach 20.1 %, so full marks are 35 % - a network that
+also earns on the return leg, which is the half of the ceiling's assumption a
+real railway hardly ever gets. The band owns the four full-mark constants;
+freight tariffs, upkeep, D-187's network value and D-193's medal bands all land
+here when they move.
+
+**Hash-verified medals, end to end** (`tests/unit/gameEnd.spec.ts`). A bus line
+is PLAYED for two game years with real commands until three goals are decided
+at two different bands, exported as an `.ironreplay`, and then: `verifyReplay`
+returns `verified`; `ReplaySession.seek(finalTick)` reproduces `goals.toData()`
+field by field, the world hash, the score and the end marker; and the whole two
+years re-simulated from the recording's own tick zero reaches the same
+scoreboard. The claim is closed from the other side too - a world whose ONLY
+difference is one medal hashes differently - because "the digest covers it" is
+exactly the kind of statement that quietly stops being true when a field lands
+on the wrong side of an audit. That test found a fixture defect worth
+recording: `tests/balance/scenario.ts` lays its ground by hand and never runs
+`markOcean`/`computeLandmasses`, so an industry SPAWNED by the yearly hook
+records `landmassId` -1 before a save and 0 after one. The shared fixture is
+deliberately left alone (every balance band was measured against it); the two
+calls are made in the test that needs a save-stable world.
+
+**Two halves reach the panel, and both were already designed.** What a goal IS
+- kind, subject, threshold, band ticks - never moves and travels on the marker
+channel once a game day, which is the cadence the daily hook decides goals at
+and therefore the fastest anything about them can change (E-05, Fehler 37). The
+moving half is the snapshot's 64-byte goal block, and the panel's bar is its one
+consumer; `SimClient` compares sixteen integers before it writes, because a
+fresh array every poll would re-render the panel fifteen times a second to draw
+the same bar. The exact FIGURE cannot come out of thousandths - "1,234,567 EUR
+of 2,000,000" is not derivable from "617 per mille" - which is why the marker
+carries it and the block does not grow a third field.
+
+**The panel names a goal from its DESCRIPTOR, never from a briefing.** A
+scenario's caption is content that travels with the scenario (D-195), and a
+loaded save carries goals with no metadata block at all - so a panel built on
+captions would be blank in every game that was ever saved and reloaded. The
+descriptor is what the daily hook measures, which is also the D-179 principle:
+the instrument displays the simulation's own terms. Band ticks arrive as
+calendar YEARS and town subjects arrive with their names looked up, because the
+interface has no tick clock and reaching for `calendarFromTick` from a component
+is precisely the static import chain D-191 removed.
+
+**Won beats Bankrupt beats Lost.** A verdict is FINAL (D-193): a company that
+achieved every goal and then went broke has won the scenario and lost the
+company, and the score says both because its value and network terms collapse
+on their own. Bankrupt has to come before Lost, because a winding-up leaves
+every goal but `SurviveUntil` sitting Open for ever, so the goal outcome alone
+would report "still running" for a game that is unmistakably over. The screen is
+dismissible by REASON rather than by tick - the marker is re-sent every game
+day, so a tick-keyed dismissal would last exactly one day - and it never appears
+over a replay, whose buttons would offer to start somebody else's game (D-189).
+
+**One defect fixed on the way.** `goalProgressMilli` divided progress by the
+THRESHOLD for every kind, and a `StationRatingHold`'s progress is a run of days
+while its threshold is a rating: "hold 60 for 30 days" read as one sixth done on
+the day it was met. `goalTarget` is the denominator now, and the store, the
+snapshot block and the panel's fallback all read it. Snapshot-only, so no hashed
+byte moved and no pin was touched.
+
+**Ledger.** No `SAVE_VERSION` bump (v28 is M17's one, D-193), no migration, no
+pin, no corpus, no snapshot byte, no atlas cell. The canonical cross-OS hash
+stays `4dff3f3f216385e6`, the corpus manifest `f1dcab2a374ab728` and the soak
+fixture `ed8ac72cd1d6284d` - checked by running them, not assumed. Five new
+constants (`SCORE_TERM_MAX_POINTS`, `SCORE_MEDAL_WEIGHTS`, `SCORE_VALUE_FULL_CT`,
+`SCORE_NETWORK_FULL_SHARE`, `SCORE_CARGO_FULL_UNITS`) and one new protocol
+message (`goalsChanged`, main-thread traffic). Tick, measured on the
+1,500-vehicle fixture after the whole milestone: **p50 1.241 / p99 2.564 ms**
+against the M10 baseline 1.45 / 3.26 on a row that allows +0.05 - the marker
+costs one message a game day on the cadence the fleet already posts on, and the
+score is computed on that message. Bundle, measured with `npm run build`: main
+chunk **913.49 -> 923.32 kB** (gzip 278.87 -> 281.92; **924,276 B on disk
+against the 930,000 B budget**), of which 5.5 kB is the fifty new German and
+English sentences and the rest the panel, the screen and the store. The end
+screen is `React.lazy` for that reason - it is the one screen a session shows at
+most once, and it loads as its own 2.41 kB chunk (gzip 1.00). `replay`
+198.03 -> 197.99 kB, worker 321.62 -> 324.10 kB, CSS 12.70 -> 13.43 kB. **The
+remaining headroom is 5,724 B and that is worth saying out loud**: the budget
+was set with a 2.4 % margin and M17 spent it down to 0.6 %, honestly (all
+interface, none of it a sim import chain), so the next milestone that adds a
+panel will have to book a raise with its own measurement the way D-192 requires.
+Raising it here, under the line, would be spending headroom this bundle did not
+need.

@@ -16,6 +16,7 @@ import {
 import { CommandQueue } from './commands/queue';
 import type { CommandEnvelope, CommandOutcome } from './commands/types';
 import { writeFlowLegs } from './flow';
+import { gameEndMarker, goalMarkers } from './goals/markers';
 import { writeGoalBlock } from './goals/snapshot';
 import {
   BANKRUPTCY_MONTHS,
@@ -24,6 +25,7 @@ import {
   SPEED_FACTORS,
   STATE_HASH_INTERVAL_TICKS,
   TICK_MS,
+  TICKS_PER_DAY,
   TICKS_PER_MONTH,
 } from './constants';
 import { loanLimitCt } from './economy/company';
@@ -146,6 +148,17 @@ let publishedColorIndex = -1;
 let publishedStructure = '';
 let publishedMonthTick = -1;
 let publishedNewsRevision = -1;
+/**
+ * Game day the goals were last sent on, and how many there were (SPEC2 M17).
+ *
+ * A day INDEX rather than a tick, because a replay scrub moves the clock
+ * backwards as well as forwards and `!==` catches both. The count is the
+ * second half of the test so that a world with no goals sends exactly one
+ * (empty) message and then nothing - and so that entering a world that HAS
+ * goals sends immediately rather than at the next day boundary.
+ */
+let publishedGoalDay = -1;
+let publishedGoalCount = -1;
 
 /** How often the fleet list is refreshed while nothing structural changed. */
 const FLEET_REFRESH_TICKS = 200;
@@ -432,6 +445,24 @@ function postLines(current: World): void {
 }
 
 /**
+ * The goals, and where the game stands (SPEC2 M17).
+ *
+ * One message for both, because they are read together: the panel draws the
+ * goals and the end screen draws the verdict, and a game that ended did so
+ * because of a goal. The score is computed here rather than in the interface
+ * for the D-179 reason - the simulation owns the definition of every figure it
+ * displays - and for the D-191 one: a panel that reached into `src/sim` for
+ * `companyValueCt` would drag the world into the main bundle.
+ */
+function postGoals(current: World): void {
+  scope.postMessage({
+    type: 'goalsChanged',
+    goals: goalMarkers(current),
+    end: gameEndMarker(current),
+  });
+}
+
+/**
  * Which tiles the trains hold, for the F3 overlay of section 9.3.
  *
  * The reservation table itself is derived state keyed by tile, so it is not
@@ -509,6 +540,17 @@ function publishSnapshot(current: World, sink: SnapshotWriter): void {
   if (current.news.revision !== publishedNewsRevision) {
     publishedNewsRevision = current.news.revision;
     postNews(current);
+  }
+
+  // The goal machine runs once a game day and nothing about it can move
+  // faster, so the panel is refreshed exactly that often. The bankruptcy of
+  // 14.2 and the end of the century both land on day boundaries too, so the
+  // end screen appears on the day it became true.
+  const goalDay = (current.tick / TICKS_PER_DAY) | 0;
+  if (goalDay !== publishedGoalDay || current.goals.count !== publishedGoalCount) {
+    publishedGoalDay = goalDay;
+    publishedGoalCount = current.goals.count;
+    postGoals(current);
   }
 
   const signature = structureSignature(current);
@@ -881,6 +923,8 @@ function adoptWorld(current: World, sink: SnapshotWriter): void {
   publishedStructure = '';
   publishedNewsRevision = -1;
   publishedMonthTick = -1;
+  publishedGoalDay = -1;
+  publishedGoalCount = -1;
 
   publishSnapshot(current, sink);
   postMonthly(current);

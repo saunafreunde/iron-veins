@@ -376,6 +376,96 @@ export interface LineMarker {
   readonly networkValue: NetworkValueMarker;
 }
 
+/**
+ * One goal as the goal panel and the end screen show it (SPEC2 M17).
+ *
+ * The IMMUTABLE half of a goal plus the exact reading of it. The moving half
+ * also travels in the snapshot's 64-byte goal block, in thousandths, and that
+ * is what draws the live bar (D-193's split: what a goal IS never moves and
+ * has no business in the 20 Hz stride, E-05/Fehler 37). What cannot be
+ * recovered from thousandths is the FIGURE - "1.234.567 EUR of 2.000.000" is
+ * not derivable from "617 per mille" - so the exact numbers ride here, on the
+ * cadence the goals actually move at: once a game day.
+ *
+ * Slot order is the store's, so marker `i` and goal block entry `i` are the
+ * same goal.
+ */
+export interface GoalMarker {
+  /** A value of `GoalKind`. */
+  readonly kind: number;
+  /** Cargo, town or -1 for "any", by kind. */
+  readonly subjectA: number;
+  /** Second town, or the run of days a rating hold needs. -1 where unused. */
+  readonly subjectB: number;
+  /** The figure to reach: cents, units, inhabitants, rating points or a tick. */
+  readonly threshold: number;
+  /** What `progress` is measured against - `subjectB` for a rating hold. */
+  readonly target: number;
+  /** Latest measurement, in `target`'s unit. */
+  readonly progress: number;
+  /** A value of `GoalStatus`. */
+  readonly status: number;
+  /** A value of `GoalMedal`; None while the goal is open or failed. */
+  readonly medal: number;
+  /**
+   * The band the goal would fall into if it were completed TODAY, so an open
+   * goal can show what it is still playing for. None once the bronze deadline
+   * has passed - at which point the goal fails on the next day boundary.
+   */
+  readonly projectedMedal: number;
+  /**
+   * Calendar year the threshold names, for the one kind whose threshold IS a
+   * tick (`SurviveUntil`); 0 for every other kind.
+   */
+  readonly thresholdYear: number;
+  /** Calendar years of the three bands - the UI has no tick clock (D-191). */
+  readonly goldYear: number;
+  readonly silverYear: number;
+  readonly bronzeYear: number;
+  /** Year the goal was achieved in, or 0 while it was not. */
+  readonly completedYear: number;
+  /** Name of the town `subjectA` names, or '' when it names none. */
+  readonly townAName: string;
+  /** Name of the town `subjectB` names, or ''. */
+  readonly townBName: string;
+}
+
+/** One term of the final score, with the figure it was computed from. */
+export interface ScoreTermMarker {
+  /** 0..1, the share of this term's full mark. */
+  readonly share: number;
+  readonly points: number;
+  /** The measurement itself, in the term's own unit. */
+  readonly measured: number;
+}
+
+/**
+ * The end of the game and what it was worth (SPEC2 M17).
+ *
+ * Computed in the simulation (`sim/goals/score.ts`) and sent whole, because
+ * every one of these numbers is a reading of hashed state and the interface
+ * must never own a second definition of it - the same reason the station
+ * x-ray's rating terms travel rather than being recomputed (D-179). It also
+ * keeps the main bundle free of the simulation (D-191).
+ */
+export interface GameEndMarker {
+  /** A value of `GameEnd`; `Running` means there is no end screen to show. */
+  readonly reason: number;
+  /** The date this reading was taken on. */
+  readonly year: number;
+  readonly month: number;
+  readonly day: number;
+  readonly goals: ScoreTermMarker;
+  readonly value: ScoreTermMarker;
+  readonly network: ScoreTermMarker;
+  readonly cargo: ScoreTermMarker;
+  readonly total: number;
+  readonly goalCount: number;
+  readonly goalsAchieved: number;
+  /** A value of `GoalMedal`: the weakest band any goal earned. */
+  readonly medal: number;
+}
+
 export type MainToWorkerMessage =
   | {
       readonly type: 'init';
@@ -511,6 +601,16 @@ export type WorkerToMainMessage =
   | { readonly type: 'fleetChanged'; readonly vehicles: readonly VehicleMarker[] }
   /** The PLAYER's lines, on the same cadence as the fleet (section 12.2). */
   | { readonly type: 'linesChanged'; readonly lines: readonly LineMarker[] }
+  /**
+   * The goals and where the game stands (SPEC2 M17), sent once a game day -
+   * the cadence the daily hook decides them on, and therefore the fastest
+   * cadence at which any of it can change.
+   */
+  | {
+      readonly type: 'goalsChanged';
+      readonly goals: readonly GoalMarker[];
+      readonly end: GameEndMarker;
+    }
   /** A save the worker encoded. The main thread decides where it goes. */
   | {
       readonly type: 'saveWritten';

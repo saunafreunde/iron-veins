@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactElement } from 'react';
+import { lazy, Suspense, useEffect, useRef, type ReactElement } from 'react';
 import { LOCALES, t } from '../i18n';
 import { SaveSlotKind } from '../shared/protocol';
 import { AUTOSAVE_EVERY_MONTHS } from './saves';
@@ -8,6 +8,8 @@ import { CrashDialog } from './CrashDialog';
 import { IndustryList, StationList, TownList, VehicleList } from './EntityLists';
 import { FinancePanel } from './FinancePanel';
 import { FleetPanel } from './FleetPanel';
+import { GoalPanel } from './GoalPanel';
+import { showsEndScreen } from './goalText';
 import { LinePanel } from './LinePanel';
 import { CompanyList } from './CompanyList';
 import { ContractPanel } from './ContractPanel';
@@ -35,6 +37,19 @@ import { useSimStore } from './store';
 
 /** How long a rejection toast stays on screen. [ms] */
 const TOAST_LIFETIME_MS = 4000;
+
+/**
+ * The end screen is loaded when the game ends, not when it starts (SPEC2 M17).
+ *
+ * The main chunk is a budget with a test behind it (D-192), and this is the one
+ * screen a session shows at most once: a scoreboard, four medals and a table of
+ * verdicts that nobody looks at until the last day of the game. The fallback is
+ * `null` because a screen that appears one frame later than the very tick the
+ * game ended is a screen that appears at the same moment.
+ */
+const GameEndScreen = lazy(async () => ({
+  default: (await import('./GameEndScreen')).GameEndScreen,
+}));
 
 /**
  * Map generation takes seconds on a large map, and it runs inside the worker,
@@ -86,6 +101,12 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
   // nothing that would author state, because a recording the player can build
   // in is not the recording any more (D-189).
   const replaying = useSimStore((s) => s.replay !== null);
+  // The end of the game (SPEC2 M17). The decision itself is a pure function so
+  // a headless test drives exactly what the screen does.
+  const gameEnd = useSimStore((s) => s.gameEnd);
+  const dismissedEnd = useSimStore((s) => s.dismissedEnd);
+  const dismissEnd = useSimStore((s) => s.dismissEnd);
+  const ending = showsEndScreen(gameEnd, dismissedEnd, replaying);
 
   // Space toggles between pause and the speed that was running before.
   const lastRunningSpeed = useRef(1);
@@ -349,6 +370,9 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
             {!replaying && openList === 'stations' && <StationList />}
             {!replaying && openList === 'towns' && <TownList />}
             {!replaying && openList === 'industries' && <IndustryList />}
+            {/* What the scenario asks for, above the books: a goal is the
+                reason the books are being read (SPEC2 M17). */}
+            {!replaying && <GoalPanel />}
             {!replaying && <TilePanel client={client} />}
             {!replaying && <FleetPanel client={client} />}
             {!replaying && <CompanyPanel client={client} />}
@@ -420,6 +444,22 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
       {/* The M14 notification routing: ticker strip and toast cards over the
           news the store already holds - pure presentation (D-110). */}
       <NotificationHost client={client} />
+
+      {/* Victory, defeat, a winding-up or the end of the century (SPEC2 M17).
+          Over the map rather than instead of it, and dismissible: a player who
+          has just lost may want to look at the network that lost it. */}
+      {ending && gameEnd !== null && (
+        <Suspense fallback={null}>
+          <GameEndScreen
+            end={gameEnd}
+            onClose={() => dismissEnd(gameEnd.reason)}
+            onMenu={() => {
+              dismissEnd(gameEnd.reason);
+              setOverlay('menu');
+            }}
+          />
+        </Suspense>
+      )}
 
       <StoredCrashNotice />
     </div>

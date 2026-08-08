@@ -1466,6 +1466,72 @@ export const GOAL_PROGRESS_SCALE = 1_000;
  */
 export const SCENARIO_TEXT_MAX_CHARS = 2_000;
 
+// -------------------------------------------- the final score (SPEC2 M17)
+
+/**
+ * Points one quarter of the final score is worth at full marks.
+ *
+ * The score has four terms - goals, company value, network value, tonnage -
+ * and each one is a SHARE of its own full mark rather than an open-ended sum.
+ * That is what stops the score from being a wealth ranking with three
+ * decorations attached: a player who is very rich and ran a bad network cannot
+ * out-score a player who did all four adequately, because the value term
+ * saturates. Four times this figure is the perfect game. [points]
+ */
+export const SCORE_TERM_MAX_POINTS = 2_500;
+
+/**
+ * Weight of a medal inside the goal term, indexed by `GoalMedal`
+ * (None/Bronze/Silver/Gold). The term is the weight actually earned divided by
+ * the weight every goal at gold would have carried, so a scenario with two
+ * goals and one with eight are scored on the same scale. [weight]
+ */
+export const SCORE_MEDAL_WEIGHTS: readonly number[] = [0, 0.4, 0.7, 1];
+
+/**
+ * Company value that earns full marks in the value term, at the FIRST year's
+ * prices. [cent]
+ *
+ * D-158 measured what this economy actually pays: a competently built network
+ * on a generated map gains at most about 840,000 EUR over a quarter century,
+ * on top of the 500,000 EUR of starting capital. Four million is therefore
+ * roughly three times the measured competent result - a figure a hand-built
+ * ideal chain reaches and a real map does not, which is what keeps the term
+ * measuring instead of saturating.
+ */
+export const SCORE_VALUE_FULL_CT = 4_000_000 * CENTS_PER_EURO;
+
+/**
+ * Network value (D-187's earned-over-ceiling share) that earns full marks.
+ *
+ * The ceiling of D-066 is unreachable by construction - it assumes no loading
+ * time and a full load in BOTH directions - so a share of one is not the right
+ * full mark. Measured instead of guessed: the wood chain of balancing scenario
+ * 3, three point-to-point shuttles that are almost never idle, reaches 20.1 %
+ * over a quarter century. Full marks are therefore a network that also earns
+ * on the return leg, which is the half of the ceiling's assumption a real
+ * railway hardly ever gets.
+ */
+export const SCORE_NETWORK_FULL_SHARE = 0.35;
+
+/**
+ * Units delivered over a company's lifetime that earn full marks. [units]
+ *
+ * The one term that survives a winding-up, because `cargoDeliveredUnits` is a
+ * lifetime tally and the fleet it was earned with is not. Calibrated on
+ * D-195's own measurements: four buses between two towns deliver 21,400
+ * passengers a game year, one coal train about 1,700 units, and the wood chain
+ * measured 70,800 units over a quarter century.
+ *
+ * A passenger is a unit and a tonne is a unit, so a passenger operator reaches
+ * this mark far sooner than a freight one. That is deliberate and not an
+ * oversight: the term counts ACTIVITY, and what the freight was worth is
+ * already the value term's job. Weighting units per cargo here would be a
+ * second tariff table standing beside `cargoSpec.baseRateCt`, free to disagree
+ * with it.
+ */
+export const SCORE_CARGO_FULL_UNITS = 250_000;
+
 // ------------------------------------------------- timetable (section 12.3)
 
 /**

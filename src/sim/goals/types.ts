@@ -128,6 +128,30 @@ export interface GoalSave extends GoalSpec {
   completedTick: number;
 }
 
+/**
+ * Why the game is over, or that it is not (SPEC2 M17).
+ *
+ * It lives in this leaf beside the other goal enumerations rather than beside
+ * `gameEndOf` in `goals/score.ts`, and that is a bundle decision as much as a
+ * tidiness one (D-191): the end screen needs the vocabulary and nothing else,
+ * while `score.ts` imports the ledger and the network value with it. A leaf can
+ * be imported statically from `src/ui`; that module cannot.
+ */
+export const GameEnd = {
+  Running: 0,
+  /** Every goal achieved. */
+  Won: 1,
+  /** The company was wound up (section 14.2). */
+  Bankrupt: 2,
+  /** Every goal decided and at least one of them failed. */
+  Lost: 3,
+  /** The playable century ran out with goals still open, or with none at all. */
+  Century: 4,
+} as const;
+export type GameEnd = (typeof GameEnd)[keyof typeof GameEnd];
+
+export const GAME_END_COUNT = 5;
+
 /** Every goal decided, and at least one of them achieved. */
 export const GoalOutcome = {
   /** At least one goal is still open. */

@@ -7,7 +7,9 @@ import type {
 } from '../shared/protocol';
 import {
   createSnapshotBuffer,
+  SNAPSHOT_GOAL_STRIDE,
   SnapshotF64,
+  SnapshotGoal,
   SnapshotI32,
   SnapshotReader,
   type VehicleFrame,
@@ -69,6 +71,16 @@ export class SimClient {
   private worker: Worker | null = null;
   private reader: SnapshotReader | null = null;
   private timerId = 0;
+  /**
+   * Last goal progress written to the store, kept so the block can be COMPARED
+   * before it is copied (SPEC2 M17).
+   *
+   * The goal block is published with every snapshot but a goal moves once a
+   * game day, so handing the panel a fresh array on every poll would re-render
+   * it fifteen times a second to draw the same bar. Sixteen integers compared
+   * is cheaper than one React pass and, unlike a throttle, it is exact.
+   */
+  private goalProgress: readonly number[] = [];
 
   /** Boot the worker and start a fresh game. */
   start(options: StartGameOptions): void {
@@ -330,6 +342,9 @@ export class SimClient {
       case 'linesChanged':
         store.setLines(message.lines);
         return;
+      case 'goalsChanged':
+        store.setGoals(message.goals, message.end);
+        return;
       case 'commandRejected':
         store.setRejection(message.reasonKey);
         return;
@@ -402,5 +417,27 @@ export class SimClient {
       stateHash: hexWord(i32[SnapshotI32.StateHashHi]!) + hexWord(i32[SnapshotI32.StateHashLo]!),
       monthsInDebt: i32[SnapshotI32.MonthsInDebt]!,
     });
+
+    const goals = reader.currentGoals();
+    const progress = goalProgressOf(goals.data, goals.count);
+    if (!sameProgress(progress, this.goalProgress)) {
+      this.goalProgress = progress;
+      useSimStore.getState().setGoalProgress(progress);
+    }
   };
+}
+
+/** The progress column of the published goal block, in slot order. */
+function goalProgressOf(data: Int32Array, count: number): number[] {
+  const progress: number[] = [];
+  for (let at = 0; at < count; at++) {
+    progress.push(data[at * SNAPSHOT_GOAL_STRIDE + SnapshotGoal.ProgressMilli]!);
+  }
+  return progress;
+}
+
+function sameProgress(a: readonly number[], b: readonly number[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
 }

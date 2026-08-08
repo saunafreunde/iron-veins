@@ -1132,3 +1132,78 @@ body {
   align-items: center;
   gap: 6px;
 }
+
+/* ------------------------------------ goals and the ending (SPEC2 M17) -- */
+
+/* The goal list: one block per goal, stacked, no columns - a goal's sentence
+   is prose and wraps, and a table would cut it. */
+.goals {
+  gap: 10px;
+}
+
+.goal {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  background: var(--surface);
+}
+
+.goal__title {
+  font-size: 13px;
+}
+
+.goal__bar {
+  width: 100%;
+  height: 6px;
+}
+
+.goal__figures {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+}
+
+/* The end screen sits over the map rather than replacing it: the network that
+   won or lost the game is worth seeing behind the verdict. */
+.gameend {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgb(0 0 0 / 62%);
+  overflow: auto;
+  z-index: 40;
+}
+
+.gameend .panel {
+  max-width: 46em;
+  max-height: 100%;
+  overflow: auto;
+}
+
+/* One scored quarter: label, meter, points, and the figure it came from. */
+.score-term {
+  display: grid;
+  grid-template-columns: minmax(0, 9em) 1fr minmax(0, 4em);
+  gap: 4px 8px;
+  align-items: center;
+  margin: 6px 0;
+  font-size: 12px;
+}
+
+.score-term__label {
+  color: var(--text-muted);
+}
+
+.score-term__value {
+  text-align: right;
+}
+
+.score-term__detail {
+  grid-column: 2 / 4;
+}

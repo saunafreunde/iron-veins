@@ -6,6 +6,8 @@ import type {
   FinanceReport,
   CompanyMarker,
   ContractMarker,
+  GameEndMarker,
+  GoalMarker,
   IndustryMarker,
   LineMarker,
   NewsMarker,
@@ -142,6 +144,29 @@ export interface SimUiState extends SnapshotValues {
   news: readonly NewsMarker[];
   companies: readonly CompanyMarker[];
   contracts: readonly ContractMarker[];
+  /** The world's goals, in slot order (SPEC2 M17). Empty in a plain game. */
+  goals: readonly GoalMarker[];
+  /**
+   * Live progress of each goal in thousandths, read out of the snapshot's
+   * 64-byte goal block and written here only when a goal actually moved.
+   *
+   * The block is the goal machine's MOVING half (D-193) and this is its one
+   * consumer; the exact figures beside the bar travel on the marker. A fresh
+   * array on every poll would re-render the panel sixty times a second for
+   * something that changes once a game day, so `SimClient` compares before it
+   * writes.
+   */
+  goalProgress: readonly number[];
+  /** Where the game stands and what it is worth, or null before the first day. */
+  gameEnd: GameEndMarker | null;
+  /**
+   * The end the player has already acknowledged, or null.
+   *
+   * By REASON rather than by tick: the end marker is re-sent every game day
+   * and a dismissal keyed to a tick would last exactly one day. Cleared by
+   * `resetWorld`, so a new game can show its own ending.
+   */
+  dismissedEnd: number | null;
   /** Settings, mirrored here so React re-renders when one changes. */
   settings: AppSettings;
   /** Saves on the shelf, newest first (section 19.1). */
@@ -290,6 +315,9 @@ export interface SimUiState extends SnapshotValues {
   setNews: (news: readonly NewsMarker[]) => void;
   setCompanies: (companies: readonly CompanyMarker[]) => void;
   setContracts: (contracts: readonly ContractMarker[]) => void;
+  setGoals: (goals: readonly GoalMarker[], end: GameEndMarker) => void;
+  setGoalProgress: (progress: readonly number[]) => void;
+  dismissEnd: (reason: number) => void;
   setSettings: (settings: AppSettings) => void;
   setSaves: (saves: readonly SaveEntry[]) => void;
   setReplays: (replays: readonly ReplayEntry[]) => void;
@@ -394,6 +422,10 @@ export const useSimStore = create<SimUiState>((set) => ({
   news: [],
   companies: [],
   contracts: [],
+  goals: [],
+  goalProgress: [],
+  gameEnd: null,
+  dismissedEnd: null,
   settings: DEFAULT_SETTINGS,
   saves: [],
   replays: [],
@@ -471,6 +503,9 @@ export const useSimStore = create<SimUiState>((set) => ({
   setNews: (news) => set({ news }),
   setCompanies: (companies) => set({ companies }),
   setContracts: (contracts) => set({ contracts }),
+  setGoals: (goals, gameEnd) => set({ goals, gameEnd }),
+  setGoalProgress: (goalProgress) => set({ goalProgress }),
+  dismissEnd: (dismissedEnd) => set({ dismissedEnd }),
   setSettings: (settings) => set({ settings, locale: settings.locale === 'en' ? 'en' : 'de' }),
   setSaves: (saves) => set({ saves }),
   setReplays: (replays) => set({ replays }),
@@ -520,6 +555,13 @@ export const useSimStore = create<SimUiState>((set) => ({
       companies: [],
       contracts: [],
       news: [],
+      // The goals belong to the world that is going, and so does its ending:
+      // a "Sieg" banner surviving into the next game would be a lie about a
+      // world that no longer exists (the activeScenario rule, one field down).
+      goals: [],
+      goalProgress: [],
+      gameEnd: null,
+      dismissedEnd: null,
       finances: null,
       hoveredTile: null,
       selectedTile: null,

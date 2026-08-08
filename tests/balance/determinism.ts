@@ -53,6 +53,7 @@ export const BALANCE_SCENARIOS = [
   'mineClosure',
   'taktLine',
   'netzdesign',
+  'gameScore',
   'aiGame',
   'aiCompany',
 ] as const;
