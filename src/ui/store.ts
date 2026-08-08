@@ -17,6 +17,7 @@ import type {
 } from '../shared/protocol';
 import type { ReplayEntry, SaveEntry } from '../platform/Storage';
 import { DEFAULT_SETTINGS, type AppSettings } from '../shared/settings';
+import { MapClimate } from '../sim/constants';
 import type { MapGenPhase } from '../sim/mapgen';
 import type { ReplayVerification } from '../sim/save/replay';
 import type { ReplayMeta } from '../sim/save/replaySession';
@@ -110,6 +111,11 @@ export interface SimUiState extends SnapshotValues {
   mapSize: number;
   townCount: number;
   industryCount: number;
+  /**
+   * The world's climate (SPEC2 M18). A world constant announced with the map,
+   * and the second input of the seasonal optics beside the published month.
+   */
+  climate: MapClimate;
   /** Shared tile layers, handed over by the worker once the map exists. */
   mapBuffer: SharedArrayBuffer | null;
   towns: readonly TownMarker[];
@@ -297,6 +303,7 @@ export interface SimUiState extends SnapshotValues {
   setWorld: (world: {
     mapSize: number;
     mapBuffer: SharedArrayBuffer;
+    climate: MapClimate;
     towns: readonly TownMarker[];
     industries: readonly IndustryMarker[];
   }) => void;
@@ -405,6 +412,7 @@ export const useSimStore = create<SimUiState>((set) => ({
   mapSize: 0,
   townCount: 0,
   industryCount: 0,
+  climate: MapClimate.Temperate,
   mapBuffer: null,
   towns: [],
   industries: [],
@@ -473,6 +481,7 @@ export const useSimStore = create<SimUiState>((set) => ({
     set({
       mapSize: world.mapSize,
       mapBuffer: world.mapBuffer,
+      climate: world.climate,
       towns: world.towns,
       industries: world.industries,
       townCount: world.towns.length,

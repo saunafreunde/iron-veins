@@ -13,10 +13,10 @@ no entry below. A number may appear under several topics.
 - **Determinism, RNG & hashing:** D-001, D-002, D-003, D-004, D-009, D-010,
   D-024, D-093, D-106, D-128, D-137, D-142, D-145, D-146, D-149, D-153, D-178,
   D-181, D-184, D-185, D-188, D-189, D-190, D-191, D-193, D-194, D-195,
-  D-196, D-200, D-201
+  D-196, D-200, D-201, D-202
 - **Commands, snapshot & worker boundary:** D-004, D-005, D-006, D-011, D-032,
   D-100, D-111, D-145, D-146, D-148, D-162, D-174, D-176, D-179, D-187, D-189,
-  D-192, D-193, D-196, D-200
+  D-192, D-193, D-196, D-200, D-202
 - **Lines & timetables:** D-145, D-146, D-147, D-148, D-149, D-150, D-151,
   D-152, D-155, D-159
 - **Map generation & terrain:** D-018, D-019, D-020, D-021, D-022, D-023,
@@ -35,7 +35,7 @@ no entry below. A number may appear under several topics.
 - **Cargo, payment & routing:** D-036, D-037, D-065, D-067, D-075, D-077,
   D-078, D-118, D-142, D-151, D-176, D-178, D-187
 - **Industry & production:** D-022, D-062, D-063, D-064, D-069, D-071, D-079,
-  D-085, D-086, D-174, D-201
+  D-085, D-086, D-174, D-201, D-202
 - **Towns, council & ownership:** D-101, D-102, D-103, D-104
 - **Economy, finance & emissions:** D-008, D-090, D-091, D-092, D-105, D-154,
   D-180, D-193, D-196
@@ -50,19 +50,19 @@ no entry below. A number may appear under several topics.
   D-122, D-147, D-152, D-153, D-154, D-155, D-156, D-158
 - **Rendering & art:** D-013, D-014, D-033, D-035, D-112, D-117, D-125, D-127,
   D-136, D-140, D-160, D-161, D-162, D-163, D-164, D-165, D-166, D-169, D-170,
-  D-171, D-172, D-173, D-174, D-175, D-177, D-179, D-186
+  D-171, D-172, D-173, D-174, D-175, D-177, D-179, D-186, D-202
 - **UI & input:** D-011, D-013, D-015, D-035, D-110, D-113, D-114, D-119,
   D-126, D-148, D-165, D-166, D-177, D-179, D-180, D-181, D-182, D-183, D-184,
-  D-186, D-187, D-189, D-191, D-192, D-193, D-194, D-195, D-196, D-200
+  D-186, D-187, D-189, D-191, D-192, D-193, D-194, D-195, D-196, D-200, D-202
 - **Performance & measurement:** D-002, D-120, D-135, D-136, D-161, D-162,
   D-163, D-164, D-167, D-170, D-171, D-172, D-173, D-174, D-176, D-177, D-184,
-  D-185, D-186, D-187, D-191, D-192, D-193, D-196, D-200, D-201
+  D-185, D-186, D-187, D-191, D-192, D-193, D-196, D-200, D-201, D-202
 - **Platform, tooling & build:** D-012, D-014, D-015, D-016, D-017, D-029,
   D-030, D-031, D-160, D-168, D-169, D-170, D-172, D-175, D-192
 - **Crash safety:** D-132, D-139, D-190
 - **Testing method & fixtures:** D-010, D-038, D-072, D-074, D-084, D-133,
   D-167, D-183, D-186, D-188, D-189, D-190, D-191, D-192, D-193, D-194,
-  D-195, D-196, D-197, D-198, D-199, D-200, D-201
+  D-195, D-196, D-197, D-198, D-199, D-200, D-201, D-202
 - **Process & specification:** D-070, D-123, D-129, D-133, D-138, D-140,
   D-185, D-191, D-197, D-198, D-199
 
@@ -8104,3 +8104,205 @@ text: it books the raise with its own measurement (D-192).** Suite after:
 plus the 13 perf tests - `npm test`, `npm run typecheck` and `npm run lint` all
 green, `npm run test:soak` green at the unchanged fixture and
 `npm run test:balance:full` green including all nine desync twins.
+
+## M18 - weather, bundle 3: the optics in the same release as the authority (2026-08-08)
+
+### D-202 The snow line is the winter friction read backwards, the regeneration repaints only what the season moved, and the rain shares the cap it is spawned last into
+
+D-200 made the sky simulation reality and D-201 made it cost something. SPEC2
+M18 puts the optics in the SAME release for a stated reason - "damit Autoritaet
+(Sim) und Candy (Render) nie auseinanderlaufen" - and this bundle is that half:
+the seasonal atlas regeneration, the height-dependent snow line, the autumn
+forests, the rain and snow driven from the published weather field, and the
+storm warning. It is render-only in the strictest sense the milestone allows,
+with one exception that is sim by nature and is named below.
+
+**Nothing here moved a byte of hashed state, and both pins say so.** No save
+bump (v29 is D-200's and this bundle adds no state), no migration edit, no
+snapshot layout change, no atlas cell. The canonical cross-OS pin stayed
+`5a2a6cf73f4107bb`, the corpus manifest stayed `c0a021f5d1ee8619` and the soak
+fixture stayed `e6c5e33d8e7607ec` at unchanged 698 commands - **re-run, not
+assumed**. The one sim-side addition, the storm warning, writes into the news
+log, which IS saved and hashed; it can only fire in a world with the weather
+rule on, and every fixture and every balancing scenario runs it off, which is
+why the pins did not move and why that is a property rather than luck.
+
+**The snow line is `winterFrictionFactor` read backwards** - D-172's device
+("light is the tint curve read backwards") applied one milestone on, and the
+reason the optics cannot drift from the economy. `snowLineFor(month, climate)`
+carries no table of its own: it walks the height levels and asks the very
+function the longitudinal solver multiplies into its rolling resistance at
+which height the season's severity reaches `SNOW_LINE_SEVERITY` (0.85 of full).
+So snow lies exactly where the ground the player drives on has gone hard, and
+a change to `SEASON_WINTER_SEVERITY_PERCENT` or `SEASON_CLIMATE_WINTER` moves
+both halves at once because there is only one table. `seasonArt.spec.ts` walks
+the agreement in FULL - every climate, every month, every height - rather than
+sampling it. Measured lines: temperate January 10, February and December 13,
+nothing in the other nine months; arctic January down to the shore (4), March
+14; desert and tropical never, the second of which follows from the exact zero
+D-201 put in the climate table. Land runs 4..15, so a January line at 10 is a
+LINE part way up the mountain, which is what the acceptance sentence asks for -
+a blanket at sea level would not be one.
+
+**The snow line costs zero atlas cells, because the game has had a snow cell
+since M1.** A tile at or above the line draws `Terrain.Snow` instead of its own
+terrain (`terrainTakesSnow`: everything but water and snow itself), and the
+substitution goes into the frame KEY, so the texture cache, the sprite path and
+the chunk bake cannot disagree about what was drawn. The M18 ledger row books
+zero cells and the existing layout guard (2176x3840 base, 4096x4096 detail) is
+what holds it.
+
+**The regeneration repaints what the season MOVED and nothing else, which is
+the whole of the budget.** `planSeasonRepaint(from, to)` compares `terrainLook`
+in the two stages and lists the terrains whose colour or grain differs, plus
+the six town cells when the roof snow changes. Four terrains have a season in
+them - grass, field, forest, marsh - and rock, sand, snow, shore and pavement
+are the same in every month, so a change repaints 4 or 5 jobs out of ten rows
+instead of the lot. A page that has never been repainted needs no special case:
+`terrainLook(terrain, Summer)` IS the base palette of section 16.3 and a summer
+roof carries no snow, so the artwork the game builds at startup is exactly the
+summer stage, which is a test rather than a claim.
+
+**Measured on the reference machine, in a real browser with a real canvas**
+(the atlas needs one; the perf suite is headless, so this is the README's
+hand-measurement class, done through the dev server): a whole regeneration over
+BOTH procedural pages costs **p50 1.35 ms (Summer to Autumn, 128 cells), 1.50 ms
+(Autumn to Winter, 146 cells), 2.67 ms (Winter to Spring), 3.34 ms (Spring to
+Summer)** - against the 30 ms SPEC2 6.2 allows, and against 11.94 ms to rebuild
+both pages from scratch on the same machine (base 4.31, detail 7.63). Per STEP -
+one job on one page, which is what a frame actually pays - p50 0.125 ms on the
+base page and 0.155 ms on the detail page. The scheduler runs two steps a
+frame, so the frame cost of a season change is a fraction of a millisecond and
+the whole change lands within a handful of frames.
+
+**Asynchronous means spread over frames, and the swap is still atomic.** The
+canvases are repainted a couple of jobs at a time, but neither is uploaded
+until the last job is done - one `texture.source.update()` per page in the same
+step - so no frame can show two seasons. `SEASON_REGEN_BUDGET_MS` (30, SPEC2's
+own number) is checked against the milliseconds the steps actually spent and
+warns on the console when it is crossed: the ATLAS_BUILD_BUDGET_MS pattern, and
+a wall clock is as legitimate here as it is there because this times work
+rather than animating anything (Fehlerkatalog 39).
+
+**The debounce protects the scrub, not the month.** SPEC2 6.2 asks for "max. 1
+Rebuild/Realsekunde bei 20x" and `SEASON_REGEN_MIN_FRAMES` is that second on a
+60 Hz display. What it actually guards is worth stating rather than implying:
+at 20x a game month is fifteen REAL seconds, so the calendar alone can never
+ask twice in one second. A replay scrubbed across years, a save loaded onto a
+running game and a new game started from the menu all can, and each arrives as
+a month jump with no notice. The latest pending look wins when the window
+opens - repainting through the intermediate months of a scrub would draw
+artwork nobody asked to see.
+
+**A chunk remembers its season the way it remembers its water row** (D-164's
+device, for a fact that changes a few times a game year instead of twice a
+second). `ChunkEntry.seasonEpoch` is the generation it baked in; the staggered
+loop that already walked the visible set for water rebakes now carries both,
+with a budget each so a season change during a shimmer cannot halve either
+rate. Measured: a 1920x1080 viewport at 0.5x holds **17 chunks**, and one chunk
+bake is p50 0.470 / p99 1.394 ms of CPU proxy, so at two a frame the season
+rolls over the viewport in nine frames of under a millisecond each. The one
+place the season and the water differ: a water swap CARRIES the emissive twin
+through unchanged (ripples move, windows do not), and a season rebake must
+re-render it, because the town cells and their twins were repainted together -
+this is the one case where carrying it through would put last season's windows
+on this season's roofs.
+
+**"Emissive im selben Pass" is one function call, not a rule.** The six
+window-only twins of the town cells are repainted inside
+`repaintSeasonJob(SEASON_JOB_BUILDINGS)`, from the same `drawTownBuilding` call
+with `emissiveOnly` set - so the lit windows sit pixel-exact on the dark ones
+by construction, which is D-172's own argument restated. What the season does
+to a building is snow on the three roofs that already take an explicit colour
+(the pitched roof, the shed's sawtooth, the commercial block's rooftop plant);
+the flat top face of the commercial block is the box primitive's own shading of
+its wall colour and is deliberately left alone, because snowing it would mean a
+roof-colour parameter on every solid in shapes.ts for one cell of six. That
+residual is named here rather than discovered.
+
+**Rain and snow are the published field plus the render frame counter, and
+nothing else** (E-01, Fehlerkatalog 25/39). Sixteen hashed attempts a frame
+over the visible tile range; each attempt asks its tile's REGION for the sky
+through `weatherRegionOf` - the one place the 16x16 grid meets the map, so what
+the simulation charges a vehicle for and what falls on it are the same front -
+and its own height for rain against snow at this month's line. So a front
+crossing a range rains in the valley and snows on the ridge in the same frame,
+and the two halves of the milestone's optics are one decision. A frost cell
+snows at any height: it is the winter sky itself, and a frost that produced
+nothing visible would be the one weather state the player could not see. A
+clear sky costs sixteen hashes and no particles.
+
+**The new particles SHARE the M13 cap and are spawned LAST, which is the whole
+of the budget decision** (D-174). Measured on the reference machine: a viewport
+under storm over every region reaches a steady state of **820 live drops**
+against a ceiling of 832 and the 2,000-row cap, at **p50 0.173 / p99 0.309 ms**
+per particle frame - and the M13 reference overload scene (300 booming
+industries plus a full 1,500-vehicle block) with the SAME storm over it holds
+**zero** weather rows, because the emitters fill the cap first and `spawn`
+refuses: p50 0.283 / p99 0.499 ms against the unchanged 2 ms median tripwire.
+That is the honest shape of the decision - under overload the rain is what is
+dropped, never a plume, because a plume is simulation truth made visible and
+rain is a sky the tint and the tile panel already report. The pool grew exactly
+one column for it (`stretch`, a per-particle vertical scale: a raindrop drawn
+as a round dot reads as grey noise and a streak is what says rain), which costs
+one read and one multiply in the mirror loop and is inside the same tripwire.
+A drop falls THROUGH the ground rather than splashing on it - the pool has no
+collision - which is the same stated floor D-174 gave smoke drifting over a
+hill.
+
+**The storm warning is the one sim-side line, and it is edge-triggered,
+filtered and canonical.** `updateWeather` records the regions where a storm
+ARRIVED in the pass that has both days in hand (a working buffer beside `next`,
+not state: both its inputs are saved, so a loaded world warns about exactly the
+storms a running one would). `reportWeather` posts one entry per arriving
+region that the PLAYER has a station in, keyed by the lowest-id station there,
+which is a canonical key `postOnce` recognises. Three decisions, each about not
+writing noise: a front that stands for a week is one event, not seven; a storm
+over empty desert costs nothing and is not news; and a message that named a
+region by its grid coordinates would be a riddle. It gets its own
+`NewsCategory.Weather` - a player who has filtered the log down to signalling
+trouble is not asking about the sky - which grew `NEWS_CATEGORY_COUNT` to six
+and the notification defaults with it (ticker: a storm costs a percentage, not
+a game). Measured over four months of harsh weather on a controlled world: a
+handful of warnings, never two in a row about the same place, and none at all
+in the same world with the rule off, where `arrivalCount` is zero for ever
+because `updateWeather` returns before it is written.
+
+**One protocol field: the climate.** The season is a pure function of (month,
+height, climate); the month rides the snapshot already and the climate is a
+world constant that nothing published. It joins the `ready` message, which is
+sent on every world replacement, so a load, a new game and leaving a replay all
+carry it. Main-thread traffic, no snapshot byte.
+
+**Ledger.** `SAVE_VERSION` unchanged at **29**, `SNAPSHOT_LAYOUT_VERSION`
+unchanged at **10**, atlas **zero cells** (regeneration is the mechanism, SPEC2
+6.2), one protocol field, two new i18n sentences in two languages, no UNHASHED
+or PARSER_IGNORED allowlist line. Tick measured on the 1,500-vehicle reference
+fixture over four runs: **p50 1.702 / 1.554 / 1.650 / 1.542 ms, p99 3.796 /
+3.456 / 3.239 / 3.156 ms** against the M10 baseline 1.45 / 3.26 - the last two
+land below the baseline and the four straddle it inside this machine's
+documented +-0.7 ms run noise; the reference fleet runs the rule OFF, where the
+milestone's two new sim lines are a return on the first line and one integer
+compare a game day.
+**Main bundle 927,719 -> 934,751 B, and the budget is raised to 950,000 B with
+that measurement beside it** (D-192's rule; D-200 and D-201 both said this
+bundle would have to book it) - the growth is `seasonArt.ts`, `weatherArt.ts`,
+the atlas repaint and the MapView scheduler, all of it interface code, none of
+it a sim import chain. `SimWorker` 327,698 -> 328,296 B, `replay` 199,950 ->
+200,040 B, the scenario catalogue unchanged at 13,319 B, CSS unchanged.
+
+**What this bundle does NOT claim.** The M18 balance band - a hard winter
+costing the reference coal line 8-15 % of its year - is still not claimed and
+still no constant is tuned towards it (D-201 said so and it remains true).
+Neither is the milestone's own renderer path measured end to end: the seasonal
+scheduler, the snow substitution and the weather spawn run inside MapView's
+frame loop, which needs a GPU and a compositor and has never been headless in
+this project (D-136). What was measured in a real browser is the atlas
+regeneration itself and the atlas pages building; the frame loop around them is
+held by the type checker, by the pure halves' own tests and by a perf proxy
+that replays the weather spawn loop literally.
+
+Suite after: **118 files, 1,363 passing plus 2 skipped** against D-201's 116
+and 1,320 + 2, plus 14 perf tests (was 13) - `npm test`, `npm run typecheck`
+and `npm run lint` all green, `npm run test:soak` green at the unchanged
+fixture and `npm run test:balance` green with scenario 5 at 1,119,720 EUR.

@@ -28,6 +28,22 @@ export class WeatherField {
   readonly next = new Uint8Array(WEATHER_REGION_COUNT);
   /** Per-cell weights of the single draw the pass makes for one region. */
   readonly weights = new Float64Array(WEATHER_CELL_COUNT);
+  /**
+   * Regions where a storm ARRIVED in the pass that just ran, and how many of
+   * them there are (SPEC2 M18: "Sturmwarnung je Region via postOnce").
+   *
+   * A working buffer like `next`, not state: it is written by the daily pass
+   * and read by the daily news report a few calls later in the SAME tick, and
+   * nothing outside that tick may look at it. Both its inputs - yesterday's
+   * field and today's - are saved, so a world that is loaded warns about
+   * exactly the storms a world that kept running would.
+   *
+   * `arrivalCount` stays 0 for ever in a world with the rule off, because
+   * `updateWeather` returns before it is touched: the report then returns on
+   * its own first line and the whole subsystem stays inert (D-200).
+   */
+  readonly arrivals = new Uint8Array(WEATHER_REGION_COUNT);
+  arrivalCount = 0;
 
   /** Overwrite the field from a save. Length is checked by the parser. */
   load(saved: Uint8Array): void {

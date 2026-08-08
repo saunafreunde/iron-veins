@@ -146,6 +146,16 @@ export interface PuffSpec {
   readonly jitterVx: number;
   /** Horizontal scatter of the spawn point around the anchor. [world px] */
   readonly scatterPx: number;
+  /**
+   * Vertical stretch of the sprite: 1 is the round puff every smoke family
+   * wears, above 1 is a streak. [factor on the height]
+   *
+   * Added with the M18 weather (SPEC2 M18): a raindrop drawn as a round dot
+   * reads as grey noise, and a streak is what says rain in a still frame. It
+   * is one column on the pool rather than a second particle container, which
+   * is the same argument the one capped container was chosen on (D-174).
+   */
+  readonly stretchY: number;
 }
 
 /** Industry chimney/dust puffs: big, slow, long-lived - a standing plume. */
@@ -158,6 +168,7 @@ export const INDUSTRY_PUFF: PuffSpec = {
   driftVx: 0.16,
   jitterVx: 0.12,
   scatterPx: 4,
+  stretchY: 1,
 };
 
 /** Vehicle exhaust: a small short-lived wisp at the tailpipe. */
@@ -170,6 +181,7 @@ export const EXHAUST_PUFF: PuffSpec = {
   driftVx: 0.05,
   jitterVx: 0.1,
   scatterPx: 2,
+  stretchY: 1,
 };
 
 /** Breakdown smoke: dark, dense, tall - a failure visible from afar. */
@@ -182,6 +194,7 @@ export const BREAKDOWN_PUFF: PuffSpec = {
   driftVx: 0.1,
   jitterVx: 0.14,
   scatterPx: 3,
+  stretchY: 1,
 };
 
 /** Exhaust grey - light enough to read over dark asphalt. [0xRRGGBB] */
@@ -216,6 +229,7 @@ export function spawnPuff(
     spec.sizePx,
     spec.growPx,
     tint,
+    spec.stretchY,
   );
 }
 
@@ -238,6 +252,12 @@ export class ParticlePool {
   readonly size = new Float64Array(PARTICLE_CAP);
   private readonly grow = new Float64Array(PARTICLE_CAP);
   readonly tint = new Int32Array(PARTICLE_CAP);
+  /**
+   * Vertical stretch of each row - 1 for every smoke family, above 1 for the
+   * M18 rain streaks. One column rather than a second container: the mirror
+   * loop pays one read and one multiply, and the tripwire prices it.
+   */
+  readonly stretch = new Float64Array(PARTICLE_CAP);
   /** Live particles; rows 0..count-1 are valid. */
   count = 0;
 
@@ -251,6 +271,7 @@ export class ParticlePool {
     sizePx: number,
     growPx: number,
     tint: number,
+    stretchY = 1,
   ): boolean {
     if (this.count >= PARTICLE_CAP) return false;
     const i = this.count++;
@@ -263,6 +284,7 @@ export class ParticlePool {
     this.size[i] = sizePx;
     this.grow[i] = growPx;
     this.tint[i] = tint;
+    this.stretch[i] = stretchY;
     return true;
   }
 
@@ -281,6 +303,7 @@ export class ParticlePool {
         this.size[i] = this.size[last]!;
         this.grow[i] = this.grow[last]!;
         this.tint[i] = this.tint[last]!;
+        this.stretch[i] = this.stretch[last]!;
         i--;
         continue;
       }

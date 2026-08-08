@@ -1211,14 +1211,13 @@ with a measurement. Read D-199 before touching a briefing or that table.
   claim each entry makes"; both now say exactly what holds, with the residual
   named.
 
-## M18 - weather as a world rule (bundles 1 and 2 of the milestone)
+## M18 - weather as a world rule (bundles 1 to 3 of the milestone)
 
 The environment becomes simulation reality (SPEC2 E-01). ONE save bump
 (v28 -> v29, owned by the weather rule and its field); ONE snapshot-layout
-bump (9 -> 10, the weather block). The milestone is NOT finished: the
-seasonal atlas regeneration, the storm warnings and the new balance band
-(a hard winter costs the reference coal line 8-15 % of its year) are still
-to come.
+bump (9 -> 10, the weather block). The milestone is NOT finished: the new
+balance band (a hard winter costs the reference coal line 8-15 % of its
+year) is still to come, and no constant has been tuned towards it.
 
 ### Bundle 1 - the rule, the field and the daily draw (D-200)
 
@@ -1305,15 +1304,93 @@ scenario 5 back at D-158's 1,119,720 EUR to the cent.
   for the ratios they state, and the band belongs with the scenario that
   will measure it (D-197's rule).
 
+### Bundle 3 - the seasonal optics, in the same release as the authority (D-202)
+
+Render-only but for one line of news. **No save bump, no migration edit,
+no snapshot byte, no atlas cell**, and every pin held on a re-run:
+canonical `5a2a6cf73f4107bb`, corpus `c0a021f5d1ee8619`, soak
+`e6c5e33d8e7607ec` at 698 commands, scenario 5 at D-158's
+1,119,720 EUR.
+
+- **The snow line is `winterFrictionFactor` read backwards** (D-202, the
+  D-172 device one milestone on): `snowLineFor` carries no table, it asks
+  the solver's own winter severity at which height it crosses
+  `SNOW_LINE_SEVERITY`. Snow therefore lies exactly where the ground has
+  gone hard, and the test walks that agreement over every climate, month
+  and height. Measured: temperate January 10, Feb/Dec 13, nothing else;
+  arctic January at the shore; desert and tropical never. Zero atlas
+  cells - a tile above the line draws the `Terrain.Snow` cell the game
+  has had since M1, and the substitution rides the frame KEY so sprite
+  path and chunk bake cannot disagree.
+- **The regeneration repaints what the season MOVED and nothing else.**
+  Four of ten terrain rows have a season in them; rock, sand, snow, shore
+  and pavement do not. `terrainLook(t, Summer)` IS the base palette, so a
+  freshly built page is the summer stage and needs no special case.
+  Measured in a real browser (the atlas needs a canvas): a whole
+  regeneration over BOTH pages p50 1.35-3.34 ms against the 30 ms of
+  SPEC2 6.2, and against 11.94 ms to rebuild both pages. Two steps a
+  frame, p50 0.125/0.155 ms per step, and neither canvas is uploaded
+  until the last step - the work is spread, the swap is atomic.
+- **The debounce protects the scrub, not the month**: at 20x a game month
+  is fifteen REAL seconds, so the calendar can never ask twice a second.
+  A replay scrub, a load and a new game can, and the latest pending look
+  wins when the window opens.
+- **A chunk remembers its season like its water row** (D-164's device).
+  One staggered loop, two budgets. Measured: 17 chunks in a 1920x1080
+  viewport at 0.5x, one bake p50 0.470 ms, so a season rolls over the
+  viewport in nine frames. A water swap carries the emissive twin
+  through; a SEASON rebake must re-render it, because the town cells and
+  their twins were repainted together.
+- **"Emissive im selben Pass" is one function call**: the six window-only
+  twins are repainted inside the same `repaintSeasonJob` call as the six
+  town cells, from the same `drawTownBuilding` - D-172's "by
+  construction" restated. The season snows the three roofs that already
+  take an explicit colour; the commercial block's flat top is `box`'s own
+  shading and is left alone, stated rather than discovered.
+- **Rain and snow are the published field plus the blink counter and
+  nothing else.** Sixteen hashed attempts a frame; each asks its tile's
+  region through `weatherRegionOf` (the one place the grid meets the map)
+  and its own height against the snow line, so a front rains in the
+  valley and snows on the ridge in one frame. Frost snows at any height.
+  **They SHARE the M13 cap and are spawned LAST** (D-174): measured 820
+  live drops at p50 0.173 ms in a storm over an idle world, and ZERO
+  weather rows in the M13 overload scene under the same storm - the
+  plumes hold the cap and the rain is what is refused. The pool grew one
+  column (`stretch`) so a drop can be a streak.
+- **The storm warning is edge-triggered, filtered and canonical**:
+  `updateWeather` records ARRIVALS in the pass that holds both days;
+  `reportWeather` posts one entry per arriving region the player has a
+  station in, keyed by the lowest-id station there. Its own
+  `NewsCategory.Weather` (count 5 -> 6, ticker by default). A world with
+  the rule off never writes one and `arrivalCount` is zero for ever.
+- **One protocol field**: the climate, on the `ready` message - the
+  season is a pure function of (month, height, climate) and the month
+  already rides the snapshot.
+- Measured: tick p50 1.702/1.554/1.650/1.542, p99 3.796/3.456/3.239/3.156
+  ms over four runs against the M10 baseline 1.45/3.26 - the last two land
+  below it and the four straddle it inside this machine's +-0.7 ms noise;
+  the reference fleet runs the rule off. **Main bundle 927,719 -> 934,751 B and the budget is RAISED to
+  950,000 B with that measurement beside it** (D-192; D-200/D-201 both
+  said this bundle would book it).
+- **Not measured, and it says so**: MapView's frame loop needs a GPU and
+  a compositor and has never been headless (D-136). The atlas
+  regeneration was measured in a real browser; the scheduler around it is
+  held by the type checker, the pure halves' tests and a perf proxy that
+  replays the weather spawn loop literally.
+
 Measured (reference machine): bundle 1 tick p50 1.296 / p99 2.841 ms,
-bundle 2 p50 1.613 / p99 2.934 ms against the M10 baseline 1.45 / 3.26 on
-a row that allows +0.15, with the reference fleet running the rule off -
-the ON-path per-vehicle cost (one array read, two table reads, a
-`baseHeight`) is NOT measured on that fixture and D-201 says so. **Main
-bundle 924,308 -> 926,473 -> 927,719 B against the 930,000 B budget -
-2,281 B of headroom left**; bundle 2's share is five constant tables that
-reach the main chunk because the interface imports `constants.ts`. The
-seasonal-optics bundle books the raise with its own measurement (D-192).
+bundle 2 p50 1.613 / p99 2.934 ms, bundle 3 p50 1.702 / 1.554 / 1.650 /
+1.542 and p99 3.796 / 3.456 / 3.239 / 3.156 over four runs, against the
+M10 baseline
+1.45 / 3.26 on a row that allows +0.15 - the reference fleet runs the
+rule off throughout, and the ON-path per-vehicle cost (one array read,
+two table reads, a `baseHeight`) is NOT measured on that fixture, which
+D-201 says. **Main bundle 924,308 -> 926,473 -> 927,719 -> 934,751 B, and
+bundle 3 raised the budget 930,000 -> 950,000 B with that measurement
+beside it** (D-192's rule, D-202): bundle 2's share was five constant
+tables that reach the main chunk because the interface imports
+`constants.ts`, bundle 3's is the two new render modules, the atlas
+repaint and the MapView scheduler.
 
 ## Still outstanding
 

@@ -163,6 +163,16 @@ export class SimClient {
     return this.reader?.currentTick() ?? 0;
   }
 
+  /**
+   * The weather field of the published tick (SPEC2 M18, E-01), for the rain
+   * and snow the renderer draws. A count of zero means the world has no
+   * weather rule at all - not a clear day - so the whole particle path can be
+   * skipped without reading 256 cells to find out.
+   */
+  readWeather(): { data: Int32Array; count: number } {
+    return this.reader?.currentWeather() ?? { data: EMPTY_VEHICLES, count: 0 };
+  }
+
   /** Change the simulation speed. Control traffic - never affects the result. */
   setSpeed(speedIndex: number): void {
     this.post({ type: 'setSpeed', speedIndex });
@@ -307,6 +317,7 @@ export class SimClient {
         store.setWorld({
           mapSize: message.mapSize,
           mapBuffer: message.mapBuffer,
+          climate: message.climate,
           towns: message.towns,
           industries: message.industries,
         });

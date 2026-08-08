@@ -49,6 +49,7 @@ import {
   BREAKDOWN_SMOKE_PERIOD,
   BREAKDOWN_TINT,
   emitterPhase,
+  emitterUnit,
   EXHAUST_PUFF,
   EXHAUST_TINT,
   exhaustPeriodForThrottle,
@@ -59,6 +60,19 @@ import {
   spawnPuff,
   vehicleThrottle,
 } from '../../src/render/particles';
+import {
+  precipitationFor,
+  RAIN_TINT,
+  SNOW_TINT,
+  WEATHER_PARTICLE_CEILING,
+  WEATHER_SPAWN_ATTEMPTS,
+  WEATHER_SPAWN_LIFT_PX,
+  weatherPuffFor,
+  weatherSpawnCount,
+  weatherTintFor,
+} from '../../src/render/weatherArt';
+import { weatherRegionOf } from '../../src/sim/weather/field';
+import { SEA_LEVEL, WeatherCell } from '../../src/sim/constants';
 import { STATE_BROKEN_DOWN } from '../../src/render/badges';
 import { INDUSTRY_SMOKE_ANCHORS } from '../../src/render/industryArt';
 import {
@@ -898,6 +912,8 @@ interface ParticleOut {
   readonly x: Float64Array;
   readonly y: Float64Array;
   readonly scale: Float64Array;
+  /** The M18 stretch column: `scale * pool.stretch`, one multiply a row. */
+  readonly scaleY: Float64Array;
   readonly alpha: Float64Array;
   readonly tint: Int32Array;
 }
@@ -917,6 +933,7 @@ function particleProxy(
   vehicleData: Int32Array,
   blink: number,
   out: ParticleOut,
+  weather: Int32Array | null = null,
 ): number {
   let attempts = 0;
   for (const industry of industries) {
@@ -967,13 +984,40 @@ function particleProxy(
     }
   }
 
+  // The M18 weather pass, last in the frame exactly as MapView spawns it
+  // (D-202): a fixed number of hashed tiles inside the visible range, each
+  // one asking its region for the sky and its height for rain against snow.
+  if (weather !== null) {
+    const snowLine = SEA_LEVEL + 4;
+    for (let attempt = 0; attempt < WEATHER_SPAWN_ATTEMPTS; attempt++) {
+      const seed = Math.imul(blink, 0x9e3779b1) ^ (attempt * 0x85ebca6b);
+      const x = Math.floor(emitterUnit(seed) * MAP_SIZE);
+      const y = Math.floor(emitterUnit(seed ^ 0x27d4eb2f) * MAP_SIZE);
+      const cell = weather[weatherRegionOf(x, y, MAP_SIZE)]!;
+      const height = x % 2 === 0 ? GROUND : snowLine + 1;
+      const kind = precipitationFor(cell, height, snowLine);
+      const count = weatherSpawnCount(kind, cell, attempt);
+      if (count === 0) continue;
+      const spec = weatherPuffFor(kind, cell);
+      const tint = weatherTintFor(kind);
+      const wx = (x - y) * (TILE_W / 2);
+      const wy = (x + y) * (TILE_H / 2) - height * HEIGHT_PX;
+      for (let drop = 0; drop < count; drop++) {
+        spawnPuff(pool, spec, wx, wy - WEATHER_SPAWN_LIFT_PX, seed ^ (drop * 0x2545f491), tint);
+        attempts++;
+      }
+    }
+  }
+
   pool.step();
 
   const count = pool.count;
   for (let i = 0; i < count; i++) {
     out.x[i] = pool.x[i]!;
     out.y[i] = pool.y[i]!;
-    out.scale[i] = pool.size[i]! / 32;
+    const scale = pool.size[i]! / 32;
+    out.scale[i] = scale;
+    out.scaleY[i] = scale * pool.stretch[i]!;
     out.alpha[i] = pool.alphaOf(i);
     out.tint[i] = pool.tint[i]!;
   }
@@ -1306,6 +1350,7 @@ describe('render CPU tripwire (SPEC2 6.3)', () => {
       x: new Float64Array(PARTICLE_CAP),
       y: new Float64Array(PARTICLE_CAP),
       scale: new Float64Array(PARTICLE_CAP),
+      scaleY: new Float64Array(PARTICLE_CAP),
       alpha: new Float64Array(PARTICLE_CAP),
       tint: new Int32Array(PARTICLE_CAP),
     };
@@ -1334,6 +1379,102 @@ describe('render CPU tripwire (SPEC2 6.3)', () => {
     expect(touched).toBeGreaterThan(PARTICLE_CAP);
     expect(p50).toBeLessThan(PARTICLE_P50_TRIPWIRE_MS);
     expect(p99).toBeLessThan(PARTICLE_P99_BACKSTOP_MS);
+  });
+
+  it('runs one particle frame with the weather active inside the same budget (M18)', () => {
+    // Two measurements, because they answer two different questions about the
+    // shared cap (D-174/D-202) and only one of them is the ordinary frame.
+    const industries = syntheticIndustries();
+    const data = new Int32Array(syntheticVehicleBlock(map));
+    for (let i = 0; i < REFERENCE_VEHICLES; i += 10) {
+      data[i * SNAPSHOT_VEHICLE_STRIDE + SnapshotVehicle.State] = STATE_BROKEN_DOWN;
+    }
+    const sky = new Int32Array(256).fill(WeatherCell.Storm);
+    const makeOut = (): ParticleOut => ({
+      x: new Float64Array(PARTICLE_CAP),
+      y: new Float64Array(PARTICLE_CAP),
+      scale: new Float64Array(PARTICLE_CAP),
+      scaleY: new Float64Array(PARTICLE_CAP),
+      alpha: new Float64Array(PARTICLE_CAP),
+      tint: new Int32Array(PARTICLE_CAP),
+    });
+
+    // (1) The weather's OWN cost, in a world where it can actually land: no
+    // industry smoking, no vehicle working, a sky of storm over every region.
+    // The pool fills to the weather's steady state and stays there, so the
+    // spawn writes, the extra step rows and the extra mirror rows are all in
+    // the sample. (The M13 reference scene below is an OVERLOAD by design and
+    // leaves the weather nothing - which is the other half of the answer.)
+    const idle = new Int32Array(REFERENCE_VEHICLES * SNAPSHOT_VEHICLE_STRIDE);
+    const live = new ParticlePool();
+    const liveOut = makeOut();
+    for (let frame = 0; frame < 400; frame++) {
+      particleProxy(live, [], idle, frame, liveOut, sky);
+    }
+    const steady = live.count;
+    let rainRows = 0;
+    for (let i = 0; i < live.count; i++) {
+      if (live.tint[i] === RAIN_TINT || live.tint[i] === SNOW_TINT) rainRows++;
+    }
+    const liveSamples = new Float64Array(DRAW_PREP_SAMPLES);
+    for (let i = 0; i < DRAW_PREP_SAMPLES; i++) {
+      const started = performance.now();
+      particleProxy(live, [], idle, 400 + i, liveOut, sky);
+      liveSamples[i] = performance.now() - started;
+    }
+    const liveP50 = percentile(liveSamples, 0.5);
+    const liveP99 = percentile(liveSamples, 0.99);
+    console.log(
+      `particle frame, weather only: storm over every region, ${WEATHER_SPAWN_ATTEMPTS} attempts ` +
+        `a frame over an idle ${REFERENCE_VEHICLES}-vehicle block, steady state ${steady} live ` +
+        `(${rainRows} of them weather, ceiling ${WEATHER_PARTICLE_CEILING}), ` +
+        `p50 ${liveP50.toFixed(4)} ms, p99 ${liveP99.toFixed(4)} ms ` +
+        `(median tripwire ${PARTICLE_P50_TRIPWIRE_MS} ms, backstop ${PARTICLE_P99_BACKSTOP_MS} ms)`,
+    );
+
+    // (2) OVERLOAD: the M13 scene with the pool pinned at the cap. The
+    // weather is spawned LAST, so every drop is refused and the plumes keep
+    // their rows - the cap decision, measured rather than argued.
+    const full = new ParticlePool();
+    for (let i = 0; i < PARTICLE_CAP; i++) {
+      full.spawn(i, 0, 0.1, -0.5, 30 + (i % 90), 6, 0.05, 0xffffff);
+    }
+    const fullOut = makeOut();
+    const touched = particleProxy(full, industries, data, 0, fullOut, sky);
+    const fullSamples = new Float64Array(DRAW_PREP_SAMPLES);
+    for (let i = 0; i < DRAW_PREP_SAMPLES; i++) {
+      const started = performance.now();
+      particleProxy(full, industries, data, i + 1, fullOut, sky);
+      fullSamples[i] = performance.now() - started;
+    }
+    const fullP50 = percentile(fullSamples, 0.5);
+    const fullP99 = percentile(fullSamples, 0.99);
+    let refusedRain = 0;
+    for (let i = 0; i < full.count; i++) {
+      if (full.tint[i] === RAIN_TINT || full.tint[i] === SNOW_TINT) refusedRain++;
+    }
+    console.log(
+      `particle frame, M13 overload scene + the same storm: ${touched} rows touched, ` +
+        `${refusedRain} weather rows in the pool (the emitters hold the cap), ` +
+        `p50 ${fullP50.toFixed(4)} ms, p99 ${fullP99.toFixed(4)} ms`,
+    );
+
+    // The weather reaches its stated share of the cap and no more, and the
+    // pool never grows past it in either regime.
+    expect(steady).toBeLessThanOrEqual(PARTICLE_CAP);
+    expect(rainRows).toBeGreaterThan(0);
+    expect(rainRows).toBeLessThanOrEqual(WEATHER_PARTICLE_CEILING);
+    // The whole pool of the weather-only scene IS weather: nothing else was
+    // emitting, so the ceiling is the population and it is under the cap.
+    expect(rainRows).toBe(steady);
+    // And under overload the weather gets nothing at all - spawned last,
+    // refused by the cap, with every plume left standing.
+    expect(full.count).toBeLessThanOrEqual(PARTICLE_CAP);
+    expect(refusedRain).toBe(0);
+    expect(liveP50).toBeLessThan(PARTICLE_P50_TRIPWIRE_MS);
+    expect(liveP99).toBeLessThan(PARTICLE_P99_BACKSTOP_MS);
+    expect(fullP50).toBeLessThan(PARTICLE_P50_TRIPWIRE_MS);
+    expect(fullP99).toBeLessThan(PARTICLE_P99_BACKSTOP_MS);
   });
 
   it('prepares the flow atlas at the 4096-leg megagraph inside the tripwire (M14)', () => {

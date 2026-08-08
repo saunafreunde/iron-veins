@@ -33,10 +33,20 @@ export const NewsCategory = {
   Network: 3,
   /** Towns and their councils. */
   Town: 4,
+  /**
+   * The sky (SPEC2 M18): storm warnings over the regions the player has a
+   * station in.
+   *
+   * Its own category rather than a line under Network or Fleet, because a
+   * player who has filtered the log down to signalling trouble is not asking
+   * about the weather - and because the weather is where the milestone's own
+   * costs come from, so it is worth being able to watch on its own.
+   */
+  Weather: 5,
 } as const;
 export type NewsCategory = (typeof NewsCategory)[keyof typeof NewsCategory];
 
-export const NEWS_CATEGORY_COUNT = 5;
+export const NEWS_CATEGORY_COUNT = 6;
 
 /** Translation keys for the filter buttons, indexed by category. */
 export const NEWS_CATEGORY_KEYS: readonly string[] = [
@@ -45,6 +55,7 @@ export const NEWS_CATEGORY_KEYS: readonly string[] = [
   'news.category.fleet',
   'news.category.network',
   'news.category.town',
+  'news.category.weather',
 ];
 
 /** How loud an entry is. The UI colours by it; nothing else reads it. */

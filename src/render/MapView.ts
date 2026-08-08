@@ -21,7 +21,7 @@ import {
   SnapshotVehicle,
   type VehicleFrame,
 } from '../shared/snapshot';
-import { MAX_HEIGHT, MAX_VEHICLES } from '../sim/constants';
+import { MAX_HEIGHT, MAX_VEHICLES, type MapClimate } from '../sim/constants';
 import { signalKind } from '../sim/map/signals';
 import type { TileMap } from '../sim/map/TileMap';
 import { SLOPE_COUNT, Terrain } from '../sim/map/terrain';
@@ -53,6 +53,7 @@ import {
 } from './flowAtlas';
 import { HEAT_REFRESH_TICKS, heatAlpha, heatColor } from './heatmap';
 import { utilisationOf } from '../sim/net/throughput';
+import { weatherRegionOf } from '../sim/weather/field';
 
 /** The company palette as Pixi tints, parsed once. */
 const COMPANY_TINTS: readonly number[] = COMPANY_COLORS.map((hex) =>
@@ -365,6 +366,7 @@ import {
   BREAKDOWN_PUFF,
   BREAKDOWN_TINT,
   emitterPhase,
+  emitterUnit,
   EXHAUST_PUFF,
   EXHAUST_TINT,
   exhaustPeriodForThrottle,
@@ -385,6 +387,25 @@ import {
   STATE_WAITING_FOR_PATH,
 } from './badges';
 import { INDUSTRY_SMOKE_ANCHORS } from './industryArt';
+import {
+  planSeasonRepaint,
+  SEASON_REGEN_MIN_FRAMES,
+  seasonKeyOf,
+  seasonLookFor,
+  SeasonStage,
+  shouldStartRegeneration,
+  SNOW_LINE_NONE,
+  terrainTakesSnow,
+  type SeasonLook,
+} from './seasonArt';
+import {
+  precipitationFor,
+  WEATHER_SPAWN_ATTEMPTS,
+  WEATHER_SPAWN_LIFT_PX,
+  weatherPuffFor,
+  weatherSpawnCount,
+  weatherTintFor,
+} from './weatherArt';
 import {
   coastEdgeMask,
   FOAM_EDGE_COUNT,
@@ -521,6 +542,43 @@ const SEGMENT_CACHE_MAX = 256;
  * of the phase window, and a still ocean never pays anything.
  */
 const WATER_CHUNK_REBAKES_PER_FRAME = 2;
+
+/**
+ * Seasonal repaint steps a frame may run. [(job, page) pairs]
+ *
+ * A step is one job - a terrain's sixteen slope cells, or the six town cells
+ * with their emissive twins - on one page. Two a frame is what makes the
+ * regeneration ASYNCHRONOUS in the only sense that matters on a single thread
+ * (SPEC2 6.2: "<= 30 ms async ... ohne sichtbaren Frame-Haenger"): the total
+ * is what it is, but no single frame pays more than a couple of milliseconds
+ * of it, and the GPU sees nothing until the last step uploads both canvases at
+ * once - so the world never shows two seasons.
+ */
+const SEASON_REPAINT_STEPS_PER_FRAME = 2;
+
+/**
+ * Chunk rebakes a frame may run for a season change. [chunks]
+ *
+ * The D-164 device again, and for the same reason: a baked chunk holds last
+ * season's pixels until it is rebaked, and rebaking a whole 0.5x viewport in
+ * the frame the season lands would spend in one frame what the stagger spreads
+ * over nine. Two a frame drains a typical viewport well inside the debounce
+ * window.
+ */
+const SEASON_CHUNK_REBAKES_PER_FRAME = 2;
+
+/**
+ * What one seasonal regeneration may cost in total. [ms]
+ *
+ * SPEC2 6.2's own number for the mechanism that replaces seasonal atlas CELLS
+ * ("Regeneration <= 30 ms async"). Measured in the running game rather than
+ * asserted: the scheduler adds up the milliseconds its steps actually spend
+ * and warns on the console when the sum crosses this - the
+ * ATLAS_BUILD_BUDGET_MS pattern, and a wall clock is as legitimate here as it
+ * is there, because this times work rather than animating anything
+ * (Fehlerkatalog 39).
+ */
+const SEASON_REGEN_BUDGET_MS = 30;
 
 /**
  * Abstract-mode network style. Widths are SCREEN pixels (divided by zoom at
@@ -682,6 +740,14 @@ interface ChunkEntry {
   /** Water animation row the bake drew, so a phase swap knows who is stale. */
   readonly waterRow: number;
   /**
+   * Season generation the bake drew (M18): the atlas artwork AND the snow
+   * line of that moment. A chunk whose epoch is behind holds last season's
+   * pixels and is rebaked on the staggered cadence - the `waterRow` device
+   * for a fact that changes a few times a game year instead of twice a
+   * second.
+   */
+  readonly seasonEpoch: number;
+  /**
    * The chunk's emissive twin (M13): window and lamp glows baked into a
    * second texture, drawn additively above the chunk with the ramp as its
    * alpha - or null when the chunk holds nothing that glows, the profile
@@ -784,6 +850,54 @@ export class MapView {
   private readonly waterSwapHandles: FrameHandle[] = [];
   /** Chunks of the last full-profile visible set, for the staggered rebake. */
   private visibleFullChunkCount = 0;
+
+  /**
+   * The seasonal optics of SPEC2 M18 (D-202), keyed to the published Month
+   * and the world's climate - a pure function of both (Z1), never a clock.
+   *
+   * `applied` is the look the two atlas pages currently hold and the snow line
+   * the placed sprites were built with; `pending` is what the calendar asks
+   * for. They differ only between a month boundary and the end of the
+   * regeneration that answers it. `epoch` counts completed regenerations and
+   * is what a baked chunk remembers, so a chunk knows whether its pixels are
+   * this season's without comparing anything (the D-164 `waterRow` device).
+   */
+  private appliedSeason: SeasonLook = { stage: SeasonStage.Summer, snowLine: SNOW_LINE_NONE };
+  private pendingSeason: SeasonLook = { stage: SeasonStage.Summer, snowLine: SNOW_LINE_NONE };
+  private appliedSeasonKey = seasonKeyOf({
+    stage: SeasonStage.Summer,
+    snowLine: SNOW_LINE_NONE,
+  });
+  private pendingSeasonKey = this.appliedSeasonKey;
+  /**
+   * The look the RUNNING regeneration is painting towards, captured when it
+   * started.
+   *
+   * Not `pendingSeason` read live: a scrub can move the calendar again while
+   * the pass is half way through, and painting the remaining jobs in a
+   * different stage from the ones already done would leave the atlas in a mix
+   * of two seasons that nothing would ever correct. The pass finishes what it
+   * began; if the calendar has moved on by then, the next frame sees pending
+   * differ from applied and starts a second pass from where this one landed.
+   */
+  private seasonTarget: SeasonLook = this.appliedSeason;
+  private seasonTargetKey = this.appliedSeasonKey;
+  private seasonEpoch = 0;
+  private builtSeasonEpoch = -1;
+  /** Frame the last regeneration finished on, for the SPEC2 6.2 debounce. */
+  private seasonRegenFrame = -SEASON_REGEN_MIN_FRAMES;
+  /** Jobs of the running regeneration; empty while none runs. */
+  private readonly seasonJobs: number[] = [];
+  private seasonJobCount = 0;
+  private seasonJobAt = 0;
+  /** 0 = base page, 1 = detail page: each job is painted on both. */
+  private seasonJobPage = 0;
+  /** Cells repainted and milliseconds spent by the running regeneration. */
+  private seasonCellsPainted = 0;
+  private seasonRegenMs = 0;
+
+  /** Where the published weather field is read from (SPEC2 M18, E-01). */
+  private weatherSource: (() => { data: Int32Array; count: number }) | null = null;
 
   /**
    * The map text of SPEC2 M12: town and station labels as BitmapText
@@ -1266,6 +1380,30 @@ export class MapView {
   /** Tell the view that the simulation changed the ground. */
   setMapRevision(revision: number): void {
     if (this.map !== null) this.map.revision = revision;
+  }
+
+  /**
+   * The calendar month and the world's climate (SPEC2 M18, D-202).
+   *
+   * Everything seasonal follows from these two numbers and nothing else: the
+   * look the atlas is repainted in, the snow line the ground is drawn against,
+   * and whether a raindrop over a mountain is a snowflake. The month comes out
+   * of the published snapshot and the climate out of the world announcement,
+   * so both are facts the SIMULATION stated - Z1's "pure function of snapshot
+   * fields" with the climate as the world constant it names.
+   *
+   * Called once a game month by the interface, not per frame: the regeneration
+   * it may ask for is debounced and runs over the following frames.
+   */
+  setSeason(month: number, climate: MapClimate): void {
+    const look = seasonLookFor(month, climate);
+    this.pendingSeason = look;
+    this.pendingSeasonKey = seasonKeyOf(look);
+  }
+
+  /** Where the published weather field is read from (SPEC2 M18, E-01). */
+  setWeatherSource(source: () => { data: Int32Array; count: number }): void {
+    this.weatherSource = source;
   }
 
   /** Station list, refreshed whenever one is built or extended. */
@@ -1758,10 +1896,15 @@ export class MapView {
     // The claimed-block set of the M13 signal aspects, refreshed BEFORE any
     // rebuild so freshly placed lamps read current truth (B5).
     this.maintainSignalClaims(map, generationMoved);
+    // The seasonal artwork (M18), likewise before the rebuild paths: a
+    // regeneration that finished this frame moved the snow line, and the
+    // rebuild below has to place the cells the NEW line commands.
+    this.maintainSeason();
 
     const bounds = this.visibleTileBounds(map.size);
     const changed =
       map.revision !== this.builtRevision ||
+      this.seasonEpoch !== this.builtSeasonEpoch ||
       this.zoom !== this.builtZoom ||
       bounds.minX !== this.builtBounds.minX ||
       bounds.minY !== this.builtBounds.minY ||
@@ -1776,6 +1919,7 @@ export class MapView {
         this.rebuild(map, bounds);
       }
       this.builtRevision = map.revision;
+      this.builtSeasonEpoch = this.seasonEpoch;
       this.builtZoom = this.zoom;
       this.builtBounds = bounds;
     }
@@ -1918,6 +2062,123 @@ export class MapView {
   }
 
   /**
+   * The seasonal atlas regeneration (SPEC2 M18, D-202).
+   *
+   * Runs every frame and does nothing at all in the overwhelming majority of
+   * them: the look the calendar asks for equals the one the pages hold, and
+   * the method returns on its second line. When they differ it starts a
+   * regeneration - once the debounce window of SPEC2 6.2 is open - and then
+   * carries it a couple of steps a frame until it is done.
+   *
+   * The swap is ATOMIC even though the work is not: the canvases are repainted
+   * over several frames, but the GPU is only told about them in the step that
+   * finishes the last job, so no frame can show a half-repainted world.
+   */
+  private maintainSeason(): void {
+    if (this.basePage === null || this.detailPage === null) return;
+    if (this.seasonJobCount > 0) {
+      this.runSeasonSteps();
+      return;
+    }
+    if (
+      !shouldStartRegeneration(
+        this.pendingSeasonKey,
+        this.appliedSeasonKey,
+        this.blink - this.seasonRegenFrame,
+      )
+    ) {
+      return;
+    }
+
+    this.seasonTarget = this.pendingSeason;
+    this.seasonTargetKey = this.pendingSeasonKey;
+    this.seasonJobCount = planSeasonRepaint(
+      this.appliedSeason.stage,
+      this.seasonTarget.stage,
+      this.seasonJobs,
+    );
+    this.seasonJobAt = 0;
+    this.seasonJobPage = 0;
+    this.seasonCellsPainted = 0;
+    this.seasonRegenMs = 0;
+    // A snow line that moved inside one stage - November to December in the
+    // arctic - repaints nothing and is finished immediately. It still bumps
+    // the epoch: the SPRITES have to be rebuilt, because which cell a tile
+    // draws changed even though no cell did.
+    if (this.seasonJobCount === 0) {
+      this.finishSeason();
+      return;
+    }
+    this.runSeasonSteps();
+  }
+
+  /** Carry the running regeneration a bounded number of steps. */
+  private runSeasonSteps(): void {
+    const stage = this.seasonTarget.stage;
+    for (let step = 0; step < SEASON_REPAINT_STEPS_PER_FRAME; step++) {
+      if (this.seasonJobAt >= this.seasonJobCount) break;
+      const page = this.seasonJobPage === 0 ? this.basePage! : this.detailPage!;
+      const started = performance.now();
+      this.seasonCellsPainted += page.atlas.repaintSeasonJob(
+        this.seasonJobs[this.seasonJobAt]!,
+        stage,
+      );
+      this.seasonRegenMs += performance.now() - started;
+      if (this.seasonJobPage === 0) {
+        this.seasonJobPage = 1;
+      } else {
+        this.seasonJobPage = 0;
+        this.seasonJobAt++;
+      }
+    }
+    if (this.seasonJobAt >= this.seasonJobCount) this.finishSeason();
+  }
+
+  /**
+   * Publish the repainted artwork and let the world catch up.
+   *
+   * Both canvases are uploaded in the same step, the applied look becomes the
+   * pending one, and the epoch moves - which is what tells the sprite pool to
+   * rebuild (the snow line decides which cell a tile draws) and the baked
+   * chunks that their pixels are a season old.
+   */
+  private finishSeason(): void {
+    // Only when something was actually repainted: `source.update()` re-uploads
+    // a whole page, and a snow line that moved inside one stage repaints no
+    // cell at all - it moves sprites, not pixels.
+    if (this.seasonCellsPainted > 0) {
+      this.basePage?.texture.source.update();
+      this.detailPage?.texture.source.update();
+    }
+    this.appliedSeason = this.seasonTarget;
+    this.appliedSeasonKey = this.seasonTargetKey;
+    this.seasonEpoch++;
+    this.seasonJobCount = 0;
+    this.seasonRegenFrame = this.blink;
+    if (this.seasonRegenMs > SEASON_REGEN_BUDGET_MS) {
+      console.warn(
+        `MapView: seasonal atlas regeneration took ${this.seasonRegenMs.toFixed(1)} ms over ` +
+          `${this.seasonCellsPainted} cells - past the ${SEASON_REGEN_BUDGET_MS} ms of SPEC2 6.2`,
+      );
+    }
+  }
+
+  /**
+   * Which terrain cell a tile is DRAWN as (SPEC2 M18): its own, or snow when
+   * it stands at or above this month's snow line.
+   *
+   * A substitution rather than a new row of cells, which is what keeps the
+   * milestone's atlas booking at the zero its ledger row promises: the game
+   * has had a `Terrain.Snow` cell since M1 and a snowed-over mountain is what
+   * it draws. Water is never substituted and snow never re-substituted
+   * (`terrainTakesSnow`).
+   */
+  private drawnTerrain(terrain: number, height: number): number {
+    if (height < this.appliedSeason.snowLine) return terrain;
+    return terrainTakesSnow(terrain) ? Terrain.Snow : terrain;
+  }
+
+  /**
    * Advance the living water to this frame's animation row (D-164).
    *
    * On the detail path a phase swap re-textures the recorded water sprites -
@@ -1951,15 +2212,37 @@ export class MapView {
     }
     if (abstract) return;
 
-    let rebaked = 0;
+    // One staggered rebake loop for both facts a baked chunk can be behind
+    // on: the water row (twice a second) and the season epoch (a few times a
+    // game year). Two budgets, because a season change arriving during a
+    // shimmer must not halve the rate at which either catches up - and one
+    // walk, because a chunk that is behind on both is one rebake either way.
+    let waterRebakes = 0;
+    let seasonRebakes = 0;
     for (let i = 0; i < this.visibleFullChunkCount; i++) {
-      if (rebaked >= WATER_CHUNK_REBAKES_PER_FRAME) return;
+      if (
+        waterRebakes >= WATER_CHUNK_REBAKES_PER_FRAME &&
+        seasonRebakes >= SEASON_CHUNK_REBAKES_PER_FRAME
+      ) {
+        return;
+      }
       const key = this.visibleChunkScratch[i]!;
       const entry = this.fullChunks.get(key);
-      if (entry === undefined || !entry.hasWater || entry.waterRow === row) continue;
-      // The twin is carried through unchanged (M13): a water phase swap
-      // moves ripples, never windows, so re-rendering the glow would be
-      // a second GPU pass for identical pixels.
+      if (entry === undefined) continue;
+      const staleSeason = entry.seasonEpoch !== this.seasonEpoch;
+      const staleWater = entry.hasWater && entry.waterRow !== row;
+      if (!staleSeason && !staleWater) continue;
+      if (staleSeason && seasonRebakes >= SEASON_CHUNK_REBAKES_PER_FRAME) continue;
+      if (!staleSeason && waterRebakes >= WATER_CHUNK_REBAKES_PER_FRAME) continue;
+      // The twin is carried through unchanged for a WATER swap (M13): a phase
+      // moves ripples, never windows, so re-rendering the glow would be a
+      // second GPU pass for identical pixels. A SEASON change repaints the
+      // town cells and their twins together (D-202), so the glow is re-baked
+      // with the chunk - the one case where carrying it through would show
+      // last season's windows on this season's roofs. The twin's texture goes
+      // back on the freelist first, so the fresh bake pops the very one it is
+      // replacing - the same in-place reuse the base texture gets.
+      if (staleSeason && entry.emissive !== null) this.freeEmissiveTextures.push(entry.emissive);
       const fresh = this.bakeChunk(
         map,
         entry.chunkX,
@@ -1967,11 +2250,12 @@ export class MapView {
         false,
         entry.texture,
         CHUNK_ZOOM_MAX,
-        entry.emissive,
+        staleSeason ? undefined : entry.emissive,
       );
       fresh.lastUsed = entry.lastUsed;
       this.fullChunks.set(key, fresh);
-      rebaked++;
+      if (staleSeason) seasonRebakes++;
+      else waterRebakes++;
     }
   }
 
@@ -2049,6 +2333,12 @@ export class MapView {
     }
     layer.visible = true;
     this.spawnIndustrySmoke(map);
+    // The weather goes in LAST, and that is the cap decision (D-174/D-202):
+    // `spawn` refuses at the cap, so whatever is spawned last is what a full
+    // pool drops. A plume is simulation truth made visible - the industry's
+    // own production level - and rain is a sky the tint, the tile panel and
+    // the news already tell the player about.
+    this.spawnWeather(map);
     this.particlePool.step();
     this.syncParticles();
   }
@@ -2089,6 +2379,68 @@ export class MapView {
   }
 
   /**
+   * Rain and snow over the visible tiles, from the published weather field
+   * (SPEC2 M18, E-01, D-202).
+   *
+   * A fixed number of attempts a frame, each one a hashed tile inside the
+   * visible range: the tile answers its own region (`weatherRegionOf` - the
+   * ONE place the 16x16 grid meets the map, so what the simulation charges the
+   * vehicle for and what falls on it are the same front) and its own height,
+   * which decides rain against snow at this month's line. An attempt on a dry
+   * region or outside the drawn rectangle places nothing, so a clear sky costs
+   * sixteen hashes.
+   *
+   * Determinism is the M13 device unchanged (Fehlerkatalog 25/39): the
+   * placement hashes are avalanches over the blink counter and the attempt
+   * index - no RNG stream, no wall clock. A count of zero means the world has
+   * no weather rule at all and the whole method returns.
+   */
+  private spawnWeather(map: TileMap): void {
+    const source = this.weatherSource;
+    if (source === null) return;
+    const field = source();
+    if (field.count === 0) return;
+
+    const bounds = this.builtBounds;
+    const spanX = bounds.maxX - bounds.minX + 1;
+    const spanY = bounds.maxY - bounds.minY + 1;
+    if (spanX <= 0 || spanY <= 0) return;
+    const size = map.size;
+    const snowLine = this.appliedSeason.snowLine;
+
+    for (let attempt = 0; attempt < WEATHER_SPAWN_ATTEMPTS; attempt++) {
+      const seed = Math.imul(this.blink, 0x9e3779b1) ^ (attempt * 0x85ebca6b);
+      const x = bounds.minX + Math.floor(emitterUnit(seed) * spanX);
+      const y = bounds.minY + Math.floor(emitterUnit(seed ^ 0x27d4eb2f) * spanY);
+      if (x < 0 || y < 0 || x >= size || y >= size) continue;
+
+      const cell = field.data[weatherRegionOf(x, y, size)]!;
+      const height = map.baseHeight(x, y);
+      const kind = precipitationFor(cell, height, snowLine);
+      const count = weatherSpawnCount(kind, cell, attempt);
+      if (count === 0) continue;
+
+      const wx = (x - y) * (TILE_W / 2);
+      const wy = (x + y) * (TILE_H / 2) - height * HEIGHT_PX;
+      if (wx < this.emitLeft || wx > this.emitRight || wy < this.emitTop || wy > this.emitBottom) {
+        continue;
+      }
+      const spec = weatherPuffFor(kind, cell);
+      const tint = weatherTintFor(kind);
+      for (let drop = 0; drop < count; drop++) {
+        spawnPuff(
+          this.particlePool,
+          spec,
+          wx + (emitterUnit(seed ^ (drop * 0x165667b1)) - 0.5) * TILE_W,
+          wy - WEATHER_SPAWN_LIFT_PX,
+          seed ^ (drop * 0x2545f491),
+          tint,
+        );
+      }
+    }
+  }
+
+  /**
    * Mirror the pool into the preallocated Pixi particles: live rows take
    * position, size and colour, rows that died since last frame drop to
    * alpha 0 - never the whole cap, only what actually lived.
@@ -2102,7 +2454,9 @@ export class MapView {
       particle.y = pool.y[i]!;
       const scale = pool.size[i]! / SMOKE_TEX_SIZE;
       particle.scaleX = scale;
-      particle.scaleY = scale;
+      // The stretch column (M18): 1 for every smoke family, above 1 for a
+      // rain streak - one multiply, so the M13 loop keeps its shape.
+      particle.scaleY = scale * pool.stretch[i]!;
       particle.alpha = pool.alphaOf(i);
       particle.tint = pool.tint[i]!;
     }
@@ -2363,9 +2717,13 @@ export class MapView {
           this.waterSlots.push(used - 1);
           this.waterSlopes.push(slope);
         } else {
+          // The snow line of M18: above it the tile draws the snow cell, and
+          // the frame KEY carries the substitution, so the texture cache and
+          // the chunk bake below cannot disagree about what was drawn.
+          const drawn = this.drawnTerrain(terrain, height);
           this.place(
             this.take(used++),
-            this.frameTexture(page, `t${terrain}:${slope}`, atlas.terrainFrame(terrain, slope)),
+            this.frameTexture(page, `t${drawn}:${slope}`, atlas.terrainFrame(drawn, slope)),
             world.x,
             world.y,
             drawOrder(x, y, height, DrawLayer.Ground),
@@ -3066,9 +3424,10 @@ export class MapView {
           );
           water.tint = isDeepWater(map, x, y) ? WATER_DEEP_TINT : WATER_SHALLOW_TINT;
         } else {
+          const drawn = this.drawnTerrain(terrain, height);
           this.place(
             this.bakeTake(used++),
-            this.frameTexture(page, `t${terrain}:${slope}`, atlas.terrainFrame(terrain, slope)),
+            this.frameTexture(page, `t${drawn}:${slope}`, atlas.terrainFrame(drawn, slope)),
             world.x,
             world.y,
             drawOrder(x, y, height, DrawLayer.Ground),
@@ -3299,6 +3658,7 @@ export class MapView {
       lastUsed: 0,
       hasWater,
       waterRow,
+      seasonEpoch: this.seasonEpoch,
       emissive,
     };
   }

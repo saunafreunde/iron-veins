@@ -205,6 +205,8 @@ export function MapCanvas({ client }: { readonly client: SimClient }): ReactElem
   const trackPreview = useSimStore((s) => s.trackPreview);
   const connectPlan = useSimStore((s) => s.connectPlan);
   const dayNight = useSimStore((s) => s.settings.dayNight);
+  const month = useSimStore((s) => s.month);
+  const climate = useSimStore((s) => s.climate);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -449,6 +451,9 @@ export function MapCanvas({ client }: { readonly client: SimClient }): ReactElem
     useSimStore.getState().setFlowSource(() => client.readFlow());
     // The day/night curve reads the published tick, never the wall clock.
     view.setTickSource(() => client.readTick());
+    // The M18 weather field: rain and snow are a pure function of the 256
+    // published cells plus the render frame counter (E-01, Fehlerkatalog 39).
+    view.setWeatherSource(() => client.readWeather());
     view.setDayNight(useSimStore.getState().settings.dayNight);
     void view.attach(host);
 
@@ -540,6 +545,14 @@ export function MapCanvas({ client }: { readonly client: SimClient }): ReactElem
   useEffect(() => {
     viewRef.current?.setDayNight(dayNight);
   }, [dayNight]);
+
+  useEffect(() => {
+    // The seasonal optics of SPEC2 M18: the published month crossed with the
+    // world's climate, pushed once a game month rather than read per frame.
+    // What the view does with it - repaint the atlas, move the snow line - is
+    // debounced and asynchronous (D-202).
+    viewRef.current?.setSeason(month, climate);
+  }, [month, climate]);
 
   useEffect(() => {
     // The deadlock markers of section 9.3. The clock lives per vehicle in the

@@ -1,9 +1,15 @@
-import { TERRAIN_COLORS } from '../shared/palette';
 import { INDUSTRY_TYPE_COUNT } from '../sim/industry/types';
 import { SIGNAL_KIND_COUNT, SignalKind } from '../sim/map/signals';
 import { SlopeBit, SLOPE_COUNT, Terrain, TERRAIN_COUNT } from '../sim/map/terrain';
 import { EMISSIVE_WINDOW_HEX } from './emissive';
 import { drawIndustry, drawIndustryEmissive, INDUSTRY_EMISSIVE_TYPES } from './industryArt';
+import {
+  roofSnowFor,
+  SEASON_JOB_BUILDINGS,
+  SeasonStage,
+  snowedRoof,
+  terrainLook,
+} from './seasonArt';
 import { box, catenaryMast, gableRoof, sawtoothRoof, shade, windows, type IsoView } from './shapes';
 import { SIGNAL_ASPECT_COUNT, SIGNAL_ASPECT_TINTS, SignalAspect } from './signalAspects';
 import { FOAM_VARIANT_COUNT, WATER_FRAME_COUNT } from './water';
@@ -65,20 +71,6 @@ export const CELL_SKIRT_STEPS = 1;
 const CELL_W = TILE_W;
 const CELL_TOP = STEP * CELL_HEADROOM_STEPS;
 const CELL_H = TILE_H + CELL_TOP + STEP * CELL_SKIRT_STEPS;
-
-/** Speckle colour per terrain, used for a little surface texture. */
-const TERRAIN_SPECKLE: readonly string[] = [
-  '#3f7896',
-  '#bda874',
-  '#628c4e',
-  '#a08c46',
-  '#365d32',
-  '#7b766a',
-  '#d7dde1',
-  '#c7ad79',
-  '#4e5d40',
-  '#a9a59d',
-];
 
 /** Rows of the atlas that are not terrain. */
 const ROAD_ROW = TERRAIN_COUNT;
@@ -216,6 +208,22 @@ export interface TerrainAtlas {
   catenaryWireFrame(direction: number): AtlasFrame;
   /** Half a track segment leaving the tile centre in one of the 8 directions. */
   trackFrame(direction: number): AtlasFrame;
+  /**
+   * Repaint the cells of ONE seasonal job in the artwork of `stage`, and
+   * answer how many cells were redrawn (SPEC2 M18).
+   *
+   * A job is a terrain index - its sixteen slope cells - or
+   * `SEASON_JOB_BUILDINGS`, which is the six town cells AND, on the page that
+   * has an emissive row, their six window-only twins. The twins are in the
+   * same call rather than in a job of their own: SPEC2 6.2 asks for the
+   * emissive in the SAME pass, and one call is the only version of that which
+   * cannot come apart (D-172's "by construction" restated a milestone on).
+   *
+   * The canvas is repainted; the GPU sees nothing until the caller updates the
+   * texture source, which is what lets a regeneration run over several frames
+   * and still swap seasons in one frame (MapView).
+   */
+  repaintSeasonJob(job: number, stage: SeasonStage): number;
 }
 
 /** Corner offsets of the base diamond inside a cell, in draw order N-E-S-W. */
@@ -238,15 +246,25 @@ function speckleHash(x: number, y: number, salt: number): number {
   return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
 }
 
+/**
+ * One terrain cell, in the colours the STAGE gives that terrain (SPEC2 M18).
+ *
+ * The two colours come from `seasonArt.terrainLook` and from nowhere else, so
+ * "what does grass look like in November" has one answer that the repaint and
+ * the first build share. Summer answers with the base tables of section 16.3,
+ * which is why the atlas the game starts with is unchanged artwork.
+ */
 function drawTerrainCell(
   ctx: CanvasRenderingContext2D,
   originX: number,
   originY: number,
   terrain: number,
   slope: number,
+  stage: SeasonStage = SeasonStage.Summer,
 ): void {
-  const base = TERRAIN_COLORS[terrain]!;
-  const speckle = TERRAIN_SPECKLE[terrain]!;
+  const look = terrainLook(terrain, stage);
+  const base = look.colour;
+  const speckle = look.speckle;
 
   const points = CORNERS.map(([cx, cy], index) => {
     const raised = (slope & CORNER_BITS[index]!) !== 0;
@@ -526,6 +544,15 @@ function drawRoadCell(
  * in the lit colour, everything else transparent: the emissive twin of the
  * cell, from the SAME specs and the same call sites, so the lit windows can
  * never drift off the dark ones.
+ *
+ * `stage` (M18) snows the ROOFS in winter - the three surfaces that already
+ * take an explicit colour: the pitched roof, the shed's sawtooth and the
+ * commercial block's rooftop plant. The flat top face of the commercial block
+ * is `box`'s own shading of its wall colour and is deliberately left alone;
+ * making it snow would mean a roof-colour parameter on every solid in
+ * shapes.ts for one cell of six. The emissive twin takes the same `stage`
+ * because it is the same call, which is what keeps "the twin is the cell with
+ * everything but the glazing skipped" true across a repaint.
  */
 function drawTownBuilding(
   ctx: CanvasRenderingContext2D,
@@ -534,7 +561,9 @@ function drawTownBuilding(
   kind: number,
   level: number,
   emissiveOnly = false,
+  stage: SeasonStage = SeasonStage.Summer,
 ): void {
+  const snow = roofSnowFor(stage);
   const view: IsoView = {
     cx: originX + TILE_W / 2,
     cy: originY + CELL_TOP + TILE_H / 2,
@@ -563,7 +592,7 @@ function drawTownBuilding(
       v: w * 0.78,
       base: height,
       rise: (6 + grow) * px,
-      colour: '#8d4b3c',
+      colour: snowedRoof('#8d4b3c', snow),
     });
     return;
   }
@@ -582,7 +611,13 @@ function drawTownBuilding(
       colour: emissiveOnly ? EMISSIVE_WINDOW_HEX : '#3f6f88',
     });
     if (emissiveOnly) return;
-    box(ctx, view, { u: w * 0.4, v: w * 0.34, height: 3 * px, colour: '#9aa1a8', base: height });
+    box(ctx, view, {
+      u: w * 0.4,
+      v: w * 0.34,
+      height: 3 * px,
+      colour: snowedRoof('#9aa1a8', snow),
+      base: height,
+    });
     return;
   }
 
@@ -596,7 +631,7 @@ function drawTownBuilding(
     base: height,
     rise: 3 * px,
     teeth: 2,
-    colour: '#5c6068',
+    colour: snowedRoof('#5c6068', snow),
     glass: emissiveOnly ? EMISSIVE_WINDOW_HEX : '#82aebf',
     glassOnly: emissiveOnly,
   });
@@ -1200,8 +1235,35 @@ export function buildTerrainAtlas(): TerrainAtlas {
     anchorY: CELL_TOP,
   });
 
+  /**
+   * The seasonal repaint of the base page (SPEC2 M18). Every cell is cleared
+   * before it is redrawn: a cell is transparent outside its diamond, and a
+   * repaint that only painted over would leave the previous season showing
+   * wherever the new artwork happens not to reach.
+   */
+  const repaintSeasonJob = (job: number, stage: SeasonStage): number => {
+    if (job === SEASON_JOB_BUILDINGS) {
+      for (let variant = 0; variant < BUILDING_VARIANTS; variant++) {
+        const kind = variant % 3;
+        const level = (variant / 3) | 0;
+        ctx.clearRect(variant * CELL_W, BUILDING_ROW * CELL_H, CELL_W, CELL_H);
+        drawTownBuilding(ctx, variant * CELL_W, BUILDING_ROW * CELL_H, kind, level, false, stage);
+        // The twin, from the same call site in the same pass.
+        ctx.clearRect(variant * CELL_W, EMISSIVE_ROW * CELL_H, CELL_W, CELL_H);
+        drawTownBuilding(ctx, variant * CELL_W, EMISSIVE_ROW * CELL_H, kind, level, true, stage);
+      }
+      return BUILDING_VARIANTS * 2;
+    }
+    for (let slope = 0; slope < SLOPE_COUNT; slope++) {
+      ctx.clearRect(slope * CELL_W, job * CELL_H, CELL_W, CELL_H);
+      drawTerrainCell(ctx, slope * CELL_W, job * CELL_H, job, slope, stage);
+    }
+    return SLOPE_COUNT;
+  };
+
   return {
     canvas,
+    repaintSeasonJob,
     terrainFrame: (terrain, slope) => frame(slope, terrain),
     roadFrame: (roadBits) => frame(roadBits & 0x0f, ROAD_ROW),
     buildingFrame: (kind, level) =>
@@ -1264,10 +1326,20 @@ const DETAIL_TALL_ANCHOR = DETAIL_STEP * CELL_HEADROOM_STEPS;
 const DETAIL_TALL_H = DETAIL_TILE_H + DETAIL_STEP * (CELL_HEADROOM_STEPS + CELL_SKIRT_STEPS);
 const DETAIL_COLUMNS = Math.floor(MAX_ATLAS_PX / DETAIL_TILE_W);
 
+/** A detail cell no season touches. */
+const SEASON_JOB_NONE = -2;
+
 /** One cell of the detail page: its frame key, row class and how to draw it. */
 interface DetailCellSpec {
   readonly key: string;
   readonly tall: boolean;
+  /**
+   * Which seasonal repaint job owns this cell (SPEC2 M18): a terrain index,
+   * `SEASON_JOB_BUILDINGS`, or `SEASON_JOB_NONE` for the cells no season
+   * moves. A field rather than a pattern over the key, so the repaint picks
+   * its cells by the same statement the build makes about them.
+   */
+  readonly seasonJob: number;
   /**
    * Draws the cell in BASE-PAGE cell space (origin at the cell's top-left,
    * ground anchor at CELL_TOP): the builder scales the context by
@@ -1279,8 +1351,12 @@ interface DetailCellSpec {
   readonly draw: (ctx: CanvasRenderingContext2D) => void;
 }
 
-/** Every cell of the detail page, in layout order. Pure until drawn. */
-function detailCellSpecs(): readonly DetailCellSpec[] {
+/**
+ * Every cell of the detail page, in layout order, in the artwork of `stage`.
+ * Pure until drawn - the layout is identical for every stage, so
+ * `planDetailAtlas` needs no season at all.
+ */
+function detailCellSpecs(stage: SeasonStage = SeasonStage.Summer): readonly DetailCellSpec[] {
   const specs: DetailCellSpec[] = [];
 
   for (let terrain = 0; terrain < TERRAIN_COUNT; terrain++) {
@@ -1288,7 +1364,8 @@ function detailCellSpecs(): readonly DetailCellSpec[] {
       specs.push({
         key: `t${terrain}:${slope}`,
         tall: false,
-        draw: (ctx) => drawTerrainCell(ctx, 0, 0, terrain, slope),
+        seasonJob: terrain,
+        draw: (ctx) => drawTerrainCell(ctx, 0, 0, terrain, slope, stage),
       });
     }
   }
@@ -1297,6 +1374,7 @@ function detailCellSpecs(): readonly DetailCellSpec[] {
     specs.push({
       key: `r${roadBits}`,
       tall: false,
+      seasonJob: SEASON_JOB_NONE,
       draw: (ctx) => drawRoadCell(ctx, 0, 0, roadBits),
     });
   }
@@ -1305,6 +1383,7 @@ function detailCellSpecs(): readonly DetailCellSpec[] {
     specs.push({
       key: `k${direction}`,
       tall: false,
+      seasonJob: SEASON_JOB_NONE,
       draw: (ctx) => drawTrackCell(ctx, 0, 0, direction),
     });
   }
@@ -1317,6 +1396,7 @@ function detailCellSpecs(): readonly DetailCellSpec[] {
     specs.push({
       key: `sg${kind}`,
       tall: false,
+      seasonJob: SEASON_JOB_NONE,
       draw: (ctx) => drawSignalPostCell(ctx, 0, 0, kind),
     });
   }
@@ -1324,14 +1404,21 @@ function detailCellSpecs(): readonly DetailCellSpec[] {
     specs.push({
       key: `sa${aspect}`,
       tall: false,
+      seasonJob: SEASON_JOB_NONE,
       draw: (ctx) => drawSignalAspectCell(ctx, 0, 0, aspect),
     });
   }
-  specs.push({ key: 'cm', tall: false, draw: (ctx) => drawCatenaryMastCell(ctx, 0, 0) });
+  specs.push({
+    key: 'cm',
+    tall: false,
+    seasonJob: SEASON_JOB_NONE,
+    draw: (ctx) => drawCatenaryMastCell(ctx, 0, 0),
+  });
   for (let direction = 0; direction < 8; direction++) {
     specs.push({
       key: `cw${direction}`,
       tall: false,
+      seasonJob: SEASON_JOB_NONE,
       draw: (ctx) => drawCatenaryWireCell(ctx, 0, 0, direction),
     });
   }
@@ -1340,6 +1427,7 @@ function detailCellSpecs(): readonly DetailCellSpec[] {
     specs.push({
       key: `i${type}`,
       tall: true,
+      seasonJob: SEASON_JOB_NONE,
       draw: (ctx) =>
         drawIndustry(
           ctx,
@@ -1361,7 +1449,8 @@ function detailCellSpecs(): readonly DetailCellSpec[] {
     specs.push({
       key: `b${variant}`,
       tall: true,
-      draw: (ctx) => drawTownBuilding(ctx, 0, 0, kind, level),
+      seasonJob: SEASON_JOB_BUILDINGS,
+      draw: (ctx) => drawTownBuilding(ctx, 0, 0, kind, level, false, stage),
     });
   }
 
@@ -1369,6 +1458,7 @@ function detailCellSpecs(): readonly DetailCellSpec[] {
     specs.push({
       key: spec.key,
       tall: true,
+      seasonJob: SEASON_JOB_NONE,
       draw: (ctx) => drawBox(ctx, 0, 0, spec.widthTiles, spec.heightPx * ATLAS_SCALE, spec.colour),
     });
   }
@@ -1440,7 +1530,13 @@ export function buildDetailAtlas(): TerrainAtlas {
   ctx.imageSmoothingEnabled = false;
 
   const factor = DETAIL_ATLAS_SCALE / ATLAS_SCALE;
-  for (const spec of detailCellSpecs()) {
+
+  /**
+   * Draw one spec into its own frame. Shared by the build and the seasonal
+   * repaint, so a repainted cell lands exactly where the built one did - the
+   * clip, the anchor shift and the scale are stated once.
+   */
+  const paint = (spec: DetailCellSpec): void => {
     const cell = plan.frames.get(spec.key)!;
     ctx.save();
     // Clip to the frame: anything a cell painted past its edge would land in
@@ -1448,13 +1544,16 @@ export function buildDetailAtlas(): TerrainAtlas {
     ctx.beginPath();
     ctx.rect(cell.x, cell.y, cell.width, cell.height);
     ctx.clip();
+    ctx.clearRect(cell.x, cell.y, cell.width, cell.height);
     // The draw routines place the ground anchor at CELL_TOP in base cell
     // space; shift so it lands on THIS row's anchor after scaling.
     ctx.translate(cell.x, cell.y + cell.anchorY - factor * CELL_TOP);
     ctx.scale(factor, factor);
     spec.draw(ctx);
     ctx.restore();
-  }
+  };
+
+  for (const spec of detailCellSpecs()) paint(spec);
 
   const lookup = (key: string): AtlasFrame => {
     const cell = plan.frames.get(key);
@@ -1462,8 +1561,25 @@ export function buildDetailAtlas(): TerrainAtlas {
     return cell;
   };
 
+  /**
+   * The seasonal repaint of the detail page (SPEC2 M18). Same specs, same
+   * `paint`, one stage further on - and no emissive twins, because the detail
+   * page has no emissive row (D-172: it stands full at 4096x4096 and every
+   * zoom composites its glow from the base page).
+   */
+  const repaintSeasonJob = (job: number, stage: SeasonStage): number => {
+    let painted = 0;
+    for (const spec of detailCellSpecs(stage)) {
+      if (spec.seasonJob !== job) continue;
+      paint(spec);
+      painted++;
+    }
+    return painted;
+  };
+
   return {
     canvas,
+    repaintSeasonJob,
     terrainFrame: (terrain, slope) => lookup(`t${terrain}:${slope}`),
     roadFrame: (roadBits) => lookup(`r${roadBits & 0x0f}`),
     buildingFrame: (kind, level) =>

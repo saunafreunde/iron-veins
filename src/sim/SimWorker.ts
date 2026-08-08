@@ -943,6 +943,7 @@ function adoptWorld(current: World, sink: SnapshotWriter): void {
     companyName: current.playerCompany.name,
     companyColorIndex: current.playerCompany.colorIndex,
     mapSize: current.map.size,
+    climate: current.climate,
     mapBuffer: current.map.buffer,
     townCount: current.towns.length,
     industryCount: current.industries.length,

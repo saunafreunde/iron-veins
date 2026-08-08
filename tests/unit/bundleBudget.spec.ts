@@ -34,18 +34,28 @@ const DIST = join(REPO_ROOT, 'dist');
  * Origin: M16's correction bundle, measured with `npm run build` on the
  * reference machine. The chain of the milestone reads 1,083.31 kB (the
  * regression) -> 936.94 kB (D-191, the sim's replay half moved into its own
- * lazily loaded chunk) -> 907.18 kB, 908,106 B on disk (this bundle: the save
- * container's identity split off from its parser, minus 32 kB, plus the scrub
- * bar's own code). The budget is that measurement plus ~2.4 %: enough headroom
- * for ordinary interface growth over a milestone or two, and far too little
- * for a sim module to arrive unnoticed - the cheapest such accident found so
- * far weighed 32 kB.
+ * lazily loaded chunk) -> 907.18 kB, 908,106 B on disk (the save container's
+ * identity split off from its parser, minus 32 kB, plus the scrub bar's own
+ * code). The budget was that measurement plus ~2.4 %: enough headroom for
+ * ordinary interface growth over a milestone or two, and far too little for a
+ * sim module to arrive unnoticed - the cheapest such accident found so far
+ * weighed 32 kB.
+ *
+ * **Raised once, in M18's third bundle (D-202), with the measurement beside
+ * it** - the booking D-200 and D-201 said this bundle would have to make. The
+ * chain since: 924,308 B (M17 as accepted) -> 926,473 (the weather rule's
+ * interface, D-200) -> 927,719 (five constant tables, D-201) -> **934,751 B**
+ * (the seasonal optics: `seasonArt.ts`, `weatherArt.ts`, the atlas repaint and
+ * the MapView scheduler, plus two i18n sentences in two languages). The new
+ * number is that measurement plus ~1.6 %, which keeps the rule the original
+ * budget was chosen on: room for interface growth, and far less than the
+ * smallest sim-import accident this test exists to catch.
  *
  * The file on disk is a few hundred bytes heavier than the number vite prints
  * (the source-map comment); this measures the FILE, because that is what a
  * browser downloads.
  */
-const MAIN_CHUNK_BUDGET_BYTES = 930_000;
+const MAIN_CHUNK_BUDGET_BYTES = 950_000;
 
 /** The verdict, separated from the measuring so a planted size can be judged. */
 interface BudgetVerdict {

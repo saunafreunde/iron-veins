@@ -57,20 +57,25 @@ export const NOTIFICATION_MODE_KEYS: readonly string[] = [
 ];
 
 /** How many news categories the routing table covers (sim/news/log.ts). */
-export const NOTIFICATION_CATEGORY_COUNT = 5;
+export const NOTIFICATION_CATEGORY_COUNT = 6;
 
 /**
  * Defaults per category, indexed by NewsCategory (Finance, Industry, Fleet,
- * Network, Town). Finance and Network default to toast cards - money trouble
- * and stuck trains are what ends runs - the rest to the one-line ticker.
- * Pause is deliberately never a default: stopping the world uninvited is a
- * choice only the player may make.
+ * Network, Town, Weather). Finance and Network default to toast cards - money
+ * trouble and stuck trains are what ends runs - the rest to the one-line
+ * ticker. Pause is deliberately never a default: stopping the world uninvited
+ * is a choice only the player may make.
+ *
+ * Weather (SPEC2 M18) is a ticker line: a storm costs a percentage, not a
+ * game, and a card for every front would be the loudest category in the game
+ * for the smallest consequence.
  */
 export const DEFAULT_NOTIFICATIONS: readonly number[] = [
   NotificationMode.Toast,
   NotificationMode.Ticker,
   NotificationMode.Ticker,
   NotificationMode.Toast,
+  NotificationMode.Ticker,
   NotificationMode.Ticker,
 ];
 

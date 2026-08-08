@@ -576,6 +576,14 @@ export type WorkerToMainMessage =
       readonly companyName: string;
       readonly companyColorIndex: number;
       readonly mapSize: number;
+      /**
+       * The world's climate (SPEC2 M18). A world constant, fixed at genesis
+       * and never changed, and the one input the seasonal optics need that no
+       * per-tick block carries: the season is a pure function of (month,
+       * height, climate) and the renderer reads it for the snow line without
+       * asking the simulation anything (Z1, E-01).
+       */
+      readonly climate: MapClimate;
       /** Shared tile layers - the renderer reads them in place, never a copy. */
       readonly mapBuffer: SharedArrayBuffer;
       readonly townCount: number;

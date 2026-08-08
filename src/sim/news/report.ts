@@ -5,7 +5,10 @@ import {
   DEADLOCK_WARN_TICKS,
   INDUSTRY_CLOSURE_MONTHS,
   INDUSTRY_WARNING_MONTHS,
+  WEATHER_REGION_COUNT,
 } from '../constants';
+import { weatherRegionOf } from '../weather/field';
+import type { Station } from '../station/types';
 import { analyseDeadlocks, type DeadlockReport } from '../net/deadlock';
 import { isInTrouble } from '../economy/company';
 import { industrySpec, type Industry } from '../industry/types';
@@ -32,6 +35,55 @@ export function reportNews(world: World): void {
   reportIndustries(world);
   reportFleet(world);
   reportSolvency(world);
+  reportWeather(world);
+}
+
+/**
+ * A storm that has just arrived over a region the player has a station in
+ * (SPEC2 M18: "Sturmwarnung je Region via postOnce").
+ *
+ * Three decisions, and each of them is about not writing noise:
+ *
+ *  - it reports ARRIVALS, which `updateWeather` recorded in the one pass that
+ *    had yesterday's field and today's in hand. A storm that stands over a
+ *    region for a week is one warning, because that is one event;
+ *  - it reports only regions where the player HAS something. A storm over
+ *    empty desert costs nothing and is not news; a storm over the line is
+ *    what the rolling resistance, the drag and the breakdown threshold of
+ *    D-201 are about to charge for;
+ *  - it names the region by the LOWEST-id player station in it, which is a
+ *    canonical key: the same front over the same region produces the same
+ *    entry and the same tile whichever order the walk took, so `postOnce`
+ *    recognises it.
+ *
+ * A world with the weather rule off never reaches the loop: `arrivalCount` is
+ * zero for ever, because `updateWeather` returns before it is written.
+ */
+function reportWeather(world: World): void {
+  const field = world.weatherField;
+  if (field.arrivalCount === 0) return;
+
+  const size = world.map.size;
+  for (let region = 0; region < WEATHER_REGION_COUNT; region++) {
+    if (field.arrivals[region] !== 1) continue;
+
+    let station: Station | null = null;
+    for (const candidate of world.stations) {
+      if (candidate.ownerId !== world.playerCompanyId) continue;
+      if (weatherRegionOf(candidate.x, candidate.y, size) !== region) continue;
+      if (station === null || candidate.id < station.id) station = candidate;
+    }
+    if (station === null) continue;
+
+    world.news.postOnce({
+      tick: world.tick,
+      category: NewsCategory.Weather,
+      severity: NewsSeverity.Warning,
+      messageKey: 'news.stormWarning',
+      params: { station: station.name },
+      tileIndex: world.map.tileIndex(station.x, station.y),
+    });
+  }
 }
 
 /**

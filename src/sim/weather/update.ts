@@ -57,6 +57,8 @@ export function updateWeather(world: World): void {
   const cells = field.cells;
   const next = field.next;
   const weights = field.weights;
+  const arrivals = field.arrivals;
+  let arrivalCount = 0;
 
   // The calendar without allocating a GameDate: this runs every game day, and
   // `World.date` builds an object every time it is read.
@@ -110,10 +112,20 @@ export function updateWeather(world: World): void {
         }
       }
       next[at] = chosen;
+      // A storm that ARRIVED, recorded where both days are in hand (SPEC2
+      // M18). Edge-triggered rather than "is storming": a front that stands
+      // over a region for a week is one piece of news, and `postOnce` only
+      // suppresses a repeat while it is the newest entry - so a standing
+      // storm reported daily would take turns with every other warning and
+      // fill the log, which is the exact failure D-186 wrote down.
+      const arrived = chosen === WeatherCell.Storm && current !== WeatherCell.Storm ? 1 : 0;
+      arrivals[at] = arrived;
+      arrivalCount += arrived;
     }
   }
 
   cells.set(next);
+  field.arrivalCount = arrivalCount;
 }
 
 /** 1 for a region that is raining or storming, 0 otherwise. */

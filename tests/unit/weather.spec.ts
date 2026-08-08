@@ -26,7 +26,10 @@ import { decodeSave, encodeSave } from '../../src/sim/save/serialize';
 import { weatherRegionOf } from '../../src/sim/weather/field';
 import { writeWeatherBlock } from '../../src/sim/weather/snapshot';
 import { updateWeather } from '../../src/sim/weather/update';
+import { NewsCategory } from '../../src/sim/news/log';
+import { ModuleKind } from '../../src/sim/station/types';
 import { hashWorld, World } from '../../src/sim/World';
+import { apply, flatScenario, makeTown, type Scenario } from '../balance/scenario';
 
 /**
  * The weather world rule of SPEC2 M18 (E-01, DECISIONS.md D-200).
@@ -438,5 +441,92 @@ describe('the region a tile lies in', () => {
       }
     }
     expect(seen.size).toBe(WEATHER_REGION_COUNT);
+  });
+});
+
+/**
+ * The storm warnings of SPEC2 M18's third bundle (D-202).
+ *
+ * The sky already costs money (D-201); this is the half that tells the player
+ * it is about to. Three properties, and none of them is about the weather
+ * model: a warning is written when a storm ARRIVES over a region the player
+ * has a station in, it is written once rather than daily while the front
+ * stands, and a world with the rule off never writes one - the field's arrival
+ * buffer is never even touched there.
+ */
+describe('the storm warning (SPEC2 M18)', () => {
+  const STORM_SIZE = 64;
+  const STORM_DAYS = 120;
+
+  function stormWorld(weather: WeatherRule, withStation: boolean, seed = 7): Scenario {
+    const town = makeTown(0, 30, 30, 1_200, 'Sturmstadt');
+    const scenario = flatScenario(STORM_SIZE, [town], [], seed, 0, true, weather);
+    if (withStation) {
+      apply(scenario, {
+        kind: CommandKind.BuildRoadStop,
+        x: town.x,
+        y: town.y,
+        moduleKind: ModuleKind.BusStop,
+      });
+    }
+    for (let i = 0; i < STORM_DAYS * TICKS_PER_DAY; i++) {
+      scenario.world.step(scenario.queue, null);
+    }
+    return scenario;
+  }
+
+  function warnings(world: World): readonly { tileIndex: number }[] {
+    return world.news.all.filter((entry) => entry.messageKey === 'news.stormWarning');
+  }
+
+  it('warns about the region the player has a station in', () => {
+    const scenario = stormWorld(WeatherRule.Harsh, true);
+    const world = scenario.world;
+    const station = world.stations[0]!;
+    const posted = warnings(world);
+
+    expect(posted.length).toBeGreaterThan(0);
+    for (const entry of posted) {
+      expect(entry.tileIndex).toBe(world.map.tileIndex(station.x, station.y));
+    }
+    // It names the station, in the log's own convention: a parameter the
+    // interface prints, never a sentence the simulation composed.
+    const first = world.news.all.find((entry) => entry.messageKey === 'news.stormWarning')!;
+    expect(first.params['station']).toBe(station.name);
+    expect(first.category).toBe(NewsCategory.Weather);
+  });
+
+  it('is silent about a storm over land the player has nothing on', () => {
+    // The identical world, identical seed, identical weather - only the
+    // station is missing. Every storm of those four months still happened.
+    const withStation = stormWorld(WeatherRule.Harsh, true);
+    const without = stormWorld(WeatherRule.Harsh, false);
+    expect(warnings(withStation.world).length).toBeGreaterThan(0);
+    expect(warnings(without.world)).toHaveLength(0);
+  });
+
+  it('writes once per front, not once per day it stands', () => {
+    const world = stormWorld(WeatherRule.Harsh, true).world;
+    const entries = world.news.all;
+    // The arrival edge is what bounds this: a standing storm produces no
+    // second entry, so consecutive storm warnings about the same tile cannot
+    // appear even when another warning came between them.
+    let consecutive = 0;
+    for (let i = 1; i < entries.length; i++) {
+      if (entries[i]!.messageKey !== 'news.stormWarning') continue;
+      if (entries[i - 1]!.messageKey === 'news.stormWarning') consecutive++;
+    }
+    expect(consecutive).toBe(0);
+    // And there are far fewer warnings than there were days: a front lasts
+    // about a week, so four months of harsh weather is a handful of them.
+    expect(warnings(world).length).toBeLessThan(STORM_DAYS / 4);
+  });
+
+  it('never writes one in a world with the rule off', () => {
+    const world = stormWorld(WeatherRule.Off, true).world;
+    expect(warnings(world)).toHaveLength(0);
+    // Provably inert rather than merely quiet: the arrival buffer the report
+    // reads was never written, because `updateWeather` returns before it.
+    expect(world.weatherField.arrivalCount).toBe(0);
   });
 });
