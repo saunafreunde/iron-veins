@@ -11,6 +11,7 @@ import {
   TICKS_PER_DAY,
   TICKS_PER_MONTH,
   TICKS_PER_YEAR,
+  WeatherRule,
   type Difficulty,
   type MapClimate,
 } from './constants';
@@ -85,6 +86,8 @@ import { isLegalMapSize, mapSizeRefusal } from './map/size';
 import { computeLandmasses, markOcean } from './mapgen/hydrology';
 import { generateMap, type GeneratedWorld, type MapGenProgress } from './mapgen';
 import { Rng, streamSalt } from './rng';
+import { WeatherField } from './weather/field';
+import { updateWeather } from './weather/update';
 import type { Town } from './town/types';
 import type { CompanyState, GameDate, NewGameParams, RngState } from './types';
 
@@ -104,6 +107,10 @@ export interface WorldStateData {
   signalPenalty: boolean;
   /** The 8.4 road traffic rules of M15 (congestion, speed cap, crossings). */
   roadCongestion: boolean;
+  /** The weather world rule of SPEC2 M18 (E-01): off, mild or harsh. */
+  weather: WeatherRule;
+  /** The 16x16 weather field, one WeatherCell per region (SPEC2 M18). */
+  weatherField: Uint8Array;
   mapSize: number;
   rng: RngState;
   /** Every company, player first. */
@@ -202,6 +209,26 @@ export class World {
    * and the roads behave exactly as they did before M15.
    */
   readonly roadCongestion: boolean;
+  /**
+   * Whether this world has weather at all, and how hard (SPEC2 E-01, M18).
+   *
+   * A world rule in the full Z2 sense - saved, hashed, migrated, fixed at
+   * genesis - because weather reaches money and physics: it is looked up as a
+   * multiplier at the existing seams of the longitudinal solver, the breakdown
+   * threshold and cargo decay. Off unless the world was started with it, which
+   * is what keeps every band measured before M18 exactly where it was
+   * (Fehlerkatalog 34), and with it off `updateWeather` returns on its first
+   * line so the field stays all-clear for ever.
+   */
+  readonly weather: WeatherRule;
+  /**
+   * What the sky is doing over each of the 16x16 regions (SPEC2 M18).
+   *
+   * Saved and hashed like any other simulation state, preallocated at world
+   * creation (law #7), and advanced once per game day from the named weather
+   * stream (Z3). The renderer sees it only through the snapshot block.
+   */
+  readonly weatherField = new WeatherField();
   readonly rng: Rng;
   /**
    * Every company in the game, index = id. Zero is the player, 1..n are the
@@ -406,6 +433,9 @@ export class World {
     this.occupancyPenalty = params.occupancyPenalty ?? false;
     this.signalPenalty = params.signalPenalty ?? false;
     this.roadCongestion = params.roadCongestion ?? false;
+    // Absent means OFF here too, and for the same reason (SPEC2 M18, E-01):
+    // every world recorded before M18 was played without weather.
+    this.weather = params.weather ?? WeatherRule.Off;
     this.rng = Rng.fromSeed(gameplaySeed(this.seed));
     this.companies.push(
       createCompany(0, params.companyName, params.companyColorIndex, params.difficulty),
@@ -502,6 +532,11 @@ export class World {
     this.tick++;
 
     if (this.tick % TICKS_PER_DAY === 0) {
+      // First of the daily pass: everything below may look the weather up as a
+      // multiplier, and what it must find is the sky of the day it is playing
+      // rather than yesterday's. A world with the rule off returns from this
+      // on its first line and pays nothing (SPEC2 M18, E-01).
+      updateWeather(this);
       // Before anything is produced: cargo made today needs somewhere to go,
       // and that answer comes out of the connections the fleet is running now.
       refreshCargoRouting(this);
@@ -672,6 +707,8 @@ export class World {
       occupancyPenalty: this.occupancyPenalty,
       signalPenalty: this.signalPenalty,
       roadCongestion: this.roadCongestion,
+      weather: this.weather,
+      weatherField: this.weatherField.cells,
       mapSize: this.map.size,
       rng: this.rng.getState(),
       companies: this.companies.map((company) => ({ ...company })),
@@ -748,6 +785,7 @@ export class World {
         occupancyPenalty: data.occupancyPenalty,
         signalPenalty: data.signalPenalty,
         roadCongestion: data.roadCongestion,
+        weather: data.weather,
         mapSize: data.mapSize,
         companyName: data.companies[0]!.name,
         companyColorIndex: data.companies[0]!.colorIndex,
@@ -757,6 +795,11 @@ export class World {
 
     world.tick = data.tick;
     world.rng.setState(data.rng);
+    // The sky the save was written under. Not derived and not re-drawn: a
+    // field rebuilt from the rule alone would give a loaded world different
+    // weather from the one that was saved, which is law #3 broken in the same
+    // silence the congestion layer of D-185 was kept out of.
+    world.weatherField.load(data.weatherField);
     world.stations.push(...data.stations.map(buildStation));
     // What a station serves and accepts is derived from the map, so it is
     // worked out again here rather than trusted from the file.
@@ -853,6 +896,17 @@ function hashDynamicState(h: Fnv1a64, world: World): void {
   h.u32(world.signalPenalty ? 1 : 0);
   // The road traffic rule of the same milestone, hashed on the same terms.
   h.u32(world.roadCongestion ? 1 : 0);
+  // The weather rule of M18, hashed unconditionally for exactly the reason
+  // above: a world with harsh weather and a world with none must never
+  // fingerprint alike. Adding it moved every world hash once, which is the
+  // designed-for event with a written protocol (D-137/D-130).
+  h.u32(world.weather);
+  // And the field itself, in the LIVE digest as well as the full one. Unlike
+  // the tile layers and the station rings it is 256 numbers on a daily
+  // cadence, which is the same cadence the live digest is taken on - it costs
+  // the F3 overlay one day's worth of work to watch the sky it can see change
+  // (the goal-block argument of D-193).
+  h.intArray(world.weatherField.cells);
 
   const rng = world.rng.getState();
   h.u32(rng[0]).u32(rng[1]).u32(rng[2]).u32(rng[3]);

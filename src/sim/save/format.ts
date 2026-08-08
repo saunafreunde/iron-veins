@@ -14,6 +14,10 @@ import {
   LINK_SAMPLE_COUNT,
   MapClimate,
   SCENARIO_TEXT_MAX_CHARS,
+  WEATHER_CELL_COUNT,
+  WEATHER_REGION_COUNT,
+  WEATHER_RULE_COUNT,
+  type WeatherRule,
 } from '../constants';
 import { INDUSTRY_TYPE_COUNT, type Industry } from '../industry/types';
 import { isLegalMapSize, mapSizeRefusal } from '../map/size';
@@ -473,6 +477,34 @@ function parseClimate(value: unknown, path: string): MapClimate {
     throw new SaveFormatError(`${path}: ${int} is not a known climate`, path);
   }
   return int;
+}
+
+function parseWeatherRule(value: unknown, path: string): WeatherRule {
+  const int = asInt(value, path);
+  if (int < 0 || int >= WEATHER_RULE_COUNT) {
+    throw new SaveFormatError(`${path}: ${int} is not a known weather rule`, path);
+  }
+  return int as WeatherRule;
+}
+
+/**
+ * The 16x16 weather field (SPEC2 M18).
+ *
+ * Every cell is validated, not only the length: a byte outside the five known
+ * skies would reach a multiplier lookup and read past its table, and "unhashed
+ * is not unchecked" applies with more force to something that IS hashed.
+ */
+function parseWeatherField(value: unknown, path: string): Uint8Array {
+  const bytes = asBytes(value, path, WEATHER_REGION_COUNT);
+  for (let at = 0; at < bytes.length; at++) {
+    if (bytes[at]! >= WEATHER_CELL_COUNT) {
+      throw new SaveFormatError(
+        `${path}[${at}]: ${bytes[at]!} is not a known weather cell`,
+        `${path}[${at}]`,
+      );
+    }
+  }
+  return bytes;
 }
 
 function asBytes(value: unknown, path: string, expectedLength: number): Uint8Array {
@@ -1248,6 +1280,12 @@ export function parseWorldState(value: unknown, path: string): WorldStateData {
     occupancyPenalty: asBoolean(stateRaw['occupancyPenalty'], `${path}.occupancyPenalty`),
     signalPenalty: asBoolean(stateRaw['signalPenalty'], `${path}.signalPenalty`),
     roadCongestion: asBoolean(stateRaw['roadCongestion'], `${path}.roadCongestion`),
+    // The weather rule of M18 and the field it drives. Both required, like
+    // every other world rule: a save that has lost either is a save whose sky
+    // - and with it whose costs, breakdowns and cargo decay - would be a
+    // different one after loading than before saving.
+    weather: parseWeatherRule(stateRaw['weather'], `${path}.weather`),
+    weatherField: parseWeatherField(stateRaw['weatherField'], `${path}.weatherField`),
     mapSize,
     rng: parseRngState(stateRaw['rng'], `${path}.rng`),
     companies: parseCompanies(stateRaw['companies'], `${path}.companies`),

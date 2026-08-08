@@ -1682,6 +1682,152 @@ export const CURVE_LOOKAHEAD_MAX_NODES = 160;
  */
 export const STOPPED_SPEED_MS = 0.4;
 
+// ----------------------------------------------------- weather (SPEC2 M18)
+
+/**
+ * The weather world rule of SPEC2 E-01: off, mild or harsh.
+ *
+ * A rule and not a setting (D-110), for the reason E-01 states: weather that
+ * only the renderer knew about would be weather that lies - it rains and
+ * nothing costs anything - and weather the simulation knew about without
+ * hashing it would break architecture law #3. So it is chosen once on the
+ * new-game screen, saved, hashed and migrated (Z2), exactly like inflation.
+ *
+ * OFF is the default and the only value a world written before M18 can have.
+ * Every balancing band this game is measured against was measured without
+ * weather, and a rule that ships on by default re-bands all of them inside the
+ * milestone that introduces it (Fehlerkatalog 34).
+ */
+export const WeatherRule = {
+  Off: 0,
+  Mild: 1,
+  Harsh: 2,
+} as const;
+export type WeatherRule = (typeof WeatherRule)[keyof typeof WeatherRule];
+
+/** How many values {@link WeatherRule} has; the parser's range check. */
+export const WEATHER_RULE_COUNT = 3;
+
+/**
+ * What one region cell of the weather field holds (SPEC2 M18).
+ *
+ * Five states, one Uint8 per region. They are deliberately WEATHER rather than
+ * effects: what a storm costs is a multiplier looked up at an existing seam,
+ * and the field says only what the sky is doing.
+ */
+export const WeatherCell = {
+  Clear: 0,
+  Rain: 1,
+  Storm: 2,
+  Frost: 3,
+  Heat: 4,
+} as const;
+export type WeatherCell = (typeof WeatherCell)[keyof typeof WeatherCell];
+
+/** How many values {@link WeatherCell} has. */
+export const WEATHER_CELL_COUNT = 5;
+
+/**
+ * Edge length of the weather region grid, in cells (SPEC2 M18).
+ *
+ * SPEC2 names 16x16 regions, and the number is deliberately independent of the
+ * map size: a 64 map and a 2048 map both have 256 regions, so the field is a
+ * fixed-size preallocated array (law #7) and the save cost of the rule is 256
+ * bytes on every world rather than a second megabyte-scale tile layer. One
+ * region is 4 tiles across on the smallest map and 128 on the largest, which
+ * is a weather FRONT either way rather than a per-tile shower. [cells]
+ */
+export const WEATHER_GRID_SIZE = 16;
+
+/** Cells of the weather field. [cells] */
+export const WEATHER_REGION_COUNT = WEATHER_GRID_SIZE * WEATHER_GRID_SIZE;
+
+/**
+ * Name of the weather RNG stream (Z3, D-106/D-128).
+ *
+ * Weather draws from `world.streamFor` and never from the shared gameplay
+ * stream: a draw there would move every later breakdown roll and fork every
+ * existing seed the moment a player switched the rule on. The salt is this
+ * name folded together with the game day, because a periodic hook needs a
+ * sequence that differs per invocation (D-128's tender-review precedent) AND a
+ * name that cannot collide with another system's by an accident of call order.
+ */
+export const WEATHER_STREAM_NAME = 'weather';
+
+/**
+ * Relative weight of each {@link WeatherCell} before persistence, season and
+ * neighbours, indexed by {@link WeatherRule} and then by cell. [dimensionless]
+ *
+ * The Off row is all zeros and is never read - the daily hook returns on its
+ * first line for a world with the rule off - and it is written out rather than
+ * omitted so the table can be indexed by the rule without a branch.
+ *
+ * The two playing rows are the design statement of the rule: MILD is a climate
+ * where most days are clear and a storm is rare; HARSH is one where clear
+ * weather is barely a majority and storms are a normal part of a season. The
+ * numbers are relative weights of a single draw, not probabilities - the
+ * factors below reshape them per cell - so what they fix is the RATIO between
+ * the five skies and nothing else.
+ *
+ * **They were CHOSEN by looking at the distribution they produce**, and
+ * `tests/unit/weather.spec.ts` then bands that distribution, so those bands are
+ * a read-back of this table rather than evidence about it. The test says so and
+ * carries the independent properties separately. Measured over five game years
+ * (seed 424,242, 1,800 sampled days x 256 regions): mild 80.5 % clear / 17.0 %
+ * rain / 1.2 % storm / 0.7 % frost / 0.6 % heat, harsh 52.4 / 33.5 / 8.3 / 3.2
+ * / 2.5.
+ */
+export const WEATHER_BASE_WEIGHT: readonly (readonly number[])[] = [
+  [0, 0, 0, 0, 0],
+  [66, 21, 3, 6, 5],
+  [40, 20, 8, 14, 12],
+];
+
+/**
+ * How much more likely a region is to keep the sky it already has than to be
+ * assigned it afresh. [multiplier on the current cell's weight]
+ *
+ * Weather that is redrawn independently every day is not weather, it is noise:
+ * a storm has to last long enough for the player to see it arrive, cost
+ * something and pass. Six against the base weights above keeps a region's sky
+ * from one day to the next in 86.4 % of cases under the mild rule (measured
+ * over five game years, seed 424,242), which is a spell of about a week rather
+ * than a coin toss every morning.
+ */
+export const WEATHER_PERSISTENCE = 6;
+
+/**
+ * How much a wet orthogonal neighbour adds to this region's rain and storm
+ * weight. [multiplier added per neighbour in Rain or Storm]
+ *
+ * This is what makes the field a WEATHER MAP rather than 256 independent
+ * dice: fronts form and travel because a region beside a wet one is more
+ * likely to turn wet itself. Neighbours are read from the PREVIOUS day, so the
+ * pass has no dependence on the order it walks the grid in (law #3).
+ *
+ * Measured over the same five harsh game years: 42.5 % of orthogonal
+ * neighbour pairs share a sky against the 40.3 % an independent scatter of the
+ * SAME per-day distribution would give. Setting this constant to zero was run
+ * and measured at 49.5 % against 49.8 % - no structure at all - which is what
+ * makes the comparison in `weather.spec.ts` evidence about the pull rather
+ * than about the weights it acts on.
+ */
+export const WEATHER_NEIGHBOUR_PULL = 0.35;
+
+/**
+ * Seasonal gate on Frost and Heat, one entry per calendar month (0 = January).
+ * [multiplier on the base weight]
+ *
+ * A pure function of the calendar with no randomness and no state, which is
+ * the shape SPEC2 M18 asks seasons to have. The hard zeros are load-bearing:
+ * a weight of zero applies to the persistence bonus as well, so a frost that
+ * is standing when the season ends CANNOT survive into a month whose gate is
+ * zero - there is no frost in July, and that is a property rather than an
+ * unlikely event.
+ */
+export const WEATHER_FROST_SEASON: readonly number[] = [1, 1, 0.5, 0, 0, 0, 0, 0, 0, 0, 0.5, 1];
+export const WEATHER_HEAT_SEASON: readonly number[] = [0, 0, 0, 0, 0.5, 1, 1, 1, 0.5, 0, 0, 0];
+
 // -------------------------------------------------- road traffic (SPEC.md 8.4)
 
 /**

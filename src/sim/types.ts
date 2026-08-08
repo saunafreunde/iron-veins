@@ -1,4 +1,4 @@
-import type { Difficulty, MapClimate } from './constants';
+import type { Difficulty, MapClimate, WeatherRule } from './constants';
 import type { GoalSpec } from './goals/types';
 
 /** The four 32 bit words of the xoshiro128** generator, as unsigned integers. */
@@ -189,6 +189,23 @@ export interface NewGameParams {
    * introduces the rule (SPEC2 Fehlerkatalog 34).
    */
   readonly roadCongestion?: boolean;
+  /**
+   * Whether this world has weather, and how hard (SPEC2 E-01, M18).
+   *
+   * A world rule exactly as the three above are, and the reason E-01 gives for
+   * it being one rather than a setting is worth repeating: weather that only
+   * the renderer knew about would be weather that lies, and weather the
+   * simulation knew about without hashing would break law #3. It reaches money
+   * and physics through multiplier lookups at existing seams, so two worlds
+   * with the same seed and the same commands but different weather diverge.
+   *
+   * ABSENT MEANS OFF, and load-bearing for the same reason as the M15 rules:
+   * every world recorded before M18 - every save, every balancing scenario,
+   * every determinism fixture, all eight shipped scenarios - was played
+   * without weather, and a default of on would re-band the lot inside the
+   * milestone that introduces the rule (SPEC2 Fehlerkatalog 34).
+   */
+  readonly weather?: WeatherRule;
   /**
    * What this world asks of the player (SPEC2 M17), at most `MAX_GOALS` of
    * them.

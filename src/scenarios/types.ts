@@ -1,5 +1,5 @@
 import type { NewGameOptions } from '../shared/protocol';
-import type { Difficulty, MapClimate } from '../sim/constants';
+import type { Difficulty, MapClimate, WeatherRule } from '../sim/constants';
 import type { GoalSpec } from '../sim/goals/types';
 import type { ScenarioMeta, ScenarioRule, ScenarioText } from '../sim/save/scenarioMeta';
 
@@ -56,6 +56,17 @@ export interface ScenarioRules {
   readonly occupancyPenalty: boolean;
   readonly signalPenalty: boolean;
   readonly roadCongestion: boolean;
+  /**
+   * The weather rule of SPEC2 M18 (E-01).
+   *
+   * Stated by every scenario rather than defaulted, because a rule a shipped
+   * scenario does not state is a rule its thresholds were not calibrated
+   * against. All eight ship with it OFF: their goal thresholds were measured
+   * by a game without weather (D-195), and re-banding them belongs to the
+   * bundle that gives weather its economic effects, not to the one that
+   * introduces the field (Fehlerkatalog 34).
+   */
+  readonly weather: WeatherRule;
 }
 
 export interface ShippedScenario {
@@ -123,6 +134,7 @@ export function newGameOptionsOf(
     occupancyPenalty: rules.occupancyPenalty,
     signalPenalty: rules.signalPenalty,
     roadCongestion: rules.roadCongestion,
+    weather: rules.weather,
     aiCompanies: rules.aiCompanies,
     goals: scenario.goals.map((goal) => goal.spec),
   };

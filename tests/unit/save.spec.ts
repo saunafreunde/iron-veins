@@ -9,6 +9,8 @@ import {
   MapClimate,
   TICKS_PER_MONTH,
   TILE_PUBLIC,
+  WEATHER_REGION_COUNT,
+  WeatherRule,
 } from '../../src/sim/constants';
 import {
   SAVE_MAGIC,
@@ -255,11 +257,12 @@ describe('save migrations', () => {
 
   it('pins the current save version', () => {
     // Bumping SAVE_VERSION has to be a conscious act, because from the first
-    // released build onwards it also requires a migration. 28 is M17's single
-    // bump (SPEC2 Z5): the goal machine owns it - the goals a world carries,
-    // their verdicts, and the per-company lifetime tonnage a cargo goal reads;
-    // the milestone's later bundles extend that migration and add no numbers.
-    expect(SAVE_VERSION).toBe(28);
+    // released build onwards it also requires a migration. 29 is M18's single
+    // bump (SPEC2 Z5): the weather world rule of E-01 owns it - off/mild/harsh
+    // plus the 16x16 region field it drives, both saved and hashed because
+    // weather is simulation reality; the milestone's later bundles extend that
+    // migration and add no numbers.
+    expect(SAVE_VERSION).toBe(29);
   });
 
   it('has a real migration for every step from version 2 on', () => {
@@ -391,7 +394,7 @@ describe('the registered migrations', () => {
     expect('autoRenew' in companies[0]!).toBe(false);
   });
 
-  it('turns an AI competitor\'s private lines into real line entities (E-06)', () => {
+  it("turns an AI competitor's private lines into real line entities (E-06)", () => {
     const order = (targetId: number): Record<string, unknown> => ({
       target: 0,
       targetId,
@@ -472,9 +475,7 @@ describe('the registered migrations', () => {
     // project now names the entity id.
     const ai = state['ai'] as Record<string, unknown>[];
     expect('lines' in ai[0]!).toBe(false);
-    expect(ai[0]!['reviews']).toEqual([
-      { lineId: 0, reviewTick: 6_000, earnedAtReviewCt: 12_345 },
-    ]);
+    expect(ai[0]!['reviews']).toEqual([{ lineId: 0, reviewTick: 6_000, earnedAtReviewCt: 12_345 }]);
     const project = ai[0]!['project'] as Record<string, unknown>;
     expect(project['lineId']).toBe(0);
     expect('lineIndex' in project).toBe(false);
@@ -579,6 +580,80 @@ describe('the registered migrations', () => {
       finalHash: 'fedcba9876543210',
       scheduleDigest: '',
     });
+  });
+
+  it('enters a v28 world with no weather and an all-clear sky, and keeps a real one', () => {
+    // M18's bump. A world played before M18 had no weather at all, so the rule
+    // enters as OFF and the field as all-clear - and the field is not an
+    // invention: all-clear is exactly what a world with the rule off holds for
+    // ever, because the daily hook returns on its first line and never writes
+    // a cell.
+    const fresh = migrateSavePayload(
+      { magic: SAVE_MAGIC, saveVersion: 28, state: { mapSize: 64 } },
+      28,
+      29,
+    );
+    const freshState = fresh['state'] as Record<string, unknown>;
+    expect(freshState['weather']).toBe(WeatherRule.Off);
+    expect(freshState['weatherField']).toEqual(new Uint8Array(WEATHER_REGION_COUNT));
+    expect(fresh['saveVersion']).toBe(29);
+
+    // The corpus trick - a CURRENT state wrapped in an old version header -
+    // must not flatten a real rule back to off or a real sky back to clear.
+    const played = new Uint8Array(WEATHER_REGION_COUNT);
+    played[9] = 2;
+    const carried = migrateSavePayload(
+      {
+        magic: SAVE_MAGIC,
+        saveVersion: 28,
+        state: { mapSize: 64, weather: WeatherRule.Harsh, weatherField: played },
+      },
+      28,
+      29,
+    );
+    const carriedState = carried['state'] as Record<string, unknown>;
+    expect(carriedState['weather']).toBe(WeatherRule.Harsh);
+    expect(carriedState['weatherField']).toBe(played);
+  });
+
+  it('migrates a v28 save to v29 into the world a fresh v29 save records', () => {
+    // What "a v28 save loads and behaves exactly as before" is worth proving,
+    // stated as the only thing that can be proved from inside one build: the
+    // migrated world is the SAME world a v29 encoder writes for the identical
+    // game. The rule and the field the migration enters are therefore not a
+    // guess about the past - they are what this build calls a world with no
+    // weather.
+    //
+    // The DIGEST of that world did move, once, when the rule and the field
+    // joined `hashWorld` - the M15 event with a written protocol (D-137,
+    // D-130). The corpus is the other half of this proof and holds it across
+    // builds: eight fixtures written by eight different versions still decode
+    // to ONE world.
+    const { world, queue } = playedWorld();
+    const current = world.toData();
+    const v28State: Record<string, unknown> = { ...current };
+    delete v28State['weather'];
+    delete v28State['weatherField'];
+
+    const v28 = {
+      magic: SAVE_MAGIC,
+      saveVersion: 28,
+      gameVersion: GAME_VERSION,
+      seed: world.seed,
+      tick: world.tick,
+      worldDigest: '',
+      state: v28State,
+      commandLog: queue.log,
+      commandsExecuted: queue.executedCount,
+      logBaseTick: 0,
+      checkpoints: [],
+      replay: null,
+      scenario: null,
+    };
+
+    const migrated = decodeSave(zlibSync(encode(v28)));
+    expect(migrated.world.weather).toBe(WeatherRule.Off);
+    expect(hashWorld(migrated.world)).toBe(hashWorld(world));
   });
 
   it('migrates a v26 save to v27 without moving the world hash', () => {

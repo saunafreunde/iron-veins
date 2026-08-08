@@ -375,6 +375,7 @@ const NEW_GAME_FIELDS: Record<keyof Required<NewGameParams>, true> = {
   occupancyPenalty: true,
   signalPenalty: true,
   roadCongestion: true,
+  weather: true,
   goals: true,
 };
 
@@ -495,15 +496,20 @@ describe('coupling: a scenario may pin world rules and nothing else', () => {
   });
 
   it('meta: flags a new world rule nobody decided about', () => {
+    // `startYear` is SPEC2 E-15's rule and lands in M23; until then it is a
+    // name this build does not know, which is exactly what the planted field
+    // has to be. (It used to be `weather` - M18 made that one real, which is
+    // the audit working: the field was a compile error here until somebody
+    // decided it was lockable.)
     const findings = auditLockableRules(
-      { ...NEW_GAME_FIELDS, weather: true },
+      { ...NEW_GAME_FIELDS, startYear: true },
       SCENARIO_LOCKABLE_RULES,
       NOT_LOCKABLE,
       stateKeys,
       settingKeys,
     );
     expect(findings).toEqual([
-      'NewGameParams field "weather" is neither lockable nor listed with a reason',
+      'NewGameParams field "startYear" is neither lockable nor listed with a reason',
     ]);
   });
 

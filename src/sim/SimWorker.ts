@@ -18,6 +18,7 @@ import type { CommandEnvelope, CommandOutcome } from './commands/types';
 import { writeFlowLegs } from './flow';
 import { gameEndMarker, goalMarkers } from './goals/markers';
 import { writeGoalBlock } from './goals/snapshot';
+import { writeWeatherBlock } from './weather/snapshot';
 import {
   BANKRUPTCY_MONTHS,
   MAX_TICK,
@@ -525,6 +526,13 @@ function publishSnapshot(current: World, sink: SnapshotWriter): void {
   i32[SnapshotI32.FlowCount] = writeFlowLegs(current, sink.draftFlow);
   // And the goal block, on the same pass and for the same reason (M17).
   i32[SnapshotI32.GoalCount] = writeGoalBlock(current.goals, sink.draftGoals);
+  // And the weather field of M18, on the same pass and for the same reason.
+  // A world with the rule off writes nothing and answers zero.
+  i32[SnapshotI32.WeatherCount] = writeWeatherBlock(
+    current.weather,
+    current.weatherField,
+    sink.draftWeather,
+  );
   i32[SnapshotI32.MonthsInDebt] = current.playerCompany.bankrupt
     ? BANKRUPTCY_MONTHS
     : current.playerCompany.monthsInDebt;

@@ -12,7 +12,7 @@
  * refuses to interpret a buffer written by a different layout.
  */
 
-export const SNAPSHOT_LAYOUT_VERSION = 9;
+export const SNAPSHOT_LAYOUT_VERSION = 10;
 
 /** Header fields, shared by both slots. */
 export const SnapshotHeader = {
@@ -52,6 +52,15 @@ export const SnapshotI32 = {
   FlowCount: 14,
   /** How many entries of the goal block are in use (M17 goal machine). */
   GoalCount: 15,
+  /**
+   * How many entries of the weather block are in use (M18 weather field):
+   * `WEATHER_REGION_COUNT` while the weather rule is on, 0 while it is off.
+   *
+   * Zero is what tells the renderer there is no weather in this world at all,
+   * as opposed to an all-clear sky - the field is all-clear in both cases, and
+   * only one of them should cost a particle system.
+   */
+  WeatherCount: 16,
 } as const;
 
 /**
@@ -60,9 +69,9 @@ export const SnapshotI32 = {
  * The Float64 block starts immediately after it, and a Float64Array view has to
  * begin on an eight byte boundary - so an odd number of Int32 fields would make
  * the whole snapshot unconstructable. Adding a field here means checking this
- * number, not only the enum above. Sixteen fields need no rounding.
+ * number, not only the enum above. Seventeen fields are rounded up to eighteen.
  */
-export const SNAPSHOT_I32_COUNT = 16;
+export const SNAPSHOT_I32_COUNT = 18;
 
 /**
  * Float fields of one slot. Money is an exact integer number of cents; it lives
@@ -231,6 +240,23 @@ export const SnapshotGoal = {
 export const SNAPSHOT_GOAL_STRIDE = 2;
 
 /**
+ * Weather regions the renderer may read in one tick (SPEC2 M18).
+ *
+ * The ONE snapshot-layout change M18 booked in the shared-resource ledger: the
+ * 16x16 field of E-01, one Int32 per region carrying a `WeatherCell`. It is a
+ * fixed 256 entries whatever the map size, so the block costs 1 KiB per slot
+ * and never depends on the world.
+ *
+ * A byte per region would have been enough for the value and is deliberately
+ * not what travels: every other block of this channel is Int32 and mixing a
+ * Uint8 view into the slot layout would put an alignment rule where there is
+ * none today. `WEATHER_REGION_COUNT` in `sim/constants.ts` is the same 256;
+ * the equality is a test rather than an import, because the shared channel must
+ * not depend on the simulation (the `SNAPSHOT_MAX_VEHICLES` precedent, D-187).
+ */
+export const SNAPSHOT_WEATHER_CELLS = 256;
+
+/**
  * One read of the published vehicle block, tagged with the generation that
  * published it, its tick and the measured simulation rate - the bundle the
  * render-side interpolator of E-05 copies and times its alpha against
@@ -253,8 +279,15 @@ const VEHICLE_BYTES = SNAPSHOT_MAX_VEHICLES * SNAPSHOT_VEHICLE_STRIDE * 4;
 const RESERVED_BYTES = SNAPSHOT_MAX_RESERVED_TILES * SNAPSHOT_RESERVED_STRIDE * 4;
 const FLOW_BYTES = SNAPSHOT_MAX_FLOW_LEGS * SNAPSHOT_FLOW_STRIDE * 4;
 const GOAL_BYTES = SNAPSHOT_MAX_GOALS * SNAPSHOT_GOAL_STRIDE * 4;
+const WEATHER_BYTES = SNAPSHOT_WEATHER_CELLS * 4;
 const SLOT_BYTES =
-  STATUS_I32_BYTES + STATUS_F64_BYTES + VEHICLE_BYTES + RESERVED_BYTES + FLOW_BYTES + GOAL_BYTES;
+  STATUS_I32_BYTES +
+  STATUS_F64_BYTES +
+  VEHICLE_BYTES +
+  RESERVED_BYTES +
+  FLOW_BYTES +
+  GOAL_BYTES +
+  WEATHER_BYTES;
 
 export const SNAPSHOT_BYTES = HEADER_BYTES + 2 * SLOT_BYTES;
 
@@ -307,6 +340,20 @@ function goalView(buffer: SharedArrayBuffer, slot: number): Int32Array {
   );
 }
 
+function weatherView(buffer: SharedArrayBuffer, slot: number): Int32Array {
+  return new Int32Array(
+    buffer,
+    slotByteOffset(slot) +
+      STATUS_I32_BYTES +
+      STATUS_F64_BYTES +
+      VEHICLE_BYTES +
+      RESERVED_BYTES +
+      FLOW_BYTES +
+      GOAL_BYTES,
+    SNAPSHOT_WEATHER_CELLS,
+  );
+}
+
 /** Allocate a correctly sized, cross-origin-isolated snapshot buffer. */
 export function createSnapshotBuffer(): SharedArrayBuffer {
   return new SharedArrayBuffer(SNAPSHOT_BYTES);
@@ -321,6 +368,7 @@ export class SnapshotWriter {
   private readonly reservedSlots: readonly [Int32Array, Int32Array];
   private readonly flowSlots: readonly [Int32Array, Int32Array];
   private readonly goalSlots: readonly [Int32Array, Int32Array];
+  private readonly weatherSlots: readonly [Int32Array, Int32Array];
   private generation = 0;
 
   constructor(readonly buffer: SharedArrayBuffer) {
@@ -331,6 +379,7 @@ export class SnapshotWriter {
     this.reservedSlots = [reservedView(buffer, 0), reservedView(buffer, 1)];
     this.flowSlots = [flowView(buffer, 0), flowView(buffer, 1)];
     this.goalSlots = [goalView(buffer, 0), goalView(buffer, 1)];
+    this.weatherSlots = [weatherView(buffer, 0), weatherView(buffer, 1)];
     Atomics.store(this.header, SnapshotHeader.LayoutVersion, SNAPSHOT_LAYOUT_VERSION);
     Atomics.store(this.header, SnapshotHeader.Generation, 0);
   }
@@ -365,6 +414,11 @@ export class SnapshotWriter {
     return this.goalSlots[(this.generation + 1) & 1]!;
   }
 
+  /** Weather block of the slot currently being filled (M18 weather field). */
+  get draftWeather(): Int32Array {
+    return this.weatherSlots[(this.generation + 1) & 1]!;
+  }
+
   /** Make the drafted slot visible to the reader. */
   publish(): void {
     this.generation++;
@@ -381,6 +435,7 @@ export class SnapshotReader {
   private readonly reservedSlots: readonly [Int32Array, Int32Array];
   private readonly flowSlots: readonly [Int32Array, Int32Array];
   private readonly goalSlots: readonly [Int32Array, Int32Array];
+  private readonly weatherSlots: readonly [Int32Array, Int32Array];
   /** 0 means "nothing published yet"; the writer starts publishing at 1. */
   private lastGeneration = 0;
 
@@ -392,6 +447,7 @@ export class SnapshotReader {
     this.reservedSlots = [reservedView(buffer, 0), reservedView(buffer, 1)];
     this.flowSlots = [flowView(buffer, 0), flowView(buffer, 1)];
     this.goalSlots = [goalView(buffer, 0), goalView(buffer, 1)];
+    this.weatherSlots = [weatherView(buffer, 0), weatherView(buffer, 1)];
 
     const layout = Atomics.load(this.header, SnapshotHeader.LayoutVersion);
     if (layout !== 0 && layout !== SNAPSHOT_LAYOUT_VERSION) {
@@ -501,6 +557,23 @@ export class SnapshotReader {
     return {
       data: this.goalSlots[slot]!,
       count: this.i32Slots[slot]![SnapshotI32.GoalCount]!,
+    };
+  }
+
+  /**
+   * The weather field of the published tick (SPEC2 M18). Block and count read
+   * from the SAME generation, the `currentVehicleFrame` rule.
+   *
+   * A count of zero means the world has no weather rule at all - not a clear
+   * day - so a reader can skip the whole subsystem without inspecting 256
+   * cells to find out that they are all zero.
+   */
+  currentWeather(): { readonly data: Int32Array; readonly count: number } {
+    const generation = this.peekGeneration();
+    const slot = generation & 1;
+    return {
+      data: this.weatherSlots[slot]!,
+      count: this.i32Slots[slot]![SnapshotI32.WeatherCount]!,
     };
   }
 }

@@ -1,5 +1,10 @@
 import { CARGO_COUNT } from '../../cargo/types';
-import { LEDGER_HISTORY_MONTHS, TILE_PUBLIC } from '../../constants';
+import {
+  LEDGER_HISTORY_MONTHS,
+  TILE_PUBLIC,
+  WEATHER_REGION_COUNT,
+  WeatherRule,
+} from '../../constants';
 import { ACCOUNT_COUNT } from '../../economy/ledger';
 import { STATION_HISTORY_SIZE, STATION_MONTH_COUNTER_SIZE } from '../../station/history';
 import { SaveFormatError, SAVE_VERSION } from '../format';
@@ -1090,6 +1095,51 @@ const v27_to_v28: SaveMigration = (payload) => {
 };
 
 /**
+ * M18 made the environment simulation reality: the weather world rule of SPEC2
+ * E-01 and the 16x16 region field it drives (M18's one Z5 bump - v29).
+ *
+ * Both enter a version 28 world as NOTHING, and as everywhere else in this file
+ * that is the only true reading rather than a convenient one:
+ *
+ *  - `weather` becomes `WeatherRule.Off`. Those worlds were played by a
+ *    simulation that had no weather at all, so every route, every breakdown
+ *    roll and every cargo age in the file was produced without it. Entering
+ *    Mild or Harsh here would give a loaded save a sky it never had and move
+ *    the M6 bands under a player who changed nothing (Fehlerkatalog 34).
+ *  - `weatherField` becomes all-clear. That is not an invention either: it is
+ *    exactly what a world with the rule off holds for ever, because
+ *    `updateWeather` returns on its first line and never writes a cell.
+ *
+ * Fields already present are kept, so the corpus trick of wrapping a CURRENT
+ * state in an old container cannot flatten a real rule back to off or a real
+ * sky back to clear. A payload with no state is refused by `state()` above; one
+ * with a state but no map is passed through as it is, since the field's size
+ * does not depend on the map (the whole point of a fixed 16x16 grid).
+ *
+ * Unlike v27 and v23 this bump MOVES hashed world state - one word for the rule
+ * plus 256 bytes of field - so both pins were re-recorded under their own
+ * protocols: the canonical cross-OS hash (D-137) and the corpus manifest
+ * (D-130). That is the designed-for event, and the corpus is the evidence that
+ * nothing but the new words moved: all eight fixtures still decode to ONE
+ * world.
+ */
+const v28_to_v29: SaveMigration = (payload) => {
+  const inner = state(payload);
+
+  return {
+    ...payload,
+    state: {
+      ...inner,
+      weather: inner['weather'] ?? WeatherRule.Off,
+      weatherField:
+        inner['weatherField'] instanceof Uint8Array
+          ? inner['weatherField']
+          : new Uint8Array(WEATHER_REGION_COUNT),
+    },
+  };
+};
+
+/**
  * Registry keyed by the version a migration reads (section 19.1).
  *
  * There is deliberately no entry for 1 -> 2: a version 1 world had no map at
@@ -1123,6 +1173,7 @@ export const SAVE_MIGRATIONS: ReadonlyMap<number, SaveMigration> = new Map<numbe
   [25, v25_to_v26],
   [26, v26_to_v27],
   [27, v27_to_v28],
+  [28, v28_to_v29],
 ]);
 
 /**

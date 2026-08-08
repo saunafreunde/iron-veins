@@ -9,6 +9,7 @@ import {
   MAP_SIZES,
   MAX_AI_COMPANIES,
   MapClimate,
+  WeatherRule,
 } from '../sim/constants';
 import { useSimStore } from './store';
 
@@ -33,6 +34,17 @@ const CLIMATES: readonly { readonly value: MapClimate; readonly key: string }[] 
   { value: MapClimate.Arctic, key: 'ui.newGame.arctic' },
   { value: MapClimate.Tropical, key: 'ui.newGame.tropical' },
   { value: MapClimate.Desert, key: 'ui.newGame.desert' },
+];
+
+/**
+ * The weather rule of SPEC2 M18 (E-01). Three choices rather than a checkbox,
+ * because "off" and "on" are not what the rule offers - a mild climate and a
+ * harsh one are different worlds, and both are different from no weather.
+ */
+const WEATHERS: readonly { readonly value: WeatherRule; readonly key: string }[] = [
+  { value: WeatherRule.Off, key: 'ui.newGame.weatherOff' },
+  { value: WeatherRule.Mild, key: 'ui.newGame.weatherMild' },
+  { value: WeatherRule.Harsh, key: 'ui.newGame.weatherHarsh' },
 ];
 
 /** A fresh seed. Main-thread randomness is fine: it becomes world state. */
@@ -63,6 +75,9 @@ export function NewGameDialog({
   const [occupancyPenalty, setOccupancyPenalty] = useState(false);
   const [signalPenalty, setSignalPenalty] = useState(false);
   const [roadCongestion, setRoadCongestion] = useState(false);
+  // And the weather rule of M18, off for the same reason: every band in the
+  // game was measured by a world without weather.
+  const [weather, setWeather] = useState<WeatherRule>(WeatherRule.Off);
   const [aiCompanies, setAiCompanies] = useState(2);
 
   return (
@@ -135,6 +150,21 @@ export function NewGameDialog({
           </button>
         ))}
       </div>
+
+      <span className="field__label field__label--spaced">{t('ui.newGame.weather')}</span>
+      <div className="button-row">
+        {WEATHERS.map((entry) => (
+          <button
+            key={entry.key}
+            type="button"
+            className={entry.value === weather ? 'button button--active' : 'button'}
+            onClick={() => setWeather(entry.value)}
+          >
+            {t(entry.key)}
+          </button>
+        ))}
+      </div>
+      <p className="panel__hint">{t('ui.newGame.weatherHint')}</p>
 
       <span className="field__label field__label--spaced">{t('ui.newGame.competitors')}</span>
       <div className="button-row">
@@ -227,6 +257,7 @@ export function NewGameDialog({
               occupancyPenalty,
               signalPenalty,
               roadCongestion,
+              weather,
               aiCompanies,
             })
           }

@@ -1211,6 +1211,58 @@ with a measurement. Read D-199 before touching a briefing or that table.
   claim each entry makes"; both now say exactly what holds, with the residual
   named.
 
+## M18 - weather as a world rule (bundle 1 of the milestone)
+
+The environment becomes simulation reality (SPEC2 E-01). ONE save bump
+(v28 -> v29, owned by the weather rule and its field, extended in place by
+the later bundles); ONE snapshot-layout bump (9 -> 10, the weather block).
+The milestone is NOT finished: the multiplier lookups that make weather
+cost money, the seasonal production and friction modifiers, the seasonal
+atlas regeneration and the storm warnings are still to come.
+
+- **`weather` is a world rule, off/mild/harsh, saved and hashed
+  unconditionally** (D-200). D-110's split for the fourth time, and OFF
+  unless the world was started with it: every band this game owns was
+  measured without weather, so a default of on would re-band the lot inside
+  the milestone that introduces the rule (Fehlerkatalog 34). All eight
+  shipped scenarios state `weather: Off` explicitly rather than defaulting.
+- **With the rule off the subsystem is provably inert.** `updateWeather`
+  returns on its first line - no draw, no stream constructed, no cell
+  written - so the field stays all-clear for ever and the snapshot
+  publishes a count of ZERO rather than 256 clear cells. Measured: 0.18 B
+  allocated per game day with the rule off, 136 B with it on.
+- **The field is 16x16 REGIONS, saved and hashed, never derived.** Fixed
+  256 bytes on every map size (law #7), not a second tile layer; a field
+  rebuilt on load would give a loaded world a different sky from the saved
+  one, which is law #3 broken in the silence Z4 was written about.
+  `weatherRegionOf` is the one place the grid meets the map.
+- **The daily pass draws from the named weather stream, never
+  `world.rng`** (Z3): salt = `streamSalt('weather')` folded with the game
+  day, one draw per region per day whatever the field holds. An off world
+  and a harsh world played a game month reach the IDENTICAL gameplay RNG
+  state, so switching the rule on cannot move a breakdown roll - which is
+  what the next bundle's threshold shifts need.
+- **Persistence, a neighbour pull and a season gate, one draw per region.**
+  The gate multiplies BEFORE the persistence bonus, which is why there is
+  no frost in July as a property rather than as an unlikely event. The
+  weight table was chosen by looking at the distribution it produces and
+  `weather.spec.ts` says so: its share bands are a READ-BACK, the front
+  comparison, the July frost, the two-run identity and the stream
+  separation are the evidence.
+- **Every pin moved once, and the corpus is the proof nothing else did.**
+  Canonical cross-OS `4dff3f3f216385e6` -> **`5a2a6cf73f4107bb`**, corpus
+  manifest `f1dcab2a374ab728` -> **`c0a021f5d1ee8619`**, soak
+  `ed8ac72cd1d6284d` -> **`e6c5e33d8e7607ec`** at unchanged 698 commands.
+  All eight corpus fixtures - seven written by seven earlier builds and
+  untouched on disk - still decode to ONE world.
+
+Measured (reference machine): tick p50 1.296 / p99 2.841 ms against the M10
+baseline 1.45 / 3.26 on a row that allows +0.15, with the reference fleet
+running the rule off. **Main bundle 924,308 -> 926,473 B against the 930,000 B
+budget - 3,527 B of headroom left**, all of it five new i18n sentences in two
+languages plus three buttons; the next M18 bundle that adds text or a panel
+books the raise with its own measurement (D-192).
+
 ## Still outstanding
 
 - **The two named walls of D-158.** A passenger pile a fleet merely

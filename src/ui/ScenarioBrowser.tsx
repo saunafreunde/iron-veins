@@ -44,6 +44,19 @@ const RULE_LABELS: readonly {
 ];
 
 const DIFFICULTY_KEYS = ['ui.newGame.easy', 'ui.newGame.normal', 'ui.newGame.hard'] as const;
+/**
+ * The weather rule of SPEC2 M18, named rather than listed with the boolean
+ * flags above: it has three values, and "off" is one of them, so a card that
+ * only mentioned it when it was on would say nothing about the two thirds of
+ * the choice that are not a flag. Indexed by the rule's own value, exactly as
+ * the difficulty and climate keys are, so this file still reaches no sim
+ * module at runtime.
+ */
+const WEATHER_KEYS = [
+  'ui.newGame.weatherOff',
+  'ui.newGame.weatherMild',
+  'ui.newGame.weatherHarsh',
+] as const;
 const CLIMATE_KEYS = [
   'ui.newGame.temperate',
   'ui.newGame.arctic',
@@ -138,6 +151,11 @@ export function ScenarioBrowser({
             })}
           </p>
           <p className="row__meta">{t('ui.scenario.rules', { rules: ruleSummary(selected) })}</p>
+          <p className="row__meta">
+            {t('ui.scenario.weather', {
+              weather: t(WEATHER_KEYS[selected.rules.weather] ?? WEATHER_KEYS[0]),
+            })}
+          </p>
 
           <ul className="saves">
             {selected.goals.map((goal, index) => (

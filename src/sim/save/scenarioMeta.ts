@@ -71,6 +71,7 @@ export const SCENARIO_LOCKABLE_RULES = [
   'roadCongestion',
   'seed',
   'signalPenalty',
+  'weather',
 ] as const;
 
 export type ScenarioRule = (typeof SCENARIO_LOCKABLE_RULES)[number];

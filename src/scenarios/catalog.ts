@@ -5,6 +5,7 @@ import {
   MapClimate,
   START_YEAR,
   TICKS_PER_YEAR,
+  WeatherRule,
 } from '../sim/constants';
 import { GoalKind } from '../sim/goals/types';
 import type { ShippedScenario } from './types';
@@ -186,6 +187,7 @@ const FRACHTRAUSCH: ShippedScenario = {
     occupancyPenalty: false,
     signalPenalty: false,
     roadCongestion: false,
+    weather: WeatherRule.Off,
   },
   lockedRules: ['climate', 'difficulty', 'goals', 'mapSize', 'seed'],
   fromTick: 0,
@@ -307,6 +309,7 @@ const PASSAGIERNETZ: ShippedScenario = {
     occupancyPenalty: false,
     signalPenalty: false,
     roadCongestion: false,
+    weather: WeatherRule.Off,
   },
   lockedRules: ['climate', 'difficulty', 'goals', 'mapSize', 'seed'],
   fromTick: 0,
@@ -388,6 +391,7 @@ const GEBIRGSLOGISTIK: ShippedScenario = {
     occupancyPenalty: true,
     signalPenalty: true,
     roadCongestion: false,
+    weather: WeatherRule.Off,
   },
   lockedRules: [
     'climate',
@@ -473,6 +477,7 @@ const INSELHUEPFEN: ShippedScenario = {
     occupancyPenalty: false,
     signalPenalty: false,
     roadCongestion: false,
+    weather: WeatherRule.Off,
   },
   lockedRules: ['climate', 'difficulty', 'goals', 'mapSize', 'seed'],
   fromTick: 0,
@@ -566,6 +571,7 @@ const WIEDERAUFBAU: ShippedScenario = {
     occupancyPenalty: false,
     signalPenalty: false,
     roadCongestion: false,
+    weather: WeatherRule.Off,
   },
   lockedRules: ['climate', 'difficulty', 'goals', 'inflation', 'mapSize', 'seed'],
   fromTick: 0,
@@ -662,6 +668,7 @@ const RATSDIPLOMATIE: ShippedScenario = {
     occupancyPenalty: false,
     signalPenalty: false,
     roadCongestion: true,
+    weather: WeatherRule.Off,
   },
   lockedRules: ['climate', 'difficulty', 'goals', 'mapSize', 'roadCongestion', 'seed'],
   fromTick: 0,
@@ -736,6 +743,7 @@ const SPEEDRUN: ShippedScenario = {
     occupancyPenalty: false,
     signalPenalty: false,
     roadCongestion: false,
+    weather: WeatherRule.Off,
   },
   lockedRules: ['climate', 'difficulty', 'goals', 'inflation', 'mapSize', 'seed'],
   fromTick: 0,
@@ -814,6 +822,7 @@ const UEBERLEBEN: ShippedScenario = {
     occupancyPenalty: true,
     signalPenalty: true,
     roadCongestion: true,
+    weather: WeatherRule.Off,
   },
   lockedRules: [
     'climate',

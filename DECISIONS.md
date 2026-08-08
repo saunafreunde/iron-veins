@@ -13,10 +13,10 @@ no entry below. A number may appear under several topics.
 - **Determinism, RNG & hashing:** D-001, D-002, D-003, D-004, D-009, D-010,
   D-024, D-093, D-106, D-128, D-137, D-142, D-145, D-146, D-149, D-153, D-178,
   D-181, D-184, D-185, D-188, D-189, D-190, D-191, D-193, D-194, D-195,
-  D-196
+  D-196, D-200
 - **Commands, snapshot & worker boundary:** D-004, D-005, D-006, D-011, D-032,
   D-100, D-111, D-145, D-146, D-148, D-162, D-174, D-176, D-179, D-187, D-189,
-  D-192, D-193, D-196
+  D-192, D-193, D-196, D-200
 - **Lines & timetables:** D-145, D-146, D-147, D-148, D-149, D-150, D-151,
   D-152, D-155, D-159
 - **Map generation & terrain:** D-018, D-019, D-020, D-021, D-022, D-023,
@@ -26,7 +26,7 @@ no entry below. A number may appear under several topics.
 - **Save format, migrations & replays:** D-007, D-025, D-026, D-027, D-048,
   D-111, D-130, D-131, D-134, D-142, D-144, D-145, D-146, D-147, D-153, D-178,
   D-181, D-184, D-185, D-188, D-189, D-190, D-191, D-192, D-193, D-194,
-  D-197, D-198
+  D-197, D-198, D-200
 - **Rail & track:** D-042, D-043, D-044, D-045, D-046, D-047, D-053, D-141,
   D-153, D-157, D-184
 - **Signals & reservations:** D-054, D-055, D-056, D-057, D-058, D-059, D-060,
@@ -41,7 +41,7 @@ no entry below. A number may appear under several topics.
   D-180, D-193, D-196
 - **Balancing & scenarios:** D-038, D-039, D-040, D-041, D-066, D-087, D-088,
   D-116, D-151, D-152, D-156, D-158, D-159, D-187, D-190, D-194, D-195,
-  D-196, D-197, D-198, D-199
+  D-196, D-197, D-198, D-199, D-200
 - **Vehicles & fleet:** D-043, D-044, D-045, D-068, D-076, D-089, D-093,
   D-096, D-142, D-143, D-145, D-146, D-155, D-157, D-171, D-174, D-181, D-185
 - **Water & air:** D-094, D-095, D-096, D-097, D-098, D-099
@@ -52,16 +52,16 @@ no entry below. A number may appear under several topics.
   D-171, D-172, D-173, D-174, D-175, D-177, D-179, D-186
 - **UI & input:** D-011, D-013, D-015, D-035, D-110, D-113, D-114, D-119,
   D-126, D-148, D-165, D-166, D-177, D-179, D-180, D-181, D-182, D-183, D-184,
-  D-186, D-187, D-189, D-191, D-192, D-193, D-194, D-195, D-196
+  D-186, D-187, D-189, D-191, D-192, D-193, D-194, D-195, D-196, D-200
 - **Performance & measurement:** D-002, D-120, D-135, D-136, D-161, D-162,
   D-163, D-164, D-167, D-170, D-171, D-172, D-173, D-174, D-176, D-177, D-184,
-  D-185, D-186, D-187, D-191, D-192, D-193, D-196
+  D-185, D-186, D-187, D-191, D-192, D-193, D-196, D-200
 - **Platform, tooling & build:** D-012, D-014, D-015, D-016, D-017, D-029,
   D-030, D-031, D-160, D-168, D-169, D-170, D-172, D-175, D-192
 - **Crash safety:** D-132, D-139, D-190
 - **Testing method & fixtures:** D-010, D-038, D-072, D-074, D-084, D-133,
   D-167, D-183, D-186, D-188, D-189, D-190, D-191, D-192, D-193, D-194,
-  D-195, D-196, D-197, D-198, D-199
+  D-195, D-196, D-197, D-198, D-199, D-200
 - **Process & specification:** D-070, D-123, D-129, D-133, D-138, D-140,
   D-185, D-191, D-197, D-198, D-199
 
@@ -7787,3 +7787,159 @@ the file already generates and play nothing), **41 -> 53 cases**. Suite after:
 114 files, **1,282 passing plus 2 skipped**
 against D-198's 1,270 + 2, and the 13 perf tests - all green, `npm run typecheck`
 and `npm run lint` clean.
+
+## M18 - weather, bundle 1: the world rule and the field (2026-08-08)
+
+### D-200 Weather is a world rule with a field of its own, and switching it off costs the simulation nothing
+
+SPEC2 E-01 settled the question the audit marked as "decide before starting":
+weather is SIM REALITY, not render candy. Render-only weather would be weather
+that lies - it rains and nothing costs anything - and sim weather that was not
+hashed would break architecture law #3 the first time a game was reloaded. This
+bundle is the authority half of that: the rule, the field, the daily pass, the
+save and the snapshot seam. What weather COSTS - the multiplier lookups at
+`ROLLING_RESISTANCE_*`/`DRAG_*`, the breakdown threshold band and
+`CARGO_EXPIRY_FRACTION_PER_DAY` - is the next bundle's, and the seams it will
+use are named here so nobody invents a second one.
+
+**`weather` is a `NewGameParams` rule, off/mild/harsh, saved and hashed
+unconditionally.** It is D-110's split applied for the fourth time (inflation,
+the two 8.4 route costs, the road congestion rule): a rule is the world's, it is
+fixed at genesis, it lives in the save and in the digest, and it is chosen on a
+different screen from the settings. Hashing it only when it is ON was refused
+for the reason M15 wrote down: a rule that entered the digest conditionally
+would let two worlds that behave differently fingerprint alike, which is the
+whole failure Z2 exists to prevent.
+
+**Absent means OFF, and that is load-bearing.** Every band this game is measured
+against - the five M6 scenarios, the takt band of D-151, scenario 5 on the D-158
+band, the AI acceptance run, all eight shipped scenarios' thresholds (D-195) -
+was measured by a simulation with no weather in it. Shipping the rule on by
+default would re-band the lot inside the milestone that introduces it, which is
+Fehlerkatalog 34 by name. So the new-game screen offers three buttons and the
+first one is selected; all eight shipped scenarios state `weather: Off`
+explicitly rather than defaulting, because a rule a scenario does not state is a
+rule its thresholds were not calibrated against.
+
+**With the rule off the subsystem is provably inert.** `updateWeather` returns
+on its first line: nothing is drawn, no stream is even constructed, no cell is
+written, so the field stays all-clear for ever and the snapshot publishes a
+count of ZERO rather than 256 clear cells. That is the same inertness D-185 gave
+the congestion layer, and it is what makes "a v28 save loads and behaves exactly
+as before" a property rather than a hope.
+
+**The field is 16x16 REGIONS and deliberately not a tile layer.** SPEC2 names
+16x16; making it independent of the map size is what keeps it a fixed 256-byte
+preallocated array on every world (law #7) instead of a second megabyte-scale
+layer beside the congestion one. One region is 4 tiles across on the smallest
+map and 128 on the largest, which is a weather FRONT either way rather than a
+per-tile shower. `weatherRegionOf` is the one place the grid is related to the
+map, so a rule reading the sky over a vehicle and a renderer drawing rain over
+that vehicle cannot disagree about where the front is.
+
+**It is SAVED, not derived.** A field rebuilt from the rule on load would give a
+loaded world a different sky from the one that was saved - and with it different
+costs, different breakdowns, different cargo ages - which is law #3 broken in
+exactly the silence Z4 and E-02 were written about. Saved, hashed, and the test
+asserts the round trip byte for byte as well as by digest.
+
+**The daily pass draws from the named weather stream and never from
+`world.rng`** (Z3, D-106/D-128). The salt is `streamSalt('weather')` folded with
+the game DAY: the name is what keeps it from colliding with another system's
+stream by an accident of call order, and the day is what makes each invocation a
+different sequence - D-128's rule that "a periodic hook passes something that
+varies per invocation", with the tender review's tick fold as the precedent. The
+consequence is measurable and is measured: an off world and a harsh world played
+a game month reach the IDENTICAL gameplay RNG state, so switching the rule on
+cannot move a single breakdown roll. The draw count is fixed at one per region
+per day whatever the field holds, which is the identical-draw-count discipline
+the next bundle's threshold shifts will need.
+
+The pass allocates the day's generator and nothing per region - what D-128
+permits for a hook and forbids for the per-tick path - and works in preallocated
+buffers otherwise. Measured rather than asserted, with M17's own instrument:
+**136 B per game day with the rule on, 0.18 B with it off**, against a control
+that allocates one small record per region at 17.5 kB. `next` exists because the
+pass reads YESTERDAY's neighbours while it writes today: without it the answer
+would depend on the order the grid is walked in, which is "iteration order as
+logic" (law #3).
+
+**The model is persistence plus a neighbour pull plus a season gate, one draw
+per region.** A cumulative pick over five weights: the base weight of the rule,
+times the season gate for Frost and Heat, times a pull that raises Rain and
+Storm beside a wet neighbour, times a persistence bonus on whatever sky is
+already standing. What each part buys:
+
+- *Persistence* is what makes it weather rather than noise. Measured over five
+  mild game years, a region keeps its sky from one day to the next in 86.4 % of
+  cases - a spell of about a week, long enough for a player to watch a front
+  arrive, cost something and pass.
+- *The neighbour pull* is what makes it a MAP rather than 256 independent dice.
+  Measured over five harsh game years: 42.5 % of orthogonal neighbour pairs
+  share a sky against the 40.3 % an independent scatter of the same per-day
+  distribution would give. With the constant set to zero the same measurement
+  reads 49.5 % against 49.8 % - no structure at all - which is what makes the
+  comparison in the test evidence about the pull rather than about the weights
+  it acts on.
+- *The season gate* multiplies BEFORE the persistence bonus, and that ordering
+  is the whole reason there is no frost in July: a gate of zero takes a standing
+  frost's weight to zero as well, so it cannot survive into the month. The test
+  plants a full map of frost in high summer and requires it gone in one day,
+  which a gate applied after persistence would fail.
+
+**The weight table was chosen by looking at the distribution it produces, and
+the test says so.** Measured over five game years (seed 424,242, 1,800 sampled
+days x 256 regions): mild 80.5 % clear / 17.0 % rain / 1.2 % storm / 0.7 % frost
+/ 0.6 % heat; harsh 52.4 / 33.5 / 8.3 / 3.2 / 2.5. `weather.spec.ts` bands those
+shares, and the file states in its header that the band is a READ-BACK of its
+own calibration - worth having because a collapse to all-clear or all-storm has
+to be a red build, worthless as evidence about the model. The evidence is
+elsewhere in the same file and is listed above: the front comparison against the
+field's own per-day distribution, the July frost, the two-run identity, the
+stream separation, the save round trip.
+
+**One snapshot layout bump, the one the ledger booked.**
+`SNAPSHOT_LAYOUT_VERSION` 9 -> 10: `WeatherCount` plus a 256-entry Int32 block,
+1 KiB per slot, written from the ONE publish pass with every other block (Fehler
+33). The renderer will read the field from there and from nowhere else, which is
+what keeps rain a pure function of published counters (Fehlerkatalog 39).
+`SNAPSHOT_I32_COUNT` went 16 -> 18 rather than 17, because the Float64 block
+behind it has to start on an eight-byte boundary. `SNAPSHOT_WEATHER_CELLS`
+equals `WEATHER_REGION_COUNT` and the equality is a TEST, not an import - the
+shared channel must not depend on the simulation (D-187's precedent).
+
+**v29, and both pins re-recorded.** M18's one Z5 bump is this one: the rule and
+the field. It moves hashed world state - one word plus 256 bytes - which is the
+designed-for event with a written protocol, and the corpus is the evidence that
+nothing but the new words moved: **all eight fixtures, seven of them written by
+seven earlier builds and untouched on disk, decode to the ONE world hash**
+`c0a021f5d1ee8619` (was `f1dcab2a374ab728`). The canonical cross-OS pin moved
+under D-137 to `5a2a6cf73f4107bb` (v29, seed 424,242, tick 10,000) and the soak
+fixture under D-190 to `e6c5e33d8e7607ec` at unchanged 698 recorded commands - the same
+game, only the fingerprint moved. The scenario metadata's lock table gained
+`weather`, which the M17 coupling test forced: a new `NewGameParams` field is a
+compile error there until somebody decides whether a scenario may pin it, and
+that test's own planted violation - which used the name `weather` - moved on to
+`startYear` (E-15, M23).
+
+**Ledger.** `SAVE_VERSION` 28 -> **29** (M18's one Z5 bump; the later bundles
+extend `v28_to_v29` in place). `SNAPSHOT_LAYOUT_VERSION` 9 -> **10**, the one
+layout change 6.1 booked: `WeatherCount` plus 256 Int32, 1 KiB per slot, so the
+whole snapshot grows by 2 KiB. Atlas: zero cells - the seasonal art is
+regeneration, not booking (6.2). Save cost: 256 B of hashed field per world,
+whatever the map size, plus one word for the rule. Tick measured on the
+1,500-vehicle reference fixture: **p50 1.296 / p99 2.841 ms** (max 17.233 ms
+over 6,500 ticks) against the M10 baseline 1.45 / 3.26 on a row that allows
++0.15 - the reference fleet runs the rule OFF, where the hook returns on its
+first line; a second run inside `npm test` measured 1.258 / 2.758. Allocation
+measured with M17's instrument: **136 B per game day with the rule on, 0.18 B
+with it off**, against a per-region control at 17.5 kB. Main bundle measured with
+`npm run build`: 924,308 -> **926,473 B against the 930,000 B budget, headroom
+3,527 B** - all of it six new i18n sentences in two languages plus the three
+buttons and the scenario card's line; `SimWorker` 324,367 -> 326,656 B, `replay`
+198,264 -> 200,046 B, the scenario catalogue 13,205 -> 13,319 B, CSS unchanged.
+**The next M18 bundle that adds a panel or a screenful of text books the raise
+with its own measurement (D-192); 3,527 B is not room for one.**
+Suite after: **115 files, 1,303 passing plus 2 skipped** against D-199's 114 and
+1,282 + 2, and the 13 perf tests - `npm test`, `npm run typecheck` and
+`npm run lint` all green; `npm run test:soak` re-recorded and green.

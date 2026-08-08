@@ -1,5 +1,5 @@
 import type { Command } from '../sim/commands/types';
-import type { Difficulty, MapClimate } from '../sim/constants';
+import type { Difficulty, MapClimate, WeatherRule } from '../sim/constants';
 import type { GoalSpec } from '../sim/goals/types';
 import type { MapGenPhase } from '../sim/mapgen';
 import type { ReplayVerification } from '../sim/save/replay';
@@ -540,6 +540,8 @@ export interface NewGameOptions {
   readonly signalPenalty: boolean;
   /** The road half of 8.4: congestion recorded, priced, capped and crossed. */
   readonly roadCongestion: boolean;
+  /** The weather rule of SPEC2 M18 (E-01): saved, hashed, off by default. */
+  readonly weather: WeatherRule;
   readonly aiCompanies: number;
   /**
    * The goals the world is created with (SPEC2 M17), or absent for none.

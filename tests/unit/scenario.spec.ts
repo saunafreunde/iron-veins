@@ -136,7 +136,14 @@ describe('the .ironscenario container', () => {
     // The one place the two halves of "a superset, not a second format" can be
     // stated as one line: a different name on disk, the same version inside.
     expect(SCENARIO_EXTENSION).toBe('.ironscenario');
-    expect(SAVE_VERSION).toBe(28);
+    // Whatever that number happens to be, the file a scenario writes carries
+    // it - which is the claim, and it is read out of a real encoded scenario
+    // rather than restated as the literal `save.spec.ts` already pins.
+    const { world, queue } = play(200);
+    const payload = decode(
+      unzlibSync(encodeScenario(world, queue, GAME_VERSION, meta())),
+    ) as Record<string, unknown>;
+    expect(payload['saveVersion']).toBe(SAVE_VERSION);
   });
 
   it('round-trips a scenario through the one serializer', () => {

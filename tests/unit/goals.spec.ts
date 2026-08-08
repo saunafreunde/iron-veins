@@ -21,7 +21,7 @@ import {
 import { IndustryType, newIndustry, type Industry } from '../../src/sim/industry/types';
 import { decodeGoals } from '../../src/sim/save/entities';
 import { SAVE_VERSION } from '../../src/sim/save/format';
-import { migrateSavePayload } from '../../src/sim/save/migrations';
+import { migrateSavePayload, SAVE_MIGRATIONS } from '../../src/sim/save/migrations';
 import { decodeSave, encodeSave } from '../../src/sim/save/serialize';
 import { ModuleKind, stationRating } from '../../src/sim/station/types';
 import { hashWorld, type World } from '../../src/sim/World';
@@ -503,7 +503,12 @@ describe('the snapshot goal block', () => {
 
 describe('goals in the save', () => {
   it('is the version 28 bump, with a migration that enters none', () => {
-    expect(SAVE_VERSION).toBe(28);
+    // 28 is M17's number for good; SAVE_VERSION has moved on since (M18 owns
+    // 29), so what this test holds is the STEP the goal machine introduced -
+    // that it is registered and what it enters - and not wherever the chain
+    // happens to end. The current value is pinned once, in save.spec.ts.
+    expect(SAVE_MIGRATIONS.has(27)).toBe(true);
+    expect(SAVE_VERSION).toBeGreaterThanOrEqual(28);
     const migrated = migrateSavePayload(
       { magic: 'IRVN', saveVersion: 27, state: { companies: [{ id: 0 }] } },
       27,

@@ -77,9 +77,14 @@
  * knew. The scenario bundle of the SAME milestone extends that one migration in
  * place (Z5) with the `.ironscenario` metadata block - a CONTAINER field like
  * the checkpoint ring, so it moves no hashed byte and the pins do not move
- * again.
+ * again. 29 is M18's one bump and it moves hashed state again: the weather
+ * world rule of SPEC2 E-01 (off/mild/harsh) and the 16x16 region field it
+ * drives, both saved and hashed because weather is simulation reality rather
+ * than render candy. A world that predates M18 had no weather, so the
+ * migration enters the rule as off and the field as all-clear - which is
+ * exactly what a world with the rule off holds for ever.
  */
-export const SAVE_VERSION = 28;
+export const SAVE_VERSION = 29;
 
 /** File extension used for manual and automatic saves. */
 export const SAVE_EXTENSION = '.ironsave';
