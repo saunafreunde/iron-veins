@@ -30,7 +30,12 @@ import { World } from '../../src/sim/World';
  * test).
  */
 
-const SIZE = 96;
+/**
+ * 128 rather than the 96 this fixture used to build (D-197): a 96-tile world
+ * is one the save format refuses, so it could be created and played and never
+ * written down. Coordinates below are unchanged; the map is larger around them.
+ */
+const SIZE = 128;
 const GROUND = 5;
 
 /** Light diesel railbus, 1950. */
@@ -135,7 +140,12 @@ function railBench(): { bench: Bench; targetTile: number } {
     signalSpacing: 0,
   });
   run(bench, { kind: CommandKind.BuildRailStop, x: 10, y: 10, moduleKind: ModuleKind.RailDepot });
-  run(bench, { kind: CommandKind.BuildRailStop, x: 40, y: 20, moduleKind: ModuleKind.RailPlatform });
+  run(bench, {
+    kind: CommandKind.BuildRailStop,
+    x: 40,
+    y: 20,
+    moduleKind: ModuleKind.RailPlatform,
+  });
   run(bench, { kind: CommandKind.BuyTrain, x: 10, y: 10, specIds: [RAILBUS] });
   run(bench, {
     kind: CommandKind.SetVehicleOrders,

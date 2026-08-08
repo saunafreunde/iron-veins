@@ -91,8 +91,29 @@ const TOWN_X = 100;
 const BULK_LORRY = 240;
 const BOX_LORRY = 250;
 const LORRIES_PER_HAUL = 4;
-/** The box lorry the planks and the goods need is a 1953 vehicle. */
+/**
+ * 1953: the chain cannot be built any earlier, because the box lorry the
+ * planks and the goods need is a 1953 vehicle.
+ *
+ * Crewing only the WOOD haul from 1950 - its bulk lorry is a 1950 one - and
+ * adding the other two in 1953 was tried and is worse than wrong: nobody
+ * collects the sawmill's planks for three years, so the 24-month closure clock
+ * of D-086 shuts the sawmill in 1952 and the "chain" that is then played is one
+ * works and two dead ones. Measured: 3,472 units delivered over the run against
+ * 70,800, and a company value of -58,857 EUR (D-197).
+ */
 const CHAIN_START_TICK = 3 * TICKS_PER_YEAR;
+/**
+ * 1978 - twenty-five game years after the chain starts running, every one of
+ * them simulated.
+ *
+ * Until the M17 acceptance pass this was `25 * TICKS_PER_YEAR`, so a run that
+ * began in 1953 simulated twenty-two years under a name that said twenty-five
+ * (D-197). The name and the run agree now, and the goal's own deadline (1975,
+ * `VALUE_GOAL.bronzeTick`) still falls INSIDE the game rather than at its end,
+ * which is what lets the medal bands mean anything.
+ */
+const HORIZON_TICKS = CHAIN_START_TICK + 25 * TICKS_PER_YEAR;
 /** Half the target: the goal has to be EARNED, not started with. */
 const CHAIN_CAPITAL_CT = 1_000_000 * CENTS_PER_EURO;
 
@@ -135,6 +156,39 @@ function chainIndustries(): Industry[] {
   ];
 }
 
+/** Crew one haul with `LORRIES_PER_HAUL` lorries out of the forest depot. */
+function crewHaul(scenario: Scenario, haul: (typeof HAULS)[number]): void {
+  const world = scenario.world;
+  const stopAt = (x: number): number => {
+    const tile = world.map.tileIndex(x, ROW);
+    return world.stations.find((station) =>
+      station.modules.some((module) => module.tileIndex === tile),
+    )!.id;
+  };
+  const from = stopAt(haul.fromX);
+  const to = stopAt(haul.toX === TOWN_X ? TOWN_X - 1 : haul.toX);
+
+  for (let i = 0; i < LORRIES_PER_HAUL; i++) {
+    apply(scenario, {
+      kind: CommandKind.BuyRoadVehicle,
+      x: FOREST_X - 3,
+      y: ROW,
+      specId: haul.specId,
+    });
+    const vehicleId = world.vehicles.count - 1;
+    apply(scenario, { kind: CommandKind.RefitVehicle, vehicleId, cargo: haul.cargo });
+    apply(scenario, {
+      kind: CommandKind.SetVehicleOrders,
+      vehicleId,
+      orders: [
+        { target: 0, targetId: from, load: 1, unload: 0 },
+        { target: 0, targetId: to, load: 1, unload: 0 },
+      ],
+    });
+    apply(scenario, { kind: CommandKind.SetVehicleRunning, vehicleId, running: true });
+  }
+}
+
 /**
  * The wood chain of balancing scenario 3, built in 1953 on one million euros -
  * a world that EARNS its way to two million rather than starting there.
@@ -165,44 +219,14 @@ function chainGame(): Scenario {
     moduleKind: ModuleKind.RoadDepot,
   });
 
-  const stopAt = (x: number): number => {
-    const tile = world.map.tileIndex(x, ROW);
-    return world.stations.find((station) =>
-      station.modules.some((module) => module.tileIndex === tile),
-    )!.id;
-  };
-
-  let vehicleId = 0;
-  for (const haul of HAULS) {
-    const from = stopAt(haul.fromX);
-    const to = stopAt(haul.toX === TOWN_X ? TOWN_X - 1 : haul.toX);
-    for (let i = 0; i < LORRIES_PER_HAUL; i++) {
-      apply(scenario, {
-        kind: CommandKind.BuyRoadVehicle,
-        x: FOREST_X - 3,
-        y: ROW,
-        specId: haul.specId,
-      });
-      apply(scenario, { kind: CommandKind.RefitVehicle, vehicleId, cargo: haul.cargo });
-      apply(scenario, {
-        kind: CommandKind.SetVehicleOrders,
-        vehicleId,
-        orders: [
-          { target: 0, targetId: from, load: 1, unload: 0 },
-          { target: 0, targetId: to, load: 1, unload: 0 },
-        ],
-      });
-      apply(scenario, { kind: CommandKind.SetVehicleRunning, vehicleId, running: true });
-      vehicleId++;
-    }
-  }
+  for (const haul of HAULS) crewHaul(scenario, haul);
   return scenario;
 }
 
-/** Play the chain to 1975. */
+/** Play the chain from 1953 to 1978 - twenty-five game years, all simulated. */
 function playQuarterCentury(): Scenario {
   const scenario = chainGame();
-  while (scenario.world.tick < 25 * TICKS_PER_YEAR) scenario.world.step(scenario.queue, null);
+  while (scenario.world.tick < HORIZON_TICKS) scenario.world.step(scenario.queue, null);
   return scenario;
 }
 
@@ -226,12 +250,17 @@ describe('the acceptance run: company value >= 2 million by 1975', () => {
         `${goals.completedTick[1]!}`,
     );
 
+    expect(world.tick).toBe(HORIZON_TICKS);
     expect(goals.status[0]).toBe(GoalStatus.Achieved);
     expect(goals.progress[0]).toBeGreaterThanOrEqual(VALUE_GOAL.threshold);
     // Nobody set this from the outside: the completion tick is a multiple of a
     // game day because the daily hook is what decided it.
     expect(goals.completedTick[0]! % TICKS_PER_DAY).toBe(0);
     expect(goals.completedTick[0]).toBeGreaterThan(CHAIN_START_TICK);
+    // ... and inside the deadline the sentence names, which is a date the run
+    // now passes on its way rather than the day it stops.
+    expect(goals.completedTick[0]).toBeLessThan(VALUE_GOAL.bronzeTick);
+    expect(HORIZON_TICKS).toBeGreaterThan(VALUE_GOAL.bronzeTick);
   });
 
   it('earns the band its completion date fell into, and not the easy one', () => {

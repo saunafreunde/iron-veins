@@ -16,6 +16,7 @@ import {
   SCENARIO_TEXT_MAX_CHARS,
 } from '../constants';
 import { INDUSTRY_TYPE_COUNT, type Industry } from '../industry/types';
+import { isLegalMapSize, mapSizeRefusal } from '../map/size';
 import { TownSize, type Town } from '../town/types';
 import type { TileMapData, WorldStateData } from '../World';
 import { decodeGoals, decodeLines, decodeStations, decodeVehicles } from './entities';
@@ -1231,11 +1232,8 @@ export function parseWorldState(value: unknown, path: string): WorldStateData {
   // accepts any square power-of-two map, which keeps small test worlds loadable
   // while still rejecting a size that would make the layer lengths nonsense.
   const mapSize = asInt(stateRaw['mapSize'], `${path}.mapSize`);
-  if (mapSize < 64 || mapSize > 2048 || (mapSize & (mapSize - 1)) !== 0) {
-    throw new SaveFormatError(
-      `${path}.mapSize: ${mapSize} is not a power of two between 64 and 2048`,
-      `${path}.mapSize`,
-    );
+  if (!isLegalMapSize(mapSize)) {
+    throw new SaveFormatError(`${path}.mapSize: ${mapSizeRefusal(mapSize)}`, `${path}.mapSize`);
   }
 
   return {

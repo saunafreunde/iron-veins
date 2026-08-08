@@ -20,6 +20,7 @@ import type { Checkpoint } from '../../src/sim/save/format';
 import {
   checkLogIntegrity,
   encodeReplay,
+  proveDivergentTick,
   scheduleCommitmentsOf,
   verifyReplay,
 } from '../../src/sim/save/replay';
@@ -342,6 +343,129 @@ describe('the good case is not regressed: an exact tick, with its proof', () => 
       toTick: recording().finalTick,
       whyKey: 'ui.replay.bracket.noCommands',
     });
+  });
+});
+
+/**
+ * The honesty branch of the taxonomy: the proof did not come off (D-197).
+ *
+ * `narrowDivergence` reaches its last gate - log intact, bracket committed,
+ * exactly one command in it - and then `proveDivergentTick` cannot produce a
+ * proof, so the answer stays a bracket. Until this block existed the key
+ * `ui.replay.bracket.unproven` appeared only in the i18n files and in the list
+ * of keys the test above checks are translated: a sentence nobody had ever
+ * made the verifier say.
+ *
+ * The case that produces it is the one the branch is FOR: the recording no
+ * longer carries the checkpoint the proof would have to start from. The proof
+ * re-simulates the bracket twice from a world the recording committed to; with
+ * that world gone there is nothing to start from, and starting from a world
+ * this build merely REACHED would prove a tick against its own guess. So the
+ * verdict names the bracket and says why - which is the whole difference
+ * between D-191 and the confident wrong tick D-189 shipped.
+ */
+describe('the proof that does not come off is reported as a bracket', () => {
+  /** Year 0 holds ONE command, so the bracket has exactly one candidate. */
+  const LONE_TICK = 5_000;
+
+  function loneRecording(): Uint8Array {
+    const world = World.create({
+      seed: SEED,
+      difficulty: Difficulty.Normal,
+      climate: MapClimate.Temperate,
+      mapSize: MAP_SIZE,
+      companyName: 'Beweisbahn',
+      companyColorIndex: 4,
+    });
+    const queue = new CommandQueue();
+    queue.enqueue({ kind: CommandKind.TakeLoan, amountCt: LOAN_STEP_CT * 3 }, LONE_TICK);
+    queue.enqueue({ kind: CommandKind.RepayLoan, amountCt: LOAN_STEP_CT }, REPAY_TICK);
+
+    const ring = new CheckpointRing();
+    ring.record(world, queue);
+    for (let i = 0; i < RECORDING_TICKS; i++) {
+      world.step(queue, null);
+      ring.record(world, queue);
+    }
+    return encodeReplay(world, queue, ring, GAME_VERSION);
+  }
+
+  let lone: Uint8Array | null = null;
+  function recordingWithOneCommandInYearZero(): Uint8Array {
+    lone ??= loneRecording();
+    return lone;
+  }
+
+  function tamperedLone(mutate: (payload: Record<string, unknown>) => void): Uint8Array {
+    const payload = decode(unzlibSync(recordingWithOneCommandInYearZero())) as Record<
+      string,
+      unknown
+    >;
+    mutate(payload);
+    return zlibSync(encode(payload));
+  }
+
+  it('verifies untampered, with one command alone in the first bracket', () => {
+    const loaded = decodeSave(recordingWithOneCommandInYearZero());
+    expect(loaded.ring.all.map((entry) => entry.tick)).toEqual([0, YEAR_ONE, YEAR_TWO]);
+    expect(loaded.queue.log.map((entry) => entry.tick)).toEqual([LONE_TICK, REPAY_TICK]);
+    expect(verifyReplay(loaded, GAME_VERSION).ok).toBe(true);
+  });
+
+  it('names the bracket and says the proof failed when the floor checkpoint is gone', () => {
+    const bytes = tamperedLone((payload) => {
+      // Two edits, and the second is what makes the first interesting: the
+      // command payload change is a real divergence with a provable tick, and
+      // removing the genesis checkpoint takes away the one world the proof
+      // could have started from. Everything else the taxonomy checks is
+      // untouched - the log's timings, and with them every schedule digest.
+      const entry = logOf(payload).find((row) => row['tick'] === LONE_TICK)!;
+      const command = entry['command'] as Record<string, unknown>;
+      command['amountCt'] = (command['amountCt'] as number) * 2;
+      payload['checkpoints'] = ringOf(payload).filter((row) => row['tick'] !== 0);
+    });
+    const loaded = decodeSave(bytes);
+    expect(loaded.ring.at(0)).toBeNull();
+
+    // The gates before the last one all pass, which is what makes this a test
+    // of the last one: the log is intact, the bracket IS committed, and it
+    // holds exactly the one command.
+    const result = verifyReplay(loaded, GAME_VERSION);
+    expect(result.logBreak).toBeNull();
+    expect(
+      scheduleCommitmentsOf(loaded).some(
+        (commitment) => commitment.fromTick <= 0 && commitment.toTick >= YEAR_ONE,
+      ),
+    ).toBe(true);
+    expect(proveDivergentTick(loaded, 0, LONE_TICK)).toBeNull();
+
+    expect(result.ok).toBe(false);
+    expect(result.verdict).toEqual({
+      kind: 'divergedInBracket',
+      fromTick: 0,
+      toTick: YEAR_ONE,
+      whyKey: 'ui.replay.bracket.unproven',
+    });
+    // The tick is NOT named, although the log offers an obvious candidate.
+    // That is the whole point of the branch: a tick this build cannot prove is
+    // a tick it does not claim.
+    expect(JSON.stringify(result.verdict)).not.toContain(String(LONE_TICK));
+  });
+
+  it('would have named the tick if the checkpoint were still there', () => {
+    // The control, so "unproven" is a statement about the missing evidence and
+    // not about the tamper: the same payload change with the ring intact is
+    // D-191's good case and comes back as an exact tick with its proof.
+    const bytes = tamperedLone((payload) => {
+      const entry = logOf(payload).find((row) => row['tick'] === LONE_TICK)!;
+      const command = entry['command'] as Record<string, unknown>;
+      command['amountCt'] = (command['amountCt'] as number) * 2;
+    });
+    const result = verifyReplay(decodeSave(bytes), GAME_VERSION);
+    expect(result.verdict.kind).toBe('divergedAt');
+    if (result.verdict.kind !== 'divergedAt') throw new Error('not a tick verdict');
+    expect(result.verdict.tick).toBe(LONE_TICK);
+    expect(result.verdict.proof.fromTick).toBe(0);
   });
 });
 

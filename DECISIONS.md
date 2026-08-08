@@ -20,12 +20,13 @@ no entry below. A number may appear under several topics.
 - **Lines & timetables:** D-145, D-146, D-147, D-148, D-149, D-150, D-151,
   D-152, D-155, D-159
 - **Map generation & terrain:** D-018, D-019, D-020, D-021, D-022, D-023,
-  D-025, D-027
+  D-025, D-027, D-197
 - **Terraforming & structures:** D-028, D-034, D-050, D-051, D-052, D-124,
   D-141
 - **Save format, migrations & replays:** D-007, D-025, D-026, D-027, D-048,
   D-111, D-130, D-131, D-134, D-142, D-144, D-145, D-146, D-147, D-153, D-178,
-  D-181, D-184, D-185, D-188, D-189, D-190, D-191, D-192, D-193, D-194
+  D-181, D-184, D-185, D-188, D-189, D-190, D-191, D-192, D-193, D-194,
+  D-197
 - **Rail & track:** D-042, D-043, D-044, D-045, D-046, D-047, D-053, D-141,
   D-153, D-157, D-184
 - **Signals & reservations:** D-054, D-055, D-056, D-057, D-058, D-059, D-060,
@@ -40,7 +41,7 @@ no entry below. A number may appear under several topics.
   D-180, D-193, D-196
 - **Balancing & scenarios:** D-038, D-039, D-040, D-041, D-066, D-087, D-088,
   D-116, D-151, D-152, D-156, D-158, D-159, D-187, D-190, D-194, D-195,
-  D-196
+  D-196, D-197
 - **Vehicles & fleet:** D-043, D-044, D-045, D-068, D-076, D-089, D-093,
   D-096, D-142, D-143, D-145, D-146, D-155, D-157, D-171, D-174, D-181, D-185
 - **Water & air:** D-094, D-095, D-096, D-097, D-098, D-099
@@ -60,9 +61,9 @@ no entry below. A number may appear under several topics.
 - **Crash safety:** D-132, D-139, D-190
 - **Testing method & fixtures:** D-010, D-038, D-072, D-074, D-084, D-133,
   D-167, D-183, D-186, D-188, D-189, D-190, D-191, D-192, D-193, D-194,
-  D-195, D-196
+  D-195, D-196, D-197
 - **Process & specification:** D-070, D-123, D-129, D-133, D-138, D-140,
-  D-185, D-191
+  D-185, D-191, D-197
 
 ---
 
@@ -7185,3 +7186,192 @@ interface, none of it a sim import chain), so the next milestone that adds a
 panel will have to book a raise with its own measurement the way D-192 requires.
 Raising it here, under the line, would be spending headroom this bundle did not
 need.
+
+---
+
+## M17 - the acceptance pass: honesty defects closed (2026-08-08)
+
+### D-197 A briefing that lied about its own world, a "25 years" that was 22, and a constant validated by the run it came from
+
+Independent verifiers read M17 and M16 and found four claims that were not true.
+None of them was a crash, a desync or a wrong number in the simulation - every
+one was the project's own standard applied to itself: a sentence somebody would
+read and believe, with nothing holding it to what the code does. They are
+recorded together because the fix is the same shape each time. **Make the claim
+true, or change the claim. Never quietly widen the claim until it stops being
+checkable.**
+
+**1. The Passagiernetz briefing promised eight cities and the world had seven.**
+`src/scenarios/catalog.ts` said, in the doc comment, "seventeen towns of 2,500 or
+more, EIGHT of them at 8,000", and told the PLAYER "Acht Grossstaedte zu je
+8.000 Einwohnern". Generated and counted, seed 10 has SEVEN. The doc comment was
+wrong and the briefing was wrong with it, and the only reason nobody noticed is
+that no test had ever asked the world.
+
+The scenario's identity is a passenger network between big towns, so the seed
+moved rather than the promise. Four hundred seeds were generated at 256 tiles
+and temperate climate and exactly THREE carry eight towns of 8,000: 28 (which is
+already Rats-Diplomatie's), 53 and 360. **360** was taken, because it also
+carries the seventeen towns of 2,500 the old comment claimed - so both halves of
+the sentence became true at once. Its four closest cities stand in a chain -
+Nieder-Weidengrund to Kaiserskirchen 33 tiles, Rosenburg another 37, Ahorngrund
+another 30, all dry land - and the `ConnectStations` goal names the first pair.
+The one claim that could not be re-measured was dropped rather than restated:
+"a measured AI competitor here delivered 28,457 passengers in its first year"
+came from a run with an AI driver attached, which no fixture in the repository
+reproduces, so it is gone.
+
+**Then all eight were audited the same way, and four more entries were wrong.**
+Frachtrausch claimed "the closest pairing is 59 tiles apart, the second 66" -
+measured, each mine's nearest power station is 57, 59, 70 and 106 tiles away, so
+the briefing's first figure named neither the closest pair nor a real pair (the
+mine at 101,129 is nearest to the plant at 155,112, not to the one at 148,83),
+and the "climb 24 over 89 tiles" corridor does not exist (the long one is 25 over
+106). Wiederaufbau, Rats-Diplomatie and the catalogue header were all wrong by
+exactly ONE GAME YEAR in the same way: 9,925 is what an unserved temperate town
+of 8,000 reaches after TWENTY years and the text called it "by 1970"; 10,465 is
+what it reaches after TWENTY-FIVE and the text called it "by 1975" - but a
+scenario deadline of `endOfYear(1975)` is the year running OUT, where the figure
+is 10,574. The desert pair is 9,200 / 9,248. Ueberleben called itself "the
+thinnest offer of the eight" while Gebirgslogistik has two industries to its
+ten. The other two calibration figures were re-measured and stand: four 1950
+buses on 8,000-strong towns 28 tiles apart deliver 21,393 passengers in their
+first game year, and the eight-wagon coal train 16,360 units over ten years.
+
+**The deliverable is the test, not the seed.** `SCENARIO_WORLD_CLAIMS` in
+`tests/unit/shippedScenarios.spec.ts` states, per scenario, every figure a
+briefing or a doc comment quotes about its own world - towns at 8,000, towns at
+2,500, industries, industries by type, inhabited land masses, the named towns
+with their ids and populations, the corridors with their distance, climb, water
+and height span, the archipelago's land-mass sizes in tiles, each mine's nearest
+power station, and the cargo Gebirgslogistik's map deliberately cannot burn.
+Every one is pinned EXACTLY rather than banded, because the generator is
+deterministic (law #3): a changed seed, a changed mapgen constant or a changed
+climate table moves them, and moving them silently is the failure being closed.
+A ninth scenario without a claims row is a red build. The one claim about the
+world's FUTURE rather than its generation - "the population goal cannot be waited
+out" - is played to its exact deadline on the cheapest such world (Wiederaufbau
+has no competitors, 0.45 s) and pins 10,574 against the 11,000 the goal asks for.
+
+**2. A test called "25-Jahres-Partie" simulated twenty-two years.**
+`tests/unit/goals.spec.ts` set `world.tick = 3 * TICKS_PER_YEAR` (1953, because
+the box lorry the chain needs is a 1953 vehicle) and ran to
+`25 * TICKS_PER_YEAR`. Both halves of the acceptance sentence in SPEC2 and in
+the 6.1.1 ledger say a quarter century. The horizon is
+`CHAIN_START_TICK + 25 * TICKS_PER_YEAR` now - 1953 to 1978, twenty-five years
+every one of which is simulated - and the goal's own 1975 deadline is a date the
+run passes on its way rather than the day it stops, which is what lets the medal
+bands mean anything.
+
+Starting in 1950 instead was tried first and is worse than wrong. Only the WOOD
+haul can be crewed in 1950; the sawmill then produces planks nobody collects for
+three years, the 24-month closure clock of D-086 shuts it in 1952, and what gets
+played is one works and two dead ones - measured, 3,472 units delivered against
+70,800 and a company value of MINUS 58,857 EUR. That is recorded in the file so
+nobody tries it again. Re-measured after the change: the goal still fires at tick
+860,800 (year 1961) for a SILVER medal, unchanged, and the company ends on
+4,103,179 EUR rather than the 2.36 M of the shorter run.
+
+`tests/balance/gameScore.spec.ts` had the identical defect under the identical
+words ("played a quarter century") and was moved to the same horizon. Re-banded
+by re-running, not by adjusting: **5,889 points - goals 2,125 (36 %), value
+1,556 (26 %), network 1,413 (24 %), cargo 795 (13 %)**, against the unchanged
+band of 3,000-7,000 with no quarter over 45 % or under 5 %. Not one constant
+moved.
+
+**3. `SCORE_NETWORK_FULL_SHARE` was validated by the run it was derived from.**
+The constant is 0.35 because the wood chain reaches 20.1 % of D-066's
+closed-form ceiling and full marks should want a network that also earns on the
+return leg. The balance band then asserted that the network term is between 5 %
+and 45 % of the total and does not saturate - both of which follow from that
+derivation arithmetically. A green test that cannot fail is not evidence, and the
+file now says so in those words.
+
+What was added is a SECOND quarter century that had no part in setting any
+constant: same map, same industries, same stops, same twelve lorries bought on
+the same day with the same orders, and one difference - the road between the
+stops doglegs sixteen tiles north and back, so every leg is sixty-two tiles of
+driving instead of thirty over an UNCHANGED paid distance. The ceiling depends
+only on capacity, tariff, top speed and years (D-187), so it is identical by
+construction and asserted to be (within 1 %); the whole difference lands in the
+numerator, which is the property the network value exists to have. Measured:
+**19.8 % against 7.8 % of the ceiling, a factor of 2.55, and 1,413 against 554
+score points**. None of the three assertions follows from the constant: the
+botched share is a number nobody put into 0.35, the RATIO between the two shares
+is independent of the full mark entirely, and "neither run saturates" is now a
+statement about two structurally different runs rather than about the one the
+constant was fitted to. The dogleg descends clear of the town because
+`placeTown` puts houses down the whole column beside the centre and a road may
+not be laid through a building - that is why the last few tiles run along the
+row.
+
+**4. Three M16 residuals, closed here because they are cheap and named.**
+
+*The superseded sentence.* SPEC2 section 6.1.1 still carried D-189's
+Fertig-wenn wording - "Replay pruefen nennt bei manipuliertem Log den ersten
+abweichenden Tick, sonst ehrlich als obere Schranke mit `exact: false`" - which
+D-191 had already proved false and replaced. It now states what the code
+guarantees: a verdict, an exact tick ONLY with a re-simulation proof attached,
+one of six named reasons when the bracket cannot be narrowed, and a corrupt file
+that never gets a tick at all.
+
+*The untested honesty branch.* `ui.replay.bracket.unproven` - the verdict when
+`proveDivergentTick` returns null - existed only in the two i18n files and in the
+list of keys a test checks are translated. Nobody had ever made the verifier say
+it. It is produced now by the case the branch is FOR: a recording whose GENESIS
+CHECKPOINT has been removed, with a payload tamper on the single command of the
+first bracket. Every earlier gate passes - the log's timings are intact so every
+schedule digest still matches, the bracket IS covered by a commitment, and it
+holds exactly one command - and then the proof has no committed world to
+re-simulate from, because starting from a world this build merely REACHED would
+prove a tick against its own guess. The verdict is the bracket with the reason,
+and the test asserts that the obvious candidate tick appears NOWHERE in it. A
+control with the ring left intact returns the exact tick, so "unproven" is a
+statement about the missing evidence rather than about the tamper.
+
+*The world that could be created and never saved.* `World.create` accepted any
+`mapSize` while `parseWorldState` accepted powers of two between 64 and 2048, so
+a world of 96 tiles could be generated and played and then never saved,
+checkpointed, replayed or crash-bundled - every one of those doors goes through
+the parser, and the failure would arrive an hour after the mistake with nothing
+to say about where it came from. The rule is ONE function now
+(`src/sim/map/size.ts`, bounds in `constants.ts` with their origin) and both ends
+import it, message included, so a refusal reads the same whichever end refused.
+It sits in the private `World` constructor, which is the single door `create`,
+`fromGenerated` and `fromData` all pass through.
+`tests/unit/mapSize.spec.ts` holds the AGREEMENT rather than either half: the
+same eleven sizes refused at both ends, the same six accepted at both, and the
+selectable `MAP_SIZES` inside the rule the format enforces. One asymmetry is
+stated rather than papered over - a fractional size never reaches the
+constructor, because `TileMap`'s typed-array views refuse to align first.
+
+**The bug was not hypothetical, and turning the check on proved it.** Three
+fixtures in the repository were building worlds the save format would have
+refused: `routing.spec.ts` and `finalApproach.spec.ts` at **96 tiles** - the
+exact size the verifier named - and `streamFor.spec.ts` at 16. Every one of them
+had been green for milestones while exercising a world that could never have
+been saved, checkpointed or replayed. They moved to 128, 128 and 64; not one
+coordinate in either 96-tile fixture changed and both pass unaltered, because a
+larger map is simply more empty ground around the same layout.
+
+**Ledger.** No `SAVE_VERSION` bump - v28 stands, M17 owns it and it is shipped.
+No migration, no snapshot byte, no atlas cell, no protocol field. Nothing this
+bundle touched is hashed world state: the Passagiernetz seed changes which world
+that scenario GENERATES, and the eight shipped scenarios are text rather than
+fixtures with pinned digests (`tests/determinism/scenarios.spec.ts` compares two
+runs of each against each other, never against a recorded number), so the
+canonical cross-OS pin `4dff3f3f216385e6`, the corpus manifest
+`f1dcab2a374ab728` and the soak fixture `ed8ac72cd1d6284d` are all untouched -
+checked by running them rather than assumed. Two new constants (`MAP_SIZE_MIN`,
+`MAP_SIZE_MAX`, both with their origin) and one new import-free leaf module.
+Test cost measured: `shippedScenarios.spec.ts` 6.3 s, `goals.spec.ts` 24.6 s
+(three more game years), `gameScore.spec.ts` 38.6 s (the second quarter
+century), `replayVerdict.spec.ts` 1.3 s, `mapSize.spec.ts` 0.1 s. Bundle,
+measured with `npm run build`: main chunk **924,308 B against the 930,000 B
+budget** (923.35 kB, gzip 281.93) - **+32 B**, which is the only number the
+whole bundle could move, since no interface file was touched and the new leaf
+module is imported by `World` and the save format alone. The scenario catalogue
+stayed in its own dynamically loaded chunk and grew 12,560 -> 12,928 B, all of
+it the corrected briefings. `replay` 198,180 B, worker 324,283 B, CSS
+unchanged. Suite after: 114 files, 1,253 passing plus 2 skipped, and the 13
+perf tests.

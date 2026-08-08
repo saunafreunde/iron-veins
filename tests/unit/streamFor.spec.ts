@@ -11,8 +11,16 @@ import { flatScenario } from '../balance/scenario';
  * stream and every other derived stream see exactly the draws they always saw.
  */
 
+/**
+ * The smallest world the save format will take (`MAP_SIZE_MIN`, D-197).
+ *
+ * It was 16 tiles until the two ends of the map-size rule were made to agree:
+ * a 16-tile world could be built here and could never have been saved, which
+ * is exactly the disagreement that fix removed. Nothing in this file depends
+ * on the size - it asks the world for RNG streams.
+ */
 function makeWorld(seed: number): World {
-  return flatScenario(16, [], [], seed).world;
+  return flatScenario(64, [], [], seed).world;
 }
 
 function digest(rng: Rng, count: number): string {

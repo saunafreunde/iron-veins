@@ -81,6 +81,7 @@ import { VehicleStore } from './vehicles/VehicleStore';
 import { Fnv1a64 } from './hash';
 import type { Industry } from './industry/types';
 import { TileMap } from './map/TileMap';
+import { isLegalMapSize, mapSizeRefusal } from './map/size';
 import { computeLandmasses, markOcean } from './mapgen/hydrology';
 import { generateMap, type GeneratedWorld, type MapGenProgress } from './mapgen';
 import { Rng, streamSalt } from './rng';
@@ -370,6 +371,15 @@ export class World {
   }
 
   private constructor(params: NewGameParams, generated: GeneratedWorld) {
+    // The ONE door into a World, so the ONE place the map-size rule is applied
+    // at creation - and it is the parser's own rule, imported rather than
+    // copied (D-197). A world the save format cannot read is a world that can
+    // be played for an hour and then never saved, checkpointed or replayed,
+    // and the failure would arrive at the save with nothing to say about where
+    // it came from.
+    if (!isLegalMapSize(generated.map.size)) {
+      throw new Error(`World: mapSize ${mapSizeRefusal(generated.map.size)}`);
+    }
     this.seed = params.seed | 0;
     this.difficulty = params.difficulty;
     this.climate = params.climate;

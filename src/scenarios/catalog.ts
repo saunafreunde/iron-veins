@@ -30,16 +30,22 @@ import type { ShippedScenario } from './types';
  * construction.
  *
  * **The thresholds are calibrated against measurements, not against feeling.**
- * The figures the bands are built on, all taken on this build:
+ * The figures the bands are built on, all four re-measured on this build in the
+ * M17 acceptance pass (D-197) - the third of them was wrong by a game year:
  *
  *  - four 1950 buses between two towns of 8,000 at 28 tiles deliver
- *    **21,400 passengers a game year** (the M6 bus-line world, four buses
- *    instead of two).
+ *    **21,393 passengers in their first game year** (the M6 bus-line world,
+ *    four buses instead of two; 64,893 cumulative over three years).
  *  - one 1950 coal train of eight wagons over 45 tiles delivers
- *    **~1,600-1,800 units of coal a year** (the M6 coal world; 16,360 over ten
- *    years).
- *  - a town of 8,000 that nobody serves grows to **10,465 in twenty-five game
- *    years** in a temperate climate and to 9,200 in an arctic or desert one.
+ *    **1,400-2,000 units of coal a year** (the M6 coal world; 16,360
+ *    cumulative over ten years, the yearly steps falling as the mine's
+ *    platform queue settles).
+ *  - a town of 8,000 that nobody serves reaches **9,925 after twenty game
+ *    years, 10,465 after twenty-five, and 10,574 by the END of 1975** in a
+ *    temperate climate; in the desert **9,200 after twenty-five years and
+ *    9,248 by the end of 1975**. The pairs are one game year apart and which
+ *    one a threshold has to clear is decided by its band tick: `endOfYear(Y)`
+ *    is the year Y running OUT, so it is the second figure of each pair.
  *    Full passenger service multiplies the growth rate by 1.55, goods and food
  *    by a further 0.35 each (`TOWN_GROWTH_*` in constants.ts), so a population
  *    goal above the passive line is a goal about SERVICE.
@@ -51,8 +57,11 @@ import type { ShippedScenario } from './types';
  * What is NOT claimed: that every gold band has been played to. The bands are
  * anchored on those four measurements and on the structural checks in
  * `tests/unit/shippedScenarios.spec.ts` - every named town exists, every cargo
- * a goal counts has a producer and an acceptor on the map, and no goal is
- * decided in the first game year by a player who does nothing.
+ * a goal counts has a producer and an acceptor on the map, no goal is decided
+ * in the first game year by a player who does nothing, and every load-bearing
+ * claim each entry below makes about its own world is pinned there against the
+ * generated world (`SCENARIO_WORLD_CLAIMS`), so a seed or a mapgen change can
+ * never silently make a briefing lie.
  */
 
 /** The last tick of `year` - "by the end of 1958" as the hook measures it. */
@@ -76,9 +85,10 @@ const AUTHOR = 'Iron Veins';
 
 /**
  * Seed 88, temperate, 256 tiles. Measured: four coal mines and TWO power
- * plants, the closest pairs 59 and 66 tiles apart (mine 101,129 -> plant
- * 148,83 and mine 177,167 -> plant 155,112), gentle ground between them
- * (climb 24 over 89 tiles on the worst long corridor). A freight map.
+ * plants. Each mine's NEAREST plant is 57, 59, 70 and 106 tiles away - three
+ * of the four are nearest to the plant at 155,112 - and the ground between
+ * them is gentle: the two short corridors climb and fall 16 and 12 levels, the
+ * 70-tile one 12, the long 106-tile one 25. A freight map.
  */
 const FRACHTRAUSCH: ShippedScenario = {
   id: 'frachtrausch',
@@ -87,14 +97,15 @@ const FRACHTRAUSCH: ShippedScenario = {
   briefing: {
     de:
       'Vier Kohlegruben, zwei Kraftwerke, flaches Land dazwischen - und niemand, ' +
-      'der die Kohle bewegt. Die kuerzeste Paarung liegt 59 Tiles auseinander, die ' +
-      'zweite 66. Ein Zug mit acht Wagen schafft rund 1.700 Einheiten im Jahr; fuer ' +
-      'Gold brauchen Sie mehrere Zuege und einen frueheren Anfang, als Ihnen lieb ist.',
+      'der die Kohle bewegt. Von jeder Grube bis zum naechsten Kraftwerk sind es ' +
+      '57, 59, 70 und 106 Tiles. Ein Zug mit acht Wagen schafft rund 1.700 Einheiten ' +
+      'im Jahr; fuer Gold brauchen Sie mehrere Zuege und einen frueheren Anfang, als ' +
+      'Ihnen lieb ist.',
     en:
       'Four coal mines, two power stations, easy ground in between - and nobody ' +
-      'moving the coal. The closest pairing is 59 tiles apart, the second 66. One ' +
-      'train of eight wagons carries some 1,700 units a year; gold needs several ' +
-      'trains and an earlier start than is comfortable.',
+      'moving the coal. From each mine to its nearest power station is 57, 59, 70 ' +
+      'and 106 tiles. One train of eight wagons carries some 1,700 units a year; ' +
+      'gold needs several trains and an earlier start than is comfortable.',
   },
   goals: [
     {
@@ -146,11 +157,20 @@ const FRACHTRAUSCH: ShippedScenario = {
 };
 
 /**
- * Seed 10, temperate, 256 tiles. Measured: seventeen towns of 2,500 or more,
- * EIGHT of them at 8,000 - Koenigsau (6) and Distelkirchen (32) 41 tiles
- * apart, Ulmenhausen (7) another 48 beyond. The densest passenger map of the
- * eight; a measured AI competitor here delivered 28,457 passengers in its
- * first year from nineteen stops.
+ * Seed 360, temperate, 256 tiles. Measured: EIGHT towns of 8,000 and seventeen
+ * of 2,500 or more - more towns above 2,500 than any other of the eight
+ * scenarios. Four of the eight cities stand in a chain across the middle of
+ * the map: Nieder-Weidengrund (17) to Kaiserskirchen (16) is 33 tiles,
+ * Rosenburg (18) another 37 beyond, Ahorngrund (5) another 30, and all three
+ * corridors are dry land climbing and falling nine levels at worst.
+ *
+ * **The seed changed in the M17 acceptance pass (D-197).** The previous one
+ * (10) carries SEVEN cities of 8,000 while both this comment and the
+ * player-facing briefing promised eight - a briefing that lied about its own
+ * world. Four hundred seeds were generated at 256 tiles and temperate climate
+ * and exactly three of them carry eight cities: 28 (which is
+ * Rats-Diplomatie's), 53 and 360. 360 was taken because it also has the
+ * seventeen towns of 2,500 the old comment claimed.
  */
 const PASSAGIERNETZ: ShippedScenario = {
   id: 'passagiernetz',
@@ -158,28 +178,32 @@ const PASSAGIERNETZ: ShippedScenario = {
   author: AUTHOR,
   briefing: {
     de:
-      'Acht Grossstaedte zu je 8.000 Einwohnern liegen dicht beieinander - Koenigsau ' +
-      'und Distelkirchen trennen 41 Tiles, Ulmenhausen liegt weitere 48 dahinter. ' +
-      'Hier zaehlt nicht die eine gute Linie, sondern das Netz: vier Busse auf einem ' +
-      'Staedtepaar bringen rund 21.000 Fahrgaeste im Jahr, und 200.000 sind mit einem ' +
-      'Paar allein nicht zu holen. Zwei Konkurrenten fahren mit.',
+      'Acht Grossstaedte zu je 8.000 Einwohnern und siebzehn Orte ab 2.500 - dichter ' +
+      'ist keine der acht Karten besiedelt. Vier der Grossen stehen als Kette quer ' +
+      'ueber die Mitte: Nieder-Weidengrund und Kaiserskirchen trennen 33 Tiles, ' +
+      'Rosenburg liegt weitere 37 dahinter, Ahorngrund noch einmal 30. Hier zaehlt ' +
+      'nicht die eine gute Linie, sondern das Netz: vier Busse auf einem Staedtepaar ' +
+      'bringen rund 21.000 Fahrgaeste im Jahr, und 200.000 sind mit einem Paar allein ' +
+      'nicht zu holen. Zwei Konkurrenten fahren mit.',
     en:
-      'Eight cities of 8,000 sit close together - 41 tiles between Koenigsau and ' +
-      'Distelkirchen, another 48 out to Ulmenhausen. This is not about one good ' +
-      'line but about a network: four buses on one pair of towns carry some 21,000 ' +
-      'passengers a year, and 200,000 will not come from one pair. Two competitors ' +
-      'are running as well.',
+      'Eight cities of 8,000 and seventeen towns of 2,500 or more - no other of the ' +
+      'eight maps is settled this densely. Four of the big ones stand in a chain ' +
+      'across the middle: 33 tiles between Nieder-Weidengrund and Kaiserskirchen, ' +
+      'another 37 out to Rosenburg, another 30 to Ahorngrund. This is not about one ' +
+      'good line but about a network: four buses on one pair of towns carry some ' +
+      '21,000 passengers a year, and 200,000 will not come from one pair. Two ' +
+      'competitors are running as well.',
   },
   goals: [
     {
       caption: {
-        de: 'Koenigsau und Distelkirchen verbinden',
-        en: 'Connect Koenigsau and Distelkirchen',
+        de: 'Nieder-Weidengrund und Kaiserskirchen verbinden',
+        en: 'Connect Nieder-Weidengrund and Kaiserskirchen',
       },
       spec: {
         kind: GoalKind.ConnectStations,
-        subjectA: 6,
-        subjectB: 32,
+        subjectA: 17,
+        subjectB: 16,
         threshold: 1,
         goldTick: endOfYear(1953),
         silverTick: endOfYear(1956),
@@ -218,7 +242,7 @@ const PASSAGIERNETZ: ShippedScenario = {
     },
   ],
   rules: {
-    seed: 10,
+    seed: 360,
     mapSize: 256,
     climate: MapClimate.Temperate,
     difficulty: Difficulty.Normal,
@@ -395,8 +419,8 @@ const INSELHUEPFEN: ShippedScenario = {
  * Seed 12, temperate, 256 tiles, HARD (250,000 to start with). Measured: seven
  * towns of 8,000, three farms and three food factories - the full food chain
  * standing idle. Erlenbach (32) is one of the big towns; unserved it reaches
- * 9,925 by 1970 and 10,465 by 1975, so the 11,000 asked for below cannot be
- * waited out.
+ * 10,033 by the end of 1970 and 10,574 by the end of 1975, so the 11,000 asked
+ * for below cannot be waited out.
  */
 const WIEDERAUFBAU: ShippedScenario = {
   id: 'wiederaufbau',
@@ -406,13 +430,15 @@ const WIEDERAUFBAU: ShippedScenario = {
     de:
       'Sieben Grossstaedte, drei Bauernhoefe, drei Lebensmittelwerke - und 250.000 ' +
       'EUR Startkapital. Die Kette steht still, und eine Stadt waechst von allein ' +
-      'nur langsam: Erlenbach kaeme unbedient bis 1975 auf 10.465 Einwohner. Die ' +
-      '11.000 muessen Sie herbeifahren. Wer nur zusieht, ist vorher zahlungsunfaehig.',
+      'nur langsam: Erlenbach kaeme unbedient bis Ende 1975 auf 10.574 Einwohner. ' +
+      'Die 11.000 muessen Sie herbeifahren. Wer nur zusieht, ist vorher ' +
+      'zahlungsunfaehig.',
     en:
       'Seven cities, three farms, three food factories - and 250,000 EUR to start ' +
       'with. The chain is idle, and a town grows slowly on its own: unserved, ' +
-      'Erlenbach would reach 10,465 inhabitants by 1975. The 11,000 asked for has ' +
-      'to be carried in. Anybody who only watches is insolvent before then.',
+      'Erlenbach would reach 10,574 inhabitants by the end of 1975. The 11,000 ' +
+      'asked for has to be carried in. Anybody who only watches is insolvent ' +
+      'before then.',
   },
   goals: [
     {
@@ -481,9 +507,11 @@ const WIEDERAUFBAU: ShippedScenario = {
 /**
  * Seed 28, temperate, 256 tiles. Measured: NINE towns of 8,000 and only eleven
  * industries - the map where the councils of 13.3 matter more than any chain.
- * Falkenheim (16) is one of the nine; unserved it reaches 9,925 by 1970. Three
- * competitors are courting the same councils, and road congestion is on, so a
- * fourth bus on a full street buys less than the first one did.
+ * Falkenheim (16) is one of the nine; unserved it reaches 10,033 by the end of
+ * 1970 and 10,574 by the end of 1975, so the 11,000 asked for below is a goal
+ * about service. Three competitors are courting the same councils, and road
+ * congestion is on, so a fourth bus on a full street buys less than the first
+ * one did.
  */
 const RATSDIPLOMATIE: ShippedScenario = {
   id: 'ratsdiplomatie',
@@ -644,9 +672,10 @@ const SPEEDRUN: ShippedScenario = {
 
 /**
  * Seed 69, desert, 256 tiles, HARD, four competitors, every world rule the
- * game has switched ON. Measured: ten industries, only two towns of 8,000, the
- * rest at 2,500 or below - the thinnest offer of the eight, and the towns grow
- * to 9,200 rather than 10,465 because the desert grows slowly. Surviving a
+ * game has switched ON. Measured: ten industries and only two towns of 8,000,
+ * the rest at 2,500 or below - a thin offer for five companies, and one that
+ * grows slowly, because a desert town of 8,000 that nobody serves reaches
+ * 9,248 by the end of 1975 where a temperate one reaches 10,574. Surviving a
  * quarter century here is the goal, and it is not a formality: the measured
  * quarter-century AI games wind up two companies in three (D-109).
  */

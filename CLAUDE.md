@@ -185,10 +185,17 @@ rewrites nothing - the cached-rm is what forces the re-checkout.
   and it is the only one that pins a FORMULA rather than a tariff: the wood
   chain played a quarter century with two goals over it, scored by the end
   screen's own function. Band: total 3,000-7,000 AND no quarter over 45 % or
-  under 5 % of it - the second half is the one worth having. Measured 5,747
-  (goals 37 %, value 26 %, network 25 %, cargo 12 %). It owns the four
-  full-mark constants of the score; freight tariffs, upkeep, the network value
-  of D-187 and the medal bands of D-193 all land here when they move (D-196).
+  under 5 % of it - the second half is the one worth having. Measured **5,889**
+  (goals 36 %, value 26 %, network 24 %, cargo 13 %) on the real twenty-five
+  years; 5,747 was the same run when it was still twenty-two (D-197). It owns
+  the four full-mark constants of the score; freight tariffs, upkeep, the
+  network value of D-187 and the medal bands of D-193 all land here when they
+  move (D-196). Since D-197 it also carries the network term's INDEPENDENT
+  evidence: a second quarter century on a deliberately doglegged alignment with
+  the identical fleet reaches 7.8 % of the ceiling against 19.8 % (factor 2.55,
+  554 points against 1,413). `SCORE_NETWORK_FULL_SHARE` was derived FROM the
+  good run, so only that comparison is evidence - the file says which half is
+  which.
 
   Scenario "Netzdesign" is SPEC2 M15's own, and it is the only one that
   measures the NETWORK rather than a tariff: identical traffic over a
@@ -1049,8 +1056,9 @@ next milestone that adds a panel books a raise with its own measurement
   not have to give. Four quarters of 2,500, each a SHARE of its own
   measured full mark, so a very rich company with a bad network cannot
   out-score one that did all four: `tests/balance/gameScore.spec.ts`
-  measures **5,747 - goals 2,125 (37 %), value 1,477 (26 %), network 1,437
-  (25 %), cargo 708 (12 %)** and bands the SPREAD, not the total.
+  measures **5,889 - goals 2,125 (36 %), value 1,556 (26 %), network 1,413
+  (24 %), cargo 795 (13 %)** and bands the SPREAD, not the total (5,747 in
+  earlier notes was the same run while it was still twenty-two years, D-197).
   **Hash-verified medals are end to end**: a played two-year recording
   verifies, and re-simulating it - from the last checkpoint AND from
   genesis - reproduces the scoreboard field by field, with the converse
@@ -1064,6 +1072,46 @@ next milestone that adds a panel books a raise with its own measurement
   Found and fixed on the way: `goalProgressMilli` divided a rating hold's
   DAYS by its RATING, so the bar read one sixth full on the day the goal
   was met.
+
+### M17 acceptance pass - four honesty defects, no save bump (D-197)
+
+Independent verifiers found four claims that were not true. None was a
+crash or a desync; every one was a sentence somebody would read and
+believe with nothing holding it to the code. Read D-197 before touching a
+briefing, a "quarter century" test or a score constant.
+
+- **A briefing may not describe a world the seed does not make.** The
+  Passagiernetz briefing promised eight cities of 8,000 and seed 10 has
+  seven. The seed moved (to **360**: eight cities, seventeen towns at
+  2,500 - out of four hundred scanned seeds exactly three carry eight),
+  because the scenario's identity is the network between big towns. Then
+  all eight were generated and audited, and four more figures were wrong -
+  Frachtrausch's mine-to-plant distances are 57/59/70/106, and three
+  population claims were out by exactly ONE GAME YEAR (`endOfYear(Y)` is
+  the year running OUT: 10,574, not 10,465). **The deliverable is
+  `SCENARIO_WORLD_CLAIMS`** in `tests/unit/shippedScenarios.spec.ts`: every
+  briefing-bearing world property of every scenario, pinned EXACTLY, so a
+  ninth scenario without a row is a red build.
+- **A test named "25 years" simulates 25 years.** `goals.spec.ts` and
+  `gameScore.spec.ts` both started in 1953 and ran to
+  `25 * TICKS_PER_YEAR` - twenty-two years. They run 1953-1978 now. A 1950
+  start is not the answer: only the wood haul has a 1950 lorry, and three
+  years of uncollected planks shut the sawmill under D-086's closure clock
+  (measured, and written down so nobody retries it).
+- **A constant may not be validated by the run it came from.**
+  `SCORE_NETWORK_FULL_SHARE` was set from the wood chain's 20.1 %, and the
+  band then checked properties that follow from that arithmetic. A second
+  quarter century - identical fleet, doglegged alignment, identical
+  ceiling by construction - reaches 7.8 % (factor 2.55). The test states
+  which half is calibration and which is evidence.
+- **A world that can be created must be a world that can be saved.**
+  `World.create` took any `mapSize`; `parseWorldState` took powers of two
+  between 64 and 2048. One rule now (`src/sim/map/size.ts`), imported by
+  both ends, applied in the private `World` constructor every door passes
+  through; `tests/unit/mapSize.spec.ts` holds the AGREEMENT, not either
+  half. Turning the check on found three fixtures that had been building
+  unsaveable worlds for milestones (96, 96 and 16 tiles) - they moved to
+  128, 128 and 64 and pass unaltered.
 
 ## Still outstanding
 

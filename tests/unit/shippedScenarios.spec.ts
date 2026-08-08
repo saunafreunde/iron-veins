@@ -57,6 +57,168 @@ function byId(id: string): ShippedScenario {
   return scenario!;
 }
 
+/**
+ * What each scenario's briefing and doc comment CLAIM about its own world.
+ *
+ * This table is the answer to the M17 acceptance defect (D-197): the
+ * Passagiernetz briefing promised "eight cities of 8,000" over a world that had
+ * seven, and nothing anywhere was able to notice. Every figure below was taken
+ * by generating the world and reading it, and every one of them is a figure
+ * some sentence a PLAYER reads depends on. They are pinned exactly rather than
+ * banded, because the generator is deterministic (law #3): a changed seed, a
+ * changed mapgen constant or a changed climate table moves them, and moving
+ * them silently is precisely what must not happen again.
+ *
+ * When one of these goes red the fix is never the number alone. The number and
+ * the sentence that quotes it are one claim, and both ends move together - or
+ * the seed does.
+ */
+interface CorridorClaim {
+  /** Town ids at each end - the straight line a briefing quotes. */
+  readonly from: number;
+  readonly to: number;
+  /** Straight-line distance, one decimal. [tiles] */
+  readonly distance: number;
+  /** Height levels climbed AND fallen along it. [levels] */
+  readonly climb: number;
+  /** Water tiles crossed. [tiles] */
+  readonly water: number;
+  /** Highest minus lowest level on the line. [levels] */
+  readonly levels: number;
+}
+
+interface WorldClaim {
+  /** Towns at 8,000 or more, and at 2,500 or more. Exact counts. */
+  readonly citiesAt8000: number;
+  readonly townsAt2500: number;
+  /** Industries on the map. Exact. */
+  readonly industries: number;
+  /** Land masses that carry at least one town. Exact. */
+  readonly inhabitedLandmasses: number;
+  /** Towns a caption or briefing names: id, name, starting population. */
+  readonly towns: readonly (readonly [number, string, number])[];
+  /** Corridors a briefing quotes a distance or a gradient for. */
+  readonly corridors?: readonly CorridorClaim[];
+  /** Industry types a briefing counts. */
+  readonly industriesOfType?: readonly (readonly [IndustryType, number])[];
+  /** Tiles per INHABITED land mass, largest first - the archipelago claim. */
+  readonly landmassTiles?: readonly number[];
+  /** Each coal mine's nearest power station, ascending. [tiles] */
+  readonly nearestPlantTiles?: readonly number[];
+  /** A cargo the briefing says the map cannot burn. */
+  readonly cargoWithoutAcceptor?: Cargo;
+}
+
+const SCENARIO_WORLD_CLAIMS: Readonly<Record<string, WorldClaim>> = {
+  // "Zwei Staedte zu 8.000 Einwohnern, 29 Tiles auseinander, drei Hoehenstufen
+  // dazwischen - flacher wird es nicht."
+  speedrun: {
+    citiesAt8000: 2,
+    townsAt2500: 12,
+    industries: 12,
+    inhabitedLandmasses: 1,
+    towns: [
+      [5, 'Nieder-Kaisershofen', 8_000],
+      [18, 'Haselstadt', 8_000],
+    ],
+    corridors: [{ from: 5, to: 18, distance: 29.4, climb: 3, water: 0, levels: 3 }],
+  },
+  // "Acht Grossstaedte zu je 8.000 Einwohnern und siebzehn Orte ab 2.500 ...
+  // Nieder-Weidengrund und Kaiserskirchen trennen 33 Tiles, Rosenburg liegt
+  // weitere 37 dahinter, Ahorngrund noch einmal 30."
+  passagiernetz: {
+    citiesAt8000: 8,
+    townsAt2500: 17,
+    industries: 10,
+    inhabitedLandmasses: 1,
+    towns: [
+      [17, 'Nieder-Weidengrund', 8_000],
+      [16, 'Kaiserskirchen', 8_000],
+      [18, 'Rosenburg', 8_000],
+      [5, 'Ahorngrund', 8_000],
+    ],
+    corridors: [
+      { from: 17, to: 16, distance: 33.4, climb: 9, water: 0, levels: 4 },
+      { from: 16, to: 18, distance: 36.9, climb: 7, water: 0, levels: 3 },
+      { from: 18, to: 5, distance: 30.0, climb: 7, water: 0, levels: 2 },
+    ],
+  },
+  // "Vier Kohlegruben, zwei Kraftwerke ... 57, 59, 70 und 106 Tiles."
+  frachtrausch: {
+    citiesAt8000: 3,
+    townsAt2500: 11,
+    industries: 12,
+    inhabitedLandmasses: 1,
+    towns: [],
+    industriesOfType: [
+      [IndustryType.CoalMine, 4],
+      [IndustryType.PowerPlant, 2],
+    ],
+    nearestPlantTiles: [57, 59, 70, 106],
+  },
+  // "Zwischen Silberheim und Ulmenburg liegen 60 Tiles Luftlinie - und elf
+  // Hoehenstufen, 88 Meter, dazu acht Tiles Wasser." Plus the reason the
+  // tonnage goal here counts passengers: nothing on this map burns coal.
+  gebirgslogistik: {
+    citiesAt8000: 3,
+    townsAt2500: 16,
+    industries: 2,
+    inhabitedLandmasses: 2,
+    towns: [
+      [3, 'Silberheim', 8_000],
+      [18, 'Ulmenburg', 2_500],
+    ],
+    corridors: [{ from: 3, to: 18, distance: 59.5, climb: 27, water: 8, levels: 11 }],
+    industriesOfType: [[IndustryType.CoalMine, 2]],
+    cargoWithoutAcceptor: Cargo.Coal,
+  },
+  // "Sandenheim ... liegt auf einer Insel. Neu-Lindenried ... liegt 52 Tiles
+  // entfernt auf dem Festland. Dazwischen ist offenes Meer."
+  inselhuepfen: {
+    citiesAt8000: 2,
+    townsAt2500: 12,
+    industries: 7,
+    inhabitedLandmasses: 3,
+    towns: [
+      [23, 'Neu-Lindenried', 8_000],
+      [8, 'Sandenheim', 8_000],
+    ],
+    corridors: [{ from: 23, to: 8, distance: 51.6, climb: 13, water: 21, levels: 5 }],
+    landmassTiles: [45_084, 252, 27],
+  },
+  // "Sieben Grossstaedte, drei Bauernhoefe, drei Lebensmittelwerke."
+  wiederaufbau: {
+    citiesAt8000: 7,
+    townsAt2500: 15,
+    industries: 13,
+    inhabitedLandmasses: 1,
+    towns: [[32, 'Erlenbach', 8_000]],
+    industriesOfType: [
+      [IndustryType.Farm, 3],
+      [IndustryType.FoodFactory, 3],
+    ],
+  },
+  // "Neun Staedte zu 8.000 Einwohnern, elf Industrien, drei Konkurrenten."
+  ratsdiplomatie: {
+    citiesAt8000: 9,
+    townsAt2500: 15,
+    industries: 11,
+    inhabitedLandmasses: 1,
+    towns: [[16, 'Falkenheim', 8_000]],
+  },
+  // "Wueste, zehn Industrien, zwei Grossstaedte."
+  ueberleben: {
+    citiesAt8000: 2,
+    townsAt2500: 15,
+    industries: 10,
+    inhabitedLandmasses: 1,
+    towns: [
+      [8, 'Sandenwerder', 8_000],
+      [13, 'Hinter-Falkenrode', 8_000],
+    ],
+  },
+};
+
 /** Height climbed and fallen along the straight line between two towns. */
 function corridor(
   world: World,
@@ -290,68 +452,7 @@ describe('every scenario names things its own map has', () => {
     }
   });
 
-  it('gives the mountain scenario a mountain', () => {
-    // The claim in the briefing, measured: 60 tiles of straight line between
-    // Silberheim and Ulmenburg, eleven height levels and water in the way.
-    const scenario = byId('gebirgslogistik');
-    const world = worldOf(scenario);
-    const line = corridor(world, 3, 18);
-    expect(line.distance).toBeGreaterThan(50);
-    expect(line.climb).toBeGreaterThanOrEqual(20);
-    expect(line.maxH - line.minH).toBeGreaterThanOrEqual(8);
-    expect(line.water).toBeGreaterThan(0);
-    expect(landmassOfTown(world, 3)).toBe(landmassOfTown(world, 18));
-  });
-
-  it('gives the island scenario an island', () => {
-    // Two towns of 8,000 on DIFFERENT land masses is the whole scenario: no
-    // bridge spans open water, so the connection is a ship or it is nothing.
-    const world = worldOf(byId('inselhuepfen'));
-    const mainland = world.towns[23]!;
-    const island = world.towns[8]!;
-    expect(mainland.population).toBeGreaterThanOrEqual(8_000);
-    expect(island.population).toBeGreaterThanOrEqual(8_000);
-    expect(landmassOfTown(world, 23)).not.toBe(landmassOfTown(world, 8));
-    expect(corridor(world, 23, 8).water).toBeGreaterThan(10);
-
-    // ... and it really is an archipelago rather than one town cut off: at
-    // least three land masses carry a town.
-    const inhabited = new Set<number>();
-    for (let id = 0; id < world.towns.length; id++) inhabited.add(landmassOfTown(world, id));
-    expect(inhabited.size).toBeGreaterThanOrEqual(3);
-  });
-
-  it('gives the freight scenario mines and somewhere to burn what they dig', () => {
-    const world = worldOf(byId('frachtrausch'));
-    expect(industryCount(world, IndustryType.CoalMine)).toBeGreaterThanOrEqual(3);
-    expect(industryCount(world, IndustryType.PowerPlant)).toBeGreaterThanOrEqual(1);
-  });
-
-  it('gives the two passenger scenarios their cities', () => {
-    for (const id of ['passagiernetz', 'ratsdiplomatie']) {
-      const world = worldOf(byId(id));
-      const cities = world.towns.filter((town) => town.population >= 8_000);
-      expect(cities.length, id).toBeGreaterThanOrEqual(6);
-    }
-  });
-
-  it('gives the reconstruction scenario a food chain to restart', () => {
-    const world = worldOf(byId('wiederaufbau'));
-    expect(industryCount(world, IndustryType.Farm)).toBeGreaterThanOrEqual(2);
-    expect(industryCount(world, IndustryType.FoodFactory)).toBeGreaterThanOrEqual(2);
-  });
-
-  it('gives the speedrun a flat pair of cities close together', () => {
-    const world = worldOf(byId('speedrun'));
-    const line = corridor(world, 5, 18);
-    expect(line.distance).toBeLessThanOrEqual(32);
-    expect(line.climb).toBeLessThanOrEqual(6);
-    expect(line.water).toBe(0);
-    expect(world.towns[5]!.population).toBeGreaterThanOrEqual(8_000);
-    expect(world.towns[18]!.population).toBeGreaterThanOrEqual(8_000);
-  });
-
-  it('gives the survival scenario every rule and the thinnest offer', () => {
+  it('gives the survival scenario every rule the game has', () => {
     const scenario = byId('ueberleben');
     expect(scenario.rules.difficulty).toBe(Difficulty.Hard);
     expect(scenario.rules.aiCompanies).toBe(4);
@@ -364,9 +465,7 @@ describe('every scenario names things its own map has', () => {
     ]) {
       expect(flag).toBe(true);
     }
-    const world = worldOf(scenario);
-    expect(world.industries.length).toBeLessThanOrEqual(12);
-    expect(world.companies).toHaveLength(5);
+    expect(worldOf(scenario).companies).toHaveLength(5);
   });
 
   it('differs from every other scenario in more than its text', () => {
@@ -376,6 +475,130 @@ describe('every scenario names things its own map has', () => {
     expect(climates.size).toBe(4);
     const difficulties = new Set(SHIPPED_SCENARIOS.map((scenario) => scenario.rules.difficulty));
     expect(difficulties.size).toBe(3);
+  });
+});
+
+// -------------------------------------------- the claims, pinned (D-197)
+
+describe('every load-bearing claim a briefing makes is true of its world', () => {
+  it('covers all eight, so a ninth scenario cannot slip in unclaimed', () => {
+    const byName = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
+    expect(Object.keys(SCENARIO_WORLD_CLAIMS).sort(byName)).toEqual(
+      SHIPPED_SCENARIOS.map((scenario) => scenario.id).sort(byName),
+    );
+  });
+
+  for (const scenario of SHIPPED_SCENARIOS) {
+    it(`${scenario.id} holds every figure its briefing quotes`, () => {
+      const claim = SCENARIO_WORLD_CLAIMS[scenario.id]!;
+      const world = worldOf(scenario);
+      const at = (what: string): string => `${scenario.id}: ${what}`;
+
+      expect(world.towns.filter((town) => town.population >= 8_000).length, at('cities')).toBe(
+        claim.citiesAt8000,
+      );
+      expect(world.towns.filter((town) => town.population >= 2_500).length, at('towns')).toBe(
+        claim.townsAt2500,
+      );
+      expect(world.industries.length, at('industries')).toBe(claim.industries);
+
+      const inhabited = new Set<number>();
+      for (let id = 0; id < world.towns.length; id++) inhabited.add(landmassOfTown(world, id));
+      expect(inhabited.size, at('inhabited land masses')).toBe(claim.inhabitedLandmasses);
+
+      // A named town is a town a CAPTION or a briefing calls by name; the id
+      // is what the descriptor addresses, so the pair has to hold together.
+      for (const [id, name, population] of claim.towns) {
+        const town = world.towns[id];
+        expect(town, at(`town ${id}`)).toBeDefined();
+        expect(town!.name, at(`town ${id} name`)).toBe(name);
+        expect(town!.population, at(`${name} population`)).toBe(population);
+      }
+
+      for (const [type, count] of claim.industriesOfType ?? []) {
+        expect(industryCount(world, type), at(`industries of type ${type}`)).toBe(count);
+      }
+
+      for (const line of claim.corridors ?? []) {
+        const measured = corridor(world, line.from, line.to);
+        const where = at(`corridor ${line.from}->${line.to}`);
+        expect(Math.round(measured.distance * 10) / 10, `${where} distance`).toBe(line.distance);
+        expect(measured.climb, `${where} climb`).toBe(line.climb);
+        expect(measured.water, `${where} water`).toBe(line.water);
+        expect(measured.maxH - measured.minH, `${where} levels`).toBe(line.levels);
+      }
+
+      if (claim.landmassTiles !== undefined) {
+        const sizes = new Map<number, number>();
+        const map = world.map;
+        for (let i = 0; i < map.landmassId.length; i++) {
+          const id = map.landmassId[i]!;
+          if (id < 0 || !inhabited.has(id)) continue;
+          sizes.set(id, (sizes.get(id) ?? 0) + 1);
+        }
+        expect(
+          [...sizes.values()].sort((a, b) => b - a),
+          at('inhabited land mass sizes'),
+        ).toEqual([...claim.landmassTiles]);
+      }
+
+      if (claim.nearestPlantTiles !== undefined) {
+        const mines = world.industries.filter((one) => one.type === IndustryType.CoalMine);
+        const plants = world.industries.filter((one) => one.type === IndustryType.PowerPlant);
+        const nearest = mines
+          .map((mine) =>
+            Math.round(
+              Math.min(...plants.map((plant) => Math.hypot(mine.x - plant.x, mine.y - plant.y))),
+            ),
+          )
+          .sort((a, b) => a - b);
+        expect(nearest, at('nearest plant per mine')).toEqual([...claim.nearestPlantTiles]);
+      }
+
+      if (claim.cargoWithoutAcceptor !== undefined) {
+        // Gebirgslogistik counts passengers rather than coal, and the reason is
+        // a property of its world: at that climate the map grows coal mines and
+        // nothing that burns their output. A map that grew an acceptor would
+        // make the doc comment's explanation false.
+        expect(
+          hasAcceptor(world, claim.cargoWithoutAcceptor),
+          at(`acceptor of cargo ${claim.cargoWithoutAcceptor}`),
+        ).toBe(false);
+      }
+    });
+  }
+
+  it('leaves the two islands unreachable by land, which is the whole scenario', () => {
+    const world = worldOf(byId('inselhuepfen'));
+    expect(landmassOfTown(world, 23)).not.toBe(landmassOfTown(world, 8));
+  });
+
+  it('keeps the mountain pair on ONE land mass, so the goal is a railway', () => {
+    const world = worldOf(byId('gebirgslogistik'));
+    expect(landmassOfTown(world, 3)).toBe(landmassOfTown(world, 18));
+  });
+
+  it('cannot have its population goal waited out', () => {
+    // The one claim in the catalogue that is about the world's FUTURE rather
+    // than about the world as generated: "unserved, Erlenbach would reach
+    // 10,574 by the end of 1975 - the 11,000 has to be carried in." Played
+    // here to that exact deadline with no player and no competitor, because a
+    // threshold under the passive line is a medal the scenario gives away.
+    //
+    // Wiederaufbau carries the cheapest such world (no AI companies at all),
+    // and the temperate passive growth curve is ONE curve: Rats-Diplomatie's
+    // Falkenheim is the same 8,000 in the same climate and reaches the same
+    // figure - measured, and recorded in the catalogue rather than replayed
+    // here, because its three competitors cost fifty times the wall clock.
+    const scenario = byId('wiederaufbau');
+    const goal = scenario.goals.find((one) => one.spec.kind === GoalKind.TownPopulationReach)!;
+    const world = World.create(worldParamsFor(newGameOptionsOf(scenario, COMPANY, 1)));
+    const queue = new CommandQueue();
+    while (world.tick < goal.spec.bronzeTick) world.step(queue, null);
+
+    expect(world.tick).toBe(26 * TICKS_PER_YEAR);
+    expect(world.towns[32]!.population).toBe(10_574);
+    expect(goal.spec.threshold).toBeGreaterThan(world.towns[32]!.population);
   });
 });
 

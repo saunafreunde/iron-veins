@@ -34,6 +34,25 @@ export const SEA_LEVEL = 3;
 /** Selectable map edge lengths in tiles. */
 export const MAP_SIZES = [256, 512, 1024, 2048] as const;
 
+/**
+ * Smallest map edge length a world may HOLD, as opposed to be started with.
+ * [tiles]
+ *
+ * The new-game screen offers `MAP_SIZES`; this is the wider rule the save
+ * format enforces, and the balancing and unit fixtures live inside it (64 and
+ * 128 tile worlds). Below it the layer lengths stop being meaningful and a
+ * station catchment covers the whole map.
+ */
+export const MAP_SIZE_MIN = 64;
+
+/**
+ * Largest map edge length a world may hold. [tiles]
+ *
+ * 2048^2 tiles is four million, which is what the SharedArrayBuffer layout and
+ * the section 21 budgets were measured against.
+ */
+export const MAP_SIZE_MAX = 2048;
+
 /** Default map edge length - 1024 tiles is 51.2 x 51.2 km. */
 export const DEFAULT_MAP_SIZE = 1024;
 

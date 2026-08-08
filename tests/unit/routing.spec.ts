@@ -31,7 +31,15 @@ import { World } from '../../src/sim/World';
  * stops helping.
  */
 
-const SIZE = 96;
+/**
+ * 128 rather than the 96 this fixture used to build (D-197).
+ *
+ * A 96-tile world was one the save format would have refused: it could be
+ * created and played and never written down. The rule is one function now and
+ * the constructor applies it, so this fixture moved to the next legal size -
+ * every coordinate below is unchanged, the map is simply larger around them.
+ */
+const SIZE = 128;
 const GROUND = 5;
 const ROW = 20;
 

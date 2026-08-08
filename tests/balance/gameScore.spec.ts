@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { Cargo } from '../../src/sim/cargo/types';
 import { CommandKind } from '../../src/sim/commands/types';
 import { CENTS_PER_EURO, SCORE_TERM_MAX_POINTS, TICKS_PER_YEAR } from '../../src/sim/constants';
+import { companyNetworkValue } from '../../src/sim/economy/networkValue';
 import { companyScore } from '../../src/sim/goals/score';
 import { GoalKind, GoalStatus, type GoalSpec } from '../../src/sim/goals/types';
 import { IndustryType, newIndustry, type Industry } from '../../src/sim/industry/types';
@@ -54,7 +55,25 @@ const LORRIES_PER_HAUL = 4;
 const CHAIN_START_TICK = 3 * TICKS_PER_YEAR;
 /** Half the goal: the company has to EARN the rest rather than start with it. */
 const CHAIN_CAPITAL_CT = 1_000_000 * CENTS_PER_EURO;
-const HORIZON_TICKS = 25 * TICKS_PER_YEAR;
+/**
+ * 1978 - twenty-five game years after the chain starts, every one simulated.
+ *
+ * This was `25 * TICKS_PER_YEAR` until the M17 acceptance pass, so a run that
+ * began in 1953 played twenty-two years while every sentence around it said a
+ * quarter century (D-197). The chain cannot start earlier: crewing only the
+ * 1950 wood haul and waiting for the box lorry shuts the sawmill under the
+ * 24-month closure clock of D-086.
+ */
+const HORIZON_TICKS = CHAIN_START_TICK + 25 * TICKS_PER_YEAR;
+/**
+ * How far north the botched alignment doglegs between two stops. [tiles]
+ *
+ * Sixteen up and sixteen down turns each thirty-tile leg into sixty-two, on
+ * the same fleet, between the same stops, over the same paid distance - so the
+ * ceiling is untouched and only the number of round trips falls. That is
+ * exactly SPEC.md section 1's promise stated as a control.
+ */
+const DETOUR_TILES = 16;
 
 /** The band the total has to land in for a competent quarter century. */
 const SCORE_MIN = 3_000;
@@ -98,8 +117,66 @@ function chainIndustries(): Industry[] {
   ];
 }
 
-/** The competent company: a whole chain, built once and then run. */
-function competentRun(): Scenario {
+/**
+ * Where the botched alignment comes back down to the row before the town.
+ *
+ * Not at the town stop itself: `placeTown` puts houses on the whole column
+ * either side of the town centre, and a road may not be laid through a
+ * building - so the dogleg descends clear of the built-up area and runs the
+ * last few tiles along the row.
+ */
+const TOWN_APPROACH_X = TOWN_X - 8;
+/** The columns the doglegs climb, in the order the chain runs through them. */
+const DETOUR_XS = [FOREST_X, SAWMILL_X, FURNITURE_X, TOWN_APPROACH_X];
+
+/**
+ * Lay the road: straight down the row, or the same stops joined by doglegs.
+ *
+ * The botched version is the ONLY difference between the two runs of this file
+ * - same map, same industries, same stops, same twelve lorries bought on the
+ * same day with the same orders. What changes is how far a lorry has to drive
+ * between two stops that are the same distance apart on the map.
+ */
+function layRoad(scenario: Scenario, detour: boolean): void {
+  if (!detour) {
+    apply(scenario, {
+      kind: CommandKind.BuildRoad,
+      x1: FOREST_X - 3,
+      y1: ROW,
+      x2: TOWN_X,
+      y2: ROW,
+    });
+    return;
+  }
+  const north = ROW - DETOUR_TILES;
+  apply(scenario, {
+    kind: CommandKind.BuildRoad,
+    x1: FOREST_X - 3,
+    y1: ROW,
+    x2: FOREST_X,
+    y2: ROW,
+  });
+  for (const x of DETOUR_XS) {
+    apply(scenario, { kind: CommandKind.BuildRoad, x1: x, y1: ROW, x2: x, y2: north });
+  }
+  apply(scenario, {
+    kind: CommandKind.BuildRoad,
+    x1: FOREST_X,
+    y1: north,
+    x2: TOWN_APPROACH_X,
+    y2: north,
+  });
+  apply(scenario, {
+    kind: CommandKind.BuildRoad,
+    x1: TOWN_APPROACH_X,
+    y1: ROW,
+    x2: TOWN_X - 1,
+    y2: ROW,
+  });
+}
+
+/** The company: a whole chain, built once and then run. */
+function chainRun(detour: boolean): Scenario {
   const town = makeTown(0, TOWN_X, ROW, 2_500, 'Punktstadt');
   const scenario = flatScenario(SIZE, [town], chainIndustries());
   const world = scenario.world;
@@ -107,7 +184,7 @@ function competentRun(): Scenario {
   world.company.cashCt = CHAIN_CAPITAL_CT;
   world.tick = CHAIN_START_TICK;
 
-  apply(scenario, { kind: CommandKind.BuildRoad, x1: FOREST_X - 3, y1: ROW, x2: TOWN_X, y2: ROW });
+  layRoad(scenario, detour);
   for (const x of [FOREST_X, SAWMILL_X, FURNITURE_X, TOWN_X - 1]) {
     apply(scenario, {
       kind: CommandKind.BuildRoadStop,
@@ -157,8 +234,8 @@ function competentRun(): Scenario {
   return scenario;
 }
 
-function playQuarterCentury(): Scenario {
-  const scenario = competentRun();
+function playQuarterCentury(detour = false): Scenario {
+  const scenario = chainRun(detour);
   while (scenario.world.tick < HORIZON_TICKS) scenario.world.step(scenario.queue, null);
   return scenario;
 }
@@ -168,6 +245,13 @@ let played: Scenario | null = null;
 function quarterCentury(): Scenario {
   played ??= playQuarterCentury();
   return played;
+}
+
+/** The same chain on a botched alignment - the control of the network term. */
+let botched: Scenario | null = null;
+function botchedCentury(): Scenario {
+  botched ??= playQuarterCentury(true);
+  return botched;
 }
 
 function scoredWorld(): World[] {
@@ -244,4 +328,85 @@ describe('the score formula: what a competent quarter century is worth', () => {
   });
 
   hashTwin('gameScore', scoredWorld, () => [playQuarterCentury().world]);
+});
+
+/**
+ * The network term, held against something it was NOT derived from (D-197).
+ *
+ * **What is calibration here, and therefore proves nothing.**
+ * `SCORE_NETWORK_FULL_SHARE` (0.35) was set FROM this very run: the competent
+ * chain reaches 20.1 % of D-066's closed-form ceiling, and the constant is that
+ * figure with headroom for a network that also earns on the return leg. So
+ * "the competent run reaches 57 % of the full mark" is arithmetic on the
+ * constant's own derivation, and the band above - total in range, no term over
+ * 45 % or under 5 % - is satisfied by construction for this one term. A
+ * self-fulfilling measurement is not evidence, however green it is.
+ *
+ * **What is evidence.** Everything below runs a SECOND quarter century that had
+ * no part in setting any constant: the same map, the same industries, the same
+ * stops, the same twelve lorries bought on the same day with the same orders,
+ * and one difference - the road between the stops doglegs sixteen tiles north
+ * and back, so every leg is sixty-two tiles of driving instead of thirty over
+ * an unchanged PAID distance. That makes the ceiling (capacity x tariff x top
+ * speed x years, D-187) identical by construction and puts the whole difference
+ * in the numerator, which is the property the network value exists to have.
+ *
+ * None of the three assertions follows from the constant's derivation:
+ *
+ *  - the botched share is a number nobody put into 0.35;
+ *  - the RATIO between the two shares is independent of the full mark entirely
+ *    (it would be the same for any value of the constant);
+ *  - "neither run saturates" is a statement about two structurally different
+ *    runs, and the second one is the one the constant knows nothing about.
+ */
+describe('the network term measures the network, not the constant it came from', () => {
+  it('reports both runs, so the comparison can be read', () => {
+    const good = companyNetworkValue(quarterCentury().world, 0);
+    const bad = companyNetworkValue(botchedCentury().world, 0);
+    console.log(
+      `network value: straight alignment ${(good.share * 100).toFixed(1)} % of the ceiling, ` +
+        `dogleg ${(bad.share * 100).toFixed(1)} % - factor ${(good.share / bad.share).toFixed(2)}; ` +
+        `score term ${companyScore(quarterCentury().world).network.points} against ` +
+        `${companyScore(botchedCentury().world).network.points} points`,
+    );
+    expect(bad.share).toBeGreaterThan(0);
+  });
+
+  it('gives both runs the same ceiling, which is what makes them comparable', () => {
+    // If this drifts the comparison below is measuring two fleets rather than
+    // two networks, and the whole control is void - so it is asserted, not
+    // assumed. Vehicles age identically in both runs (same build tick, same
+    // horizon), so the only way it moves is a lorry dying in one and not the
+    // other.
+    const good = companyNetworkValue(quarterCentury().world, 0);
+    const bad = companyNetworkValue(botchedCentury().world, 0);
+    expect(bad.ceilingCt / good.ceilingCt).toBeGreaterThan(0.99);
+    expect(bad.ceilingCt / good.ceilingCt).toBeLessThan(1.01);
+  });
+
+  it('scores the botched alignment materially lower on the identical fleet', () => {
+    const good = companyNetworkValue(quarterCentury().world, 0);
+    const bad = companyNetworkValue(botchedCentury().world, 0);
+    // Twice the driving for the same paid distance should cost roughly half
+    // the trips; the band is deliberately loose because what is being held is
+    // that the term DISCRIMINATES, not by how much.
+    expect(bad.share).toBeLessThan(good.share * 0.75);
+    expect(bad.share).toBeGreaterThan(good.share * 0.2);
+    // And it has to reach the SCORE, not stop at the share: a term that moves
+    // by less than a point is a term the end screen cannot show.
+    const goodPoints = companyScore(quarterCentury().world).network.points;
+    const badPoints = companyScore(botchedCentury().world).network.points;
+    expect(goodPoints - badPoints).toBeGreaterThan(SCORE_TERM_MAX_POINTS * 0.1);
+  });
+
+  it('does not saturate on either of the two runs', () => {
+    // The competent run staying under the full mark is calibration. The second
+    // one staying under it - and well above zero - is the part that says the
+    // term still has range on a network it was never fitted to.
+    for (const world of [quarterCentury().world, botchedCentury().world]) {
+      const share = companyScore(world).network.share;
+      expect(share).toBeGreaterThan(0.05);
+      expect(share).toBeLessThan(1);
+    }
+  });
 });
