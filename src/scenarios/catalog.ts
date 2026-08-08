@@ -43,9 +43,13 @@ import type { ShippedScenario } from './types';
  *  - a town of 8,000 that nobody serves reaches **9,925 after twenty game
  *    years, 10,465 after twenty-five, and 10,574 by the END of 1975** in a
  *    temperate climate; in the desert **9,200 after twenty-five years and
- *    9,248 by the end of 1975**. The pairs are one game year apart and which
- *    one a threshold has to clear is decided by its band tick: `endOfYear(Y)`
- *    is the year Y running OUT, so it is the second figure of each pair.
+ *    9,248 by the end of 1975**. All six figures are played out and pinned in
+ *    `tests/unit/shippedScenarios.spec.ts` (the desert pair on the Ueberleben
+ *    seed with its four competitors taken out - "unserved" is not a thing that
+ *    can be measured in a world where somebody else is building). The pairs are
+ *    one game year apart and which one a threshold has to clear is decided by
+ *    its band tick: `endOfYear(Y)` is the year Y running OUT, so it is the
+ *    second figure of each pair.
  *    Full passenger service multiplies the growth rate by 1.55, goods and food
  *    by a further 0.35 each (`TOWN_GROWTH_*` in constants.ts), so a population
  *    goal above the passive line is a goal about SERVICE.
@@ -62,6 +66,17 @@ import type { ShippedScenario } from './types';
  * claim each entry below makes about its own world is pinned there against the
  * generated world (`SCENARIO_WORLD_CLAIMS`), so a seed or a mapgen change can
  * never silently make a briefing lie.
+ *
+ * **And since D-198 the briefings themselves are read.** Pinning the world was
+ * only half of it: the sentences a PLAYER sees could still be falsified on
+ * their own, and were - a verifier changed "Acht Grossstaedte zu je 8.000
+ * Einwohnern und siebzehn Orte ab 2.500" into "Neun ... 9.000 ... vierzig" and
+ * the suite stayed green. `SCENARIO_BRIEFING_FIGURES` now lists every number
+ * each briefing says out loud, in order, each one either READ BACK from the
+ * claims table (or from this entry's own rules, goals and constants) or named
+ * on a short allowlist with the reason no world property can justify it. Both
+ * languages are held to the same list, so a figure that changes in one
+ * sentence and not in the other is a red build too.
  */
 
 /** The last tick of `year` - "by the end of 1958" as the hook measures it. */
@@ -85,10 +100,15 @@ const AUTHOR = 'Iron Veins';
 
 /**
  * Seed 88, temperate, 256 tiles. Measured: four coal mines and TWO power
- * plants. Each mine's NEAREST plant is 57, 59, 70 and 106 tiles away - three
- * of the four are nearest to the plant at 155,112 - and the ground between
- * them is gentle: the two short corridors climb and fall 16 and 12 levels, the
- * 70-tile one 12, the long 106-tile one 25. A freight map.
+ * plants, at 148,83 and 155,112. Each mine's NEAREST plant is 57, 59, 70 and
+ * 106 tiles away, and it is the SAME plant for all four - the one at 155,112;
+ * no mine is nearer to the other plant, which is what makes this one freight
+ * map rather than two. (The M17 acceptance pass said "three of the four" here and
+ * that was wrong by one: measured, the mine at 101,129 is 57 tiles from
+ * 155,112 against 66 from 148,83, and the other three are further from the
+ * second plant still - D-198.) The ground between them is gentle: the two
+ * short corridors climb and fall 16 and 12 levels, the 70-tile one 12, the
+ * long 106-tile one 25. A freight map.
  */
 const FRACHTRAUSCH: ShippedScenario = {
   id: 'frachtrausch',
@@ -157,12 +177,14 @@ const FRACHTRAUSCH: ShippedScenario = {
 };
 
 /**
- * Seed 360, temperate, 256 tiles. Measured: EIGHT towns of 8,000 and seventeen
- * of 2,500 or more - more towns above 2,500 than any other of the eight
- * scenarios. Four of the eight cities stand in a chain across the middle of
- * the map: Nieder-Weidengrund (17) to Kaiserskirchen (16) is 33 tiles,
- * Rosenburg (18) another 37 beyond, Ahorngrund (5) another 30, and all three
- * corridors are dry land climbing and falling nine levels at worst.
+ * Seed 360, temperate, 256 tiles. Measured: forty towns, SEVENTEEN of them at
+ * 2,500 inhabitants or more, and EIGHT OF THOSE SEVENTEEN at 8,000 - the eight
+ * are inside the seventeen, not beside them. No other of the eight scenarios
+ * carries more towns of 2,500 or more. Four of the eight cities stand in a
+ * chain across the middle of the map: Nieder-Weidengrund (17) to
+ * Kaiserskirchen (16) is 33 tiles, Rosenburg (18) another 37 beyond,
+ * Ahorngrund (5) another 30, and all three corridors are dry land climbing and
+ * falling nine levels at worst.
  *
  * **The seed changed in the M17 acceptance pass (D-197).** The previous one
  * (10) carries SEVEN cities of 8,000 while both this comment and the
@@ -171,6 +193,14 @@ const FRACHTRAUSCH: ShippedScenario = {
  * and exactly three of them carry eight cities: 28 (which is
  * Rats-Diplomatie's), 53 and 360. 360 was taken because it also has the
  * seventeen towns of 2,500 the old comment claimed.
+ *
+ * **The sentence changed in the acceptance pass after that one (D-198).** "Acht
+ * Grossstaedte zu je 8.000 Einwohnern und siebzehn Orte ab 2.500" was true of
+ * this world and still read as eight plus seventeen - twenty-five settlements
+ * where the map has forty, seventeen of which clear the 2,500 the sentence
+ * names. Two true numbers joined by "und" state a partition; these two are a
+ * set and a subset, and both languages say so now. The other seven briefings
+ * were read for the same defect and none of them nests a set inside another.
  */
 const PASSAGIERNETZ: ShippedScenario = {
   id: 'passagiernetz',
@@ -178,21 +208,23 @@ const PASSAGIERNETZ: ShippedScenario = {
   author: AUTHOR,
   briefing: {
     de:
-      'Acht Grossstaedte zu je 8.000 Einwohnern und siebzehn Orte ab 2.500 - dichter ' +
-      'ist keine der acht Karten besiedelt. Vier der Grossen stehen als Kette quer ' +
-      'ueber die Mitte: Nieder-Weidengrund und Kaiserskirchen trennen 33 Tiles, ' +
+      'Vierzig Orte stehen auf der Karte, siebzehn davon haben 2.500 Einwohner oder ' +
+      'mehr, und acht von diesen siebzehn sind Grossstaedte zu je 8.000 - keine der ' +
+      'acht Karten traegt mehr Orte ab 2.500. Vier der Grossstaedte stehen als Kette ' +
+      'quer ueber die Mitte: Nieder-Weidengrund und Kaiserskirchen trennen 33 Tiles, ' +
       'Rosenburg liegt weitere 37 dahinter, Ahorngrund noch einmal 30. Hier zaehlt ' +
       'nicht die eine gute Linie, sondern das Netz: vier Busse auf einem Staedtepaar ' +
       'bringen rund 21.000 Fahrgaeste im Jahr, und 200.000 sind mit einem Paar allein ' +
       'nicht zu holen. Zwei Konkurrenten fahren mit.',
     en:
-      'Eight cities of 8,000 and seventeen towns of 2,500 or more - no other of the ' +
-      'eight maps is settled this densely. Four of the big ones stand in a chain ' +
-      'across the middle: 33 tiles between Nieder-Weidengrund and Kaiserskirchen, ' +
-      'another 37 out to Rosenburg, another 30 to Ahorngrund. This is not about one ' +
-      'good line but about a network: four buses on one pair of towns carry some ' +
-      '21,000 passengers a year, and 200,000 will not come from one pair. Two ' +
-      'competitors are running as well.',
+      'Forty towns stand on the map, seventeen of them have 2,500 inhabitants or ' +
+      'more, and eight of those seventeen are cities of 8,000 - no other of the eight ' +
+      'maps carries more towns of 2,500. Four of the cities stand in a chain across ' +
+      'the middle: 33 tiles between Nieder-Weidengrund and Kaiserskirchen, another 37 ' +
+      'out to Rosenburg, another 30 to Ahorngrund. This is not about one good line ' +
+      'but about a network: four buses on one pair of towns carry some 21,000 ' +
+      'passengers a year, and 200,000 will not come from one pair. Two competitors ' +
+      'are running as well.',
   },
   goals: [
     {
@@ -273,16 +305,18 @@ const GEBIRGSLOGISTIK: ShippedScenario = {
   briefing: {
     de:
       'Zwischen Silberheim und Ulmenburg liegen 60 Tiles Luftlinie - und elf ' +
-      'Hoehenstufen, 88 Meter, dazu acht Tiles Wasser. Die gerade Linie ist die ' +
-      'teuerste; die Steigungsregel misst ueber ein Fenster, nicht von Tile zu Tile, ' +
-      'also gewinnt hier, wer den Umweg am Hang findet. Die Streckenkosten aus 8.4 ' +
-      'sind eingeschaltet: belegte Abschnitte und Signale kosten den Zug etwas.',
+      'Hoehenstufen zwischen dem tiefsten und dem hoechsten Punkt der Geraden, also ' +
+      '88 Meter, dazu acht Tiles Wasser. Die gerade Linie ist die teuerste; die ' +
+      'Steigungsregel misst ueber ein Fenster, nicht von Tile zu Tile, also gewinnt ' +
+      'hier, wer den Umweg am Hang findet. Die Streckenkosten aus 8.4 sind ' +
+      'eingeschaltet: belegte Abschnitte und Signale kosten den Zug etwas.',
     en:
       'Sixty tiles of straight line lie between Silberheim and Ulmenburg - and ' +
-      'eleven height levels, 88 metres, plus eight tiles of water. The direct route ' +
-      'is the expensive one; the gradient rule measures over a window rather than ' +
-      'tile to tile, so the win goes to whoever finds the detour along the slope. ' +
-      'The 8.4 route costs are on: a claimed section and a signal both cost a train.',
+      'eleven height levels between its lowest and its highest point, which is 88 ' +
+      'metres, plus eight tiles of water. The direct route is the expensive one; the ' +
+      'gradient rule measures over a window rather than tile to tile, so the win goes ' +
+      'to whoever finds the detour along the slope. The 8.4 route costs are on: a ' +
+      'claimed section and a signal both cost a train.',
   },
   goals: [
     {
@@ -343,11 +377,14 @@ const GEBIRGSLOGISTIK: ShippedScenario = {
 
 /**
  * Seed 67, tropical, 256 tiles. Measured: three inhabited land masses. The
- * mainland carries Neu-Lindenried (23, 8,000); a 252-tile island off the
- * south-east corner carries Sandenheim (8, 8,000) 52 tiles away across open
- * water; a third islet of 27 tiles carries a village. Two cities of 8,000 with
- * sea between them is what "island hopping" means here - no bridge can span
- * it, so the connection is a ship or it is nothing.
+ * 45,084-tile mainland carries Neu-Lindenried (23, 8,000); a 252-tile island
+ * off the south-east corner carries Sandenheim (8, 8,000) 52 tiles away across
+ * open water; a third islet of 27 tiles carries a village. Which town stands
+ * on which land mass is pinned as a PAIR since D-198 - the sorted sizes alone
+ * would still hold if the two cities swapped islands, and then the scenario
+ * would be a different one. Two cities of 8,000 with sea between them is what
+ * "island hopping" means here - no bridge can span it, so the connection is a
+ * ship or it is nothing.
  */
 const INSELHUEPFEN: ShippedScenario = {
   id: 'inselhuepfen',
@@ -420,7 +457,11 @@ const INSELHUEPFEN: ShippedScenario = {
  * towns of 8,000, three farms and three food factories - the full food chain
  * standing idle. Erlenbach (32) is one of the big towns; unserved it reaches
  * 10,033 by the end of 1970 and 10,574 by the end of 1975, so the 11,000 asked
- * for below cannot be waited out.
+ * for below cannot be waited out. This world has no competitors at all, which
+ * is what makes it the one the passive temperate growth curve is played out on
+ * (`shippedScenarios.spec.ts`): both figures above are pinned there, and so are
+ * the 9,925 and 10,465 the catalogue header quotes at twenty and twenty-five
+ * game years.
  */
 const WIEDERAUFBAU: ShippedScenario = {
   id: 'wiederaufbau',
@@ -435,8 +476,8 @@ const WIEDERAUFBAU: ShippedScenario = {
       'zahlungsunfaehig.',
     en:
       'Seven cities, three farms, three food factories - and 250,000 EUR to start ' +
-      'with. The chain is idle, and a town grows slowly on its own: unserved, ' +
-      'Erlenbach would reach 10,574 inhabitants by the end of 1975. The 11,000 ' +
+      'with. The chain is idle, and a town grows slowly on its own: by the end of ' +
+      '1975 an unserved Erlenbach would have reached 10,574 inhabitants. The 11,000 ' +
       'asked for has to be carried in. Anybody who only watches is insolvent ' +
       'before then.',
   },
@@ -507,11 +548,15 @@ const WIEDERAUFBAU: ShippedScenario = {
 /**
  * Seed 28, temperate, 256 tiles. Measured: NINE towns of 8,000 and only eleven
  * industries - the map where the councils of 13.3 matter more than any chain.
- * Falkenheim (16) is one of the nine; unserved it reaches 10,033 by the end of
- * 1970 and 10,574 by the end of 1975, so the 11,000 asked for below is a goal
- * about service. Three competitors are courting the same councils, and road
- * congestion is on, so a fourth bus on a full street buys less than the first
- * one did.
+ * Falkenheim (16) is one of the nine, and it starts at the same 8,000 in the
+ * same climate as Wiederaufbau's Erlenbach, whose passive curve IS played out
+ * and pinned: 10,033 by the end of 1970, 10,574 by the end of 1975. That is
+ * where the 11,000 asked for below comes from. Falkenheim itself is not played
+ * out, and could not be honestly: this world has three competitors in it, and
+ * one of them serving the town is exactly what the goal is asking the player
+ * to do first (D-198 - the earlier comment quoted the figures as if they had
+ * been measured HERE). Road congestion is on, so a fourth bus on a full street
+ * buys less than the first one did.
  */
 const RATSDIPLOMATIE: ShippedScenario = {
   id: 'ratsdiplomatie',
@@ -675,8 +720,11 @@ const SPEEDRUN: ShippedScenario = {
  * game has switched ON. Measured: ten industries and only two towns of 8,000,
  * the rest at 2,500 or below - a thin offer for five companies, and one that
  * grows slowly, because a desert town of 8,000 that nobody serves reaches
- * 9,248 by the end of 1975 where a temperate one reaches 10,574. Surviving a
- * quarter century here is the goal, and it is not a formality: the measured
+ * 9,248 by the end of 1975 where a temperate one reaches 10,574. That desert
+ * figure is played out and pinned on THIS seed with the four competitors taken
+ * out (`shippedScenarios.spec.ts`, D-198): "unserved" is not a property a
+ * world with four builders in it can be asked about. Surviving a quarter
+ * century here is the goal, and it is not a formality: the measured
  * quarter-century AI games wind up two companies in three (D-109).
  */
 const UEBERLEBEN: ShippedScenario = {

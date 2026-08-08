@@ -990,11 +990,15 @@ owned by the goal machine and extended in place afterwards); snapshot
 layout 8 -> 9 for the goal block. Measured on the reference machine (ledger
 6.1.1): tick p50 1.241 / p99 2.564 ms against the M10 baseline 1.45 / 3.26
 on a row that allows +0.05, and the daily hook allocates 0.17-0.71 B per
-game day. **The main bundle finished the milestone at 924,276 B against the
-930,000 B budget** - 5,724 B of headroom left, all of the growth interface
+game day. **The main bundle finished the milestone at 924,308 B against the
+930,000 B budget** - 5,692 B of headroom left, all of the growth interface
 (50 new sentences in two languages) and none of it a sim import chain. The
 next milestone that adds a panel books a raise with its own measurement
-(D-192's rule); this one stayed under the line.
+(D-192's rule); this one stayed under the line. (Both figures are the
+artefact as it stands, re-measured after the second acceptance pass; 924,276 /
+5,724 was the B4 build, before D-197's `map/size.ts` added +32 B and D-198
+left the main chunk untouched - the briefings live in the scenario catalogue's
+own dynamically loaded chunk, 12,928 -> 13,205 B.)
 
 - **A goal is the tutorial's predicate moved into the daily hook** (D-193).
   The vocabulary is D-113's and not one new signal was invented; what
@@ -1112,6 +1116,52 @@ briefing, a "quarter century" test or a score constant.
   half. Turning the check on found three fixtures that had been building
   unsaveable worlds for milestones (96, 96 and 16 tiles) - they moved to
   128, 128 and 64 and pass unaltered.
+
+### M17 acceptance pass 2 - the briefing bound to the claims (D-198)
+
+The verifier who confirmed every figure in `SCENARIO_WORLD_CLAIMS` then
+defeated the guard: he planted the lie in the player-facing GERMAN BRIEFING
+("Acht Grossstaedte zu je 8.000 Einwohnern und siebzehn Orte ab 2.500" ->
+"Neun ... 9.000 ... vierzig"), left the claims table alone, and the suite
+stayed green. Nothing in the repository read a briefing's CONTENT - the
+assertions were non-empty, under the length cap, and de !== en.
+
+- **Every number a briefing says out loud is read back**
+  (`SCENARIO_BRIEFING_FIGURES`, same file). Each numeral, in reading order, is
+  either PINNED - resolved out of the claims table, the scenario's own rules
+  and goals, or a constant - or on an eight-entry allowlist with the reason no
+  world property can justify it (a SPEC section number, a calibration
+  measurement, the fleet a measurement used). Both locales are held to the
+  same list, so a figure that moves in one language and not the other is red
+  too. Spelled-out numerals are extracted in both languages because that is
+  how the lie was written; `ein`/`one` and ordinals are deliberately not
+  numerals, and a numeral word the table has never seen is a red build rather
+  than an invisible claim. **The falsification was planted in the real source,
+  the red build watched, and reverted** - and a meta-test keeps a copy.
+- **Deriving the numbers INTO the prose was the other honest design and was
+  refused**: it would have to generate German and English agreement from bare
+  numbers, and it would STILL need this scanner underneath to prove no literal
+  numeral had been typed in beside a placeholder.
+- **A set inside a set is never stated as if it stood beside it.** "Acht
+  Grossstaedte ... und siebzehn Orte" was true and read as 8 + 17 = 25; the map
+  has forty towns, seventeen at 2,500+, eight of THOSE at 8,000. Both locales
+  say so now, the claims table pins `townsTotal` and the ordering
+  cities <= towns <= total, and the other seven briefings were read for the
+  same defect (none has it).
+- **Three claim types grew.** `CorridorClaim` addresses industries as well as
+  towns - Frachtrausch's four mine-to-plant corridors were inexpressible, and
+  "three of the four are nearest to the plant at 155,112" was wrong by one (all
+  four are); `townLandmassTiles` binds a town to its island BY ID, which the
+  sorted sizes never did; `passiveGrowth` PLAYS the four temperate and two
+  desert population figures the catalogue quotes instead of quoting them - the
+  desert one on Ueberleben's seed with its competitors removed, because
+  "unserved" is not a property a world with four builders can be asked about,
+  and the claim says so.
+- **The map-size refusal now comes from the door the game uses.**
+  `World.create({ mapSize: 32 })` answered "No playable map found for seed 7
+  after 20 attempts": mapgen ran BEFORE the size check, and the old test only
+  went in through `fromGenerated`. The size is refused first now, and the test
+  goes through `create` on every refused size.
 
 ## Still outstanding
 

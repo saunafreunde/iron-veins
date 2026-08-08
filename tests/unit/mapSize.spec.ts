@@ -14,7 +14,8 @@ import type { NewGameParams } from '../../src/sim/types';
 import { World } from '../../src/sim/World';
 
 /**
- * The map-size rule, held at BOTH ends (D-197).
+ * The map-size rule, held at BOTH ends (D-197) and at the door a player
+ * actually walks through (D-198).
  *
  * The defect this file closes: `World.create` took whatever size it was handed
  * and `parseWorldState` accepted powers of two between 64 and 2048, so a world
@@ -26,6 +27,15 @@ import { World } from '../../src/sim/World';
  * refused by the constructor and by the parser, and the same sizes are taken by
  * both. A second copy of the rule would pass a test that only asked each end
  * about itself.
+ *
+ * The second defect, found when this file was read against the real game
+ * (D-198): every assertion below went through `World.fromGenerated`, which is
+ * handed a map that already exists. `World.create` GENERATES one first, and
+ * mapgen fails on its own terms before the size check was ever reached -
+ * `World.create({ mapSize: 32 })` answered "No playable map found for seed 7
+ * after 20 attempts", a true sentence about the wrong subject. The size is
+ * refused before mapgen now, and the refusal is asserted through `create`
+ * itself rather than only through the cheap door.
  */
 
 const REFUSED = [0, 1, 32, 63, 96, 100, 255, 1_000, 3_000, 4_096, -256];
@@ -76,14 +86,47 @@ describe('one map-size rule, applied at creation and at parse', () => {
     }
   });
 
-  it('refuses a fractional size at both ends, in two different sentences', () => {
+  it('refuses the same sizes through the door a new game uses', () => {
+    // `World.create` is what the new-game screen, the scenario browser and
+    // every determinism fixture call, and it does something `fromGenerated`
+    // does not: it generates a map first. Each of these has to come back with
+    // the size sentence rather than with whatever mapgen gave up on (D-198).
+    for (const size of REFUSED) {
+      expect(() => World.create({ ...params(), mapSize: size }), `create ${size}`).toThrow(
+        mapSizeRefusal(size),
+      );
+    }
+  });
+
+  it('answers the 32-tile map with the size, not with mapgen giving up', () => {
+    // The exact call that exposed the hole. Before the check moved ahead of
+    // mapgen this threw "No playable map found for seed 7 after 20 attempts":
+    // twenty wasted generation attempts and a sentence about playability for a
+    // size the format was never going to accept. Both halves are asserted -
+    // the sentence that must appear and the one that must not.
+    let refusal = '';
+    try {
+      World.create({ ...params(), mapSize: 32 });
+    } catch (error) {
+      refusal = String(error);
+    }
+    expect(refusal).toContain(mapSizeRefusal(32));
+    expect(refusal).not.toContain('playable');
+  });
+
+  it('refuses a fractional size at every end, in two different sentences', () => {
     // The one asymmetry, stated rather than papered over: a non-integer size
-    // never reaches the World constructor, because `TileMap` lays typed-array
-    // views over one buffer and a fractional tile count misaligns the first
-    // Int16 view. The rule says no and so does the layout - they simply say it
-    // in different words, and both are refusals.
+    // never reaches the World constructor by the `fromGenerated` route, because
+    // `TileMap` lays typed-array views over one buffer and a fractional tile
+    // count misaligns the first Int16 view. The rule says no and so does the
+    // layout - they simply say it in different words, and both are refusals.
+    // Through `create` the rule speaks first, so there the sentence is the
+    // size's own.
     expect(isLegalMapSize(FRACTIONAL)).toBe(false);
     expect(() => worldOfSize(FRACTIONAL)).toThrow();
+    expect(() => World.create({ ...params(), mapSize: FRACTIONAL })).toThrow(
+      mapSizeRefusal(FRACTIONAL),
+    );
     expect(() => parseWorldState({ mapSize: FRACTIONAL }, 'save.state')).toThrow();
   });
 

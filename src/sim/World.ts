@@ -370,6 +370,24 @@ export class World {
     return Rng.fromSeed((this.seed + folded) | 0);
   }
 
+  /**
+   * The one refusal, in the one sentence, wherever a size arrives (D-197,
+   * D-198).
+   *
+   * It is applied twice on purpose. The constructor is the single door every
+   * World passes through, so it is what makes the rule unavoidable; but by
+   * then `create` has already GENERATED a map, and mapgen fails on its own
+   * terms first - `World.create({ mapSize: 32 })` used to die with "No
+   * playable map found for seed 7 after 20 attempts", which is a true sentence
+   * about the wrong subject. So `create` asks the same question about the size
+   * it was handed before it spends anything on it.
+   */
+  private static refuseIllegalMapSize(size: number): void {
+    if (!isLegalMapSize(size)) {
+      throw new Error(`World: mapSize ${mapSizeRefusal(size)}`);
+    }
+  }
+
   private constructor(params: NewGameParams, generated: GeneratedWorld) {
     // The ONE door into a World, so the ONE place the map-size rule is applied
     // at creation - and it is the parser's own rule, imported rather than
@@ -377,9 +395,7 @@ export class World {
     // be played for an hour and then never saved, checkpointed or replayed,
     // and the failure would arrive at the save with nothing to say about where
     // it came from.
-    if (!isLegalMapSize(generated.map.size)) {
-      throw new Error(`World: mapSize ${mapSizeRefusal(generated.map.size)}`);
-    }
+    World.refuseIllegalMapSize(generated.map.size);
     this.seed = params.seed | 0;
     this.difficulty = params.difficulty;
     this.climate = params.climate;
@@ -449,6 +465,9 @@ export class World {
 
   /** Start a new game: generates the map, then builds the world around it. */
   static create(params: NewGameParams, report: MapGenProgress | null = null): World {
+    // Before mapgen, not after it: an illegal size must be refused BY the size
+    // rule rather than by whatever mapgen happens to fail at first (D-198).
+    World.refuseIllegalMapSize(params.mapSize);
     const generated = generateMap(
       { size: params.mapSize, seed: params.seed, climate: params.climate },
       report,

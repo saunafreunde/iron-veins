@@ -20,13 +20,13 @@ no entry below. A number may appear under several topics.
 - **Lines & timetables:** D-145, D-146, D-147, D-148, D-149, D-150, D-151,
   D-152, D-155, D-159
 - **Map generation & terrain:** D-018, D-019, D-020, D-021, D-022, D-023,
-  D-025, D-027, D-197
+  D-025, D-027, D-197, D-198
 - **Terraforming & structures:** D-028, D-034, D-050, D-051, D-052, D-124,
   D-141
 - **Save format, migrations & replays:** D-007, D-025, D-026, D-027, D-048,
   D-111, D-130, D-131, D-134, D-142, D-144, D-145, D-146, D-147, D-153, D-178,
   D-181, D-184, D-185, D-188, D-189, D-190, D-191, D-192, D-193, D-194,
-  D-197
+  D-197, D-198
 - **Rail & track:** D-042, D-043, D-044, D-045, D-046, D-047, D-053, D-141,
   D-153, D-157, D-184
 - **Signals & reservations:** D-054, D-055, D-056, D-057, D-058, D-059, D-060,
@@ -41,7 +41,7 @@ no entry below. A number may appear under several topics.
   D-180, D-193, D-196
 - **Balancing & scenarios:** D-038, D-039, D-040, D-041, D-066, D-087, D-088,
   D-116, D-151, D-152, D-156, D-158, D-159, D-187, D-190, D-194, D-195,
-  D-196, D-197
+  D-196, D-197, D-198
 - **Vehicles & fleet:** D-043, D-044, D-045, D-068, D-076, D-089, D-093,
   D-096, D-142, D-143, D-145, D-146, D-155, D-157, D-171, D-174, D-181, D-185
 - **Water & air:** D-094, D-095, D-096, D-097, D-098, D-099
@@ -61,9 +61,9 @@ no entry below. A number may appear under several topics.
 - **Crash safety:** D-132, D-139, D-190
 - **Testing method & fixtures:** D-010, D-038, D-072, D-074, D-084, D-133,
   D-167, D-183, D-186, D-188, D-189, D-190, D-191, D-192, D-193, D-194,
-  D-195, D-196, D-197
+  D-195, D-196, D-197, D-198
 - **Process & specification:** D-070, D-123, D-129, D-133, D-138, D-140,
-  D-185, D-191, D-197
+  D-185, D-191, D-197, D-198
 
 ---
 
@@ -7375,3 +7375,209 @@ stayed in its own dynamically loaded chunk and grew 12,560 -> 12,928 B, all of
 it the corrected briefings. `replay` 198,180 B, worker 324,283 B, CSS
 unchanged. Suite after: 114 files, 1,253 passing plus 2 skipped, and the 13
 perf tests.
+## M17 - the acceptance pass after that one: the briefing bound to its claims (2026-08-08)
+
+### D-198 The guard that pinned the world and never read the sentence
+
+D-197 built `SCENARIO_WORLD_CLAIMS`: every world property any shipped briefing
+quotes, pinned exactly against the generated world. An independent verifier
+checked all of it, confirmed every figure was true - and then defeated the guard
+in one move. He put the falsification in the PLAYER-FACING German briefing of
+Passagiernetz ("Acht Grossstaedte zu je 8.000 Einwohnern und siebzehn Orte ab
+2.500" became "Neun Grossstaedte zu je 9.000 Einwohnern und vierzig Orte ab
+2.500"), left the claims table untouched, and the whole suite stayed GREEN.
+
+He was right, and the reason is worth stating plainly: **nothing in the
+repository read a briefing's content.** The only assertions on the text were
+non-empty, under `SCENARIO_TEXT_MAX_CHARS`, and de !== en. The claims table
+pinned the world the sentence is ABOUT and had no opinion about the sentence.
+
+**1. The fix: every number a briefing says out loud is read back.**
+
+Two designs were honest, and the second was taken.
+
+*(a) Derive the numbers INTO the prose* - placeholders in the briefing filled
+from the claims table at load or build time, so text and table cannot disagree
+by construction. Strongest in principle, and refused for two reasons that
+compound. It has to generate German AND English prose from bare numbers:
+agreement ("zwei Kraftwerke" against "ein Kraftwerk"), spelled-out numerals
+where the register wants them and digits where it does not, capitalisation at
+the head of a sentence. And it would STILL need a scanner underneath it: a
+placeholder scheme binds the numbers that ARE placeholders, and a literal
+numeral typed in beside one is exactly as invisible as before. Since the
+scanner is needed either way, the scanner alone is the smaller mechanism - and
+it is the stronger one here, because it also covers the numbers no placeholder
+could fill and it makes the two locales one claim rather than two.
+
+*(b) Extract and compare* - `tests/unit/briefingNumerals.ts` reads every
+numeral out of every briefing in both locales, and `SCENARIO_BRIEFING_FIGURES`
+in `tests/unit/shippedScenarios.spec.ts` says, in reading order, where each one
+is allowed to come from:
+
+- **pinned** - resolved out of the claims table (`townsAt2500`,
+  `citiesAt8000`, `industries`, a corridor's distance in whole tiles, its
+  height span, its water tiles), out of the scenario's own definition (a goal
+  threshold, `aiCompanies`, the year `toTick` falls in), or out of a constant
+  with its own origin (`START_CAPITAL_CT` per difficulty,
+  `BANKRUPTCY_WARNING_MONTHS`, `BANKRUPTCY_MONTHS`, `HEIGHT_STEP_M`,
+  `SHIPPED_SCENARIOS.length`). Nobody can move one of these without moving
+  what it is read from, and the claims table is in turn held against the
+  generated world. That is the chain the falsification walked around.
+- **allowed** - a number no world property can justify, with its value AND the
+  reason. There are exactly EIGHT in eight briefings, and the test asserts both
+  that count and that the world-bound figures outnumber the free ones in every
+  single scenario: the two SPEC.md "8.4" cross-references, the four buses and
+  21,400 / 21,000 passengers of the bus calibration, the eight wagons and 1,700
+  units of the coal calibration. Each reason names where the measurement comes
+  from - including that 21,000 is the same measured 21,393 rounded DOWN because
+  Passagiernetz's pair is 33 tiles where the measurement drove 28.
+
+Both locales are compared against the SAME resolved list, so the two languages
+are one claim: a figure that changes in German and not in English is red, and
+so is a translation that quietly drops one.
+
+The extractor handles what the lie was actually written in. Digits with either
+language's thousands separator, and spelled-out numerals in German and English
+- "neun" and "vierzig" are how the falsification reads. Three things are
+deliberately not numerals, each a hole in one direction only, because any edit
+that turns a recognised numeral into something else drops it from the sequence
+and the comparison fails on length: the German article that is also its numeral
+("ein Zug" is "a train"), the English pronoun "one", and ordinals ("die vierte
+Buslinie" ranks, it does not count). Two shapes a naive reader gets wrong are
+tested directly: "57, 59" is two numbers where "1,700" is one, and the 2 in
+"CO2-Abgabe" is not a number at all. And a numeral WORD the table has never
+seen is not silently ignored - `unrecognisedNumeralWords` flags anything built
+out of the productive parts of either language, so "einundvierzig" is a red
+build rather than an invisible claim.
+
+**The proof was performed, not asserted.** The verifier's falsification was
+planted in `src/scenarios/catalog.ts` itself - the same three lies, one word
+each, applied to the sentence as it now stands ("siebzehn davon" -> "vierzig
+davon", "acht von diesen" -> "neun von diesen", "8.000" -> "9.000"). The build
+went RED, with a message that names the figure that moved: *"passagiernetz/de
+quotes 16 figures - 0: Vierzig (towns on the map), 1: vierzig (towns of 2,500
+or more), 3: neun (cities among them), 5: 9.000 (the population a city starts
+at) ... expected [40, 40, 2500, 9, 17, 9000, ...] to deeply equal [40, 17, 2500,
+8, 17, 8000, ...]"*. Two tests failed: the audit and the meta-test. The plant
+was then reverted and the file is green again. The meta-test keeps the
+falsification permanently, applies it to the live string and requires the
+comparison to reject it - with the converse beside it, because a guard that
+rejects everything is no guard.
+
+**2. The wording defect: a set stated as if it stood beside its superset.**
+
+"Acht Grossstaedte zu je 8.000 Einwohnern und siebzehn Orte ab 2.500" was TRUE
+of seed 360 and still misleading. Two counts joined by "und" state a partition,
+and a player reads twenty-five settlements. Measured, the map carries FORTY
+towns; seventeen of them have 2,500 or more; and the eight cities are eight OF
+those seventeen, not eight beside them. Both languages now say it in the order
+a reader can only take one way - "Vierzig Orte stehen auf der Karte, siebzehn
+davon haben 2.500 Einwohner oder mehr, und acht von diesen siebzehn sind
+Grossstaedte zu je 8.000" - and the claims table pins `townsTotal` (40) with the
+ordering `citiesAt8000 <= townsAt2500 <= townsTotal` as a property of the table
+itself.
+
+The same sentence carried a second overclaim: "dichter ist keine der acht
+Karten besiedelt" is false by the obvious other measure - Rats-Diplomatie has
+97,000 inhabitants on it against this map's 95,700. It says what is true and
+checkable now ("keine der acht Karten traegt mehr Orte ab 2.500"), and a test
+compares that count across all eight claims and requires this one to be the
+strict maximum.
+
+**All seven other briefings were read for the same defect class and none has
+it.** Frachtrausch's "vier Kohlegruben, zwei Kraftwerke" are disjoint types;
+Wiederaufbau's farms and food factories likewise; Ueberleben's "zehn
+Industrien, zwei Grossstaedte" count different things. The one near-miss was
+Gebirgslogistik, which quoted one corridor in two measures ("elf Hoehenstufen,
+88 Meter") in a way that could read as two separate quantities; it now says
+which two points the eleven levels are between and that the metres ARE those
+levels.
+
+**3. Three claim types that could not express what a doc comment said.**
+
+*A corridor could only address towns.* Frachtrausch's comment quotes four
+gradients between mines and power stations - "the two short corridors climb and
+fall 16 and 12 levels, the 70-tile one 12, the long 106-tile one 25" - and a
+mine-to-plant corridor was inexpressible, so all four sentences were unpinned.
+`CorridorEnd` is a town id OR an industry id now, and the four corridors are in
+the table with their distance, climb, water and height span.
+
+That is also how a wrong sentence was found: the M17 comment said "three of the
+four are nearest to the plant at 155,112", and measured, ALL FOUR are. The mine
+at 101,129 is 57 tiles from that plant against 66 from the one at 148,83, and
+the other three are further from the second plant still. `nearestPlantOfMine`
+replaces `nearestPlantTiles` and pins the plant BY ID per mine, so "the same
+plant for all four" is an assertion rather than a summary; `industriesAt` pins
+the two plants' positions, which is what makes "the plant at 155,112" a name.
+
+*A land mass could only be pinned by size.* Inselhuepfen's comment says "a
+252-tile island carries Sandenheim (8)", and `landmassTiles` pinned the sorted
+sizes [45,084, 252, 27] - which would hold unchanged if the two cities swapped
+islands, with the sentence false and every number in the table green.
+`townLandmassTiles` binds the pair.
+
+*A growth curve was quoted rather than played.* The catalogue header quotes six
+population figures for an unserved town of 8,000 - 9,925 / 10,033 / 10,465 /
+10,574 temperate and 9,200 / 9,248 desert - and exactly one of them (the last
+temperate) was played out while the other five were prose. `passiveGrowth` plays
+them all now: four samples on Wiederaufbau, which has no competitors at all, and
+two on Ueberleben's seed with `aiCompanies` set to zero. That last part is a
+field of the claim, `withoutCompetitors`, because "unserved" is not a property a
+world with four AI builders in it can be asked about, and a test that quietly
+played the shipped world would be measuring something else. All six figures were
+confirmed by the runs; not one had to move. Rats-Diplomatie's comment, which
+quoted the temperate pair as if IT had been measured, cites Wiederaufbau's
+pinned curve now and says why Falkenheim itself cannot honestly be played out:
+three competitors, and one of them serving the town is what its goal asks the
+player to do first.
+
+**4. The refusal that was not the refusal the real door prints.**
+
+D-197 put the map-size rule in the private `World` constructor, "the single door
+`create`, `fromGenerated` and `fromData` all pass through". True, and one step
+too late: `create` GENERATES a map before it reaches the constructor, and mapgen
+fails on its own terms first. `World.create({ mapSize: 32 })` answered
+`MapGenerationError: No playable map found for seed 7 after 20 attempts` - a
+true sentence about the wrong subject, after twenty wasted generation attempts,
+for a size the save format was never going to accept. `mapSize.spec.ts` never
+saw it because every assertion went in through `fromGenerated`, which is handed
+a map that already exists.
+
+`create` asks the size question before it spends anything, through the same
+private `refuseIllegalMapSize` the constructor uses, so there is still ONE
+sentence and one place it is written. The test goes through the real door now:
+all eleven refused sizes through `World.create` as well, plus the 32-tile call
+by name with BOTH halves asserted - the size sentence must appear and the word
+"playable" must not. Verified by disabling the new check and watching that exact
+test fail with the MapGenerationError, then restoring it. The one asymmetry
+stays stated: a fractional size is refused by the rule through `create` and by
+`TileMap`'s typed-array alignment through `fromGenerated` - two sentences, both
+refusals.
+
+**5. Documentation staleness, re-measured rather than copied.**
+
+`CLAUDE.md`'s M17 summary line and SPEC2 6.1.1's bundle paragraph both still
+quoted 924,276 B and 5,724 B of headroom under their summaries while the D-197
+paragraphs beneath them said 924,308. Re-measured with `npm run build` on this
+build: main chunk **924,308 B against the 930,000 B budget, headroom 5,692 B**.
+Both summary lines and the 6.1 ledger row say that now, with the history beside
+it - 924,276 was the B4 build, D-197 added the +32 B of `map/size.ts`, and this
+bundle adds nothing to the main chunk.
+
+**Ledger.** No `SAVE_VERSION` bump - v28 stands. No migration, no snapshot byte,
+no protocol field, no atlas cell, no constant added or moved. Nothing here is
+hashed world state: a briefing is the unhashed metadata block by construction
+(D-194), and the only `src/sim` change is a validation call that moves ahead of
+mapgen - a world that used to throw one message throws another, and no world
+that could be created can no longer be. Canonical cross-OS pin
+`4dff3f3f216385e6`, corpus manifest `f1dcab2a374ab728` and soak fixture
+`ed8ac72cd1d6284d` untouched. Bundle measured: main chunk **924,308 B**
+unchanged - the scenario catalogue is its own dynamically loaded chunk and grew
+12,928 -> 13,205 B, all of it the longer briefings - worker 324,283 -> 324,367 B
+and `replay` 198,180 -> 198,264 B (the map-size guard, +84 B each), CSS
+unchanged. Test cost measured on this machine, both ends re-run rather than
+compared against an older note: `shippedScenarios.spec.ts` 6.48 -> 6.76 s (the
+desert growth run is 0.5 s of it and replaced nothing), 26 -> 41 cases;
+`mapSize.spec.ts` 0.1 s, 5 -> 7 cases. Suite after: 114 files, **1,270 passing
+plus 2 skipped** against D-197's 1,253 + 2, and the 13 perf tests - all green,
+`npm run typecheck` and `npm run lint` clean.
