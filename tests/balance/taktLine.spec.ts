@@ -8,6 +8,7 @@ import { RailType } from '../../src/sim/map/track';
 import { ModuleKind, stationRating } from '../../src/sim/station/types';
 import { VehicleState } from '../../src/sim/vehicles/VehicleStore';
 import type { World } from '../../src/sim/World';
+import { hashTwin } from './determinism';
 import { apply, flatScenario, type Scenario } from './scenario';
 
 /**
@@ -222,6 +223,8 @@ interface Measurement {
   readonly slotWaitTicks: number;
   readonly taktTicks: number;
   readonly roundTicks: number;
+  /** The world the measurement was taken on - the desync guard's subject. */
+  readonly world: World;
 }
 
 function fleetEarnedCt(world: World): number {
@@ -312,6 +315,7 @@ function measure(takted: boolean): Measurement {
     slotWaitTicks,
     taktTicks,
     roundTicks,
+    world,
   };
 }
 
@@ -388,4 +392,12 @@ describe('the takt band: same earnings, steadied stations', () => {
       untakted.mineVariance * MINE_VARIANCE_RATIO_MAX,
     );
   });
+
+  // The scenario is the PAIR, so both halves are guarded: a takt that drew
+  // randomness (Z3 forbids it) would show up in the takted world alone.
+  hashTwin(
+    'taktLine',
+    () => [untakted.world, takted.world],
+    () => [measure(false).world, measure(true).world],
+  );
 });

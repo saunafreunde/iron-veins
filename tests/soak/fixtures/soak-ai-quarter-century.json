@@ -1,0 +1,80 @@
+{
+  "saveVersion": 27,
+  "seed": 4711,
+  "mapSize": 256,
+  "years": 25,
+  "aiCompanies": 3,
+  "finalTick": 1800000,
+  "finalHash": "615d0259186b89dc",
+  "commandCount": 698,
+  "checkpoints": [
+    {
+      "tick": 0,
+      "hash": "d992f6120c3901f5"
+    },
+    {
+      "tick": 792000,
+      "hash": "164dc8e6b4867b18"
+    },
+    {
+      "tick": 864000,
+      "hash": "24e6f319e69ca373"
+    },
+    {
+      "tick": 936000,
+      "hash": "3beab7f462ac2824"
+    },
+    {
+      "tick": 1008000,
+      "hash": "576baef49e4f47d8"
+    },
+    {
+      "tick": 1080000,
+      "hash": "10442e1881788c4c"
+    },
+    {
+      "tick": 1152000,
+      "hash": "c6c9b615d1e9b63e"
+    },
+    {
+      "tick": 1224000,
+      "hash": "9fe023983e69bb12"
+    },
+    {
+      "tick": 1296000,
+      "hash": "caacb10ac201b013"
+    },
+    {
+      "tick": 1368000,
+      "hash": "d62afc0925ca24fc"
+    },
+    {
+      "tick": 1440000,
+      "hash": "e14d0a8381a5b5e4"
+    },
+    {
+      "tick": 1512000,
+      "hash": "3f1372114dd479a5"
+    },
+    {
+      "tick": 1584000,
+      "hash": "ad31e5968ebf1dba"
+    },
+    {
+      "tick": 1656000,
+      "hash": "c91bfac6880e89df"
+    },
+    {
+      "tick": 1728000,
+      "hash": "b8b9a4bd113ea7fc"
+    },
+    {
+      "tick": 1800000,
+      "hash": "615d0259186b89dc"
+    }
+  ],
+  "recordedOn": {
+    "platform": "win32",
+    "arch": "x64"
+  }
+}

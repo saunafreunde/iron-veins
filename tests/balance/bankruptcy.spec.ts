@@ -12,6 +12,8 @@ import {
 import { isInTrouble } from '../../src/sim/economy/company';
 import { upkeepPerYearCt } from '../../src/sim/economy/ledger';
 import { ModuleKind } from '../../src/sim/station/types';
+import type { World } from '../../src/sim/World';
+import { hashTwin } from './determinism';
 import { apply, flatScenario, makeTown, type Scenario } from './scenario';
 
 /**
@@ -95,6 +97,13 @@ function yearOfRuin(scenario: Scenario, years: number): number {
   return -1;
 }
 
+/** The idle company played to its ruin - one whole run, for the desync guard. */
+function ruinedWorld(): World[] {
+  const scenario = idleCompany();
+  yearOfRuin(scenario, 12);
+  return [scenario.world];
+}
+
 describe('scenario 4: a company that stops playing', () => {
   it('reports what it measured', () => {
     const scenario = idleCompany();
@@ -149,4 +158,6 @@ describe('scenario 4: a company that stops playing', () => {
     expect(scenario.world.company.bankrupt).toBe(false);
     expect(scenario.world.company.monthsInDebt).toBe(0);
   });
+
+  hashTwin('idleCompany', ruinedWorld, ruinedWorld);
 });

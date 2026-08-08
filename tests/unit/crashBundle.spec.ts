@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   assembleCrashBundle,
   bugReportFileName,
+  bugReportReplayFileName,
   bytesToBase64,
   COMMAND_LOG_BYTE_BUDGET,
   CommandLogTail,
@@ -132,6 +133,16 @@ function inputWith(overrides: Partial<CrashBundleInput>): CrashBundleInput {
     },
     commandLog: ['{"atTick":1}', '{"atTick":2}'],
     autosave: { name: 'autosave-1.ironsave', bytes: new Uint8Array([73, 82, 86, 78, 0, 255]) },
+    replay: {
+      name: 'bug-report-2026-08-06T12-00-00-000Z.ironreplay',
+      bytes: new Uint8Array([1, 2, 3, 4, 5]),
+      finalTick: 4000,
+      baseTick: 0,
+      commandCount: 12,
+      checkpointTicks: [0, 72_000],
+      verifiable: true,
+    },
+    replayError: null,
     ...overrides,
   };
 }
@@ -146,6 +157,16 @@ interface DecodedBundle {
   context: { seed: number; mapSize: number; tick: number; stateHash: string; isDesktop: boolean };
   commandLog: string[];
   autosave: { name: string; base64: string } | null;
+  replay: {
+    name: string;
+    base64: string;
+    finalTick: number;
+    baseTick: number;
+    commandCount: number;
+    checkpointTicks: number[];
+    verifiable: boolean;
+  } | null;
+  replayError: string | null;
 }
 
 function decode(bytes: Uint8Array): DecodedBundle {
@@ -188,6 +209,51 @@ describe('assembleCrashBundle', () => {
     expect(bundle.error).toBeNull();
   });
 
+  it('carries the session recording, bytes and claim alike', () => {
+    // SPEC2 M16: a bug report is a repro. The recording travels whole, and
+    // with the facts that let a reader see WHERE it ends before decoding it.
+    const bytes = new Uint8Array(Array.from({ length: 200 }, (_, index) => (index * 3) % 256));
+    const bundle = decode(
+      assembleCrashBundle(
+        inputWith({
+          replay: {
+            name: 'bug-report-x.ironreplay',
+            bytes,
+            finalTick: 144_000,
+            baseTick: 72_000,
+            commandCount: 31,
+            checkpointTicks: [72_000, 144_000],
+            verifiable: true,
+          },
+        }),
+      ),
+    );
+
+    expect(bundle.replay?.name).toBe('bug-report-x.ironreplay');
+    expect(new Uint8Array(Buffer.from(bundle.replay?.base64 ?? '', 'base64'))).toEqual(bytes);
+    expect(bundle.replay?.finalTick).toBe(144_000);
+    expect(bundle.replay?.baseTick).toBe(72_000);
+    expect(bundle.replay?.commandCount).toBe(31);
+    expect(bundle.replay?.checkpointTicks).toEqual([72_000, 144_000]);
+    expect(bundle.replay?.verifiable).toBe(true);
+    expect(bundle.replayError).toBeNull();
+  });
+
+  it('says WHY there is no recording instead of being silently short of one', () => {
+    const bundle = decode(
+      assembleCrashBundle(inputWith({ replay: null, replayError: 'no save had been written' })),
+    );
+
+    expect(bundle.replay).toBeNull();
+    expect(bundle.replayError).toBe('no save had been written');
+  });
+
+  it('names the schema version the recording arrived with', () => {
+    // Bumped from 1 to 2 by the recording; tooling that reads bundles has to
+    // be able to tell the shapes apart (D-132).
+    expect(CRASH_BUNDLE_SCHEMA_VERSION).toBe(2);
+  });
+
   it('carries the error text and tick when there was a crash', () => {
     const bundle = decode(assembleCrashBundle(inputWith({})));
     expect(bundle.error).toEqual({ message: 'boom', stack: 'Error: boom\n    at tick', tick: 4321 });
@@ -204,6 +270,16 @@ describe('bugReportFileName', () => {
   it('contains no characters a filesystem refuses', () => {
     const name = bugReportFileName(new Date(0).toISOString());
     expect(/[:<>"/\\|?*]/.test(name)).toBe(false);
+  });
+
+  it('names the recording inside a bundle after the same stamp', () => {
+    // Same moment, same stamp, different extension: a reader taking the report
+    // apart gets two files that obviously belong together. It is a LABEL - no
+    // file of this name is ever written, so the crash-directory scan of D-139
+    // keeps seeing exactly the bundles it knows.
+    const stamp = '2026-08-06T12:34:56.789Z';
+    expect(bugReportReplayFileName(stamp)).toBe('bug-report-2026-08-06T12-34-56-789Z.ironreplay');
+    expect(bugReportFileName(stamp)).toBe('bug-report-2026-08-06T12-34-56-789Z.json');
   });
 });
 

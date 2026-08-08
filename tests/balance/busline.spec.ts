@@ -4,6 +4,7 @@ import { stationRating } from '../../src/sim/station/types';
 import { VEHICLE_STATE_KEYS } from '../../src/sim/vehicles/VehicleStore';
 import { upkeepPerYearCt } from '../../src/sim/economy/ledger';
 import type { World } from '../../src/sim/World';
+import { hashTwin } from './determinism';
 import { buildBusLine, runYears, twoTownScenario } from './scenario';
 
 /**
@@ -30,6 +31,8 @@ interface Measurement {
   readonly paybackYear: number;
   /** Plain-language account of what the line actually did, for calibration. */
   readonly detail: string;
+  /** The world the measurement was taken on - the desync guard's subject. */
+  readonly world: World;
 }
 
 function measure(years: number): Measurement {
@@ -48,7 +51,7 @@ function measure(years: number): Measurement {
       break;
     }
   }
-  return { investmentCt, balances, paybackYear, detail };
+  return { investmentCt, balances, paybackYear, detail, world: scenario.world };
 }
 
 /**
@@ -105,4 +108,10 @@ describe('scenario 1: the first bus line', () => {
     expect(result.paybackYear).toBeGreaterThanOrEqual(PAYBACK_MIN_YEARS);
     expect(result.paybackYear).toBeLessThanOrEqual(PAYBACK_MAX_YEARS);
   });
+
+  hashTwin(
+    'busline',
+    () => [result.world],
+    () => [measure(PAYBACK_MAX_YEARS + 2).world],
+  );
 });

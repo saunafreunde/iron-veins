@@ -49,9 +49,9 @@ import { contractProgress, isOpen } from './economy/contracts';
 import { refusedTile } from './vehicles/reservations';
 import { writeVehicleBlock } from './vehicles/snapshot';
 import { VehicleKind } from './vehicles/spec';
-import { SaveCorruptionError, SaveFormatError, SAVE_VERSION } from './save/format';
+import { SaveCorruptionError, SaveFormatError } from './save/format';
 import { CheckpointRing } from './save/checkpoints';
-import { encodeReplay, ReplayVersionError } from './save/replay';
+import { encodeReplay, replayFromSaveBytes, ReplayVersionError } from './save/replay';
 import {
   replayMeta,
   ReplaySession,
@@ -733,36 +733,18 @@ function postReplayFailure(reasonKey: string, error: unknown): void {
 /**
  * Turn bytes into a recording for the shelf and describe it.
  *
- * Two of the three cases hand the file back UNCHANGED, and both for the same
- * reason - re-encoding it would restamp it with this build's version and turn
- * somebody else's recording into one this build claims to have made:
- *
- *  - a file that already IS a `.ironreplay`;
- *  - a save from an older format. It migrates and plays from its
- *    reconstructed genesis (SPEC2 M16's "Alt-Saves bleiben abspielbar"), and
- *    it makes no claim about its end, so verification refuses it by name
- *    rather than reporting a divergence that is really a version gap (E-11).
- *
- * A save of THIS format is converted: it carries a ring and a log this build
- * wrote, which is everything a claim needs to be honest (D-189).
+ * The conversion itself is `replayFromSaveBytes` and lives beside the format,
+ * because the crash bundle of D-132 needs the same three cases from the MAIN
+ * thread, over a worker that is by then dead. This function is the shelf's
+ * door onto it: decode, describe, post.
  */
 function makeReplay(bytes: Uint8Array, label: string): void {
   try {
-    const loaded = decodeSave(bytes);
-    if (loaded.replay !== null || loaded.saveVersion !== SAVE_VERSION) {
-      scope.postMessage({
-        type: 'replayWritten',
-        bytes,
-        meta: replayMeta(loaded, __APP_VERSION__),
-        label,
-      });
-      return;
-    }
-    const replayBytes = encodeReplay(loaded.world, loaded.queue, loaded.ring, loaded.gameVersion);
+    const converted = replayFromSaveBytes(bytes);
     scope.postMessage({
       type: 'replayWritten',
-      bytes: replayBytes,
-      meta: replayMeta(decodeSave(replayBytes), __APP_VERSION__),
+      bytes: converted.bytes,
+      meta: replayMeta(converted.loaded, __APP_VERSION__),
       label,
     });
   } catch (error) {

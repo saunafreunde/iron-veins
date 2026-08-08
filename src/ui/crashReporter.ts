@@ -18,6 +18,7 @@ import {
   summariseCrashBundle,
   type CrashErrorInput,
 } from './crashBundle';
+import { sessionReplayFrom } from './sessionReplay';
 import { useSimStore } from './store';
 
 /**
@@ -29,6 +30,10 @@ import { useSimStore } from './store';
  * `simCrashed` message is a bonus - the stack and the exact tick - but the
  * bundle assembles the same way if that message never arrives, because a
  * crashed worker cannot be trusted to encode anything (D-111).
+ *
+ * Since SPEC2 M16 the bundle additionally carries a `.ironreplay` of the
+ * session, converted here from the same save bytes (see ./sessionReplay.ts) -
+ * so a bug report is a deterministic repro rather than a description of one.
  */
 
 const tail = new CommandLogTail(COMMAND_LOG_BYTE_BUDGET);
@@ -70,10 +75,16 @@ async function assembleBundle(error: CrashErrorInput | null): Promise<Uint8Array
   const store = useSimStore.getState();
   // Wall clock is fine here - this is the UI side, and a report needs a date.
   const writtenAt = new Date().toISOString();
+  const appVersion = store.appVersion === '' ? __APP_VERSION__ : store.appVersion;
   const saved = lastSave;
   const bytes = saved === null ? null : await readSave(saved.name);
+  // The recording of the session, built from the very bytes copied above -
+  // the repro half of the report (SPEC2 M16). It ends where that save ended,
+  // and the commands after it stay in the log tail rather than being spliced
+  // into a history that could not reproduce.
+  const session = await sessionReplayFrom(bytes, writtenAt, appVersion);
   return assembleCrashBundle({
-    appVersion: store.appVersion === '' ? __APP_VERSION__ : store.appVersion,
+    appVersion,
     saveVersion: SAVE_VERSION,
     writtenAt,
     error,
@@ -86,6 +97,8 @@ async function assembleBundle(error: CrashErrorInput | null): Promise<Uint8Array
     },
     commandLog: tail.lines(),
     autosave: saved === null || bytes === null ? null : { name: saved.name, bytes },
+    replay: session.replay,
+    replayError: session.error,
   });
 }
 

@@ -74,6 +74,7 @@ says which it got.
 npm run typecheck    # tsc --noEmit
 npm run lint         # eslint, including the architecture rules
 npm test             # everything: unit, determinism, balance, performance
+npm run test:soak    # the recorded 25-year AI game, replayed (~50 s)
 npm run build        # typecheck + production bundle into dist/
 ```
 
@@ -108,13 +109,15 @@ project does not have.
 ## What the tests hold in place
 
 `npm test` runs four suites, and each exists to stop a different kind of damage.
+A fifth, `test:soak`, is deliberately outside it and has its own CI job.
 
 | Suite | Guards |
 | --- | --- |
 | `test:determinism` | Same seed plus same commands ⇒ bit-identical state, across three runs and across a save/load. **This must never be red.** Determinism cannot be repaired afterwards. |
-| `test:balance` | The economy. Six reference scenarios with tolerance bands; when one leaves its band the CONSTANTS change, never the test. |
+| `test:balance` | The economy. Reference scenarios with tolerance bands; when one leaves its band the CONSTANTS change, never the test. Since M16 every scenario also runs TWICE and asserts hash equality, so the balance suite doubles as a desync net; the two quarter-century AI scenarios are costly enough that their twin runs in CI's `soak` job rather than locally (`npm run test:balance:full` runs all of them). |
 | `test:unit` | The formulas, the physics, the signalling, the migrations, and that both translation catalogues carry the same keys. |
 | `test:perf` | Section 21's budgets that a headless run can hold: tick p99 with a full fleet on a 1024 map, save load time, map generation. |
+| `test:soak` | A recorded twenty-five year AI game exported as a `.ironreplay` and re-simulated against the sixteen year-boundary hashes it committed to, plus a text fixture pinning them. About 50 s, so it lives in its own CI job rather than in `npm test`. |
 
 ### Measuring the two frame-rate budgets
 

@@ -8,6 +8,7 @@ import {
 } from '../../src/sim/constants';
 import { Personality } from '../../src/sim/ai/types';
 import { World } from '../../src/sim/World';
+import { hashTwin } from './determinism';
 
 /**
  * Balancing scenario 5 of section 19.4: an AI company alone on a 512 map,
@@ -157,4 +158,13 @@ describe('scenario 5: an AI company alone on a 512 map, twenty-five years', () =
     expect(expansive.lines).toBeGreaterThanOrEqual(1);
     expect(expansive.vehicles).toBeGreaterThanOrEqual(1);
   });
+
+  // Three quarter-century games on a 512 map - the most expensive twin in the
+  // suite (measured 102 s on its own), so the default run skips it and the CI
+  // `soak` job asserts it on every push (see ./determinism.ts).
+  hashTwin(
+    'aiCompany',
+    () => [road.world, rail.world, expansive.world],
+    () => [play(4_711).world, play(3).world, play(2).world],
+  );
 });

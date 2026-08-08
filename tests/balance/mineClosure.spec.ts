@@ -6,6 +6,8 @@ import {
 } from '../../src/sim/constants';
 import { closureWarningLevel } from '../../src/sim/industry/lifecycle';
 import { IndustryType, newIndustry } from '../../src/sim/industry/types';
+import type { World } from '../../src/sim/World';
+import { hashTwin } from './determinism';
 import { flatScenario, type Scenario } from './scenario';
 
 /**
@@ -38,6 +40,13 @@ function monthOfClosure(scenario: Scenario, months: number): number {
 
 function mineScenario(): Scenario {
   return flatScenario(SIZE, [], [newIndustry(0, IndustryType.CoalMine, MINE_X, MINE_Y, 0)]);
+}
+
+/** The mine played past its closure - one whole run, for the desync guard. */
+function closedWorld(): World[] {
+  const scenario = mineScenario();
+  monthOfClosure(scenario, INDUSTRY_CLOSURE_MONTHS + 12);
+  return [scenario.world];
 }
 
 describe('scenario 6: a coal mine nobody collects from', () => {
@@ -97,4 +106,6 @@ describe('scenario 6: a coal mine nobody collects from', () => {
     expect(mine.open).toBe(true);
     expect(mine.monthsWithoutCollection).toBe(0);
   });
+
+  hashTwin('mineClosure', closedWorld, closedWorld);
 });

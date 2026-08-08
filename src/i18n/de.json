@@ -224,7 +224,7 @@
   "ui.heat.toggle": "Auslastung (U)",
   "ui.error.title": "Die Simulation konnte nicht gestartet werden",
   "ui.crash.title": "Die Simulation ist abgestürzt",
-  "ui.crash.body": "Der Stand bis zum letzten Speichern ist sicher. Ein Absturzbericht mit dem letzten Spielstand, dem Befehlsprotokoll und den Versionsnummern wurde zusammengestellt — er ist das, was den Fehler auffindbar macht.",
+  "ui.crash.body": "Der Stand bis zum letzten Speichern ist sicher. Ein Absturzbericht mit dem letzten Spielstand, einer Aufzeichnung der Sitzung, dem Befehlsprotokoll und den Versionsnummern wurde zusammengestellt — er ist das, was den Fehler reproduzierbar macht.",
   "ui.crash.atTick": "Tick {tick}:",
   "ui.crash.storedDesktop": "Der Bericht liegt im Ordner „crashes\" des Spieldatenverzeichnisses.",
   "ui.crash.storedBrowser": "Der Bericht wurde als Download übergeben.",

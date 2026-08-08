@@ -3,7 +3,7 @@ import type { CommandEnvelope } from '../commands/types';
 import { hashWorld, World } from '../World';
 import { restoreCheckpoint, type CheckpointRing } from './checkpoints';
 import { SaveFormatError, SAVE_VERSION, type ReplayClaim } from './format';
-import { encodeSave, type LoadedGame } from './serialize';
+import { decodeSave, encodeSave, type LoadedGame } from './serialize';
 
 /**
  * The replay half of the save format (SPEC2 M16).
@@ -201,6 +201,47 @@ export function encodeReplay(
   const replayQueue = new CommandQueue();
   replayQueue.loadLog(queue.log, 0, base);
   return encodeSave(baseWorld, replayQueue, gameVersion, ring, claim);
+}
+
+/** Bytes that are a recording, and the decoded game they describe. */
+export interface ConvertedReplay {
+  /** The recording: the input unchanged, or a freshly encoded `.ironreplay`. */
+  readonly bytes: Uint8Array;
+  /** The game those bytes decode to - what `replayMeta` describes it from. */
+  readonly loaded: LoadedGame;
+  /** False when the input was handed back untouched. */
+  readonly converted: boolean;
+}
+
+/**
+ * Turn a file into a recording - the ONE conversion, behind every door that
+ * offers one (SPEC2 M16: the shelf's import, "export replay from save", and
+ * the crash bundle of M10/D-132).
+ *
+ * Two of the three cases hand the file back UNCHANGED, and both for the same
+ * reason: re-encoding it would restamp it with this build's version and turn
+ * somebody else's recording into one this build claims to have made.
+ *
+ *  - a file that already IS a `.ironreplay`;
+ *  - a save from an older format. It migrates and plays from its
+ *    reconstructed genesis (SPEC2 M16's "Alt-Saves bleiben abspielbar"), and
+ *    it makes no claim about its end, so verification refuses it by name
+ *    rather than reporting a divergence that is really a version gap (E-11).
+ *
+ * A save of THIS format is converted: it carries a ring and a log this build
+ * wrote, which is everything a claim needs to be honest (D-189).
+ *
+ * It lives here rather than in the worker because a crash bundle is assembled
+ * by the MAIN thread, over a worker that is already dead (D-132) - two doors
+ * onto one conversion, never two conversions.
+ */
+export function replayFromSaveBytes(bytes: Uint8Array): ConvertedReplay {
+  const loaded = decodeSave(bytes);
+  if (loaded.replay !== null || loaded.saveVersion !== SAVE_VERSION) {
+    return { bytes, loaded, converted: false };
+  }
+  const replayBytes = encodeReplay(loaded.world, loaded.queue, loaded.ring, loaded.gameVersion);
+  return { bytes: replayBytes, loaded: decodeSave(replayBytes), converted: true };
 }
 
 /**

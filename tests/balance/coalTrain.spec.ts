@@ -8,6 +8,7 @@ import { upkeepPerYearCt } from '../../src/sim/economy/ledger';
 import { ModuleKind, stationRating } from '../../src/sim/station/types';
 import { VEHICLE_STATE_KEYS } from '../../src/sim/vehicles/VehicleStore';
 import type { World } from '../../src/sim/World';
+import { hashTwin } from './determinism';
 import { apply, flatScenario, runYears, type Scenario } from './scenario';
 
 /**
@@ -52,6 +53,8 @@ interface Measurement {
   readonly balances: readonly number[];
   readonly paybackYear: number;
   readonly detail: string;
+  /** The world the measurement was taken on - the desync guard's subject. */
+  readonly world: World;
 }
 
 /** Mine, power plant, a line between them and one train working it. */
@@ -186,7 +189,7 @@ function measure(years: number): Measurement {
       break;
     }
   }
-  return { investmentCt, balances, paybackYear, detail };
+  return { investmentCt, balances, paybackYear, detail, world };
 }
 
 describe('scenario 2: the first rail line', () => {
@@ -221,4 +224,10 @@ describe('scenario 2: the first rail line', () => {
     expect(plant.open).toBe(true);
     expect(plant.producedThisMonth + plant.inputStock0).toBeGreaterThan(0);
   });
+
+  hashTwin(
+    'coalTrain',
+    () => [result.world],
+    () => [measure(PAYBACK_MAX_YEARS + 2).world],
+  );
 });

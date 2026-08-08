@@ -11,6 +11,7 @@ import {
 import { upkeepPerYearCt } from '../../src/sim/economy/ledger';
 import { ModuleKind, stationRating } from '../../src/sim/station/types';
 import type { World } from '../../src/sim/World';
+import { hashTwin } from './determinism';
 import { apply, flatScenario, makeTown, runYears, type Scenario } from './scenario';
 
 /**
@@ -162,7 +163,7 @@ function describeChain(world: World): string {
 }
 
 /** Profit of the last measured year, once the chain has filled up. */
-function measure(): { profitCt: number; balances: number[]; detail: string } {
+function measure(): { profitCt: number; balances: number[]; detail: string; world: World } {
   const scenario = woodChain();
   // Three years for the chain to fill - the sawmill cannot make planks before
   // the first timber arrives, and the furniture works waits on the sawmill.
@@ -170,7 +171,7 @@ function measure(): { profitCt: number; balances: number[]; detail: string } {
 
   const balances = runYears(scenario, 3);
   const profitCt = Math.round((balances[2]! - balances[0]!) / 2);
-  return { profitCt, balances, detail: describeChain(scenario.world) };
+  return { profitCt, balances, detail: describeChain(scenario.world), world: scenario.world };
 }
 
 describe('scenario 3: the whole wood chain', () => {
@@ -200,4 +201,10 @@ describe('scenario 3: the whole wood chain', () => {
     // And the town grew on the goods it was sent.
     expect(scenario.world.towns[0]!.population).toBeGreaterThan(2_500);
   });
+
+  hashTwin(
+    'woodChain',
+    () => [result.world],
+    () => [measure().world],
+  );
 });

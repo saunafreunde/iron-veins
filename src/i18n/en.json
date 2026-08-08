@@ -224,7 +224,7 @@
   "ui.heat.toggle": "Utilisation (U)",
   "ui.error.title": "The simulation could not be started",
   "ui.crash.title": "The simulation crashed",
-  "ui.crash.body": "Everything up to the last save is safe. A crash report with the latest save, the command log and the version numbers has been put together — it is what makes the bug findable.",
+  "ui.crash.body": "Everything up to the last save is safe. A crash report with the latest save, a replay of the session, the command log and the version numbers has been put together — it is what makes the bug reproducible.",
   "ui.crash.atTick": "Tick {tick}:",
   "ui.crash.storedDesktop": "The report is in the \"crashes\" folder of the game's data directory.",
   "ui.crash.storedBrowser": "The report was handed over as a download.",

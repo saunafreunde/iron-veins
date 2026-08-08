@@ -345,7 +345,7 @@ abgenommen.** Eine Überschreitung ist ein Abnahme-Fehler, kein Schulterzucken.
 | M13 | — | +`IndustryMarker.level` (Layout-Bump) — **B6 gemessen: seit M5 vorhanden (Marker-Kanal, Industrie-Uhr); null Byte Layout-Änderung, `SNAPSHOT_LAYOUT_VERSION` bleibt 6 (D-174, das D-171-Muster)** | +0,00 ms (render-only) | Seite 1 (~600 Fahrzeug-Zellen), Seite 2 (Emissive) |
 | M14 | **v25** — Stations-Frachthistorie-Ring — **B3 eingelöst: 12 Monate × 18 Frachten × 3 Zähler (Collected/Delivered/Expired) je Station, Int32-Ring + Float64-Monatsakkumulator, beide gespeichert + im VOLL-Digest gehasht (Live-Digest bewusst nicht — Kachel-Layer-Präzedenz), Migration v24→v25 = Null-Ringe, Pin `bbe572afe2880243` + Korpus (`v25-played.ironsave`) nach Protokoll re-recorded; Tick-Anteil = indizierte Adds in bestehenden Pfaden + Monats-Roll, kein neuer Snapshot-Byte; Tick nachgemessen 1,490/3,339 ms p50/p99 auf der Referenzflotte — die M10-Grundlinie (1,45/3,26) im dokumentierten ±0,7-ms-Laufrauschen (D-178)**; **B4 (Statistik-Zentrum): +2 Fahrzeug-Felder im SELBEN v25-Payload (`breakdownCount` + `depotCall`, beide gespeichert + gehasht — der Depot-Ruf ist Z4-Routing-Zustand), Migration v24→v25 in place erweitert (EIN Bump je Meilenstein, nicht EIN Migrations-Edit); Pin nach D-137-Protokoll re-recorded auf `8146983bca3a6f92`, Korpus unverändert gültig (die Korpus-Welt ist fahrzeuglos — geprüft, nicht angenommen); Tick-Anteil = 1 Zähler-Inkrement je Panne + 1 Flag-Vergleich am Routenende, kein neuer Snapshot-Byte — Details Marker-Kanal (D-181)** | +FlowMarker-Block (Layout-Bump) — **B1 eingelöst: `SNAPSHOT_LAYOUT_VERSION` 6 → 7 (EIN Bump: +FlowCount-Feld, Stride-8-Block, Cap 4 096 Legs); Export im selben Publish-Pass wie `structureSignature` (Fehler 33), gemessen median 0,060 / p99 0,285 ms bei 420 aktiven Legs auf der Referenzflotte — unter der ≤-0,5-ms-Zusage, Tripwire gated den Median auf der Zusage selbst (D-176, D-167)** | +0,00 ms Tick; ≤ +0,5 ms je Snapshot-Publish | 0 (Vektor) |
 | M15 | **v26** — 8.4-Weltregeln + Stau-Layer (~1 MB gehasht auf 1024²) — **eingelöst: B1 legt `occupancyPenalty` + `signalPenalty` an (D-184), B2 erweitert dieselbe `v25_to_v26`-Migration IN PLACE um `roadCongestion` + den Uint8-Layer (D-185), B3/B4 berühren keine gespeicherte Form; Pin zweimal nach D-137 re-recorded, zuletzt `50c7d6a38f6da052`; Save-Größe A/B gemessen: Null-Layer 1 039 B komprimiert gegen 1 048 576 B roh, stark bespielt 20 023 B** | +Stau-Overlay-Block — **B2/B3 gemessen: der Stau-Layer und die Durchsatz-Zähler reisen im SharedArrayBuffer der Karte, also NULL Byte Snapshot (D-185/D-186, das D-171/D-174-Muster); die zugesagte EINE Layout-Buchung löst B4 stattdessen mit der E-18-Entscheidung ein: `SNAPSHOT_LAYOUT_VERSION` 7 → 8, `SNAPSHOT_MAX_VEHICLES` 1 500 → 4 000 = `MAX_VEHICLES`, +160 KiB Shared-Buffer (D-187)** | +0,50 ms (Inkremente, Zerfall, A*-Term) — **gemessen −0,31 ms** | 0 |
-| M16 | **v27** — Checkpoint-Ring-Metadaten, `.ironreplay` — **B1 eingelöst: der EINE Z5-Bump gehört dem Checkpoint-Ring; `checkpoints` + `logBaseTick` + `replay` liegen im CONTAINER (Historie, nicht Zustand — die Command-Log-Familie, D-131), also NULL Byte gehashter Weltzustand: die `v26_to_v27`-Migration reicht `state` per Referenz durch (das v23-Muster, D-130), der Korpus-Manifest-Hash bleibt für alle sechs Fixtures `17f7f507023b91d8` und der kanonische Pin bleibt nach D-137-Protokoll re-recorded auf demselben `50c7d6a38f6da052` (nur `saveVersion` 26 → 27). Ring-Kosten gemessen statt geschätzt: eine Nutzlast 25 471–39 081 B komprimiert gegen 1 206 267 B rohes MessagePack auf der 25-Jahre-KI-Partie, Encode 24,5–41,3 ms, alle 26 Checkpoints 916 498 B — bei Kapazität 16 hält der Ring Genesis + 15 Jahre = 566 367 B (D-188)**; **B2 (Replay-Theater) berührt KEINE gespeicherte Form: kein zweiter Bump, Pin und Korpus-Manifest unverändert, die zwei UNHASHED-Allowlist-Einträge des Feld-Audits unverändert — die Wiedergabe ist derselbe Scheduler mit versiegelter Queue, das Regal ist ein zweites Regal neben den Saves (D-189)** | — | +0,00 ms (Checkpoints auf Save-Pfad) — **B1 gemessen: Tick p50 1,494 / p99 2,684 ms auf der 1500-Fahrzeug-Referenzflotte gegen die M10-Grundlinie 1,45/3,26; der einzige Per-Tick-Anteil ist ein Modulo im Scheduler, das Encode läuft einmal je Spieljahr auf dem Save-Pfad (D-188); B2 fügt je Frame einen Vergleich gegen den Aufzeichnungs-Endtick hinzu und sonst nichts (D-189)** | 0 |
+| M16 | **v27** — Checkpoint-Ring-Metadaten, `.ironreplay` — **B1 eingelöst: der EINE Z5-Bump gehört dem Checkpoint-Ring; `checkpoints` + `logBaseTick` + `replay` liegen im CONTAINER (Historie, nicht Zustand — die Command-Log-Familie, D-131), also NULL Byte gehashter Weltzustand: die `v26_to_v27`-Migration reicht `state` per Referenz durch (das v23-Muster, D-130), der Korpus-Manifest-Hash bleibt für alle sechs Fixtures `17f7f507023b91d8` und der kanonische Pin bleibt nach D-137-Protokoll re-recorded auf demselben `50c7d6a38f6da052` (nur `saveVersion` 26 → 27). Ring-Kosten gemessen statt geschätzt: eine Nutzlast 25 471–39 081 B komprimiert gegen 1 206 267 B rohes MessagePack auf der 25-Jahre-KI-Partie, Encode 24,5–41,3 ms, alle 26 Checkpoints 916 498 B — bei Kapazität 16 hält der Ring Genesis + 15 Jahre = 566 367 B (D-188)**; **B2 (Replay-Theater) berührt KEINE gespeicherte Form: kein zweiter Bump, Pin und Korpus-Manifest unverändert, die zwei UNHASHED-Allowlist-Einträge des Feld-Audits unverändert — die Wiedergabe ist derselbe Scheduler mit versiegelter Queue, das Regal ist ein zweites Regal neben den Saves (D-189)**; **B3 (Beweis-Infrastruktur) ebenfalls ohne Änderung gespeicherter Form: kein Bump, Pin `50c7d6a38f6da052` und Korpus-Manifest `17f7f507023b91d8` unverändert, Allowlists unverändert — das Bundle ist Testinfrastruktur, eine Crash-Pfad-Konvertierung und eine Build-Datei; gemessen statt geschätzt: die `.ironreplay` der 25-Jahre-Partie 582 520 B gegen 593 434 B Save (Ring 566 367 B in beiden), das Soak-Fixture 1 359 B Text, Crash-Bundle-Schema 1 → 2 (D-190)** | — | +0,00 ms (Checkpoints auf Save-Pfad) — **B1 gemessen: Tick p50 1,494 / p99 2,684 ms auf der 1500-Fahrzeug-Referenzflotte gegen die M10-Grundlinie 1,45/3,26; der einzige Per-Tick-Anteil ist ein Modulo im Scheduler, das Encode läuft einmal je Spieljahr auf dem Save-Pfad (D-188); B2 fügt je Frame einen Vergleich gegen den Aufzeichnungs-Endtick hinzu und sonst nichts (D-189)** | 0 |
 | M17 | **v28** — GoalState | +Goal-Block (~64 B) | +0,05 ms (nur Tages-Hook) | 0 |
 | M18 | **v29** — Wetter-Regel + Wetterfeld (16×16 Uint8) | +Wetterfeld-Block | +0,15 ms (1 Array-Read/Fzg. + Tagesupdate) | 0 (Regeneration statt Zellen) |
 | M19 | **v30** — +2 Cargo-IDs, Remap-Migration | — | +0,10 ms (tägliche Gravitations-Scores) | 0 (Klassen-Icons = UI-SVG) |
@@ -390,6 +390,7 @@ Headroom und lehrt, ein rotes Gate zu ignorieren (D-136).
 | M13 | 2026-08-07 | **1,27 ms / 2,92 ms** (max 17,4 ms über 6 500 Ticks) | **+0,00 ms belegt** (render-only; gemessen −0,34 gegen die Grundlinie — dasselbe ±0,7-ms-Laufrauschen; der einzige Sim-seitige Diff ist die wörtliche Marker-Assembly-Extraktion nach `src/sim/markers.ts`, D-174) | D-167–D-174 |
 | M14 | 2026-08-07 | **1,48 ms / 3,17 ms** (max 19,8 ms über 6 500 Ticks; Abschlusslauf nach allen fünf Bundles) | **−0,09 ms** (Budget-Zeile Tick +0,00 eingehalten; die Bundle-Läufe 1,393/3,232 in B1 (D-176) und 1,490/3,339 in B3 (D-178) STRADDELN die Grundlinie exakt wie die M12-Zeile — das dokumentierte ±0,7-ms-Laufrauschen; der Publish-Mehrpreis steht als eigene Messung im Detail) | D-175–D-183 |
 | M15 | 2026-08-08 | **1,481 ms / 2,949 ms** (max 19,98 ms über 6 500 Ticks; Abschlusslauf nach allen vier Bundles) | **−0,31 ms** (Budget-Zeile +0,50 eingehalten; die vier Bundle-Läufe 1,512/3,023, 1,351/2,985, 1,383/2,785 und der Abschluss STRADDELN die Grundlinie im dokumentierten ±0,7-ms-Laufrauschen — die Regeln laufen auf der Referenzflotte AUS, und selbst eingeschaltet sind Belegungslesung, Reroute, Stau-Inkrement und Durchsatz-Zähler je ein geklemmter Add bzw. ein nie genommener Zweig) | D-184–D-187 |
+| M16 | 2026-08-08 | **1,447 ms / 2,868 ms** (max 24,37 ms über 6 500 Ticks; Abschlusslauf nach allen drei Bundles) | **−0,39 ms** (Budget-Zeile +0,00 eingehalten: der einzige Per-Tick-Anteil des Meilensteins ist ein Modulo im Scheduler; Checkpoint-Encode läuft einmal je Spieljahr auf dem SAVE-Pfad, B2 fügt einen Frame-Vergleich hinzu, B3 fasst `src/sim` nur über die extrahierte `replayFromSaveBytes` an, die der Worker vorher wörtlich ausführte) | D-188–D-190 |
 
 M11-Zeile im Detail: **SAVE_VERSION v24** — genau EIN Bump für alle drei
 Stufen (Z5; Order-Grammatik-Stride, LineStore, Takt-Felder,
@@ -549,6 +550,63 @@ Stau-Layer bit-identisch ✓ (Byte- UND Digest-Vergleich in
 `roadCongestion.spec.ts`, D-185), Tick ≤ +0,5 ms über der M10-Grundlinie ✓
 (−0,31 ms gemessen). E-18 steht damit im Ledger, wie SPEC2 es verlangt.
 
+M16-Zeile im Detail: **SAVE_VERSION v27 — genau EIN Bump (Z5),** Besitzer ist
+der Checkpoint-Ring aus B1, und es ist der dritte reine CONTAINER-Bump der
+Kette: `checkpoints`, `logBaseTick` und `replay` sind Historie, nicht Zustand
+(die Command-Log-Familie, D-131), also wandert kein Byte gehashter Weltzustand
+— `v26_to_v27` reicht `state` per Referenz durch (das v23-Muster, D-130). Der
+Beleg ist ungewöhnlich direkt: der kanonische Cross-OS-Pin wurde nach
+D-137-Protokoll re-recorded und steht auf DEMSELBEN `50c7d6a38f6da052` (nur
+`saveVersion` 26 → 27), das Korpus-Manifest auf DEMSELBEN
+`17f7f507023b91d8` für alle sechs Fixtures. B2 und B3 berühren keine
+gespeicherte Form; beide Pins bleiben unverändert, die zwei
+UNHASHED-Allowlist-Einträge des Feld-Audits (`checkpoints[].payload`,
+`replay.finalTick`) bleiben die einzigen. **Kein Snapshot-Layout-Bump, kein
+Atlas-Byte** — der Meilenstein ist Format, Wiedergabe und Beweis, nichts
+davon zeichnet.
+
+Abnahme-Messwerte (Referenzmaschine, `npm run test:perf` 2026-08-08):
+**Tick p50 1,447 / p99 2,868 ms** (max 24,37 ms über 6 500 Ticks,
+Abschlusslauf nach allen drei Bundles) gegen die M10-Grundlinie 1,45/3,26 —
+der B1-Lauf 1,494/2,684 liegt daneben, beide im dokumentierten
+±0,7-ms-Laufrauschen; die Budget-Zeile „+0,00 ms" ist damit eingehalten.
+Übrige Tripwires grün: Sprite-Pool-Median 1,70, Draw-Prep 2,53 (Konsist-Szene,
+9 000 Units), E-18-Vollblock 4 000 Fahrzeuge p50 2,37, Chunk-Bake 0,47,
+Partikel 0,30, Aspekt 0,03, Emissive 0,05, Flow-Prep 0,29 ms;
+Flow-Export-Median 0,062 ms. Save der 1500-Fahrzeug-Referenzwelt 187 319 B,
+in 619 ms zurückgelesen.
+
+**Ring-Kosten gemessen statt geschätzt** (D-188): eine Checkpoint-Nutzlast der
+25-Jahre-KI-Partie 25 471–39 081 B komprimiert gegen 1 206 267 B rohes
+MessagePack, Encode 24,5–41,3 ms; alle 26 Checkpoints des Vierteljahrhunderts
+916 498 B, bei Kapazität 16 hält der Ring Genesis + 15 Jahre = 566 367 B.
+Log-Kompaktierung an einem Zwei-Jahres-Fixture: 44 304 B ganz gegen 23 494 B
+auf einen Checkpoint getrimmt, und der getrimmte Stand läuft auf denselben
+Hash weiter. **B3-Größen** (D-190): die `.ironreplay` derselben Partie
+582 520 B gegen 593 434 B Save — der Ring dominiert beide —, das
+Soak-Fixture 1 359 B **Text**, Crash-Bundle-Schema 1 → 2.
+
+Fertig-wenn-Posten der M16-Sektion: jeder Spielstand per einem Klick als
+Replay abspielbar ✓ (Konvertierung `replayFromSaveBytes` hinter drei Türen:
+Speichern-Fenster, Import, Crash-Bundle — D-189/D-190), Sprung zu jedem
+Jahres-Checkpoint ✓ (`replayJumpTicks` IST der Ring, ein Sprung auf eine
+Jahresgrenze landet auf dem zugesicherten Hash, D-188/D-189), „Replay prüfen"
+nennt bei manipuliertem Log den ersten abweichenden Tick ✓ (exakt bei genau
+einem Befehl im Intervall — Fixture: Tick 78 000 statt der laufend gefundenen
+84 000 —, sonst ehrlich als obere Schranke mit `exact: false`, D-189),
+**die aufgezeichnete 25-Jahre-KI-Partie als `.ironreplay` mit identischem
+Final-Hash verifiziert ✓** (`npm run test:soak`: Seed 4 711, 256er-Karte, drei
+Konkurrenten, 1 800 000 Ticks, 698 aufgezeichnete Befehle, Final-Hash
+`615d0259186b89dc`, verglichen an 16 zugesicherten Ticks, 48,9 s Wanduhr
+inklusive Nachrechnung; Fixture-Pin self-priming nach D-137-Protokoll),
+**jedes Balance-Szenario sichert Hash-Gleichheit über zwei Läufe zu ✓** — mit
+offengelegtem Preis: alle neun je Push im `soak`-Job (Wanduhr 223 s gegen 134 s
+im Standardlauf; der aiCompany-Zwilling allein 101,6 s), die sieben billigen
+in jedem gewöhnlichen Lauf, aufgezählt statt gezählt durch
+`tests/unit/balanceDeterminism.spec.ts` (D-190). Alt-Saves bleiben abspielbar
+und machen keine Behauptung (E-11: Cross-Version-Prüfung wird abgelehnt, nicht
+geraten).
+
 Die M10-Grundlinie liegt UNTER der linearen Extrapolation (~3–4 ms) — der
 Eskalationspfad (Kanten-Graph vor M14) ist nicht ausgelöst. Referenzmaschine:
 Ryzen 5 7520U (4C/8T), 16 GB, Windows 11, Node 24 — schwächer als das
@@ -580,8 +638,9 @@ Ledger-Verstoß.
 |---|---|---|
 | lint+types | M10 | unverändert |
 | determinism | M10 | Runner parst ALLE CommandKinds; ab M10 zusätzlich **ubuntu-latest** (erste Cross-OS-Hash-Evidenz) |
-| balance | M10 | jedes Szenario 2× mit Hash-Assertion (ab M16 verbindlich); Referenzläufe mit allen Regeln „aus" |
+| balance | M10 | jedes Szenario 2× mit Hash-Assertion (ab M16 verbindlich); Referenzläufe mit allen Regeln „aus" — **M16 B3 eingelöst und ehrlich geteilt: der Zwilling ist gemessen (+186 s CPU, davon 143 s allein die zwei 25-Jahre-KI-Szenarien), deshalb laufen im gewöhnlichen `npm test` die sieben billigen Zwillinge (+43 s) und ALLE neun im `soak`-Job je Push; `tests/balance/determinism.ts` trägt die Messwerte, ein Kopplungstest (`tests/unit/balanceDeterminism.spec.ts`) zählt die Szenarien nicht, sondern zählt sie AUF (D-190)** |
 | perf | M10 | 1500-Fzg.-Fixture p99; Render-Tripwire (Sprite-Pool-Rebuild-ms, Draw-Prep-ms; ab M12 Chunk-Bake-ms; ab M13 Partikel-ms; ab M14 Flow-Export-ms je Publish + Flow-Prep-ms am 4096-Leg-Megagraph) |
+| soak | M16 | **neu (D-190):** `npm run test:soak` — aufgezeichnete 25-Jahre-KI-Partie, gegen die 16 zugesicherten Jahres-Hashes UND einen Textmanifest-Pin nachgerechnet (`tests/soak/fixtures/soak-ai-quarter-century.json`, self-priming nach dem D-137-Protokoll); dazu die vollständige Balance-Zwillings-Matrix (`IRON_VEINS_BALANCE_HASH=all`). Läuft auf `windows-latest` — der Referenzplattform beider Pins; die Cross-OS-Frage bleibt D-137s eigenes, bewusst billiges Fixture |
 | desktop-smoke | M25 | wöchentlich, Rust gecacht; release.yml auf Tag |
 
 ---

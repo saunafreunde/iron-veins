@@ -12,7 +12,7 @@ no entry below. A number may appear under several topics.
 
 - **Determinism, RNG & hashing:** D-001, D-002, D-003, D-004, D-009, D-010,
   D-024, D-093, D-106, D-128, D-137, D-142, D-145, D-146, D-149, D-153, D-178,
-  D-181, D-184, D-185, D-188, D-189
+  D-181, D-184, D-185, D-188, D-189, D-190
 - **Commands, snapshot & worker boundary:** D-004, D-005, D-006, D-011, D-032,
   D-100, D-111, D-145, D-146, D-148, D-162, D-174, D-176, D-179, D-187, D-189
 - **Lines & timetables:** D-145, D-146, D-147, D-148, D-149, D-150, D-151,
@@ -23,7 +23,7 @@ no entry below. A number may appear under several topics.
   D-141
 - **Save format, migrations & replays:** D-007, D-025, D-026, D-027, D-048,
   D-111, D-130, D-131, D-134, D-142, D-144, D-145, D-146, D-147, D-153, D-178,
-  D-181, D-184, D-185, D-188, D-189
+  D-181, D-184, D-185, D-188, D-189, D-190
 - **Rail & track:** D-042, D-043, D-044, D-045, D-046, D-047, D-053, D-141,
   D-153, D-157, D-184
 - **Signals & reservations:** D-054, D-055, D-056, D-057, D-058, D-059, D-060,
@@ -37,7 +37,7 @@ no entry below. A number may appear under several topics.
 - **Economy, finance & emissions:** D-008, D-090, D-091, D-092, D-105, D-154,
   D-180
 - **Balancing & scenarios:** D-038, D-039, D-040, D-041, D-066, D-087, D-088,
-  D-116, D-151, D-152, D-156, D-158, D-159, D-187
+  D-116, D-151, D-152, D-156, D-158, D-159, D-187, D-190
 - **Vehicles & fleet:** D-043, D-044, D-045, D-068, D-076, D-089, D-093,
   D-096, D-142, D-143, D-145, D-146, D-155, D-157, D-171, D-174, D-181, D-185
 - **Water & air:** D-094, D-095, D-096, D-097, D-098, D-099
@@ -54,9 +54,9 @@ no entry below. A number may appear under several topics.
   D-185, D-186, D-187
 - **Platform, tooling & build:** D-012, D-014, D-015, D-016, D-017, D-029,
   D-030, D-031, D-160, D-168, D-169, D-170, D-172, D-175
-- **Crash safety:** D-132, D-139
+- **Crash safety:** D-132, D-139, D-190
 - **Testing method & fixtures:** D-010, D-038, D-072, D-074, D-084, D-133,
-  D-167, D-183, D-186, D-188, D-189
+  D-167, D-183, D-186, D-188, D-189, D-190
 - **Process & specification:** D-070, D-123, D-129, D-133, D-138, D-140,
   D-185
 
@@ -6303,3 +6303,132 @@ allowlists are unchanged. No snapshot-layout change, no atlas cell. Tick cost:
 none - a replay is stepped by the same loop, the seal is a boolean read on a
 path that already allocated an envelope, and the only new per-frame arithmetic
 is the `limit` comparison that stops a playback at the recorded end.
+
+## M16 - the proof chain, bundle 3: the evidence (2026-08-08)
+
+### D-190 A bug report carries a recording, the balance suite doubles as the desync net at a measured and stated price, and the soak fixture is a manifest of hashes rather than a megabyte in git
+
+Bundles 1 and 2 built the format and the theatre. This one spends them: three
+pieces of evidence, and the only decision each of them needed was where the
+honesty line runs.
+
+**The crash bundle carries an `.ironreplay` of the session, converted on the
+MAIN thread from the very bytes it already copies.** SPEC2 M16 asks for it in
+one clause and the audit's phrase for it is the point - the deterministic repro
+superpower, made literal. A report has always carried the last save plus a
+rolling command tail (D-132), and a developer could always convert that save by
+hand; what the bundle lacked was the CLAIM, and with it the ability to ask the
+game rather than a human whether the session reproduces. So the bundle now
+holds the recording, its `finalTick`/`baseTick`, its command count, the
+checkpoint ticks a scrub lands on, and whether THIS build may judge it. The
+conversion is `replayFromSaveBytes`, extracted from `SimWorker.makeReplay` so
+that the shelf's import, "export replay from save" and the crash bundle are one
+function with three doors - the three cases (already a recording, an older
+format, this format) had to stay one decision or they would drift apart.
+
+D-132's argument decides WHERE it happens: when the worker dies it cannot be
+asked to encode anything, so the survivor does it. `src/ui/sessionReplay.ts`
+imports the sim DYNAMICALLY - the simulation belongs to the worker, and a
+static import would put a second copy of it in the main bundle for a path that
+runs once in the life of a session, if ever. That import is also the honest
+failure boundary: a load that fails, bytes that are not a save, a file this
+build had to migrate - each is caught, `replay` is null and `replayError` says
+why in plain text. The recording is the repro ON TOP of the contract, never the
+contract itself, so the bundle degrades to exactly what M10 promised.
+
+**The recording ends where the last save ended, and the gap is stated in
+numbers rather than papered over.** The commands issued after that save are in
+the log tail, but as main-thread JSON: stamped with the last PUBLISHED tick,
+without the worker's exact tick and without the sequence numbers `CommandQueue`
+gave them. Splicing them into the log would manufacture a history that cannot
+reproduce - and a recording that lies about itself is worse than one that stops
+early, because the verifier would then report a desync that is really a
+forgery. `replay.finalTick` against `error.tick` is the gap, and a test asserts
+the report shows it. Schema version 1 to 2, because tooling has to be able to
+tell bundle shapes apart (D-132's own reason for having the field).
+
+Size, measured rather than assumed, on the twenty-five year AI game: the
+recording is **582,520 B** against the save's **593,434 B**, of which the ring
+is **566,367 B** in both - a recording and a save of the same long game cost
+almost exactly the same, because the checkpoints dominate both. A bundle
+therefore roughly doubles, and the shelf cap of five (D-139) is what bounds it.
+That is the price of a self-contained repro and it is worth paying; what was
+refused is the cheaper version - a recording with the ring stripped out - which
+would have saved half the bytes by throwing away every intermediate hash and
+leaving the verifier able to say only "somewhere in twenty-five years".
+
+**Every balancing scenario is a desync guard now, and the price is split in the
+open instead of being hidden.** SPEC2 asks for each scenario to run twice with
+hash equality asserted. Measured one file at a time on the reference machine:
+busline 6.6 s, coalTrain 9.1 s, woodChain 12.3 s, bankruptcy 10.7 s,
+mineClosure 6.0 s, taktLine 9.4 s, netzdesign 12.9 s - and aiGame 40.9 s,
+aiCompany 109.9 s. A complete twin is about **+186 s of CPU, of which the two
+quarter-century AI scenarios are 143 s**: 77 % of the price for 2 of the 9
+scenarios. Dropping the twin for those two would have been a quiet gap in a
+sentence that says "every"; paying it on every developer's machine would have
+made the suite something people stop running, which is the same gap by another
+route.
+
+So the split is declared and enumerated: the seven cheap twins run in every
+`npm run test:balance` (+43 s of CPU; measured wall 118 s to 134 s), and ALL
+NINE run in the new `soak` CI job on every push (`IRON_VEINS_BALANCE_HASH=all`,
+also `npm run test:balance:full`; measured wall 223 s against the default
+run's 134 s, of which the aiCompany twin alone is 101.6 s and the aiGame twin
+23.2 s). Coverage of
+every scenario is therefore per-push, not "eventually" - the rotating-subset
+scheme the brief allowed was not needed once the expensive set turned out to be
+two named files rather than a long tail.
+`tests/unit/balanceDeterminism.spec.ts` is what keeps the claim true: it walks
+the directory against the registry in both directions, so a new scenario
+without a twin is a red build, and the one exempt file (`tariff.spec.ts`,
+closed-form revenue ceilings) is named WITH its reason and re-checked - the
+audit asserts the file really contains no world. Enumerated, not counted (the
+D-183 habit).
+
+The twin costs exactly ONE extra construction, not two: `hashTwin` takes a
+thunk over the worlds the file already built for its band assertions and a
+thunk that builds them again. Where a scenario is a comparison - netzdesign's
+three railways, taktLine's takted and untakted pair, aiCompany's three
+personalities - every world is hashed, because a divergence in either half
+moves the number the band is read from.
+
+**The long-run soak fixture is a manifest of HASHES, and that is the whole size
+decision.** SPEC2 wants a recorded twenty-five year AI game replayed to an
+identical hash. Committing the `.ironreplay` itself would put 582 kB of
+compressed world states into git, re-recorded on every save bump, in a
+repository whose glob test exists to keep binaries out (E-14). What the fixture
+has to carry is what the recording COMMITTED to, and that is 1,359 bytes of
+JSON: the sixteen year-boundary digests the ring holds, the final tick and
+hash, the command count, and the parameters the game was played with. The
+recording is rebuilt from the seed on every run - the same self-priming pin
+protocol as the canonical cross-OS hash (D-137), including the error text that
+tells you to delete the file and re-run when the simulation legitimately
+changed, and never to re-pin a cross-platform divergence.
+
+Two independent things are asserted, and only one of them needs the file: the
+recording, decoded from its own bytes, re-simulates to every hash it committed
+to (self-consistency, which catches a desync inside a single run), and those
+hashes are the ones the fixture recorded (regression). Measured: seed 4,711,
+256 map, three competitors, 1,800,000 ticks, **698 recorded commands**, final
+hash `615d0259186b89dc`, compared at **16 committed ticks**, whole soak
+**48.9 s** wall including the re-simulation. The liveness half is asserted too
+- a soak that reproduces an empty world reproduces nothing - and the ring is
+proven full with its base still at tick 0, which is D-188's never-evict rule
+seen from the outside.
+
+**The `soak` job runs on `windows-latest`, the platform both pins were recorded
+on.** Putting a quarter-century AI game on the cross-OS surface would be
+genuinely stronger evidence, and it is deliberately NOT taken here: D-137's
+fixture is sized to be cheap on two runners and its failure is unambiguous,
+whereas a red twenty-five-year soak on a second OS is an expensive thing to
+bisect at a milestone boundary. The upgrade path is one line in the workflow
+and is named here so it stays a decision rather than an oversight.
+
+**Ledger.** No `SAVE_VERSION` bump - v27 is bundle 1's, and this bundle changes
+no serialised shape: nothing under `hashWorld` moved, so the canonical cross-OS
+pin (`50c7d6a38f6da052`) and the corpus manifest (`17f7f507023b91d8`) are
+untouched, and the field audit's allowlists are unchanged. No snapshot-layout
+change, no atlas cell, no tick cost - every line of this bundle is test
+infrastructure, a crash-path conversion and a build file. The one production
+change a running game can see is the extracted `replayFromSaveBytes`, which the
+worker already ran verbatim.

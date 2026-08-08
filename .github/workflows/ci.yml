@@ -65,3 +65,41 @@ jobs:
 
       - name: Determinism on Linux - same pin as Windows
         run: npm run test:determinism
+
+  # SPEC2 M16, 6.3: the proof job. Two pieces of evidence that are worth having
+  # on every push and too slow to sit inside every local `npm test`:
+  #
+  #  - the long-run soak - a recorded twenty-five year AI game replayed to the
+  #    hashes it committed to at every game-year checkpoint (measured 49 s of
+  #    pure simulation on the reference machine);
+  #  - the balance suite with EVERY desync twin. The default run twins the
+  #    seven cheap scenarios; the two quarter-century AI scenarios cost 143 s
+  #    of the 186 s a complete twin takes, so they are switched on here rather
+  #    than on every developer's machine (tests/balance/determinism.ts states
+  #    the split and the measurements).
+  #
+  # It runs on windows-latest, the platform both pins were recorded on. The
+  # cross-OS question is D-137's and has its own fixture, deliberately sized to
+  # be cheap on two runners; putting a quarter-century AI game on that surface
+  # is a separate decision with its own cost.
+  soak:
+    runs-on: windows-latest
+    timeout-minutes: 40
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - name: Long-run soak - a quarter century replayed to its pinned hashes
+        run: npm run test:soak
+
+      - name: Balance suite as a desync guard - every scenario twice
+        run: npm run test:balance
+        env:
+          IRON_VEINS_BALANCE_HASH: all

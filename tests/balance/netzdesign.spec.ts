@@ -13,6 +13,7 @@ import { STATION_HISTORY_MONTHS } from '../../src/sim/constants';
 import { ModuleKind, stationRating } from '../../src/sim/station/types';
 import { VEHICLE_STATE_KEYS } from '../../src/sim/vehicles/VehicleStore';
 import { World } from '../../src/sim/World';
+import { hashTwin } from './determinism';
 import { makeTown, placeTown } from './scenario';
 
 /**
@@ -295,6 +296,8 @@ interface Measurement {
   readonly earnedCt: number;
   readonly ceilingCt: number;
   readonly detail: string;
+  /** The world the measurement was taken on - the desync guard's subject. */
+  readonly world: World;
 }
 
 /** Why the line earns what it earns - the house rule for a balancing test. */
@@ -341,7 +344,7 @@ function measure(b: Bench): Measurement {
   for (let id = 0; id < vehicles.count; id++) if (vehicles.alive[id] === 1) ids.push(id);
 
   const value = networkValueOf(b.world, ids);
-  return { ...value, detail: explain(b, YEARS) };
+  return { ...value, detail: explain(b, YEARS), world: b.world };
 }
 
 describe('scenario Netzdesign: what good track is worth', () => {
@@ -388,4 +391,16 @@ describe('scenario Netzdesign: what good track is worth', () => {
   it('pays at least three times as much for the well designed line', () => {
     expect(factor).toBeGreaterThanOrEqual(MIN_FACTOR);
   });
+
+  // All three railways, because the factor is a comparison and a divergence
+  // in either half would move it.
+  hashTwin(
+    'netzdesign',
+    () => [bad.world, middle.world, good.world],
+    () => [
+      measure(botched()).world,
+      measure(straightUnsignalled()).world,
+      measure(signalled()).world,
+    ],
+  );
 });

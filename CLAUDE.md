@@ -96,9 +96,12 @@ npm run dev              # vite dev server on :5183 (COOP/COEP headers set)
 npm run build            # tsc --noEmit && vite build
 npm run typecheck
 npm run lint
-npm test                 # everything
+npm test                 # everything except the perf and soak suites, then perf
 npm run test:unit
 npm run test:determinism # must never be red
+npm run test:balance
+npm run test:balance:full # + the two costly desync twins (SPEC2 M16, D-190)
+npm run test:soak        # the recorded 25-year AI game, replayed (~50 s)
 npm run icons            # regenerate src-tauri/icons from tools/make-icons.mjs
 npm run tauri dev        # desktop shell - needs the Rust toolchain
 ```
@@ -838,6 +841,83 @@ against the M10 baseline 1.45 / 3.26 - a p99 delta of -0.31 ms where the
 row allows +0.50. Save size A/B on one world: the all-zero congestion
 layer costs 1,039 B compressed against 1,048,576 B raw; heavily played,
 20,023 B.
+
+## M16 - the replay theatre and the proof chain
+
+The determinism dividend, paid out: a game is a file you can watch, scrub,
+and hand to somebody else as evidence. ONE save bump (v26 -> v27) and it is
+a CONTAINER-only one - not a byte of hashed world state moved, so the
+canonical cross-OS pin stayed `50c7d6a38f6da052` and the corpus manifest
+stayed `17f7f507023b91d8` through the whole milestone. Zero snapshot
+change, zero atlas cell, zero tick cost.
+
+- **The checkpoint ring is ONE mechanism for three jobs** (D-188) -
+  scrubbing, tail verification, log compaction - because SPEC2 said so and
+  following it literally is what kept the milestone small. A checkpoint is
+  the whole world at a year boundary, compressed at record time (measured
+  25-39 kB against 1.2 MB raw), carrying its own digest, verified when it
+  is RESTORED rather than when the file is opened. `CHECKPOINT_RING_CAPACITY`
+  is 16 and **entry zero is never evicted**: it is the tick the retained log
+  hangs from. Tick 0 is a year boundary, so a game's genesis is a checkpoint
+  like any other and "replay from the first day" is a DECODE. A
+  `.ironreplay` is the same container with three things settled - the world
+  at `logBaseTick`, `commandsExecuted = 0`, and a `ReplayClaim` - never a
+  second format, because a second parser falls silently behind the command
+  set (the D-133 defect). "Trim the log at a checkpoint" is a legal save
+  variant, one-way and never automatic.
+- **A recording plays through a SEALED queue** (D-189). Playback is the
+  ordinary scheduler at the ordinary speeds; the only difference is
+  `CommandQueue.seal()`, and it has to stop two writers: the AI, whose moves
+  are already IN the log (before the seal, a recorded AI game could not be
+  played back at all), and the interface, refused in four layers so the
+  player gets a sentence rather than a silence. Entering a replay REPLACES
+  the world, so leaving one loads the game that was put aside through the
+  ordinary load path. Scrubbing IS the ring, which is what makes a jump
+  exact. "Replay pruefen" names the first divergent tick EXACTLY when the
+  bracket between two committed hashes holds one command tick, and says
+  `exact: false` honestly when it holds more - the floor is stated, not
+  dressed up, and `checkLogIntegrity` withdraws the claim when the log's own
+  numbering was tampered with. A file this build had to MIGRATE is shelved
+  as it stands and is `verifiable: false` before the button is pressed.
+- **A bug report is a repro now** (D-190). The crash bundle carries an
+  `.ironreplay` of the session beside the autosave it was converted from -
+  same conversion as the shelf's ("export replay from save"), extracted to
+  `replayFromSaveBytes` so three doors share one decision, and run on the
+  MAIN thread because a dead worker cannot encode anything (D-132). The sim
+  enters that thread through a DYNAMIC import, which is also the honest
+  failure boundary: `replay: null` plus a `replayError` sentence, never a
+  broken bundle. The recording ends at the last save, and the commands after
+  it stay in the log tail as text - splicing them in would manufacture a
+  history that cannot reproduce, since the main thread has neither the
+  worker's exact ticks nor the queue's sequence numbers.
+- **The balance suite is the desync net, at a price that is stated**
+  (D-190). Every simulating scenario runs twice and asserts hash equality.
+  A complete twin costs +186 s of CPU and 143 s of that is the two
+  quarter-century AI scenarios, so the seven cheap twins run in every
+  `npm run test:balance` (+43 s) and ALL NINE run in the new `soak` CI job
+  on every push (`IRON_VEINS_BALANCE_HASH=all`, locally
+  `npm run test:balance:full`). `tests/unit/balanceDeterminism.spec.ts`
+  walks the directory against the registry in both directions, so a new
+  scenario without a twin is a red build and the one exempt file
+  (`tariff.spec.ts` - closed form, no world) is named with its reason.
+- **The long-run soak is a manifest of HASHES, not a megabyte in git**
+  (D-190). `npm run test:soak` plays the recorded twenty-five year AI game
+  (seed 4,711, 256 map, three competitors), exports it as a `.ironreplay`
+  and re-simulates it against the 16 year-boundary digests it committed to
+  AND against a 1,359-byte text pin - self-priming under the D-137
+  protocol, including the rule that a cross-platform divergence is debugged
+  and never re-pinned. Measured 48.9 s wall, 698 recorded commands, final
+  hash `615d0259186b89dc`. The `soak` job runs on windows-latest, the
+  platform both pins were recorded on; putting a quarter century on the
+  cross-OS surface is a named, deliberately untaken upgrade.
+
+Measured (reference machine, ledger 6.1.1): tick p50 1.447 / p99 2.868 ms
+against the M10 baseline 1.45 / 3.26, on a row that allows +0.00 - the
+milestone's only per-tick cost is a modulo in the scheduler, and a
+checkpoint is encoded once a game year on the SAVE path (25-39 kB
+compressed against 1.2 MB raw, 24-41 ms). A recording of the twenty-five
+year game costs 582,520 B against the save's 593,434 B; the ring is
+566,367 B of both.
 
 ## Still outstanding
 

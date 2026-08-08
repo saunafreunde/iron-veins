@@ -3,6 +3,7 @@ import { CommandQueue } from '../../src/sim/commands/queue';
 import { Difficulty, MapClimate, TICKS_PER_YEAR, TILE_PUBLIC } from '../../src/sim/constants';
 import { PERSONALITY_COUNT, Personality } from '../../src/sim/ai/types';
 import { hashWorld, World } from '../../src/sim/World';
+import { hashTwin } from './determinism';
 
 /**
  * The acceptance criterion of M8: a twenty-five year game against three AI
@@ -222,4 +223,15 @@ describe('M8 acceptance: twenty-five years against three competitors', () => {
     expect(queue.log.length).toBeGreaterThan(0);
     for (const envelope of queue.log) expect(envelope.companyId).toBeGreaterThan(0);
   });
+
+  // The quarter century itself, not the five-year probe above: costly enough
+  // to be one of the two scenarios the default run skips (see
+  // ./determinism.ts), and covered on every push by the CI `soak` job and by
+  // the long-run fixture, which replays exactly this game against the
+  // sixteen hashes its checkpoint ring committed to.
+  hashTwin(
+    'aiGame',
+    () => [quarterCentury().world],
+    () => [play(YEARS).world],
+  );
 });

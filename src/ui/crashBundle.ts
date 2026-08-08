@@ -10,6 +10,8 @@
  * hands.
  */
 
+import { REPLAY_EXTENSION } from '../sim/save/format';
+
 /**
  * Byte budget of the rolling command-log tail. [byte]
  * SPEC2 M10: "rollierender Command-Log-Schwanz (~1 MB)". Enough for tens of
@@ -17,8 +19,12 @@
  */
 export const COMMAND_LOG_BYTE_BUDGET = 1_048_576;
 
-/** Version of the bundle's own JSON shape, so tooling can tell them apart. */
-export const CRASH_BUNDLE_SCHEMA_VERSION = 1;
+/**
+ * Version of the bundle's own JSON shape, so tooling can tell them apart.
+ * 2 since SPEC2 M16: the bundle additionally carries a `.ironreplay` of the
+ * session ({@link CrashReplayInput}).
+ */
+export const CRASH_BUNDLE_SCHEMA_VERSION = 2;
 
 /** UTF-8 size of a string, without allocating the encoded bytes. */
 function utf8ByteLength(text: string): number {
@@ -160,6 +166,39 @@ export interface CrashContextInput {
   readonly isDesktop: boolean;
 }
 
+/**
+ * The `.ironreplay` of the session (SPEC2 M16), derived from the same save the
+ * bundle carries a copy of.
+ *
+ * A recording is what turns a bug report into a repro: it holds the world at
+ * its base tick, the command log that produced everything after it, and the
+ * claim `{finalTick, finalHash}` the crashing build committed to - so the
+ * developer receiving the report can play the session back and have the game
+ * itself say whether the re-simulation reproduces it, to the tick (D-189).
+ *
+ * It ends where the last save ended, NOT at the crash: the commands issued
+ * after it live in {@link CrashBundleInput.commandLog} as plain text and are
+ * deliberately NOT spliced into the recording. The main thread stamps those
+ * lines with the last PUBLISHED tick and knows neither the worker's exact tick
+ * nor the sequence numbers the queue gave them, so appending them would
+ * manufacture a log that cannot reproduce - a recording that lies about its own
+ * history is worse than one that stops early and says so. `finalTick` against
+ * the bundle's `error.tick` is that gap, stated in numbers.
+ */
+export interface CrashReplayInput {
+  readonly name: string;
+  readonly bytes: Uint8Array;
+  /** Tick the recording ends at - the last save's, never the crash's. */
+  readonly finalTick: number;
+  /** Tick the retained log starts from; 0 unless the log was compacted. */
+  readonly baseTick: number;
+  readonly commandCount: number;
+  /** Ticks a jump lands on exactly - the checkpoint ring, oldest first. */
+  readonly checkpointTicks: readonly number[];
+  /** Whether the build that wrote this bundle may verify the recording (E-11). */
+  readonly verifiable: boolean;
+}
+
 export interface CrashBundleInput {
   readonly appVersion: string;
   readonly saveVersion: number;
@@ -171,6 +210,15 @@ export interface CrashBundleInput {
   readonly commandLog: readonly string[];
   /** The last autosave as the shelf holds it, or null when none exists yet. */
   readonly autosave: { readonly name: string; readonly bytes: Uint8Array } | null;
+  /**
+   * The session as a recording, or null when there is none to build - no save
+   * has been written yet, or the conversion itself failed. Null is honest and
+   * never fatal: the autosave and the command tail are the bundle's contract
+   * (D-132), the recording is the repro on top of it.
+   */
+  readonly replay: CrashReplayInput | null;
+  /** Why {@link replay} is null, in plain text; null when there is one. */
+  readonly replayError: string | null;
 }
 
 /**
@@ -195,6 +243,19 @@ export function assembleCrashBundle(input: CrashBundleInput): Uint8Array {
       input.autosave === null
         ? null
         : { name: input.autosave.name, base64: bytesToBase64(input.autosave.bytes) },
+    replay:
+      input.replay === null
+        ? null
+        : {
+            name: input.replay.name,
+            base64: bytesToBase64(input.replay.bytes),
+            finalTick: input.replay.finalTick,
+            baseTick: input.replay.baseTick,
+            commandCount: input.replay.commandCount,
+            checkpointTicks: input.replay.checkpointTicks,
+            verifiable: input.replay.verifiable,
+          },
+    replayError: input.replayError,
   };
   return new TextEncoder().encode(JSON.stringify(document, null, 2));
 }
@@ -205,6 +266,18 @@ export function assembleCrashBundle(input: CrashBundleInput): Uint8Array {
  */
 export function bugReportFileName(writtenAt: string): string {
   return `bug-report-${writtenAt.replace(/[:.]/g, '-')}.json`;
+}
+
+/**
+ * Name of the recording INSIDE a bundle - what the base64 should be written
+ * out as when a developer takes the report apart.
+ *
+ * It is a label, not a second file: the bundle stays ONE JSON document
+ * (D-132), so nothing in the crashes directory ever carries this name and the
+ * directory scan of D-139 keeps seeing exactly the bundles it knows.
+ */
+export function bugReportReplayFileName(writtenAt: string): string {
+  return `bug-report-${writtenAt.replace(/[:.]/g, '-')}${REPLAY_EXTENSION}`;
 }
 
 /**
