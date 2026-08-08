@@ -166,6 +166,7 @@
   "ui.line.utilisation": "Utilisation",
   "ui.line.profitYear": "Profit/year",
   "ui.line.roundTime": "Mean round",
+  "ui.line.networkValue": "Network value",
   "ui.line.roundDays": "{days} days",
   "ui.line.roundEstimate": "~ = estimate: at least one leg has never been driven and is credited as a straight line at 54 km/h.",
   "ui.line.stops": "Stops",
@@ -476,6 +477,7 @@
   "ui.finance.balanceSheet": "Balance sheet",
   "ui.finance.assets": "Fixed assets",
   "ui.finance.equity": "Company value",
+  "ui.finance.networkValue": "Network value",
   "ui.finance.cashflow": "Cash flow (24 months)",
   "ui.finance.profit": "Result",
   "account.revenuePassengers": "Passenger revenue",
@@ -880,5 +882,7 @@
   "ui.tooltip.vehicle.age": "Age against design life. Past its design life a vehicle pays {factor}x upkeep and loses reliability twice as fast - replace or renew it.",
   "ui.tooltip.vehicle.reliability": "Falls with every year in service and recovers in a depot. Low reliability means more breakdowns and a worse rating at every station it serves.",
   "ui.tooltip.vehicle.earned": "Lifetime revenue, the yearly rate beside it - hold it against the yearly upkeep above: a line that cannot out-earn its upkeep is a hobby.",
-  "ui.tooltip.finance.valueGraph": "Company value = cash plus the fleet's book value minus the loan - one point per closed year, the last one is today. Buying a vehicle alone does not move it (money becomes book value); depreciation and profit do."
+  "ui.tooltip.finance.valueGraph": "Company value = cash plus the fleet's book value minus the loan - one point per closed year, the last one is today. Buying a vehicle alone does not move it (money becomes book value); depreciation and profit do.",
+  "ui.tooltip.line.networkValue": "This line's earned revenue divided by its vehicles' ceiling: capacity x tariff x top speed - what they would take with no loading time and a full load in both directions. Because the ceiling does not depend on the alignment, the percentage measures the network design rather than the size of the fleet. So far {earned} of {ceiling}.",
+  "ui.tooltip.finance.networkValue": "The whole fleet's earned revenue divided by its ceiling: capacity x tariff x top speed - what the vehicles would take with no loading time and a full load in both directions. The ceiling depends on the vehicles alone and never on the alignment: the whole difference between a smooth, signalled line and a slapdash one lands in the numerator. Parked vehicles count. So far {earned} of {ceiling}."
 }

@@ -1,10 +1,11 @@
 import { useState, type ReactElement } from 'react';
 import { formatMoney, t } from '../i18n';
-import type { LineMarker } from '../shared/protocol';
+import type { LineMarker, NetworkValueMarker } from '../shared/protocol';
 import { CommandKind } from '../sim/commands/types';
 import { TAKT_MAX_TICKS, TAKT_MIN_TICKS, TICKS_PER_DAY } from '../sim/constants';
 import { vehicleSpec } from '../sim/vehicles/catalog';
 import { ListPanel, type Column } from './ListPanel';
+import { Tooltip } from './Tooltip';
 import { OrderEditor, toSpec } from './OrderEditor';
 import type { SimClient } from './SimClient';
 import { useSimStore } from './store';
@@ -22,6 +23,17 @@ import { useSimStore } from './store';
 /** A line's display name. Lines have no free names; the id is the name. */
 function lineName(line: LineMarker): string {
   return t('ui.line.name', { line: line.id + 1 });
+}
+
+/**
+ * The network value of SPEC2 M15 as the percentage it is meant to be read as.
+ *
+ * The share itself was computed in `economy/networkValue.ts`; the panel only
+ * chooses how many digits to show, so the figure the player reads and the
+ * figure the Netzdesign scenario asserts are the same figure.
+ */
+function networkValueLabel(value: NetworkValueMarker): string {
+  return value.ceilingCt > 0 ? `${Math.round(value.share * 100)} %` : '—';
 }
 
 /** Round time in whole game days, the unit the player plans in. */
@@ -65,6 +77,12 @@ export function LinePanel({ client }: { readonly client: SimClient }): ReactElem
       render: (l) => formatMoney(l.profitPerYearCt),
       sortBy: (l) => l.profitPerYearCt,
       className: (l) => (l.profitPerYearCt < 0 ? 'row__meta value--danger' : 'row__meta'),
+    },
+    {
+      key: 'networkValue',
+      labelKey: 'ui.line.networkValue',
+      render: (l) => networkValueLabel(l.networkValue),
+      sortBy: (l) => l.networkValue.share,
     },
     {
       key: 'round',
@@ -151,6 +169,24 @@ function LineDetail({
         <div>
           <dt>{t('ui.line.roundTime')}</dt>
           <dd className="value value--mono">{roundLabel(line)}</dd>
+        </div>
+        {/* The 4x promise of SPEC.md section 1, as a number (SPEC2 M15). It
+            wears the M14 tooltip module because a bare percentage invites
+            exactly the wrong reading - the tip says what the denominator is
+            and why it does not move when the track does (D-183). */}
+        <div>
+          <dt>
+            <Tooltip
+              textKey="ui.tooltip.line.networkValue"
+              params={{
+                earned: formatMoney(Math.round(line.networkValue.earnedCt)),
+                ceiling: formatMoney(Math.round(line.networkValue.ceilingCt)),
+              }}
+            >
+              <span tabIndex={0}>{t('ui.line.networkValue')}</span>
+            </Tooltip>
+          </dt>
+          <dd className="value value--mono">{networkValueLabel(line.networkValue)}</dd>
         </div>
       </dl>
       {/* The 54 km/h straight-line fallback leg, VISIBLY named an estimate

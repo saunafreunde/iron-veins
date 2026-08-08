@@ -166,6 +166,7 @@
   "ui.line.utilisation": "Auslastung",
   "ui.line.profitYear": "Gewinn/Jahr",
   "ui.line.roundTime": "Ø-Umlauf",
+  "ui.line.networkValue": "Netzwert",
   "ui.line.roundDays": "{days} Tage",
   "ui.line.roundEstimate": "~ = Schätzung: mindestens eine Teilstrecke ist noch nie gefahren worden und wird mit Luftlinie bei 54 km/h angesetzt.",
   "ui.line.stops": "Halte",
@@ -476,6 +477,7 @@
   "ui.finance.balanceSheet": "Bilanz",
   "ui.finance.assets": "Anlagevermögen",
   "ui.finance.equity": "Firmenwert",
+  "ui.finance.networkValue": "Netzwert",
   "ui.finance.cashflow": "Cashflow (24 Monate)",
   "ui.finance.profit": "Ergebnis",
   "account.revenuePassengers": "Erlöse Personen",
@@ -880,5 +882,7 @@
   "ui.tooltip.vehicle.age": "Alter gegen Auslegungsdauer. Jenseits davon zahlt ein Fahrzeug {factor}-fachen Unterhalt und verliert doppelt so schnell Zuverlässigkeit - ersetzen oder erneuern.",
   "ui.tooltip.vehicle.reliability": "Sinkt mit jedem Dienstjahr und erholt sich im Depot. Wenig Zuverlässigkeit heißt mehr Pannen und schlechteres Rating an jeder bedienten Station.",
   "ui.tooltip.vehicle.earned": "Lebenszeit-Ertrag, daneben die Jahresrate - gegen den Jahresunterhalt darüber halten: Eine Linie, die ihren Unterhalt nicht schlägt, ist ein Hobby.",
-  "ui.tooltip.finance.valueGraph": "Firmenwert = Kasse plus Buchwert der Flotte minus Kredit - ein Punkt je abgeschlossenem Jahr, der letzte ist heute. Ein Fahrzeugkauf allein bewegt ihn nicht (Geld wird Buchwert); Abschreibung und Gewinn bewegen ihn."
+  "ui.tooltip.finance.valueGraph": "Firmenwert = Kasse plus Buchwert der Flotte minus Kredit - ein Punkt je abgeschlossenem Jahr, der letzte ist heute. Ein Fahrzeugkauf allein bewegt ihn nicht (Geld wird Buchwert); Abschreibung und Gewinn bewegen ihn.",
+  "ui.tooltip.line.networkValue": "Verdienter Ertrag dieser Linie geteilt durch die Obergrenze ihrer Fahrzeuge: Kapazität × Tarif × Höchstgeschwindigkeit - was sie einbrächten, wenn sie ohne Ladezeit in beide Richtungen voll führen. Weil die Obergrenze nicht an der Trasse hängt, misst der Prozentsatz das Netzdesign und nicht die Flottengröße. Bisher {earned} von {ceiling}.",
+  "ui.tooltip.finance.networkValue": "Verdienter Ertrag der ganzen Flotte geteilt durch ihre Obergrenze: Kapazität × Tarif × Höchstgeschwindigkeit - was die Fahrzeuge einbrächten, wenn sie ohne Ladezeit in beide Richtungen voll führen. Die Obergrenze hängt nur an den Fahrzeugen, nie an der Trasse: der ganze Unterschied zwischen einer glatten, signalisierten Strecke und einer hingerotzten steht im Zähler. Abgestelltes Gerät zählt mit. Bisher {earned} von {ceiling}."
 }

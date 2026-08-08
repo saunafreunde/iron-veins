@@ -64,6 +64,24 @@ export interface CompanyMarker {
 }
 
 /**
+ * The network value of SPEC2 M15: earned revenue against the closed-form
+ * ceiling of D-066, computed sim-side in `economy/networkValue.ts`.
+ *
+ * All three numbers travel because the panel shows the percentage and the
+ * tooltip explains it with the two figures it came from. The UI divides
+ * nothing: `share` is the simulation's own answer, so the number on screen
+ * and the number a balancing scenario asserts are the same number.
+ */
+export interface NetworkValueMarker {
+  /** Revenue the vehicles actually booked over their lives. [cent] */
+  readonly earnedCt: number;
+  /** What that same fleet could have earned over the same lives. [cent] */
+  readonly ceilingCt: number;
+  /** `earnedCt / ceilingCt`, 0 while nothing has had the chance to earn. */
+  readonly share: number;
+}
+
+/**
  * The company's books, as the finance panel shows them (section 14.1).
  *
  * Sent by message rather than through the snapshot: it is a hundred numbers
@@ -86,6 +104,13 @@ export interface FinanceReport {
   /** Carbon emitted this game year and last, in kilograms (section 14.3). */
   readonly co2ThisYearKg: number;
   readonly co2LastYearKg: number;
+  /**
+   * The whole company's network value (SPEC2 M15). It belongs in the BOOKS
+   * because SPEC.md section 1 asks for the reward for good network design to
+   * be measurable "in der Bilanz" - and because it moves on the same monthly
+   * cadence as everything else here.
+   */
+  readonly networkValue: NetworkValueMarker;
 }
 
 /** One line of the news log, as the panel shows it (section 17.1). */
@@ -340,6 +365,12 @@ export interface LineMarker {
   readonly advisedVehicles: number;
   /** Slack per round at the advised size. [ticks] */
   readonly headroomTicks: number;
+  /**
+   * Earned against possible for this line's vehicles (SPEC2 M15) - the one
+   * figure that separates the quality of the ALIGNMENT from the size of the
+   * fleet, because the denominator depends on neither.
+   */
+  readonly networkValue: NetworkValueMarker;
 }
 
 export type MainToWorkerMessage =

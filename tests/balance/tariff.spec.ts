@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cargoSpec } from '../../src/sim/cargo/types';
-import { TICKS_PER_YEAR, TICK_HZ, TILE_SIZE_M } from '../../src/sim/constants';
+import { ceilingRevenueCtPerYear } from '../../src/sim/economy/networkValue';
 import {
   capacityFor,
   defaultCargo,
@@ -13,30 +12,28 @@ import {
 /**
  * What a vehicle can earn in a year, in closed form.
  *
- * The payment formula is `amount x rate x distance/100 tiles`, and distance per
- * year is `speed x seconds per year / metres per tile`. The distance cancels:
- * a vehicle's ceiling revenue does NOT depend on how long its line is, only on
- * what it carries and how fast it goes. That is the whole reason this can be a
- * unit test instead of a simulation.
- *
- *   ct/year = capacity x baseRate x speed[m/s] x (TICKS_PER_YEAR / TICK_HZ)
- *             / TILE_SIZE_M / 100
+ * The payment formula is `amount x rate x distance/PAYMENT_DISTANCE_TILES`,
+ * and distance per year is `speed x seconds per year / metres per tile`. The
+ * distance cancels: a vehicle's ceiling revenue does NOT depend on how long
+ * its line is, only on what it carries and how fast it goes. That is the whole
+ * reason this can be a unit test instead of a simulation.
  *
  * The figure is a CEILING: it assumes no loading time, a full load every trip
  * and a full load in both directions. Real lines reach a fraction of it. What
  * makes it worth pinning is that a vehicle whose ceiling is below its upkeep
  * cannot be run at a profit on any line of any length, and nothing else in the
  * suite would ever notice.
+ *
+ * The FORMULA moved into `src/sim/economy/networkValue.ts` in SPEC2 M15 and
+ * this file imports it. It was written here first, and the freight rates were
+ * calibrated against it (D-066); the network-value panel divides earnings by
+ * the very same number, and two copies of it would be two definitions of what
+ * a tariff means.
  */
 
-/** Seconds of real time in one game year, divided by the payment's 100 tiles. */
-const REVENUE_FACTOR = TICKS_PER_YEAR / TICK_HZ / TILE_SIZE_M / 100;
-
-function ceilingRevenueCtPerYear(spec: VehicleSpec): number {
+function specCeilingCtPerYear(spec: VehicleSpec): number {
   const cargo = defaultCargo(spec);
-  const capacity = capacityFor(spec, cargo);
-  if (capacity <= 0) return 0;
-  return capacity * cargoSpec(cargo).baseRateCt * spec.maxSpeedMs * REVENUE_FACTOR;
+  return ceilingRevenueCtPerYear(capacityFor(spec, cargo), cargo, spec.maxSpeedMs);
 }
 
 describe('the revenue ceiling of every vehicle', () => {
@@ -50,7 +47,7 @@ describe('the revenue ceiling of every vehicle', () => {
       if (spec.railRole === RailRole.Traction && capacityFor(spec, defaultCargo(spec)) === 0) {
         continue;
       }
-      const revenue = ceilingRevenueCtPerYear(spec);
+      const revenue = specCeilingCtPerYear(spec);
       if (revenue <= 0) continue;
 
       // A wagon has no upkeep worth speaking of on its own; it is charged as
@@ -82,8 +79,8 @@ describe('the revenue ceiling of every vehicle', () => {
     const lorry = VEHICLE_SPECS.find((s) => s.nameKey === 'veh.lorry_bulk1')!;
     const wagon = VEHICLE_SPECS.find((s) => s.nameKey === 'veh.wagon_open1')!;
 
-    const lorryRatio = ceilingRevenueCtPerYear(lorry) / lorry.upkeepCtPerYear;
-    const wagonRatio = ceilingRevenueCtPerYear(wagon) / wagon.upkeepCtPerYear;
+    const lorryRatio = specCeilingCtPerYear(lorry) / lorry.upkeepCtPerYear;
+    const wagonRatio = specCeilingCtPerYear(wagon) / wagon.upkeepCtPerYear;
 
     expect(lorryRatio).toBeGreaterThan(MIN_ROAD_RATIO);
     expect(lorryRatio).toBeLessThan(wagonRatio);
@@ -98,7 +95,7 @@ describe('the revenue ceiling of every vehicle', () => {
     const speed = Math.min(loco.maxSpeedMs, wagon.maxSpeedMs);
     const cargo = defaultCargo(wagon);
     const capacity = wagons * capacityFor(wagon, cargo);
-    const revenue = capacity * cargoSpec(cargo).baseRateCt * speed * REVENUE_FACTOR;
+    const revenue = ceilingRevenueCtPerYear(capacity, cargo, speed);
     const upkeep = loco.upkeepCtPerYear + wagons * wagon.upkeepCtPerYear;
 
     console.log(

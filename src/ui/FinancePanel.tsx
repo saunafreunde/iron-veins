@@ -173,6 +173,28 @@ function Books({ report }: { readonly report: FinanceReport }): ReactElement {
             {formatMoney(report.companyValueCt)}
           </dd>
         </div>
+        {/* SPEC.md section 1 asks for the reward for good network design to be
+            measurable IN THE BOOKS, so this is where the company-wide figure
+            of SPEC2 M15 stands. The share is the simulation's own
+            (economy/networkValue.ts); the panel formats it. */}
+        <div>
+          <dt>
+            <Tooltip
+              textKey="ui.tooltip.finance.networkValue"
+              params={{
+                earned: formatMoney(Math.round(report.networkValue.earnedCt)),
+                ceiling: formatMoney(Math.round(report.networkValue.ceilingCt)),
+              }}
+            >
+              <span tabIndex={0}>{t('ui.finance.networkValue')}</span>
+            </Tooltip>
+          </dt>
+          <dd className="value value--mono">
+            {report.networkValue.ceilingCt > 0
+              ? `${Math.round(report.networkValue.share * 100)} %`
+              : '—'}
+          </dd>
+        </div>
       </dl>
 
       <ValueGraph report={report} />

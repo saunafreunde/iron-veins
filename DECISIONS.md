@@ -14,7 +14,7 @@ no entry below. A number may appear under several topics.
   D-024, D-093, D-106, D-128, D-137, D-142, D-145, D-146, D-149, D-153, D-178,
   D-181, D-184, D-185
 - **Commands, snapshot & worker boundary:** D-004, D-005, D-006, D-011, D-032,
-  D-100, D-111, D-145, D-146, D-148, D-162, D-174, D-176, D-179
+  D-100, D-111, D-145, D-146, D-148, D-162, D-174, D-176, D-179, D-187
 - **Lines & timetables:** D-145, D-146, D-147, D-148, D-149, D-150, D-151,
   D-152, D-155, D-159
 - **Map generation & terrain:** D-018, D-019, D-020, D-021, D-022, D-023,
@@ -30,14 +30,14 @@ no entry below. A number may appear under several topics.
   D-061, D-073, D-080, D-081, D-082, D-083, D-157, D-173, D-184, D-185, D-186
 - **Stations & catchment:** D-049, D-080, D-095, D-150, D-159, D-178, D-179
 - **Cargo, payment & routing:** D-036, D-037, D-065, D-067, D-075, D-077,
-  D-078, D-118, D-142, D-151, D-176, D-178
+  D-078, D-118, D-142, D-151, D-176, D-178, D-187
 - **Industry & production:** D-022, D-062, D-063, D-064, D-069, D-071, D-079,
   D-085, D-086, D-174
 - **Towns, council & ownership:** D-101, D-102, D-103, D-104
 - **Economy, finance & emissions:** D-008, D-090, D-091, D-092, D-105, D-154,
   D-180
 - **Balancing & scenarios:** D-038, D-039, D-040, D-041, D-066, D-087, D-088,
-  D-116, D-151, D-152, D-156, D-158, D-159
+  D-116, D-151, D-152, D-156, D-158, D-159, D-187
 - **Vehicles & fleet:** D-043, D-044, D-045, D-068, D-076, D-089, D-093,
   D-096, D-142, D-143, D-145, D-146, D-155, D-157, D-171, D-174, D-181, D-185
 - **Water & air:** D-094, D-095, D-096, D-097, D-098, D-099
@@ -48,10 +48,10 @@ no entry below. A number may appear under several topics.
   D-171, D-172, D-173, D-174, D-175, D-177, D-179, D-186
 - **UI & input:** D-011, D-013, D-015, D-035, D-110, D-113, D-114, D-119,
   D-126, D-148, D-165, D-166, D-177, D-179, D-180, D-181, D-182, D-183, D-184,
-  D-186
+  D-186, D-187
 - **Performance & measurement:** D-002, D-120, D-135, D-136, D-161, D-162,
   D-163, D-164, D-167, D-170, D-171, D-172, D-173, D-174, D-176, D-177, D-184,
-  D-185, D-186
+  D-185, D-186, D-187
 - **Platform, tooling & build:** D-012, D-014, D-015, D-016, D-017, D-029,
   D-030, D-031, D-160, D-168, D-169, D-170, D-172, D-175
 - **Crash safety:** D-132, D-139
@@ -5857,3 +5857,165 @@ untouched, as does the corpus manifest (D-130), both green in the suite. Had a
 train been deadlocked in either, re-recording under the documented protocol
 would have been the correct act; it was not needed, and saying so precisely is
 the point of checking.
+## M15 - net value and road congestion, bundle 4: the number, the scenario, the cap (2026-08-08)
+
+### D-187 The network value is the tariff test's own ceiling read from the world, the Netzdesign band is met by an alignment and a capacity in equal measure, and E-18 is answered by raising the cap
+
+SPEC.md section 1 opens with the promise the whole game is built on: a smooth,
+well signalled alignment with sensible passing places carries FOUR TIMES what a
+slapdash one does, and the player must be able to SEE it and MEASURE it in the
+books. SPEC2 M15 is where that sentence becomes a number. This bundle is four
+decisions - what the number is, where it is shown, what the scenario measures,
+and E-18.
+
+**The ceiling was already written, and it lived in a test.** D-066 computes a
+vehicle's ceiling revenue in closed form - `capacity x rate x speed x constant`,
+with the line length cancelling out - and the freight tariffs were recalibrated
+against exactly that figure. It lived in `tests/balance/tariff.spec.ts`, which
+is the right place for the number that CALIBRATED the rates and the wrong place
+for a number the interface divides by. `ceilingRevenueCtPerYear` is now
+`src/sim/economy/networkValue.ts` and the test IMPORTS it. Two copies would be
+two definitions of what a tariff means, and the copy that drifted would be the
+one nobody was watching. The test's printed table is unchanged to the euro,
+which is the evidence that the move was a move.
+
+The formula's `/ 100` moved with it: a rate is quoted per
+`PAYMENT_DISTANCE_TILES`, and that is a constant in `constants.ts` with a unit
+and an origin now rather than a literal in `payment.ts` and a second literal
+beside the ceiling. Same value, no behaviour change - the
+`REPATH_INTERVAL_TICKS` tidy-up of D-184, met a second time.
+
+**The denominator is quoted at the price level of the earnings it divides, and
+that took a new function.** Revenue carries `epochFactor` (section 14.2), so a
+lifetime of earnings is a sum of a century of different price levels; a ceiling
+quoted at today's prices would make a company's network value sag by 1.8 % a
+year for no reason but the calendar, and one quoted at the first year's would
+make it climb. `inflatedYearsBetween` in `payment.ts` integrates the price level
+between two ticks - a prefix sum over the same `EPOCH_FACTORS` table
+`epochFactor` reads, so there is exactly one definition of what a year was
+worth, and the answer is two lookups rather than a loop over a century. It is in
+`payment.ts` and not beside the ceiling for that reason.
+
+**What the number counts is deliberately generous to the track and hard on the
+fleet.** The ceiling assumes no loading time and a full load in BOTH directions,
+so it is unreachable by construction and the honest reading of a line at 7 % is
+"this is what a railway looks like", not "you are failing" - which is why the
+tooltip carries the mechanism (D-183) and the panel never shows the percentage
+bare. Parked vehicles COUNT: a company-wide figure that quietly excluded what
+stands in the shed would hide the most common way a network is badly designed.
+And because the denominator depends only on capacity, tariff and top speed, two
+identical fleets on two alignments have the identical denominator - the whole
+difference between them lands in the numerator, which is the property that makes
+the figure a measure of the NETWORK rather than of the fleet.
+
+It is shown per line (the list column and the detail, beside the round time) and
+per company IN THE BOOKS - `FinanceReport.networkValue`, on the monthly cadence
+with everything else there, because "in der Bilanz messen" is what SPEC.md asked
+for. The share is computed sim-side and the interface divides nothing, so the
+number on screen and the number the balancing scenario asserts are the same
+number.
+
+**The Netzdesign scenario: the promise measured, and decomposed.**
+`tests/balance/netzdesign.spec.ts` runs the identical traffic - the same two
+trains, the same orders, the same two towns, the same seed, the same world rules
+- over two railways between the same two stations, and divides their network
+values. Measured over six game years: **botched 1.8 %, signalled 6.9 %, factor
+3.73** against SPEC2's band of 3, and the figure is stable across seeds
+(3.73 / 3.71 / 3.75 on three of them) rather than one lucky draw.
+
+The scenario prints WHY, and it prints it as a decomposition, because a single
+ratio sends the reader guessing. A third world - straight but still unsignalled
+- splits the answer in two: the ALIGNMENT alone is worth **2.01x** (the sawtooth
+is a fifth longer and every kink carries a curve speed limit from the 8.1
+table), and the CAPACITY on top of it another **1.86x** (the botched line has no
+signal anywhere, so `sectionEnd` runs to the end of the route, the whole line is
+one section, and the second train can never enter it while the first is on it).
+Two failures, each worth about double, and their product is the promise. The
+station histories are printed beside it: the botched line collects 1,800 units a
+game year and lets 5,700 expire on its platforms, the signalled one collects
+6,120 and loses 1,443.
+
+**The good railway is not the passing loop SPEC2's sentence names, and that is a
+measured finding rather than a shortcut.** A short loop on single track was
+built first. It does not work in this game, for two reasons that are both in the
+engine rather than in the fixture. First, a train will not take it: the loop's
+four 45-degree turns cost radius-300 curve speed at every one of them (8.1),
+which is some eight seconds of route cost, while D-184 deliberately prices a
+claimed section at three - occupancy is a NUDGE, and the nudge is an order of
+magnitude too small to pay for a detour with curves in it. Second, even a loop a
+train did take only helps where the trains happen to MEET; two shuttling trains
+meet wherever their dwell times put them, and where they meet on plain signalled
+line they deadlock, which is D-059's stated limitation and not a defect. The
+design that removes opposing traffic altogether is the one D-082 already
+recorded: one-way blocks and a return track, so the passing place is the whole
+line. That is what the scenario's good railway is, and this entry says so
+instead of dressing an oval up as an Ausweiche. Both worlds run with
+`occupancyPenalty` and `signalPenalty` ON, so the comparison is about track and
+never about a rule.
+
+Nothing here tuned a constant. The scenario's own knobs - four passenger coaches
+cut to three so the train FITS its two-tile platform (`platformShare`), and a
+town population that offers a little more than the good line can carry - are
+fixture sizing, and both are argued in the file: a train hanging off its
+platform measures the platform, and a traffic level neither line can serve
+measures neither.
+
+**E-18: the cap goes up, and the priority writer is refused.**
+`SNAPSHOT_MAX_VEHICLES` was 1,500 against a store of `MAX_VEHICLES` = 4,000, so
+a large fleet was drawn at 37.5 % - and WHICH vehicles were drawn was decided by
+nothing more meaningful than the order the store hands out slots.
+`tests/unit/snapshotCap.spec.ts` measures that rather than describing it:
+against a block sized as it was, the written rows are exactly ids 0 through
+1,499 and the rest of the fleet is not there. To make that measurable at all,
+the block writer moved out of `SimWorker` - which no test can import, because it
+reads worker globals - into `src/sim/vehicles/snapshot.ts`, beside its subject,
+the shape `flow.ts` already gave the flow block.
+
+The cap is now the store's capacity, so the truncation cannot be reached by any
+fleet this simulation can hold. Measured price on the reference machine
+(`npm run test:perf`): the renderer's draw-prep walk over a full block of 4,000
+plain vehicles is **p50 2.40 ms / p99 3.52 ms** against **0.89 / 1.50 ms** for
+1,500 - and the tripwire scene next door already prices 9,000 placed units per
+frame at 2.49 ms, which is MORE work than a full plain block, so the existing
+gate covers this case from above and no new threshold was added. In the worker
+the raise costs nothing at all for any world at or below the old cap: the write
+loop is bounded by how many vehicles are alive, never by the cap. In memory it
+costs 160 KiB of shared buffer.
+
+The priority writer was refused on three grounds, none of them cost. It would
+put the CAMERA inside the decision, so which vehicles exist for the renderer
+would depend on where the player is looking - and a click, a sound and a status
+badge all address a vehicle by the id in that block. It would break the E-05
+pairing (D-162): a row that leaves the block and re-enters it has no previous
+generation to glide from, so every pan would pop vehicles instead of moving
+them. And it would put a per-vehicle priority test in the publish pass to save a
+buffer the machine does not notice.
+
+This spends the ONE snapshot-layout bump the M15 ledger row promised.
+`SNAPSHOT_LAYOUT_VERSION` goes 7 -> 8 because the block's size and every offset
+behind it move; the "Stau-Overlay-Block" that bump was booked for turned out to
+cost zero bytes twice over (D-185's congestion layer and D-186's throughput
+counters both ride the map's own shared buffer), so the row is honoured rather
+than quietly left unspent. SAVE_VERSION stays at v26 - this bundle touches no
+saved shape at all - and the canonical cross-OS pin `50c7d6a38f6da052` and the
+corpus manifest are untouched and green: the snapshot is a render channel and
+has never been in the world hash.
+
+One coupling followed the cap. The render tripwires used to size their scenes
+with `SNAPSHOT_MAX_VEHICLES` because it happened to equal the reference fleet.
+They say `REFERENCE_VEHICLES` = 1,500 now - the fleet of SPEC.md section 21,
+which is what the ledger prices everything against - so a cap that moves again
+can never move a tripwire's readings out from under the milestones that recorded
+them.
+
+**Measured on the reference machine** (Ryzen 5 7520U, `npm run test:perf`
+2026-08-08): tick p50 **1.481 ms** / p99 **2.949 ms** on the 1,500-vehicle
+fixture (max 19.98 ms over 6,500 ticks), against the M10 baseline of 1.45 / 3.26
+- a p99 delta of **-0.31 ms** where the M15 ledger row allows +0.50 ms for the
+whole milestone. The network value adds nothing to the tick by construction: it
+runs on the marker cadence (`postLines`, one pass over the line's vehicles) and
+on the monthly books (`postMonthly`, one pass over the fleet), both outside
+`World.step`. Render tripwires green (sprite pool median 1.77, draw prep 2.49,
+chunk bake 0.48, particles 0.29, aspect 0.03, emissive 0.06, flow prep 0.29 ms);
+flow export median 0.055 ms; the big save is unchanged at 187,272 B and reads
+back in 604 ms.

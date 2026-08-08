@@ -441,10 +441,10 @@ function rebuildProxy(
  * out exactly as the worker writes it - the draw-prep proxy reads it with the
  * renderer's own stride constants.
  */
-function syntheticVehicleBlock(map: TileMap): Int32Array {
-  const data = new Int32Array(SNAPSHOT_MAX_VEHICLES * SNAPSHOT_VEHICLE_STRIDE);
+function syntheticVehicleBlock(map: TileMap, rows = REFERENCE_VEHICLES): Int32Array {
+  const data = new Int32Array(rows * SNAPSHOT_VEHICLE_STRIDE);
   const span = WINDOW_MAX - WINDOW_MIN; // exclusive of the last column: next = tile + 1 stays inside
-  for (let i = 0; i < SNAPSHOT_MAX_VEHICLES; i++) {
+  for (let i = 0; i < rows; i++) {
     const base = i * SNAPSHOT_VEHICLE_STRIDE;
     const x = WINDOW_MIN + ((i * 7) % span);
     const y = WINDOW_MIN + ((i * 13) % span);
@@ -465,10 +465,13 @@ function syntheticVehicleBlock(map: TileMap): Int32Array {
  * tick earlier on the same steps, plus the id-to-row index the interpolator
  * maintains - here the identity, because the synthetic block never compacts.
  */
-function syntheticPrevBlock(data: Int32Array): { prev: Int32Array; prevRowById: Int32Array } {
+function syntheticPrevBlock(
+  data: Int32Array,
+  rows = REFERENCE_VEHICLES,
+): { prev: Int32Array; prevRowById: Int32Array } {
   const prev = new Int32Array(data);
-  const prevRowById = new Int32Array(SNAPSHOT_MAX_VEHICLES);
-  for (let i = 0; i < SNAPSHOT_MAX_VEHICLES; i++) {
+  const prevRowById = new Int32Array(rows);
+  for (let i = 0; i < rows; i++) {
     const base = i * SNAPSHOT_VEHICLE_STRIDE;
     prev[base + SnapshotVehicle.ProgressMilli] = Math.max(
       0,
@@ -495,6 +498,19 @@ interface ProxyConsist {
 const CONSIST_LOCO_SPEC = 1_000;
 const CONSIST_WAGON_SPEC = 1_520;
 /** Wagons per proxy train - SPEC2 M13's named scene, the 10-wagon coal train. */
+/**
+ * Vehicles the render tripwires are measured with.
+ *
+ * It is the reference fleet of SPEC.md section 21 - the same 1,500 the tick
+ * budget is priced against - and it used to be spelled `SNAPSHOT_MAX_VEHICLES`
+ * because the two numbers happened to be equal. SPEC2 M15 raised the snapshot
+ * cap to the store's capacity (E-18, D-187), and a tripwire whose scene size
+ * moves with a cap is a tripwire whose readings stop being comparable across
+ * milestones. The cap gets its own measurement below; the gates keep the
+ * reference fleet.
+ */
+const REFERENCE_VEHICLES = 1_500;
+
 const CONSIST_WAGONS = 10;
 /**
  * Every how-many-th vehicle is a consist train. 2 makes 750 ten-wagon
@@ -515,7 +531,7 @@ function syntheticConsists(): Map<number, ProxyConsist> {
   const span = WINDOW_MAX - WINDOW_MIN;
   const specIds = [CONSIST_LOCO_SPEC];
   for (let i = 0; i < CONSIST_WAGONS; i++) specIds.push(CONSIST_WAGON_SPEC);
-  for (let i = 0; i < SNAPSHOT_MAX_VEHICLES; i += CONSIST_EVERY) {
+  for (let i = 0; i < REFERENCE_VEHICLES; i += CONSIST_EVERY) {
     const x = WINDOW_MIN + ((i * 7) % span);
     const y = WINDOW_MIN + ((i * 13) % span);
     const ring = new BreadcrumbRing();
@@ -553,10 +569,11 @@ function drawPrepProxy(
   facings: Uint8Array,
   consists: ReadonlyMap<number, ProxyConsist>,
   consistScratch: readonly ConsistPlacement[],
+  rows = REFERENCE_VEHICLES,
 ): number {
   const size = map.size;
   let drawn = 0;
-  for (let i = 0; i < SNAPSHOT_MAX_VEHICLES; i++) {
+  for (let i = 0; i < rows; i++) {
     const base = i * SNAPSHOT_VEHICLE_STRIDE;
     const tile = data[base + SnapshotVehicle.Tile]!;
     const next = data[base + SnapshotVehicle.NextTile]!;
@@ -926,7 +943,7 @@ function particleProxy(
   }
 
   const size = MAP_SIZE;
-  for (let i = 0; i < SNAPSHOT_MAX_VEHICLES; i++) {
+  for (let i = 0; i < REFERENCE_VEHICLES; i++) {
     const base = i * SNAPSHOT_VEHICLE_STRIDE;
     const tile = vehicleData[base + SnapshotVehicle.Tile]!;
     const next = vehicleData[base + SnapshotVehicle.NextTile]!;
@@ -1033,7 +1050,7 @@ describe('render CPU tripwire (SPEC2 6.3)', () => {
   it('prepares a full vehicle block with the rail-heavy consist scene inside the tripwire', () => {
     // A full block plus 750 ten-wagon consists (SPEC2 M13, E-05).
     const expectedUnits =
-      SNAPSHOT_MAX_VEHICLES + Math.ceil(SNAPSHOT_MAX_VEHICLES / CONSIST_EVERY) * CONSIST_WAGONS;
+      REFERENCE_VEHICLES + Math.ceil(REFERENCE_VEHICLES / CONSIST_EVERY) * CONSIST_WAGONS;
     const out: DrawList = {
       key: new Float64Array(expectedUnits),
       frame: new Int32Array(expectedUnits),
@@ -1048,7 +1065,7 @@ describe('render CPU tripwire (SPEC2 6.3)', () => {
     // the shape of the real bySpec map, plus the per-vehicle facing cache.
     const specVariants = new Map<number, number>();
     for (let spec = 0; spec < 40; spec++) specVariants.set(1000 + spec, 1 + (spec % 3));
-    const facings = new Uint8Array(SNAPSHOT_MAX_VEHICLES).fill(FACING_NONE);
+    const facings = new Uint8Array(REFERENCE_VEHICLES).fill(FACING_NONE);
     const consists = syntheticConsists();
     const consistScratch: ConsistPlacement[] = Array.from(
       { length: MAX_CONSIST_FOLLOWERS },
@@ -1095,7 +1112,7 @@ describe('render CPU tripwire (SPEC2 6.3)', () => {
     const p99 = percentile(samples, 0.99);
     console.log(
       `vehicle draw prep: ${drawn} units per frame ` +
-        `(${SNAPSHOT_MAX_VEHICLES} vehicles, ${consists.size} ten-wagon consists), ` +
+        `(${REFERENCE_VEHICLES} vehicles, ${consists.size} ten-wagon consists), ` +
         `p50 ${p50.toFixed(4)} ms, p99 ${p99.toFixed(4)} ms ` +
         `(median tripwire ${DRAW_PREP_P50_TRIPWIRE_MS} ms, backstop ${DRAW_PREP_P99_BACKSTOP_MS} ms)`,
     );
@@ -1103,6 +1120,86 @@ describe('render CPU tripwire (SPEC2 6.3)', () => {
     expect(drawn).toBe(expectedUnits);
     expect(p50).toBeLessThan(DRAW_PREP_P50_TRIPWIRE_MS);
     expect(p99).toBeLessThan(DRAW_PREP_P99_BACKSTOP_MS);
+  });
+
+  it('prices the E-18 cap raise: the reference fleet against a full block', () => {
+    // What raising SNAPSHOT_MAX_VEHICLES from the reference fleet to the
+    // store's capacity actually costs the renderer, measured rather than
+    // extrapolated (E-18, D-187). Single-sprite vehicles on both runs and no
+    // consists: this is the price of DRAWING vehicles that used to be missing
+    // from the block entirely, not of the rail-heavy tripwire scene above.
+    //
+    // It is a measurement and not a gate. The gated scene next door places
+    // 9,000 units per frame, which is more work than a full block of 4,000
+    // plain vehicles - so the tripwire already covers this case from above,
+    // and a second threshold would only be a second thing to tune.
+    const noConsists = new Map<number, ProxyConsist>();
+    const consistScratch: ConsistPlacement[] = Array.from(
+      { length: MAX_CONSIST_FOLLOWERS },
+      () => ({ fx: 0, fy: 0, h: 0, dirX: 0, dirY: 0 }),
+    );
+    const specVariants = new Map<number, number>();
+    for (let spec = 0; spec < 40; spec++) specVariants.set(1000 + spec, 1 + (spec % 3));
+
+    const measure = (rows: number): { p50: number; p99: number; drawn: number } => {
+      const out: DrawList = {
+        key: new Float64Array(rows),
+        frame: new Int32Array(rows),
+        x: new Float64Array(rows),
+        y: new Float64Array(rows),
+      };
+      const data = syntheticVehicleBlock(map, rows);
+      const { prev, prevRowById } = syntheticPrevBlock(data, rows);
+      const facings = new Uint8Array(rows).fill(FACING_NONE);
+      const drawn = drawPrepProxy(
+        map,
+        data,
+        prev,
+        prevRowById,
+        0.5,
+        out,
+        specVariants,
+        facings,
+        noConsists,
+        consistScratch,
+        rows,
+      );
+      const samples = new Float64Array(DRAW_PREP_SAMPLES);
+      for (let i = 0; i < DRAW_PREP_SAMPLES; i++) {
+        const started = performance.now();
+        drawPrepProxy(
+          map,
+          data,
+          prev,
+          prevRowById,
+          0.5,
+          out,
+          specVariants,
+          facings,
+          noConsists,
+          consistScratch,
+          rows,
+        );
+        samples[i] = performance.now() - started;
+      }
+      return { p50: percentile(samples, 0.5), p99: percentile(samples, 0.99), drawn };
+    };
+
+    const reference = measure(REFERENCE_VEHICLES);
+    const full = measure(SNAPSHOT_MAX_VEHICLES);
+    console.log(
+      `E-18 cap: ${REFERENCE_VEHICLES} plain vehicles p50 ${reference.p50.toFixed(4)} ms / ` +
+        `p99 ${reference.p99.toFixed(4)} ms, ${SNAPSHOT_MAX_VEHICLES} plain vehicles ` +
+        `p50 ${full.p50.toFixed(4)} ms / p99 ${full.p99.toFixed(4)} ms ` +
+        `(backstop ${DRAW_PREP_P99_BACKSTOP_MS} ms)`,
+    );
+
+    // Every row of both blocks is inside the window by construction, so a
+    // dropped row would mean the walk stopped early rather than that a
+    // vehicle was off screen.
+    expect(reference.drawn).toBe(REFERENCE_VEHICLES);
+    expect(full.drawn).toBe(SNAPSHOT_MAX_VEHICLES);
+    expect(full.p99).toBeLessThan(DRAW_PREP_P99_BACKSTOP_MS);
   });
 
   it('refreshes the signal aspects on a claim edge inside the tripwire (M13 B5)', () => {
@@ -1202,7 +1299,7 @@ describe('render CPU tripwire (SPEC2 6.3)', () => {
     const industries = syntheticIndustries();
     const data = new Int32Array(syntheticVehicleBlock(map));
     // Every tenth vehicle broken down, so the dense-smoke branch is priced.
-    for (let i = 0; i < SNAPSHOT_MAX_VEHICLES; i += 10) {
+    for (let i = 0; i < REFERENCE_VEHICLES; i += 10) {
       data[i * SNAPSHOT_VEHICLE_STRIDE + SnapshotVehicle.State] = STATE_BROKEN_DOWN;
     }
     const out: ParticleOut = {
@@ -1225,7 +1322,7 @@ describe('render CPU tripwire (SPEC2 6.3)', () => {
     const p99 = percentile(samples, 0.99);
     console.log(
       `particle frame: pool at cap ${PARTICLE_CAP}, ${industries.length} industries + ` +
-        `${SNAPSHOT_MAX_VEHICLES} vehicles emitting (${touched} rows touched in the warm frame), ` +
+        `${REFERENCE_VEHICLES} vehicles emitting (${touched} rows touched in the warm frame), ` +
         `p50 ${p50.toFixed(4)} ms, p99 ${p99.toFixed(4)} ms ` +
         `(median tripwire ${PARTICLE_P50_TRIPWIRE_MS} ms, backstop ${PARTICLE_P99_BACKSTOP_MS} ms)`,
     );

@@ -323,6 +323,8 @@ andocken kann. Pack-Format, ID-Namespaces, Pack-Hashing: Folgeprogramm.
 bis Ende M15 fallen und im Ledger stehen, bevor Benchmark-Karten (M22) den
 Deckel stillschweigend reißen.
 
+*Entschieden in M15 B4 (D-187): **Cap-Anhebung**. `SNAPSHOT_MAX_VEHICLES` = `MAX_VEHICLES` = 4 000, `SNAPSHOT_LAYOUT_VERSION` 7 → 8 — das ist die EINE in 6.1 gebuchte M15-Layout-Änderung, weil der dort vorgesehene Stau-Overlay-Block zweimal null Byte kostete. Gemessen statt geschätzt: Draw-Prep über einen vollen Block 4 000 einfacher Fahrzeuge p50 2,40 / p99 3,52 ms gegen 0,89 / 1,50 ms bei 1 500, und die bereits gegatete Konsist-Szene bepreist mit 9 000 Units je Frame mehr Arbeit als ein voller Einfach-Block — kein neuer Tripwire. Der Priority-/Viewport-Writer ist abgelehnt: er stellt die Kamera in die Entscheidung (Klick, Klang und Badge adressieren Fahrzeuge über die Id IN diesem Block) und bricht die E-05-Paarung (D-162), weil eine Zeile, die den Block verlässt und wieder betritt, keine Vorgänger-Generation zum Gleiten hat.*
+
 ---
 
 ## 6. SHARED-RESOURCE-LEDGER (Abnahme-Instrument)
@@ -342,7 +344,7 @@ abgenommen.** Eine Überschreitung ist ein Abnahme-Fehler, kein Schulterzucken.
 | M12 | — | — | +0,00 ms (render-only) | +4 Wasser-Animationszeilen Seite 0 |
 | M13 | — | +`IndustryMarker.level` (Layout-Bump) — **B6 gemessen: seit M5 vorhanden (Marker-Kanal, Industrie-Uhr); null Byte Layout-Änderung, `SNAPSHOT_LAYOUT_VERSION` bleibt 6 (D-174, das D-171-Muster)** | +0,00 ms (render-only) | Seite 1 (~600 Fahrzeug-Zellen), Seite 2 (Emissive) |
 | M14 | **v25** — Stations-Frachthistorie-Ring — **B3 eingelöst: 12 Monate × 18 Frachten × 3 Zähler (Collected/Delivered/Expired) je Station, Int32-Ring + Float64-Monatsakkumulator, beide gespeichert + im VOLL-Digest gehasht (Live-Digest bewusst nicht — Kachel-Layer-Präzedenz), Migration v24→v25 = Null-Ringe, Pin `bbe572afe2880243` + Korpus (`v25-played.ironsave`) nach Protokoll re-recorded; Tick-Anteil = indizierte Adds in bestehenden Pfaden + Monats-Roll, kein neuer Snapshot-Byte; Tick nachgemessen 1,490/3,339 ms p50/p99 auf der Referenzflotte — die M10-Grundlinie (1,45/3,26) im dokumentierten ±0,7-ms-Laufrauschen (D-178)**; **B4 (Statistik-Zentrum): +2 Fahrzeug-Felder im SELBEN v25-Payload (`breakdownCount` + `depotCall`, beide gespeichert + gehasht — der Depot-Ruf ist Z4-Routing-Zustand), Migration v24→v25 in place erweitert (EIN Bump je Meilenstein, nicht EIN Migrations-Edit); Pin nach D-137-Protokoll re-recorded auf `8146983bca3a6f92`, Korpus unverändert gültig (die Korpus-Welt ist fahrzeuglos — geprüft, nicht angenommen); Tick-Anteil = 1 Zähler-Inkrement je Panne + 1 Flag-Vergleich am Routenende, kein neuer Snapshot-Byte — Details Marker-Kanal (D-181)** | +FlowMarker-Block (Layout-Bump) — **B1 eingelöst: `SNAPSHOT_LAYOUT_VERSION` 6 → 7 (EIN Bump: +FlowCount-Feld, Stride-8-Block, Cap 4 096 Legs); Export im selben Publish-Pass wie `structureSignature` (Fehler 33), gemessen median 0,060 / p99 0,285 ms bei 420 aktiven Legs auf der Referenzflotte — unter der ≤-0,5-ms-Zusage, Tripwire gated den Median auf der Zusage selbst (D-176, D-167)** | +0,00 ms Tick; ≤ +0,5 ms je Snapshot-Publish | 0 (Vektor) |
-| M15 | **v26** — 8.4-Weltregeln + Stau-Layer (~1 MB gehasht auf 1024²) | +Stau-Overlay-Block | +0,50 ms (Inkremente, Zerfall, A*-Term) | 0 |
+| M15 | **v26** — 8.4-Weltregeln + Stau-Layer (~1 MB gehasht auf 1024²) — **eingelöst: B1 legt `occupancyPenalty` + `signalPenalty` an (D-184), B2 erweitert dieselbe `v25_to_v26`-Migration IN PLACE um `roadCongestion` + den Uint8-Layer (D-185), B3/B4 berühren keine gespeicherte Form; Pin zweimal nach D-137 re-recorded, zuletzt `50c7d6a38f6da052`; Save-Größe A/B gemessen: Null-Layer 1 039 B komprimiert gegen 1 048 576 B roh, stark bespielt 20 023 B** | +Stau-Overlay-Block — **B2/B3 gemessen: der Stau-Layer und die Durchsatz-Zähler reisen im SharedArrayBuffer der Karte, also NULL Byte Snapshot (D-185/D-186, das D-171/D-174-Muster); die zugesagte EINE Layout-Buchung löst B4 stattdessen mit der E-18-Entscheidung ein: `SNAPSHOT_LAYOUT_VERSION` 7 → 8, `SNAPSHOT_MAX_VEHICLES` 1 500 → 4 000 = `MAX_VEHICLES`, +160 KiB Shared-Buffer (D-187)** | +0,50 ms (Inkremente, Zerfall, A*-Term) — **gemessen −0,31 ms** | 0 |
 | M16 | **v27** — Checkpoint-Ring-Metadaten, `.ironreplay` | — | +0,00 ms (Checkpoints auf Save-Pfad) | 0 |
 | M17 | **v28** — GoalState | +Goal-Block (~64 B) | +0,05 ms (nur Tages-Hook) | 0 |
 | M18 | **v29** — Wetter-Regel + Wetterfeld (16×16 Uint8) | +Wetterfeld-Block | +0,15 ms (1 Array-Read/Fzg. + Tagesupdate) | 0 (Regeneration statt Zellen) |
@@ -387,6 +389,7 @@ Headroom und lehrt, ein rotes Gate zu ignorieren (D-136).
 | M12 | 2026-08-07 | **1,46 ms / 3,69 ms** (max 19,1 ms über 6 500 Ticks; Zweitlauf 1,34 / 3,19) | **+0,00 ms belegt** (render-only, kein Byte unter `src/sim` verändert; die zwei Läufe messen +0,43 und −0,07 gegen die Grundlinie — sie STRADDELN sie, das ist das ±0,7-ms-Laufrauschen dieser Maschine, das schon die M11-Zeile dokumentiert) | D-160–D-166 |
 | M13 | 2026-08-07 | **1,27 ms / 2,92 ms** (max 17,4 ms über 6 500 Ticks) | **+0,00 ms belegt** (render-only; gemessen −0,34 gegen die Grundlinie — dasselbe ±0,7-ms-Laufrauschen; der einzige Sim-seitige Diff ist die wörtliche Marker-Assembly-Extraktion nach `src/sim/markers.ts`, D-174) | D-167–D-174 |
 | M14 | 2026-08-07 | **1,48 ms / 3,17 ms** (max 19,8 ms über 6 500 Ticks; Abschlusslauf nach allen fünf Bundles) | **−0,09 ms** (Budget-Zeile Tick +0,00 eingehalten; die Bundle-Läufe 1,393/3,232 in B1 (D-176) und 1,490/3,339 in B3 (D-178) STRADDELN die Grundlinie exakt wie die M12-Zeile — das dokumentierte ±0,7-ms-Laufrauschen; der Publish-Mehrpreis steht als eigene Messung im Detail) | D-175–D-183 |
+| M15 | 2026-08-08 | **1,481 ms / 2,949 ms** (max 19,98 ms über 6 500 Ticks; Abschlusslauf nach allen vier Bundles) | **−0,31 ms** (Budget-Zeile +0,50 eingehalten; die vier Bundle-Läufe 1,512/3,023, 1,351/2,985, 1,383/2,785 und der Abschluss STRADDELN die Grundlinie im dokumentierten ±0,7-ms-Laufrauschen — die Regeln laufen auf der Referenzflotte AUS, und selbst eingeschaltet sind Belegungslesung, Reroute, Stau-Inkrement und Durchsatz-Zähler je ein geklemmter Add bzw. ein nie genommener Zweig) | D-184–D-187 |
 
 M11-Zeile im Detail: **SAVE_VERSION v24** — genau EIN Bump für alle drei
 Stufen (Z5; Order-Grammatik-Stride, LineStore, Takt-Felder,
@@ -498,6 +501,53 @@ wirkungserklärendem Tooltip ✓** — aus dem Tool-Registry AUFGEZÄHLT
 statt gezählt: Compile-Time-Abdeckung der Tool-Union in `ui/tools.ts`,
 Kopplungstest über beide Locales in `tests/unit/tooltips.spec.ts`
 (D-183).
+
+M15-Zeile im Detail: **SAVE_VERSION v26 — genau EIN Bump (Z5),** Besitzer
+sind D-184s zwei `railPath`-Regelflags; B2 erweiterte dieselbe
+`v25_to_v26`-Migration IN PLACE um `roadCongestion` + den Uint8-Stau-Layer
+(D-185), B3 und B4 berühren keine gespeicherte Form. Der kanonische Pin
+wanderte nach D-137-Protokoll zweimal mit (`54a6bef6e40c2a52` nach B1,
+`50c7d6a38f6da052` nach B2, Datei-Stand gilt); Korpus in beiden Bundles
+re-recorded (`v26-played.ironsave`, D-130), in B3/B4 geprüft unverändert
+gültig. **Snapshot-Layout 7 → 8 — genau EIN Bump,** und NICHT für den in
+6.1 gebuchten „Stau-Overlay-Block": der kostete zweimal null Byte (der
+Stau-Layer von D-185 und die Durchsatz-Zähler von D-186 reisen im
+SharedArrayBuffer der Karte, das D-171/D-174-Muster zum dritten und
+vierten Mal), also löst B4 die zugesagte Layout-Buchung mit der
+E-18-Entscheidung ein: `SNAPSHOT_MAX_VEHICLES` 1 500 → 4 000 =
+`MAX_VEHICLES`, womit der Renderer eine große Flotte nicht länger still zu
+37,5 % zeichnet (D-187). Abnahme-Messwerte (Referenzmaschine,
+`npm run test:perf` 2026-08-08): **Tick p50 1,481 / p99 2,949 ms** (max
+19,98 ms über 6 500 Ticks, Abschlusslauf nach allen vier Bundles) — die
+Bundle-Läufe 1,512/3,023 (B1, D-184), 1,351/2,985 (B2, D-185) und
+1,383/2,785 (B3, D-186) liegen alle im dokumentierten ±0,7-ms-Laufrauschen
+um die M10-Grundlinie; **E-18-Preis gemessen statt extrapoliert: Draw-Prep
+über einen vollen Block, 4 000 einfache Fahrzeuge p50 2,40 / p99 3,52 ms
+gegen 0,89 / 1,50 ms bei 1 500** — die daneben gegatete Konsist-Szene
+bepreist 9 000 Units je Frame mit 2,49 ms und deckt den Fall damit von
+oben ab, deshalb KEINE neue Schwelle (D-187/D-167). **Save-Größe als A/B
+auf einer Welt** (D-185): Null-Layer 1 039 B komprimiert gegen 1 048 576 B
+roh auf 1024², stark bespielt 20 023 B — die Ledger-Zusage „~1 MB,
+zlib-klein weil überwiegend null" ist mit Reserve eingelöst; die
+1500-Fahrzeug-Referenzwelt bleibt bei 187 272 B und liest in 604 ms
+zurück. Übrige Tripwires nach allen Bundles grün (Sprite-Pool-Median 1,77,
+Draw-Prep 2,49, Chunk-Bake 0,48, Partikel 0,29, Aspekt 0,03, Emissive
+0,06, Flow-Prep 0,29 ms); Flow-Export Median 0,055 ms. Atlas: 0 wie
+zugesagt — Heatmap und Deadlock-Highlight sind Vektor-Graphics (D-186).
+**Netzwert-Faktor: 3,73 gemessen gegen das Band ≥ 3**
+(`tests/balance/netzdesign.spec.ts`, botched 1,8 % vs. signalisiert 6,9 %,
+über drei Seeds 3,71–3,75 stabil), zerlegt gedruckt: Trassenführung allein
+2,01×, Kapazität obendrauf 1,86× (D-187). Fertig-wenn-Posten der
+M15-Sektion: 200 Lkw bilden messbar Stau und neu geroutete Fahrten nehmen
+die Ausweichroute ✓ (Zwei-Routen-Test je Richtung, 46/41 und 50/63 gegen
+96/0 und 103/0 mit Regel aus, D-185), ein Zug mit aktiver Belegungsstrafe
+zieht die freie Ausweiche dem besetzten Block vor ✓
+(`railRules.spec.ts`-Diamant, D-184), Netzdesign-Szenario ≥ 3 ✓ (3,73),
+erkannte Deadlock-Schleife benennt alle Züge und Tiles ✓ (`news.deadlockCycle`
+mit Ring-Kanonisierung + F3-`blockedTile`, D-186), Save/Load erhält den
+Stau-Layer bit-identisch ✓ (Byte- UND Digest-Vergleich in
+`roadCongestion.spec.ts`, D-185), Tick ≤ +0,5 ms über der M10-Grundlinie ✓
+(−0,31 ms gemessen). E-18 steht damit im Ledger, wie SPEC2 es verlangt.
 
 Die M10-Grundlinie liegt UNTER der linearen Extrapolation (~3–4 ms) — der
 Eskalationspfad (Kanten-Graph vor M14) ist nicht ausgelöst. Referenzmaschine:

@@ -20,8 +20,15 @@ import { World } from '../../src/sim/World';
 export const SCENARIO_SIZE = 64;
 const GROUND_HEIGHT = 5;
 
-/** Lay a block of town: a road cross with houses along it. */
-function placeTown(map: TileMap, town: Town): void {
+/**
+ * Lay a block of town: a road cross with houses along it.
+ *
+ * Exported since SPEC2 M15: the Netzdesign scenario builds its own world (it
+ * needs the 8.4 route rules on and a fleet's worth of capital), but it must
+ * place its towns exactly the way every other balancing scenario does, or the
+ * catchment it measures would be a different catchment.
+ */
+export function placeTown(map: TileMap, town: Town): void {
   const half = town.radius;
 
   // The whole built-up area belongs to the town, exactly as the map generator

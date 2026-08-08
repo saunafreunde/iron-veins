@@ -178,6 +178,14 @@ rewrites nothing - the cached-rm is what forces the re-checkout.
   floors. SPEC.md's 5-25 M was measured against the map's physical offer
   and is not real - read D-158 before touching that band.
 
+  Scenario "Netzdesign" is SPEC2 M15's own, and it is the only one that
+  measures the NETWORK rather than a tariff: identical traffic over a
+  botched and a well designed railway, compared by network value (earned
+  revenue over the closed-form ceiling of D-066). Band: factor >= 3,
+  measured 3.73, and it prints the split - alignment 2.01x, capacity
+  1.86x. It owns no constant; if it ever leaves its band, something about
+  signalling, the curve table or the payment formula moved (D-187).
+
 - **An industry is judged on what left ON A VEHICLE**, never on what a station
   took (D-085). Crediting the deposit makes the growth signal meaningless: a
   works then reads full service while its output rots on a platform.
@@ -743,6 +751,93 @@ ONE snapshot-layout bump (6 -> 7, the FlowMarker block). Ledger row
   price line keeps the exact inflated figures (D-119). Major readouts
   (cash/loan, station rating, x-ray terms, industry, vehicle, value
   graph) wear the same module with `tabIndex` 0.
+
+## M15 - net value and road congestion: SPEC.md 8.4 as world rules
+
+The 4x promise of SPEC.md section 1 becomes a number, and the two route
+costs 8.4 always named finally exist. ONE save bump (v25 -> v26, owned by
+the rail rules, extended in place by the road layer); ONE snapshot-layout
+bump (7 -> 8) - spent not on the promised congestion block, which cost
+zero bytes twice, but on the E-18 cap. Every new rule is a `NewGameParams`
+flag and every one of them is OFF unless chosen: the five M6 bands, the
+takt band and scenario 5 were all measured by a game that had none of
+them, and shipping one on by default would re-band the lot inside the
+milestone that introduced it (Fehlerkatalog 34).
+
+- **The rail terms read the ONE reservation table, and a held train
+  reconsiders on a capped cadence** (D-184). `RailPathfinder.find` takes
+  the live table and the searching vehicle's id, both REQUIRED; occupancy
+  is charged once per foreign run ENTERED (3 s - per tile would scale the
+  price with how much track the train ahead happens to hold), and it is a
+  PRICE, never a wall - a claimed section that returned NoRoute would hide
+  D-059's stated deadlock. The reroute hangs off `stalled` in the
+  Driving/Braking branch, not off `WaitingForPath`: the braking lookahead
+  stops a train SHORT of the red, so the tile-boundary gate never runs
+  again (D-060/D-157, met a third time). An identical route is never
+  re-adopted - that would release the claim and shove the head back to the
+  start of its own tile every interval.
+- **The road congestion layer is SAVED and hashed** (D-185, E-02/Z4).
+  Vehicles per tile over 200 ticks is history, and a layer rebuilt empty
+  on load would price the same road differently after a load than before a
+  save - law #3 broken in silence. It rides the map's SharedArrayBuffer,
+  so the heat map costs no snapshot byte. One entry = 16 units, one sweep
+  every 20 ticks removes `ceil(value / 11)`, so `value / 16` IS "vehicles
+  in the last 200 ticks" and the decay is an epoch walk over a dirty list,
+  never a map scan. The layer ALSO IS the leader rule: a vehicle reads the
+  tile's traffic, subtracts its own trail and caps its top speed by it -
+  no neighbour search, floor 0.35 (a jam is a queue and a price, never a
+  standstill). A level crossing shuts on the claim the trains obey.
+- **The counters may draw the picture but never write the log** (D-186).
+  `TileMap.throughput` is derived, monthly-cleared, never saved, never
+  hashed - and the licence for that is that NOTHING reads it: a test walks
+  `src/sim` and fails the day anything but the meter speaks the access. So
+  the news is NOT conditioned on it (saved state must not depend on unsaved
+  state); an Engpass is defined by the QUEUE - two trains refused at the
+  same tile. The deadlock detector walks the waiting graph, whose edge is
+  `tryClaim`'s own refusal test read backwards (`refusedTile`), rotates
+  each ring to its lowest id so `postOnce` recognises it, and reports one
+  heading per stuck train - ring, queue or plain stuck - because two
+  headings about one situation would take turns being newest and spam the
+  log daily. No auto-fix, and that is tested (SPEC.md Fehler 18).
+- **The network value is the tariff test's ceiling, read from the world**
+  (D-187). `ceilingRevenueCtPerYear` moved out of
+  `tests/balance/tariff.spec.ts` into `src/sim/economy/networkValue.ts`
+  and the test imports it - the number that CALIBRATED the freight rates
+  (D-066) and the number the panel divides by must be one number. The
+  denominator is quoted at the price level of the earnings it divides
+  (`inflatedYearsBetween`, a prefix sum over `epochFactor`'s own table),
+  or a company would read as improving because the century wore on. It
+  depends only on capacity, tariff and top speed - never on the track - so
+  two identical fleets on two alignments share a denominator and the whole
+  difference lands in the numerator. Per line in the line panel, per
+  company in the BOOKS, because "in der Bilanz messen" is what SPEC.md
+  asked for.
+- **Netzdesign measured 3.73 against the band of 3** (D-187), stable
+  across seeds, and the scenario prints the split: the alignment alone is
+  worth 2.01x (a fifth longer, a curve limit at every kink) and the
+  capacity on top another 1.86x (no signal anywhere means the whole line
+  is ONE section, so the second train can never enter it). The good
+  railway is one-way blocks plus a return track, NOT the short passing
+  loop SPEC2's sentence names: a train will not take a loop whose four
+  45-degree turns cost some eight seconds against D-184's deliberate 3 s
+  nudge, and a loop only helps where two shuttling trains happen to meet.
+  That is measured, written up, and the D-082 shape is what replaces it.
+- **E-18 is answered by raising the cap** (D-187):
+  `SNAPSHOT_MAX_VEHICLES` = `MAX_VEHICLES` = 4,000, so no living fleet can
+  outgrow the block again (it was drawn at 37.5 %, and WHICH vehicles fell
+  off was decided by the order the store hands out slots). Measured: a
+  full block of 4,000 plain vehicles costs draw-prep p50 2.40 ms against
+  0.89 at 1,500, while the already-gated consist scene prices 9,000 units
+  at 2.49 - the gate covers it from above, so no new threshold. The
+  priority writer was refused because it puts the CAMERA inside the
+  decision and breaks the E-05 id pairing. The block writer moved to
+  `src/sim/vehicles/snapshot.ts` so a test can reach it at all.
+
+Measured (reference machine, ledger 6.1.1): tick p50 1.481 / p99 2.949 ms
+against the M10 baseline 1.45 / 3.26 - a p99 delta of -0.31 ms where the
+row allows +0.50. Save size A/B on one world: the all-zero congestion
+layer costs 1,039 B compressed against 1,048,576 B raw; heavily played,
+20,023 B.
 
 ## Still outstanding
 

@@ -7,13 +7,10 @@ import type {
 } from '../shared/protocol';
 import {
   SNAPSHOT_MAX_RESERVED_TILES,
-  SNAPSHOT_MAX_VEHICLES,
   SNAPSHOT_RESERVED_STRIDE,
-  SNAPSHOT_VEHICLE_STRIDE,
   SnapshotReserved,
   SnapshotF64,
   SnapshotI32,
-  SnapshotVehicle,
   SnapshotWriter,
 } from '../shared/snapshot';
 import { CommandQueue } from './commands/queue';
@@ -27,10 +24,9 @@ import {
   STATE_HASH_INTERVAL_TICKS,
   TICK_MS,
   TICKS_PER_MONTH,
-  TILE_DIAGONAL_M,
-  TILE_SIZE_M,
 } from './constants';
 import { loanLimitCt } from './economy/company';
+import { companyNetworkValue, networkValueOf } from './economy/networkValue';
 import { scheduleOf } from './lines/LineStore';
 import { industryMarkers, stationMarkers, vehicleCargoRows } from './markers';
 import {
@@ -51,6 +47,7 @@ import type { NewGameOptions, SaveSlotKind } from '../shared/protocol';
 import { bookValueCt, companyValueCt, monthsInOrder } from './economy/ledger';
 import { contractProgress, isOpen } from './economy/contracts';
 import { refusedTile } from './vehicles/reservations';
+import { writeVehicleBlock } from './vehicles/snapshot';
 import { VehicleKind } from './vehicles/spec';
 import { SaveCorruptionError, SaveFormatError } from './save/format';
 import { decodeSave, encodeSave } from './save/serialize';
@@ -246,6 +243,11 @@ function postMonthly(current: World): void {
       cashCt: company.cashCt,
       co2ThisYearKg: company.co2ThisYearKg,
       co2LastYearKg: company.co2LastYearKg,
+      // The 4x promise of SPEC.md section 1 as a number, for the whole
+      // company (SPEC2 M15). Everything the company owns counts, parked
+      // vehicles included - a fleet that earns nothing while its ceiling
+      // runs on is exactly what the figure exists to show.
+      networkValue: companyNetworkValue(current, company.id),
     },
   });
   scope.postMessage({ type: 'townsChanged', towns: townMarkers(current) });
@@ -383,55 +385,10 @@ function postLines(current: World): void {
       taktOffsetTicks: current.lines.taktOffsetTicks[lineId]!,
       advisedVehicles: advice === null ? 0 : advice.vehiclesNeeded,
       headroomTicks: advice === null ? 0 : advice.headroomTicks,
+      networkValue: networkValueOf(current, vehicleIds),
     });
   }
   scope.postMessage({ type: 'linesChanged', lines: markers });
-}
-
-/**
- * Copy the drawable state of every vehicle into the snapshot block.
- *
- * Only what changes per tick travels: which tile, which tile next, how far
- * between them, and what the vehicle is doing. Everything static about it - its
- * type, its name, its orders - the renderer already knows or does not need.
- */
-function writeVehicles(current: World, block: Int32Array): number {
-  const vehicles = current.vehicles;
-  let written = 0;
-
-  for (let id = 0; id < vehicles.count && written < SNAPSHOT_MAX_VEHICLES; id++) {
-    if (vehicles.alive[id] !== 1) continue;
-
-    const tile = vehicles.tileIndex[id]!;
-    const index = vehicles.pathIndex[id]!;
-    const hasNext = index + 1 < vehicles.pathLength[id]!;
-    const next = hasNext ? vehicles.paths[id]![index + 1]! : tile;
-
-    // Progress is a fraction of THIS step, which on a diagonal piece of track
-    // is 70.7 m rather than 50 m - dividing by the tile size would make every
-    // train jump forward as it entered a diagonal.
-    const size = current.map.size;
-    const diagonal =
-      hasNext && next % size !== tile % size && ((next / size) | 0) !== ((tile / size) | 0);
-    const stepM = diagonal ? TILE_DIAGONAL_M : TILE_SIZE_M;
-
-    const base = written * SNAPSHOT_VEHICLE_STRIDE;
-    block[base + SnapshotVehicle.Tile] = tile;
-    block[base + SnapshotVehicle.NextTile] = next;
-    block[base + SnapshotVehicle.ProgressMilli] = Math.round(
-      (vehicles.progressM[id]! / stepM) * 1000,
-    );
-    block[base + SnapshotVehicle.State] = vehicles.state[id]!;
-    block[base + SnapshotVehicle.Kind] = vehicles.kind[id]!;
-    // The block is compacted, so the row index says nothing about which
-    // vehicle this is. The id is what lets the map answer a click and what
-    // keeps a sound attached to the same vehicle between frames.
-    block[base + SnapshotVehicle.VehicleId] = id;
-    block[base + SnapshotVehicle.Owner] = vehicles.ownerId[id]!;
-    block[base + SnapshotVehicle.LineId] = vehicles.lineId[id]!;
-    written++;
-  }
-  return written;
 }
 
 /**
@@ -486,7 +443,11 @@ function publishSnapshot(current: World, sink: SnapshotWriter): void {
   f64[SnapshotF64.LoanCt] = current.playerCompany.loanCt;
   f64[SnapshotF64.LoanLimitCt] = loanLimitCt(current.playerCompany);
 
-  i32[SnapshotI32.VehicleCount] = writeVehicles(current, sink.draftVehicles);
+  i32[SnapshotI32.VehicleCount] = writeVehicleBlock(
+    current.vehicles,
+    current.map.size,
+    sink.draftVehicles,
+  );
   i32[SnapshotI32.ReservedCount] = writeReserved(current, sink.draftReserved);
   // The flow atlas rides THIS publish pass like every other block - a second
   // pass over stations or links is the exact mistake Fehler 33 names (M14).

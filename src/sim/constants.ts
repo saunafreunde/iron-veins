@@ -816,6 +816,18 @@ export const COMPANY_VALUE_YEARS = 25;
 /** Inflation applied to revenue and costs alike, per game year. [1/year] */
 export const INFLATION_PER_YEAR = 0.018;
 
+/**
+ * Distance a cargo rate is quoted over: a rate is euros per unit per this
+ * many tiles (section 7.5). [tiles]
+ *
+ * It was a literal `/ 100` inside the payment formula until SPEC2 M15 needed
+ * the same figure a second time - the closed-form revenue ceiling of D-066,
+ * which is that formula run backwards over a whole year. Two copies of the
+ * quantity a rate is quoted over would be two definitions of what a tariff
+ * MEANS, so it is one constant with a unit and an origin.
+ */
+export const PAYMENT_DISTANCE_TILES = 100;
+
 /** Payment multiplier for cargo that arrives in half the grace period or less. */
 export const FAST_DELIVERY_BONUS = 1.3;
 

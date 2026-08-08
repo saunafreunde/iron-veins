@@ -12,7 +12,7 @@
  * refuses to interpret a buffer written by a different layout.
  */
 
-export const SNAPSHOT_LAYOUT_VERSION = 7;
+export const SNAPSHOT_LAYOUT_VERSION = 8;
 
 /** Header fields, shared by both slots. */
 export const SnapshotHeader = {
@@ -77,11 +77,22 @@ export const SNAPSHOT_F64_COUNT = 3;
 /**
  * Vehicles the renderer may draw in one tick.
  *
- * Everything about a vehicle that changes per tick is five Int32 values, so the
- * whole block is one typed array rather than five - fewer views to create, and
- * the layout stays trivially aligned.
+ * Everything about a vehicle that changes per tick is a handful of Int32
+ * values, so the whole block is one typed array rather than one per field -
+ * fewer views to create, and the layout stays trivially aligned.
+ *
+ * It is `MAX_VEHICLES`, the store's own capacity, and that is E-18's answer
+ * (D-187). It stood at 1,500 - the reference fleet of SPEC.md section 21 -
+ * while the store could hold 4,000, so a large fleet was drawn at 37.5 % and
+ * the vehicles that fell off were chosen by nothing more meaningful than
+ * their ids. The rule "everything alive is drawn" costs 160 KiB of shared
+ * buffer and nothing at all per tick for any world at or below the old cap.
+ * `tests/unit/snapshotCap.spec.ts` holds the equality against
+ * `sim/constants.ts`, which is not imported here on purpose: the shared
+ * channel does not depend on the simulation, so the coupling is a test
+ * rather than an import.
  */
-export const SNAPSHOT_MAX_VEHICLES = 1_500;
+export const SNAPSHOT_MAX_VEHICLES = 4_000;
 
 /** Fields per vehicle, in the order they appear in the block. */
 export const SnapshotVehicle = {

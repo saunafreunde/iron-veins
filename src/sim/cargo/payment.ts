@@ -4,8 +4,10 @@ import {
   FAST_DELIVERY_BONUS,
   INFLATION_PER_YEAR,
   NO_COOLING_PENALTY,
+  PAYMENT_DISTANCE_TILES,
   START_YEAR,
   TICKS_PER_DAY,
+  TICKS_PER_YEAR,
   TIME_FACTOR_MIN,
 } from '../constants';
 
@@ -42,6 +44,44 @@ export function epochFactor(year: number): number {
   if (index <= 0) return 1;
   const last = EPOCH_FACTORS.length - 1;
   return EPOCH_FACTORS[index > last ? last : index]!;
+}
+
+/**
+ * Running sum of {@link EPOCH_FACTORS}: entry `i` is the price level summed
+ * over the first `i` game years. It turns "how much price level lies between
+ * two ticks" into two lookups instead of a loop over a century.
+ */
+const EPOCH_PREFIX: Float64Array = (() => {
+  const table = new Float64Array(EPOCH_FACTORS.length + 1);
+  for (let i = 0; i < EPOCH_FACTORS.length; i++) table[i + 1] = table[i]! + EPOCH_FACTORS[i]!;
+  return table;
+})();
+
+/** Price level integrated from the first playable year to `years` after it. */
+function inflatedYearsAt(years: number): number {
+  if (years <= 0) return 0;
+  const last = EPOCH_FACTORS.length - 1;
+  const whole = years | 0;
+  // Past the end of the table the price level is flat, exactly as
+  // `epochFactor` clamps it - so the integral continues linearly.
+  if (whole >= last) return EPOCH_PREFIX[last]! + (years - last) * EPOCH_FACTORS[last]!;
+  return EPOCH_PREFIX[whole]! + (years - whole) * EPOCH_FACTORS[whole]!;
+}
+
+/**
+ * Game years between two ticks, each weighted by the price level of the year
+ * it fell in. [years at the first year's prices]
+ *
+ * Revenue carries `epochFactor` (section 14.2), so a sum of earnings is a sum
+ * of DIFFERENT price levels. Anything that compares such a sum against a rate
+ * - the closed-form revenue ceiling of D-066, which SPEC2 M15 divides earnings
+ * by - has to quote the rate over the same price levels, or a company would
+ * read as improving simply because the century wore on. This is that
+ * conversion, and it is here rather than beside the ceiling because the price
+ * level has exactly one definition and it is `EPOCH_FACTORS`.
+ */
+export function inflatedYearsBetween(fromTick: number, toTick: number): number {
+  return inflatedYearsAt(toTick / TICKS_PER_YEAR) - inflatedYearsAt(fromTick / TICKS_PER_YEAR);
 }
 
 /**
@@ -113,7 +153,7 @@ export function deliveryRevenueCt(input: PaymentInput): number {
   return Math.round(
     input.amount *
       spec.baseRateCt *
-      (input.distanceTiles / 100) *
+      (input.distanceTiles / PAYMENT_DISTANCE_TILES) *
       timeFactor(input.cargo, days) *
       cooling *
       epochFactor(input.year),
