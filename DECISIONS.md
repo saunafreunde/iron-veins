@@ -12,10 +12,10 @@ no entry below. A number may appear under several topics.
 
 - **Determinism, RNG & hashing:** D-001, D-002, D-003, D-004, D-009, D-010,
   D-024, D-093, D-106, D-128, D-137, D-142, D-145, D-146, D-149, D-153, D-178,
-  D-181, D-184, D-185, D-188, D-189, D-190, D-191
+  D-181, D-184, D-185, D-188, D-189, D-190, D-191, D-193
 - **Commands, snapshot & worker boundary:** D-004, D-005, D-006, D-011, D-032,
   D-100, D-111, D-145, D-146, D-148, D-162, D-174, D-176, D-179, D-187, D-189,
-  D-192
+  D-192, D-193
 - **Lines & timetables:** D-145, D-146, D-147, D-148, D-149, D-150, D-151,
   D-152, D-155, D-159
 - **Map generation & terrain:** D-018, D-019, D-020, D-021, D-022, D-023,
@@ -24,7 +24,7 @@ no entry below. A number may appear under several topics.
   D-141
 - **Save format, migrations & replays:** D-007, D-025, D-026, D-027, D-048,
   D-111, D-130, D-131, D-134, D-142, D-144, D-145, D-146, D-147, D-153, D-178,
-  D-181, D-184, D-185, D-188, D-189, D-190, D-191, D-192
+  D-181, D-184, D-185, D-188, D-189, D-190, D-191, D-192, D-193
 - **Rail & track:** D-042, D-043, D-044, D-045, D-046, D-047, D-053, D-141,
   D-153, D-157, D-184
 - **Signals & reservations:** D-054, D-055, D-056, D-057, D-058, D-059, D-060,
@@ -36,7 +36,7 @@ no entry below. A number may appear under several topics.
   D-085, D-086, D-174
 - **Towns, council & ownership:** D-101, D-102, D-103, D-104
 - **Economy, finance & emissions:** D-008, D-090, D-091, D-092, D-105, D-154,
-  D-180
+  D-180, D-193
 - **Balancing & scenarios:** D-038, D-039, D-040, D-041, D-066, D-087, D-088,
   D-116, D-151, D-152, D-156, D-158, D-159, D-187, D-190
 - **Vehicles & fleet:** D-043, D-044, D-045, D-068, D-076, D-089, D-093,
@@ -49,15 +49,15 @@ no entry below. A number may appear under several topics.
   D-171, D-172, D-173, D-174, D-175, D-177, D-179, D-186
 - **UI & input:** D-011, D-013, D-015, D-035, D-110, D-113, D-114, D-119,
   D-126, D-148, D-165, D-166, D-177, D-179, D-180, D-181, D-182, D-183, D-184,
-  D-186, D-187, D-189, D-191, D-192
+  D-186, D-187, D-189, D-191, D-192, D-193
 - **Performance & measurement:** D-002, D-120, D-135, D-136, D-161, D-162,
   D-163, D-164, D-167, D-170, D-171, D-172, D-173, D-174, D-176, D-177, D-184,
-  D-185, D-186, D-187, D-191, D-192
+  D-185, D-186, D-187, D-191, D-192, D-193
 - **Platform, tooling & build:** D-012, D-014, D-015, D-016, D-017, D-029,
   D-030, D-031, D-160, D-168, D-169, D-170, D-172, D-175, D-192
 - **Crash safety:** D-132, D-139, D-190
 - **Testing method & fixtures:** D-010, D-038, D-072, D-074, D-084, D-133,
-  D-167, D-183, D-186, D-188, D-189, D-190, D-191, D-192
+  D-167, D-183, D-186, D-188, D-189, D-190, D-191, D-192, D-193
 - **Process & specification:** D-070, D-123, D-129, D-133, D-138, D-140,
   D-185, D-191
 
@@ -6701,3 +6701,127 @@ measured with `npm run build` before and after: main chunk
 **936.94 kB -> 907.18 kB** (gzip 283.96 -> 277.04, 908,106 B on disk), the `replay` chunk growing
 158.57 -> 190.41 kB as the parser lands where it belongs, the worker unchanged
 at 313.15 kB.
+
+---
+
+## M17 - the goal machine, bundle 1: goals decided by the simulation (2026-08-08)
+
+### D-193 A goal is the tutorial's predicate moved into the daily hook, because a medal has to be reproducible, and its bands live in hashed state rather than in the briefing
+
+SPEC2 M17 asks for six goal descriptors and takes their vocabulary from the
+tutorial of D-113 - and then, in the same sentence, says they are evaluated in
+the SIMULATION's daily hook. That is a deliberate departure from D-113's rule
+that a lesson watches and never touches the simulation, and it is worth being
+explicit about which half of D-113 is kept and which is dropped.
+
+**What is kept.** A goal is still a sentence plus a predicate over state that
+already exists. Not one new signal was invented for it: company value is
+section 14.1's own `companyValueCt`, a rating is `stationRating`, a connection
+is the 7.4 table's `expectedTicks`, a population is the town's. A goal writes
+nothing but its own verdict - no company, station, vehicle or tile is touched -
+so architecture law #6 is untouched too: the daily hook is already a legitimate
+author of state (E-10's argument for town growth), and no player command is
+involved in reaching a verdict.
+
+**What is dropped, and why it had to be.** D-113's binding reason for keeping
+the tutorial out of the simulation was that a second author of state beside the
+command queue would leave the replay missing half of what happened. A goal has
+the opposite problem: evaluated in the interface it would be state the replay
+never SEES. A medal decided in a panel is decided at whichever frame the panel
+happened to be mounted, on whichever machine had it open; two players watching
+one recording could disagree about who won, and M16's verifier - which compares
+world digests - could not judge it at all. Evaluated sim-side and hashed, "the
+goal fired at tick 860,800 with a silver medal" is part of the world's
+fingerprint, survives the save, and re-simulates bit-identically. SPEC2 says
+"nur so sind Sieg und Medaille deterministisch und replay-verifizierbar", and
+that is exactly right.
+
+**The bands are descriptors, not briefing.** SPEC2's `.ironscenario` metadata
+block is deliberately UNHASHED and Fehler 35 makes a coupling test of it - a
+briefing typo must never become a desync. Medal bands are listed among the
+metadata in that sentence, and they cannot be: a medal decided from unhashed
+bytes is a medal a typo can change, and two players with the same recording and
+different files would hash different scoreboards. So the three band ticks are
+fields of the GOAL DESCRIPTOR, which is world state - saved, hashed, fixed at
+genesis. A scenario's briefing may DESCRIBE the bands in prose; the descriptor
+is what decides them. That keeps the M17 scenario bundle's metadata block free
+to be exactly what Fehler 35 wants it to be.
+
+**Goals are a world rule (Z2), so they are a `NewGameParams` field**, saved,
+hashed and migrated like `inflation` or the three 8.4 rules - and absent means
+NONE, the load-bearing default every world recorded before M17 relies on. The
+store is struct-of-arrays and allocated whole in its constructor, which is what
+"descriptors preallocated at load" means in practice: the hook writes into
+storage that already exists.
+
+**The six descriptors, and the two places the words had to be pinned down.**
+`ConnectStations` names TOWNS rather than stations, and that is forced rather
+than chosen: a scenario is authored before a single station exists, so a
+station id would refer to something the author cannot name, while towns are
+placed at genesis and keep their ids. `StationRatingHold` watches the best
+rating among the player's qualifying stops rather than one named station, for
+the same reason - and its streak is a HISTORICAL input to a simulation
+decision, so it is saved state (Z4) rather than something recomputed on load.
+`CargoDeliveredTotal` needed a lifetime figure that no window can rebuild, so
+`CompanyState.cargoDeliveredUnits` joined the save: one indexed add on the
+delivery path that already books the revenue, per cargo, counting exactly what
+the station ring calls Delivered (D-178) so the two can never disagree.
+
+**A verdict is final.** Achieved or Failed, the goal is never measured again -
+which is what makes a fifty-year game pay for a decided goal exactly once, and
+why the tonnage goal's progress in the acceptance run reads 5,001 units while
+the company has since delivered 70,800. The deadline is inclusive and is judged
+on the day boundary that follows it; `SurviveUntil` is the one kind that can
+fail EARLY, because a wound-up company cannot survive to a later date and
+pretending otherwise would leave a decided outcome open for twenty years. The
+parser refuses every scoreboard the hook could not have produced: achieved
+without a date, a medal without an achievement, bands out of order.
+
+**The snapshot block is the moving half only** - `SNAPSHOT_LAYOUT_VERSION`
+8 -> 9, eight goals of two Int32, the 64 bytes the ledger booked. Progress in
+thousandths and a `Standing` that folds status and medal into one signed number
+(-1 failed, 0 open, 1..3 the band); every achievement earns at least bronze -
+the bronze tick IS the deadline - so the fold loses nothing. What a goal IS
+never moves and therefore never travels here (E-05, Fehler 37), and the block
+is written from the ONE publish pass with every other block (Fehler 33).
+
+**Allocation-free, measured rather than asserted - and the measurement found a
+defect.** A bare `heapUsed` delta is not an instrument: it falls whenever a
+collection happens to run, and the first attempt measured the ALLOCATING
+control at a tenth of the subject. What is honest is the growth plus everything
+the collector took away inside the window, which `GCProfiler` reports per
+event. Instrumented that way, the hook's own machinery - loop, switch, store
+writes, verdict transitions - allocates **0.17-0.71 bytes per game day over
+50,000 days**, against an allocating control at 336 B/day. The harness has a
+floor it states rather than hides: a call across a module boundary returning a
+double is boxed here at exactly 16 bytes, because the test graph is not the
+bundle the game ships, and the six-kind hook makes five such calls a day (81 B
+measured, bound 128).
+
+Chasing that residue found a real one. `stationRating` - documented
+allocation-free since M5 because the collection gate and town production call
+it from inside the tick - allocated ~9 bytes a call through `hasModule`'s
+`for...of`, whose array iterator V8 does not always elide. It is an indexed
+loop now, and the gate, the town clock and the goal hook all stopped paying it.
+
+**Ledger.** **SAVE_VERSION 27 -> 28**, M17's one Z5 bump, owned by this bundle
+and extended in place by the milestone's later bundles: `goals` plus
+`cargoDeliveredUnits`, both hashed, migration entering none and zero - which is
+exactly what a pre-M17 world knew about itself. First bump since v26 to move
+hashed state, so both pins were re-recorded under their protocols: the
+canonical cross-OS hash `50c7d6a38f6da052` -> **`4dff3f3f216385e6`** (D-137),
+the corpus manifest `17f7f507023b91d8` -> **`f1dcab2a374ab728`** with a
+`v28-played.ironsave` fixture, all seven fixtures still decoding to ONE world
+(D-130). The soak fixture was re-recorded on the same reference platform,
+`615d0259186b89dc` -> **`ed8ac72cd1d6284d`** at an unchanged 698 recorded
+commands - the quarter century plays the same game, only the fingerprint moved.
+The D-134 field audit covers every new field, with a synthetic achieved goal as
+its representative; no allowlist entry was added or needed. Snapshot layout
+8 -> 9, +64 B per slot. Atlas 0. Tick, measured on the 1,500-vehicle fixture:
+**p50 1.181 / p99 2.449 ms** against the M10 baseline 1.45 / 3.26 on a row that
+allows +0.05 - the hook returns on its first line for a world with no goals.
+Bundle, measured with `npm run build`: main chunk **907.18 -> 907.53 kB**
+(gzip 277.04 -> 277.16) against the 930,000 B budget, the whole of it the goal
+block's constants in the shared channel; the `replay` chunk 190.41 -> 196.46 kB
+and the worker 313.15 -> 319.89 kB, both of which carry the simulation and are
+not the budget.

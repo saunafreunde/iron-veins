@@ -50,6 +50,9 @@ import {
   type VehicleSave,
 } from './save/entities';
 import { LineStore } from './lines/LineStore';
+import { buildGoalStore, GoalStore } from './goals/GoalStore';
+import { updateGoals } from './goals/evaluate';
+import type { GoalSave } from './goals/types';
 import { assignStationIndustries } from './industry/catchment';
 import { openNewIndustries } from './industry/lifecycle';
 import { SaveFormatError } from './save/format';
@@ -112,6 +115,8 @@ export interface WorldStateData {
   vehicles: VehicleSave[];
   /** The lines of section 12.2 (M11): shared order lists, saved and hashed. */
   lines: LineSave[];
+  /** The goals of SPEC2 M17, descriptors and verdicts alike. */
+  goals: GoalSave[];
   /** Measured travel times between stations; the connection table of 7.4. */
   cargoLinks: CargoLinkSave[];
   /** The news log, oldest first. */
@@ -230,6 +235,16 @@ export class World {
    * Replaced wholesale when a save is loaded, exactly like the vehicles.
    */
   lines = new LineStore();
+  /**
+   * What this world asks of the player, and what the simulation has decided
+   * about it (SPEC2 M17).
+   *
+   * Descriptors AND verdicts are saved and hashed, which is what makes a medal
+   * reproducible from a seed and a command log - the departure from D-113's
+   * watch-only tutorial that the milestone exists to make (D-193). Replaced
+   * wholesale on load, like the vehicles and the lines.
+   */
+  goals = new GoalStore();
   readonly roadPathfinder: RoadPathfinder;
   readonly railPathfinder: RailPathfinder;
   /**
@@ -378,6 +393,13 @@ export class World {
       ),
     );
     this.ai = createAiStates(this.companies.length, this.rng);
+    // Goals are a world rule like inflation (Z2): fixed when the world is
+    // created, saved, hashed, and never editable afterwards. Absent means
+    // none, which is every game started before M17.
+    const goals = params.goals;
+    if (goals !== undefined) {
+      for (let i = 0; i < goals.length; i++) this.goals.add(goals[i]!);
+    }
     this.map = generated.map;
     this.towns = generated.towns;
     this.industries = generated.industries;
@@ -461,6 +483,12 @@ export class World {
       collectIndustryOutput(this);
       rollBreakdowns(this);
       expireStaleCargo(this);
+      // The goal machine of SPEC2 M17, judged on the day that has just been
+      // played: after the cargo routing above, so ConnectStations reads
+      // today's connection table rather than yesterday's, and after the
+      // deliveries, so a goal about tonnage sees them. Allocation-free
+      // (goals/evaluate.ts) and skipped entirely by a world with no goals.
+      updateGoals(this);
       // Last of the daily pass, so what it reports is the state the day ended
       // in rather than a half-updated one.
       reportNews(this);
@@ -640,6 +668,7 @@ export class World {
       stations: encodeStations(this.stations),
       vehicles: encodeVehicles(this.vehicles),
       lines: encodeLines(this.lines),
+      goals: this.goals.toData(),
       cargoLinks: this.cargoLinks.toData(),
       news: this.news.toData(),
       contracts: this.contracts.map((contract) => ({
@@ -705,6 +734,9 @@ export class World {
     for (const station of world.stations) assignStationIndustries(world, station);
     world.vehicles = buildVehicleStore(data.vehicles);
     world.lines = buildLineStore(data.lines);
+    // Descriptors preallocated at load, verdict and all: what the file says
+    // this world asked for and how far the player got (SPEC2 M17).
+    world.goals = buildGoalStore(data.goals);
     world.cargoLinks.loadData(data.cargoLinks);
     world.news.loadData(data.news);
     world.contracts = data.contracts.map((contract) => ({
@@ -825,6 +857,10 @@ function hashDynamicState(h: Fnv1a64, world: World): void {
     for (const amount of c.monthHistory) h.int(amount);
     h.u32(c.valueHistory.length);
     for (const value of c.valueHistory) h.int(value);
+    // Lifetime tonnage per cargo (SPEC2 M17). Saved state, so hashed like
+    // every other saved figure (D-134) - and it is what a CargoDeliveredTotal
+    // goal reads, so a bent counter is a different medal.
+    for (const units of c.cargoDeliveredUnits) h.f64(units);
   }
 
   h.u32(world.towns.length);
@@ -910,6 +946,22 @@ function hashDynamicState(h: Fnv1a64, world: World): void {
       h.int(order.condKind).u32(order.condComparator);
       h.f64(order.condValue).u32(order.condJumpTo);
     }
+  }
+
+  // The goals of SPEC2 M17, descriptors AND verdicts. Both halves, because
+  // both are what "the medal is reproducible" means: the descriptor decides
+  // what is being asked and the verdict is the answer, and a save that lost
+  // either would replay into a different scoreboard while fingerprinting like
+  // the recorded game. In the LIVE digest as well as the full one - a dozen
+  // numbers per goal, moving exactly when the player can see them move.
+  const goals = world.goals;
+  h.u32(goals.count);
+  for (let at = 0; at < goals.count; at++) {
+    h.u32(goals.kind[at]!).int(goals.subjectA[at]!).int(goals.subjectB[at]!);
+    h.f64(goals.threshold[at]!);
+    h.u32(goals.goldTick[at]!).u32(goals.silverTick[at]!).u32(goals.bronzeTick[at]!);
+    h.f64(goals.progress[at]!).u32(goals.holdDays[at]!);
+    h.u32(goals.status[at]!).u32(goals.medal[at]!).int(goals.completedTick[at]!);
   }
 
   h.u32(world.industries.length);

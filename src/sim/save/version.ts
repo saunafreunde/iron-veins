@@ -69,9 +69,14 @@
  * bundle (Z5, D-191) with one schedule digest per mark, so a command MOVED
  * inside a bracket is detectable instead of silently renaming the divergent
  * tick. Not one byte of the hashed world state moves, which the migration test
- * proves by hash identity.
+ * proves by hash identity. 28 is M17's one bump and the first one since 26 to
+ * move hashed world state: the goal machine - what a world asks of the player
+ * and what the simulation has decided about it - plus the per-company lifetime
+ * tonnage a cargo goal reads. A world that predates M17 asked nothing, so the
+ * migration gives it no goals and a zeroed tally, which is exactly what it
+ * knew.
  */
-export const SAVE_VERSION = 27;
+export const SAVE_VERSION = 28;
 
 /** File extension used for manual and automatic saves. */
 export const SAVE_EXTENSION = '.ironsave';

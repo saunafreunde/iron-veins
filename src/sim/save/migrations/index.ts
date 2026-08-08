@@ -1,3 +1,4 @@
+import { CARGO_COUNT } from '../../cargo/types';
 import { LEDGER_HISTORY_MONTHS, TILE_PUBLIC } from '../../constants';
 import { ACCOUNT_COUNT } from '../../economy/ledger';
 import { STATION_HISTORY_SIZE, STATION_MONTH_COUNTER_SIZE } from '../../station/history';
@@ -1032,6 +1033,53 @@ function withClaimScheduleDigest(value: unknown): unknown {
 }
 
 /**
+ * M17 gave a world something to be measured against: the goal machine (SPEC2
+ * M17, the milestone's one Z5 bump - v28).
+ *
+ * Two things enter the hashed state, and both are entered as "nothing", which
+ * is not a convenient default but the only true one:
+ *
+ *  - `goals` becomes the empty list. A world started before M17 was asked for
+ *    nothing, and inventing a goal here would hand a player a scenario they
+ *    never chose - and, worse, a medal the simulation never decided.
+ *  - every company gets a zeroed `cargoDeliveredUnits`. Those companies DID
+ *    deliver cargo; nobody counted it, and the count is not reconstructible
+ *    from anything the file carries (the twelve-month station ring is a
+ *    window, not a lifetime). Zero is what that world knew about itself - the
+ *    same honesty the v24 -> v25 rings and the v25 -> v26 congestion layer
+ *    were given.
+ *
+ * Fields already present are kept, so the corpus trick of wrapping a CURRENT
+ * state in an old container cannot flatten a real goal list back to empty. A
+ * payload with no state or no company section is passed through as it is: the
+ * decoder is the one that refuses it (the v17_to_v18 precedent).
+ */
+const v27_to_v28: SaveMigration = (payload) => {
+  const inner = state(payload);
+  const companies = Array.isArray(inner['companies']) ? inner['companies'] : null;
+
+  return {
+    ...payload,
+    state: {
+      ...inner,
+      goals: inner['goals'] ?? [],
+      ...(companies === null
+        ? {}
+        : {
+            companies: companies.map((company) => {
+              const previous = company as Record<string, unknown>;
+              return {
+                ...previous,
+                cargoDeliveredUnits:
+                  previous['cargoDeliveredUnits'] ?? new Array<number>(CARGO_COUNT).fill(0),
+              };
+            }),
+          }),
+    },
+  };
+};
+
+/**
  * Registry keyed by the version a migration reads (section 19.1).
  *
  * There is deliberately no entry for 1 -> 2: a version 1 world had no map at
@@ -1064,6 +1112,7 @@ export const SAVE_MIGRATIONS: ReadonlyMap<number, SaveMigration> = new Map<numbe
   [24, v24_to_v25],
   [25, v25_to_v26],
   [26, v26_to_v27],
+  [27, v27_to_v28],
 ]);
 
 /**

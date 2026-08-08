@@ -255,11 +255,11 @@ describe('save migrations', () => {
 
   it('pins the current save version', () => {
     // Bumping SAVE_VERSION has to be a conscious act, because from the first
-    // released build onwards it also requires a migration. 27 is M16's single
-    // bump (SPEC2 Z5): the checkpoint ring, the log base tick and the replay
-    // claim own it; the milestone's later bundles extend that migration and
-    // add no numbers.
-    expect(SAVE_VERSION).toBe(27);
+    // released build onwards it also requires a migration. 28 is M17's single
+    // bump (SPEC2 Z5): the goal machine owns it - the goals a world carries,
+    // their verdicts, and the per-company lifetime tonnage a cargo goal reads;
+    // the milestone's later bundles extend that migration and add no numbers.
+    expect(SAVE_VERSION).toBe(28);
   });
 
   it('has a real migration for every step from version 2 on', () => {

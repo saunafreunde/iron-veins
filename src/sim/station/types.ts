@@ -191,8 +191,14 @@ export interface Station {
 
 /** Does the station have at least one module of this kind? */
 export function hasModule(station: Station, kind: ModuleKind): boolean {
-  for (const module of station.modules) {
-    if (module.kind === kind) return true;
+  // Indexed rather than `for...of`: this sits under `ratingTerms`, which the
+  // collection gate, town production and the M17 goal hook all call from
+  // inside the tick, and the array iterator is an allocation V8 does not
+  // always elide - measured at ~9 bytes a call, which is the whole of what
+  // `stationRating` was allocating (law #7, SPEC2 M17).
+  const modules = station.modules;
+  for (let i = 0; i < modules.length; i++) {
+    if (modules[i]!.kind === kind) return true;
   }
   return false;
 }

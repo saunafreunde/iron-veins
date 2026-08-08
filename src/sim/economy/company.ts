@@ -12,7 +12,7 @@ import {
   START_CAPITAL_CT,
   type Difficulty,
 } from '../constants';
-import { Cargo } from '../cargo/types';
+import { Cargo, CARGO_COUNT } from '../cargo/types';
 import type { CompanyState } from '../types';
 import {
   Account,
@@ -56,6 +56,7 @@ export function createCompany(
     bankrupt: false,
     co2ThisYearKg: 0,
     co2LastYearKg: 0,
+    cargoDeliveredUnits: new Array<number>(CARGO_COUNT).fill(0),
   };
 }
 

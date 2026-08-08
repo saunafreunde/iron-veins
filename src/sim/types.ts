@@ -1,4 +1,5 @@
 import type { Difficulty, MapClimate } from './constants';
+import type { GoalSpec } from './goals/types';
 
 /** The four 32 bit words of the xoshiro128** generator, as unsigned integers. */
 export type RngState = readonly [number, number, number, number];
@@ -87,6 +88,19 @@ export interface CompanyState {
    */
   co2ThisYearKg: number;
   co2LastYearKg: number;
+  /**
+   * Units of cargo this company's vehicles have delivered to a DESTINATION
+   * since it was founded, by cargo (SPEC2 M17). [units]
+   *
+   * The same verdict the station history ring calls Delivered (D-178), kept
+   * per company and for a lifetime rather than for twelve months: a
+   * CargoDeliveredTotal goal asks what the company has moved altogether, and
+   * that is not reconstructible from any window. A historical input to a
+   * simulation decision is saved state (Z4), so it is saved and hashed. A
+   * transfer set-down is deliberately not counted, exactly as it is not
+   * counted there.
+   */
+  cargoDeliveredUnits: number[];
 }
 
 /** Calendar position derived from a tick count. */
@@ -175,4 +189,15 @@ export interface NewGameParams {
    * introduces the rule (SPEC2 Fehlerkatalog 34).
    */
   readonly roadCongestion?: boolean;
+  /**
+   * What this world asks of the player (SPEC2 M17), at most `MAX_GOALS` of
+   * them.
+   *
+   * A world rule in the full Z2 sense: fixed at genesis, saved, hashed,
+   * migrated - because the goals decide a medal, and a medal that could be
+   * edited mid-game would be a medal no replay could reproduce. Absent means
+   * NONE, which is what every world recorded before M17 has and what the
+   * v27 -> v28 migration enters.
+   */
+  readonly goals?: readonly GoalSpec[];
 }

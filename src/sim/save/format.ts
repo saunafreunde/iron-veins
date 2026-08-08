@@ -2,6 +2,7 @@ import type { AiProject, AiState } from '../ai/types';
 import type { Contract } from '../economy/contracts';
 import { CommandKind, type Command, type CommandEnvelope } from '../commands/types';
 import type { CargoLinkSave } from '../cargo/linkGraph';
+import { CARGO_COUNT } from '../cargo/types';
 import { ACCOUNT_COUNT } from '../economy/ledger';
 import { NEWS_CATEGORY_COUNT, type NewsEntry } from '../news/log';
 import {
@@ -16,7 +17,7 @@ import {
 import { INDUSTRY_TYPE_COUNT, type Industry } from '../industry/types';
 import { TownSize, type Town } from '../town/types';
 import type { TileMapData, WorldStateData } from '../World';
-import { decodeLines, decodeStations, decodeVehicles } from './entities';
+import { decodeGoals, decodeLines, decodeStations, decodeVehicles } from './entities';
 import { REPLAY_EXTENSION, SAVE_EXTENSION, SAVE_VERSION } from './version';
 import type { CompanyState, RngState } from '../types';
 
@@ -417,7 +418,23 @@ function parseCompany(value: unknown, path: string): CompanyState {
       raw['accumulatedDepreciationCt'],
       `${path}.accumulatedDepreciationCt`,
     ),
+    // Fractional units, so it is a row of finite numbers rather than of whole
+    // cents - the one place a company row is not money (SPEC2 M17).
+    cargoDeliveredUnits: parseUnits(
+      raw['cargoDeliveredUnits'],
+      `${path}.cargoDeliveredUnits`,
+      CARGO_COUNT,
+    ),
   };
+}
+
+/** A row of cargo figures of exactly the expected length. */
+function parseUnits(value: unknown, path: string, length: number): number[] {
+  const entries = asArray(value, path);
+  if (entries.length !== length) {
+    throw new SaveFormatError(`${path}: expected ${length} entries, got ${entries.length}`, path);
+  }
+  return entries.map((entry, i) => asFinite(entry, `${path}[${i}]`));
 }
 
 function parseDifficulty(value: unknown, path: string): Difficulty {
@@ -1121,6 +1138,7 @@ export function parseWorldState(value: unknown, path: string): WorldStateData {
     stations: decodeStations(stateRaw['stations'], `${path}.stations`),
     vehicles: decodeVehicles(stateRaw['vehicles'], `${path}.vehicles`),
     lines: decodeLines(stateRaw['lines'], `${path}.lines`),
+    goals: decodeGoals(stateRaw['goals'], `${path}.goals`),
     cargoLinks: parseCargoLinks(stateRaw['cargoLinks'], `${path}.cargoLinks`),
     news: parseNews(stateRaw['news'], `${path}.news`),
     contracts: parseContracts(stateRaw['contracts'], `${path}.contracts`),

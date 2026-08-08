@@ -1431,6 +1431,28 @@ export const MAX_STATIONS = 1_000;
  */
 export const MAX_LINES = 256;
 
+// ----------------------------------------------------- goals (SPEC2 M17)
+
+/**
+ * Upper bound on goals a world may carry, sizing the goal store.
+ *
+ * Eight is what a scenario briefing can state without becoming a list nobody
+ * reads - the eight shipped scenarios of SPEC2 M17 carry between one and four
+ * each - and it is what keeps the whole goal block inside the 64 bytes the
+ * shared-resource ledger booked for it (SPEC2 6.1). [goals]
+ */
+export const MAX_GOALS = 8;
+
+/**
+ * Scale of the goal progress the snapshot carries: thousandths of the way to
+ * the threshold, clamped to 0..1000.
+ *
+ * The same convention `SnapshotVehicle.ProgressMilli` uses, and for the same
+ * reason - the channel is Int32 and a ratio needs a fixed denominator both
+ * sides agree on. [1/1000]
+ */
+export const GOAL_PROGRESS_SCALE = 1_000;
+
 // ------------------------------------------------- timetable (section 12.3)
 
 /**

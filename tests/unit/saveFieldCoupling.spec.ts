@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, it } from 'vitest';
+import { GoalKind, GoalMedal, GoalStatus } from '../../src/sim/goals/types';
 import { parseSaveFile, SAVE_MAGIC, SAVE_VERSION } from '../../src/sim/save/format';
 import { scheduleDigest } from '../../src/sim/save/schedule';
 import { hashWorld, World } from '../../src/sim/World';
@@ -330,6 +331,26 @@ beforeAll(() => {
         railTrains: 1,
         lineId: -1,
       },
+    });
+  }
+  if (state.goals.length === 0) {
+    // A representative goal of SPEC2 M17 - a world only carries goals when a
+    // scenario gave it some, and the recorded road fixture has none. Achieved
+    // rather than open, so the verdict fields (medal, completion date) are
+    // walked as the values the parser actually cross-checks.
+    state.goals.push({
+      kind: GoalKind.CompanyValueBy,
+      subjectA: -1,
+      subjectB: -1,
+      threshold: 200_000_000,
+      goldTick: 720_000,
+      silverTick: 1_296_000,
+      bronzeTick: 1_800_000,
+      progress: 250_000_000,
+      holdDays: 3,
+      status: GoalStatus.Achieved,
+      medal: GoalMedal.Silver,
+      completedTick: 900_000,
     });
   }
   if (state.lines.length === 0) {

@@ -12,7 +12,7 @@
  * refuses to interpret a buffer written by a different layout.
  */
 
-export const SNAPSHOT_LAYOUT_VERSION = 8;
+export const SNAPSHOT_LAYOUT_VERSION = 9;
 
 /** Header fields, shared by both slots. */
 export const SnapshotHeader = {
@@ -50,6 +50,8 @@ export const SnapshotI32 = {
   MonthsInDebt: 13,
   /** How many entries of the flow-leg block are in use (M14 flow atlas). */
   FlowCount: 14,
+  /** How many entries of the goal block are in use (M17 goal machine). */
+  GoalCount: 15,
 } as const;
 
 /**
@@ -58,7 +60,7 @@ export const SnapshotI32 = {
  * The Float64 block starts immediately after it, and a Float64Array view has to
  * begin on an eight byte boundary - so an odd number of Int32 fields would make
  * the whole snapshot unconstructable. Adding a field here means checking this
- * number, not only the enum above. Fifteen fields round up to sixteen.
+ * number, not only the enum above. Sixteen fields need no rounding.
  */
 export const SNAPSHOT_I32_COUNT = 16;
 
@@ -203,6 +205,32 @@ export const SnapshotFlow = {
 export const SNAPSHOT_FLOW_STRIDE = 8;
 
 /**
+ * Goals the panel may draw in one tick (SPEC2 M17).
+ *
+ * The goal machine's moving half, and the ONE snapshot-layout change M17
+ * booked in the shared-resource ledger: eight goals of two Int32 each is the
+ * ~64 bytes the ledger row promised. `MAX_GOALS` in `sim/constants.ts` is the
+ * same eight; the equality is a test rather than an import, because the shared
+ * channel must not depend on the simulation (the `SNAPSHOT_MAX_VEHICLES`
+ * precedent, D-187).
+ */
+export const SNAPSHOT_MAX_GOALS = 8;
+
+/** Fields per goal. */
+export const SnapshotGoal = {
+  /** Progress towards the threshold in thousandths, clamped to 0..1000. */
+  ProgressMilli: 0,
+  /**
+   * Where the goal stands, status and medal in one signed number: -1 failed,
+   * 0 open, 1 bronze, 2 silver, 3 gold. Every achievement earns at least
+   * bronze - the bronze tick IS the deadline - so the fold loses nothing and
+   * the block stays inside its 64-byte booking.
+   */
+  Standing: 1,
+} as const;
+export const SNAPSHOT_GOAL_STRIDE = 2;
+
+/**
  * One read of the published vehicle block, tagged with the generation that
  * published it, its tick and the measured simulation rate - the bundle the
  * render-side interpolator of E-05 copies and times its alpha against
@@ -224,8 +252,9 @@ const STATUS_F64_BYTES = SNAPSHOT_F64_COUNT * 8;
 const VEHICLE_BYTES = SNAPSHOT_MAX_VEHICLES * SNAPSHOT_VEHICLE_STRIDE * 4;
 const RESERVED_BYTES = SNAPSHOT_MAX_RESERVED_TILES * SNAPSHOT_RESERVED_STRIDE * 4;
 const FLOW_BYTES = SNAPSHOT_MAX_FLOW_LEGS * SNAPSHOT_FLOW_STRIDE * 4;
+const GOAL_BYTES = SNAPSHOT_MAX_GOALS * SNAPSHOT_GOAL_STRIDE * 4;
 const SLOT_BYTES =
-  STATUS_I32_BYTES + STATUS_F64_BYTES + VEHICLE_BYTES + RESERVED_BYTES + FLOW_BYTES;
+  STATUS_I32_BYTES + STATUS_F64_BYTES + VEHICLE_BYTES + RESERVED_BYTES + FLOW_BYTES + GOAL_BYTES;
 
 export const SNAPSHOT_BYTES = HEADER_BYTES + 2 * SLOT_BYTES;
 
@@ -265,6 +294,19 @@ function flowView(buffer: SharedArrayBuffer, slot: number): Int32Array {
   );
 }
 
+function goalView(buffer: SharedArrayBuffer, slot: number): Int32Array {
+  return new Int32Array(
+    buffer,
+    slotByteOffset(slot) +
+      STATUS_I32_BYTES +
+      STATUS_F64_BYTES +
+      VEHICLE_BYTES +
+      RESERVED_BYTES +
+      FLOW_BYTES,
+    SNAPSHOT_MAX_GOALS * SNAPSHOT_GOAL_STRIDE,
+  );
+}
+
 /** Allocate a correctly sized, cross-origin-isolated snapshot buffer. */
 export function createSnapshotBuffer(): SharedArrayBuffer {
   return new SharedArrayBuffer(SNAPSHOT_BYTES);
@@ -278,6 +320,7 @@ export class SnapshotWriter {
   private readonly vehicleSlots: readonly [Int32Array, Int32Array];
   private readonly reservedSlots: readonly [Int32Array, Int32Array];
   private readonly flowSlots: readonly [Int32Array, Int32Array];
+  private readonly goalSlots: readonly [Int32Array, Int32Array];
   private generation = 0;
 
   constructor(readonly buffer: SharedArrayBuffer) {
@@ -287,6 +330,7 @@ export class SnapshotWriter {
     this.vehicleSlots = [vehicleView(buffer, 0), vehicleView(buffer, 1)];
     this.reservedSlots = [reservedView(buffer, 0), reservedView(buffer, 1)];
     this.flowSlots = [flowView(buffer, 0), flowView(buffer, 1)];
+    this.goalSlots = [goalView(buffer, 0), goalView(buffer, 1)];
     Atomics.store(this.header, SnapshotHeader.LayoutVersion, SNAPSHOT_LAYOUT_VERSION);
     Atomics.store(this.header, SnapshotHeader.Generation, 0);
   }
@@ -316,6 +360,11 @@ export class SnapshotWriter {
     return this.flowSlots[(this.generation + 1) & 1]!;
   }
 
+  /** Goal block of the slot currently being filled (M17 goal machine). */
+  get draftGoals(): Int32Array {
+    return this.goalSlots[(this.generation + 1) & 1]!;
+  }
+
   /** Make the drafted slot visible to the reader. */
   publish(): void {
     this.generation++;
@@ -331,6 +380,7 @@ export class SnapshotReader {
   private readonly vehicleSlots: readonly [Int32Array, Int32Array];
   private readonly reservedSlots: readonly [Int32Array, Int32Array];
   private readonly flowSlots: readonly [Int32Array, Int32Array];
+  private readonly goalSlots: readonly [Int32Array, Int32Array];
   /** 0 means "nothing published yet"; the writer starts publishing at 1. */
   private lastGeneration = 0;
 
@@ -341,6 +391,7 @@ export class SnapshotReader {
     this.vehicleSlots = [vehicleView(buffer, 0), vehicleView(buffer, 1)];
     this.reservedSlots = [reservedView(buffer, 0), reservedView(buffer, 1)];
     this.flowSlots = [flowView(buffer, 0), flowView(buffer, 1)];
+    this.goalSlots = [goalView(buffer, 0), goalView(buffer, 1)];
 
     const layout = Atomics.load(this.header, SnapshotHeader.LayoutVersion);
     if (layout !== 0 && layout !== SNAPSHOT_LAYOUT_VERSION) {
@@ -436,6 +487,20 @@ export class SnapshotReader {
       data: this.flowSlots[slot]!,
       count: i32[SnapshotI32.FlowCount]!,
       tick: i32[SnapshotI32.Tick]!,
+    };
+  }
+
+  /**
+   * Goals of the published tick (SPEC2 M17). Block and count read from the
+   * SAME generation, the `currentVehicleFrame` rule: a count that straddled a
+   * publish would draw a goal that is not there.
+   */
+  currentGoals(): { readonly data: Int32Array; readonly count: number } {
+    const generation = this.peekGeneration();
+    const slot = generation & 1;
+    return {
+      data: this.goalSlots[slot]!,
+      count: this.i32Slots[slot]![SnapshotI32.GoalCount]!,
     };
   }
 }

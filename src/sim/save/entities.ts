@@ -11,7 +11,16 @@ import {
 import { hasVehicleSpec, vehicleSpec } from '../vehicles/catalog';
 import { powerCode } from '../vehicles/spec';
 import { LineStore } from '../lines/LineStore';
-import { MAX_CONSIST_UNITS, MAX_LINES, MAX_ORDERS_PER_VEHICLE } from '../constants';
+import {
+  GOAL_KIND_COUNT,
+  GOAL_MEDAL_COUNT,
+  GOAL_STATUS_COUNT,
+  GoalMedal,
+  GoalStatus,
+  type GoalKind,
+  type GoalSave,
+} from '../goals/types';
+import { MAX_CONSIST_UNITS, MAX_GOALS, MAX_LINES, MAX_ORDERS_PER_VEHICLE } from '../constants';
 import type { OrderLoad, OrderTarget, OrderUnload } from '../vehicles/VehicleStore';
 import { MAX_PATH_TILES, VehicleStore, type Order } from '../vehicles/VehicleStore';
 import { SaveFormatError } from './format';
@@ -561,4 +570,76 @@ export function buildVehicleStore(saves: readonly VehicleSave[]): VehicleStore {
     store.refreshAggregate(id);
   }
   return store;
+}
+
+/**
+ * Validate the goal section of a save (SPEC2 M17).
+ *
+ * Everything a goal decides is checked here rather than trusted, because the
+ * verdict IS the medal: a file whose status says Achieved with a medal of None
+ * would show a scoreboard the simulation could never have produced, and a bent
+ * band would decide a different medal from the same completion date. The
+ * ordering gold <= silver <= bronze is part of that check - `medalFor` is total
+ * without it, but a save that carries a bent band is a corrupt save and saying
+ * so beats quietly awarding gold for a bronze finish.
+ */
+export function decodeGoals(value: unknown, path: string): GoalSave[] {
+  const entries = list(value, path);
+  if (entries.length > MAX_GOALS) {
+    throw new SaveFormatError(`${path}: ${entries.length} goals is more than ${MAX_GOALS}`, path);
+  }
+  return entries.map((entry, i) => {
+    const where = `${path}[${i}]`;
+    const raw = record(entry, where);
+
+    const kind = int(raw['kind'], `${where}.kind`);
+    if (kind < 0 || kind >= GOAL_KIND_COUNT) {
+      throw new SaveFormatError(`${where}.kind: ${kind} is not a known goal`, `${where}.kind`);
+    }
+    const status = int(raw['status'], `${where}.status`);
+    if (status < 0 || status >= GOAL_STATUS_COUNT) {
+      throw new SaveFormatError(`${where}.status: ${status} is not a known status`);
+    }
+    const medal = int(raw['medal'], `${where}.medal`);
+    if (medal < 0 || medal >= GOAL_MEDAL_COUNT) {
+      throw new SaveFormatError(`${where}.medal: ${medal} is not a known medal`);
+    }
+    const goldTick = int(raw['goldTick'], `${where}.goldTick`);
+    const silverTick = int(raw['silverTick'], `${where}.silverTick`);
+    const bronzeTick = int(raw['bronzeTick'], `${where}.bronzeTick`);
+    if (goldTick < 0 || goldTick > silverTick || silverTick > bronzeTick) {
+      throw new SaveFormatError(
+        `${where}: the medal bands ${goldTick}/${silverTick}/${bronzeTick} are not ordered`,
+        where,
+      );
+    }
+    const completedTick = int(raw['completedTick'], `${where}.completedTick`);
+    if (status === GoalStatus.Achieved) {
+      if (completedTick < 0) {
+        throw new SaveFormatError(`${where}.completedTick: an achieved goal has a date`);
+      }
+      if (medal === GoalMedal.None) {
+        throw new SaveFormatError(`${where}.medal: an achieved goal wears a medal`);
+      }
+    } else if (completedTick !== -1 || medal !== GoalMedal.None) {
+      throw new SaveFormatError(`${where}.status: only an achieved goal has a date and a medal`);
+    }
+    const holdDays = int(raw['holdDays'], `${where}.holdDays`);
+    if (holdDays < 0) throw new SaveFormatError(`${where}.holdDays: ${holdDays} is negative`);
+
+    return {
+      kind: kind as GoalKind,
+      subjectA: int(raw['subjectA'], `${where}.subjectA`),
+      subjectB: int(raw['subjectB'], `${where}.subjectB`),
+      threshold: num(raw['threshold'], `${where}.threshold`),
+      goldTick,
+      silverTick,
+      bronzeTick,
+      progress: num(raw['progress'], `${where}.progress`),
+      holdDays,
+      status: status as GoalStatus,
+      medal: medal as GoalMedal,
+      completedTick,
+    };
+  });
 }

@@ -16,6 +16,7 @@ import {
 import { CommandQueue } from './commands/queue';
 import type { CommandEnvelope, CommandOutcome } from './commands/types';
 import { writeFlowLegs } from './flow';
+import { writeGoalBlock } from './goals/snapshot';
 import {
   BANKRUPTCY_MONTHS,
   MAX_TICK,
@@ -490,6 +491,8 @@ function publishSnapshot(current: World, sink: SnapshotWriter): void {
   // The flow atlas rides THIS publish pass like every other block - a second
   // pass over stations or links is the exact mistake Fehler 33 names (M14).
   i32[SnapshotI32.FlowCount] = writeFlowLegs(current, sink.draftFlow);
+  // And the goal block, on the same pass and for the same reason (M17).
+  i32[SnapshotI32.GoalCount] = writeGoalBlock(current.goals, sink.draftGoals);
   i32[SnapshotI32.MonthsInDebt] = current.playerCompany.bankrupt
     ? BANKRUPTCY_MONTHS
     : current.playerCompany.monthsInDebt;

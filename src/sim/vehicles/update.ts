@@ -836,6 +836,13 @@ function serveStation(world: World, id: number, station: Station): number {
         // A contract is satisfied by cargo that actually REACHED the town, so
         // it is credited on the delivery path and nowhere else.
         creditDelivery(world, vehicles.ownerId[id]!, station.townId, stack.cargo, paidFor);
+        // And the company's own lifetime tally, which a CargoDeliveredTotal
+        // goal reads once a day (SPEC2 M17). One indexed add on a path that
+        // already books revenue - the same measure as the station ring's
+        // Delivered, so the two can never disagree about what arrived.
+        const owner = world.companyOf(vehicles.ownerId[id]!);
+        owner.cargoDeliveredUnits[stack.cargo] =
+          (owner.cargoDeliveredUnits[stack.cargo] ?? 0) + paidFor;
       }
       units += paidFor;
       stack.amount -= paidFor;
