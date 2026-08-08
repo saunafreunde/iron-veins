@@ -20,12 +20,19 @@ import { hashWorld, type World } from '../../src/sim/World';
  * costs about +186 s of CPU, of which the two quarter-century AI scenarios are
  * 143 s: 77 % of the price for 2 of the 9 scenarios.
  *
+ * SPEC2 M18's `hardWinter` is the eleventh entry and the most expensive cheap
+ * one: measured 32.5 s for the file, because the band is an ensemble of six
+ * seeds played in two arms (D-203). Its twin is deliberately ONE world rather
+ * than twelve - measured 2.3-3.2 s of that - and the entry says which one and
+ * why.
+ *
  * So the twin is split rather than dropped, and the split is stated rather
  * than hidden:
  *
- *  - **every run** twins the seven scenarios whose second run is cheap
- *    (+43 s), which is what a developer gets from `npm run test:balance` and
- *    what CI's ordinary `npm test` job asserts;
+ *  - **every run** twins the scenarios whose second run is cheap (+43 s for
+ *    the seven measured above, +2.3-3.2 s for `hardWinter`), which is what a
+ *    developer gets from `npm run test:balance` and what CI's ordinary
+ *    `npm test` job asserts;
  *  - **the `soak` job** (and `npm run test:balance:full` locally) sets
  *    `IRON_VEINS_BALANCE_HASH=all` and twins all nine, on every push. Coverage
  *    of every scenario is therefore per-push, not "eventually".
@@ -48,6 +55,7 @@ import { hashWorld, type World } from '../../src/sim/World';
 export const BALANCE_SCENARIOS = [
   'busline',
   'coalTrain',
+  'hardWinter',
   'woodChain',
   'idleCompany',
   'mineClosure',

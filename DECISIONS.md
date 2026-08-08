@@ -41,7 +41,7 @@ no entry below. A number may appear under several topics.
   D-180, D-193, D-196
 - **Balancing & scenarios:** D-038, D-039, D-040, D-041, D-066, D-087, D-088,
   D-116, D-151, D-152, D-156, D-158, D-159, D-187, D-190, D-194, D-195,
-  D-196, D-197, D-198, D-199, D-200
+  D-196, D-197, D-198, D-199, D-200, D-203
 - **Vehicles & fleet:** D-043, D-044, D-045, D-068, D-076, D-089, D-093,
   D-096, D-142, D-143, D-145, D-146, D-155, D-157, D-171, D-174, D-181, D-185,
   D-201
@@ -62,9 +62,9 @@ no entry below. A number may appear under several topics.
 - **Crash safety:** D-132, D-139, D-190
 - **Testing method & fixtures:** D-010, D-038, D-072, D-074, D-084, D-133,
   D-167, D-183, D-186, D-188, D-189, D-190, D-191, D-192, D-193, D-194,
-  D-195, D-196, D-197, D-198, D-199, D-200, D-201, D-202
+  D-195, D-196, D-197, D-198, D-199, D-200, D-201, D-202, D-203
 - **Process & specification:** D-070, D-123, D-129, D-133, D-138, D-140,
-  D-185, D-191, D-197, D-198, D-199
+  D-185, D-191, D-197, D-198, D-199, D-203
 
 ---
 
@@ -8306,3 +8306,187 @@ Suite after: **118 files, 1,363 passing plus 2 skipped** against D-201's 116
 and 1,320 + 2, plus 14 perf tests (was 13) - `npm test`, `npm run typecheck`
 and `npm run lint` all green, `npm run test:soak` green at the unchanged
 fixture and `npm run test:balance` green with scenario 5 at 1,119,720 EUR.
+
+## M18 - weather, bundle 4: the band and the closure (2026-08-08)
+
+### D-203 A hard winter costs the reference coal line 4.95 %, not 8-15 %; the route to 8-15 % was found, measured and refused
+
+SPEC2 M18 ends with a balance band: "a hard winter depresses the reference coal
+line's annual revenue by 8-15 %". D-200 built the authority, D-201 built the
+four seams and said in as many words that no constant had been tuned towards
+that sentence, D-202 built the optics. This bundle measures it. **The number
+the economy pays is 4.95 %, the band is 3-7 %, and that is a re-band taken with
+the trace rather than by moving a constant until the sentence came true** - the
+D-158 precedent, applied to a number that was written before the physics it
+describes existed.
+
+**The scenario is scenario 2's own railway, and now literally so.** The coal
+line was hand-built inside `coalTrain.spec.ts`; a second file measuring a
+second thing about "the reference coal line" would have been a second railway
+within a game year of the first edit. `tests/balance/coalLine.ts` is the ONE
+definition now - geometry, platform length, consist, orders, seed and span -
+and both files call it; the only thing a caller may vary is the weather rule
+and the seed. Scenario 2's own figures are unchanged by the extraction and were
+re-run to prove it: investment 249,980 EUR, payback in year 6, the same nine
+year-end balances to the cent.
+
+**Why an ensemble and not a world.** One coal train is chaotic. The weather
+moves a THRESHOLD and never a draw (Z3, D-201), so the two arms take the same
+numbers out of the shared gameplay stream and start getting different OUTCOMES
+from the first frosty morning; a breakdown that falls on the wrong day costs a
+month of trips. Measured with the rule off, seed 9 alone runs 60.3 / 75.4 /
+60.7 / 70.4 / 71.5 / 64.7 / 64.7 / 65.5 k EUR over eight consecutive years - a
+swing of a quarter of the mean, against an effect of a twentieth. So
+`tests/balance/hardWinter.spec.ts` plays SIX seeds in both arms over the same
+nine years scenario 2 plays and bands the ENSEMBLE, and it prints the per-seed
+figures because their spread is the honest error bar: 3.33 % to 8.15 %, one
+seed outside the band on each side of it.
+
+**The measurement.** Six seeds x nine years, freight revenue (the coal line has
+no other): **3,510,797 EUR with the weather rule off against 3,336,995 EUR
+under the harsh rule, -4.95 %.** Winter-loaded on two instruments that are not
+the banded figure: breakdowns in December, January and February rise 29.2 %
+against 12.9 % in the other nine months, and the train's mean speed while it is
+moving falls 4.87 % against 3.00 %. Not one seed earns more with weather than
+without.
+
+**Which multiplier dominates**, measured by neutralising one channel at a time
+against the same off baseline (the residual is what the channel was worth):
+
+| channel neutralised | measured | the channel is worth |
+| --- | --- | --- |
+| nothing (the band) | -4.95 % | - |
+| `WEATHER_BREAKDOWN_FACTOR` to all 1 | -0.51 % | ~4.4 points |
+| `WEATHER_ROLLING_FACTOR` + `WEATHER_DRAG_FACTOR` to all 1 | -2.89 % | ~2.1 points |
+| `SEASON_WINTER_SEVERITY_PERCENT` to all 0 | -4.01 % | ~0.9 points |
+| `WEATHER_EXPIRY_FACTOR` to all 1 | -4.31 % | ~0.6 points |
+
+The parts sum to eight points against a whole of five, and that is not an
+error: the channels compete for the same lost time on the same chaotic line, so
+removing any one of them lets the others take some of what it was taking. What
+the table settles is the ORDER, and the order is unambiguous - **the breakdown
+threshold is the seam with the reach**, the two solver seams are second, and
+the heat seam is close to nothing on a line that carries coal (coal in a yard,
+and the heat gate is zero in the months the frost gate is open).
+
+**Why the solver seams cannot reach further, measured rather than argued.** The
+reference train is a 1950 steam locomotive and eight open wagons: 158 t empty,
+358 t loaded, top speed 20.83 m/s. Measured on the played line - traction
+105.0 kN from a standstill and 43.2 kN at top speed, against a rolling
+resistance of 7.0 kN loaded and a drag of 2.4 kN at top speed. A frosty January
+at this line's height multiplies the rolling coefficient by 1.3 (the sky) times
+1.1344 (the season) and takes that 7.0 kN to 10.4 kN - **3.4 kN off a 33.8 kN
+surplus, so the cruise does not lose one metre per second.** What it costs is
+the ramps, and the ramps are most of the journey: the train is at its top speed
+on only 16.1 % of its moving ticks over a 45-tile haul. That is exactly the
+shape of the measured -4.87 % of winter mean speed - real, and bounded by
+physics rather than by a table.
+
+**Why the frequency cannot reach further either.** Measured over 256 regions
+and three game years under the harsh rule: the sky is clear 52.7 % of
+region-days, rain 33.5, storm 8.2, frost 3.1, heat 2.6 - and in December,
+January and February, where `WEATHER_FROST_SEASON` opens its gate fully, frost
+holds **9.6 %**. A harsh January is a wet month with three frosty days in it.
+The reason is in the field generator: frost's weight is 14 and never boosted,
+while rain's is 20 and the neighbour pull multiplies it by up to 2.4, so the
+sky that forms fronts crowds out the sky the season is gating for.
+
+**The seams are not too weak, and this is the measurement that proves it.**
+With every sky behaving as FROST at both weather seams and the season at full
+severity in all twelve months - a permanent winter, far beyond anything the
+rule can draw - the same six seeds over the same nine years lose **26.39 %**.
+So "the multipliers are too small" is false. What is small is how much of the
+year the expensive sky owns.
+
+**The route to 8-15 %, measured**, by sweeping the one constant that owns that:
+`WEATHER_BASE_WEIGHT[Harsh][Frost]`.
+
+| frost weight | frost share of winter region-days | single-sky days of 1,080 | revenue |
+| --- | --- | --- | --- |
+| **14 (shipped)** | 9.6 % | 0 | -4.95 % |
+| 40 | 36.6 % | 0 | -7.30 % |
+| 90 | 70.0 % | 0 | **-9.30 %** |
+| 250 | 91.9 % | 0 | -10.86 % |
+| 2000 | 99.4 % | 66 | -13.81 % |
+
+So the band is reachable, and reaching it needs seven of every ten winter days
+to be frost. **It was refused, for three reasons that are stated together
+because no one of them would carry it alone:**
+
+1. **`WEATHER_FROST_SEASON` is climate-blind.** It is indexed by month and by
+   nothing else - `updateWeather` reads it with no climate term anywhere near
+   it - while the SEASON half (`SEASON_CLIMATE_WINTER`) is climate-aware and
+   gives tropical an exact zero. At 9.6 % that asymmetry is a blemish: a
+   tropical January gets the odd frost. At 70 % it is a tropical January frozen
+   on seven days in ten. Fixing that means giving the sky its own climate
+   table, which is a new mechanic in a milestone whose own decision says there
+   are four seams and no fifth, and whose one Z5 bump is spent.
+2. **The constant would have been set FROM the run the band then validates.**
+   There is no independent standard by which 14 is wrong - D-200 chose the
+   weight row by looking at the distribution it produces, and `weather.spec.ts`
+   says its share bands are a read-back of that choice. The only thing that
+   calls 14 wrong is the revenue figure it fails to produce, which is precisely
+   the defect D-197 was written about.
+3. **It would change what the rule MEANS in order to move one line's number.**
+   The weight row is the design statement of "harsh"; a world that switches the
+   rule on gets that winter everywhere, in every climate, for every vehicle,
+   for the rest of the century.
+
+**What the band is worth, and what it is not.** The band is a read-back of
+D-201's four factor tables in the same sense scenario 2's payback year is a
+read-back of the freight tariffs: it restates what this build's constants do to
+this line. What it is worth is that a seam which stops being wired, a factor
+table that collapses to the identity, or a field that stops producing weather
+all turn the build red. Independent of it, and asserted separately: the
+winter-loading on two instruments, that no seed earns more in the weather than
+without it, and that the two arms really are two arms (the off world's field is
+clear on every one of its region-days; the harsh world's is not, measured
+2,357,962 non-clear region-days).
+
+**The residual, named so it can be picked up rather than rediscovered.** M23
+gives climate its own sets (E-15, the ledger's v34 row). That is the milestone
+in which the sky can honestly be given a climate table, and with one a
+continental winter can be frosty without freezing the tropics - at which point
+this band is the one to re-measure, and 8-15 % may well be what it reads. The
+sweep above is the map for whoever does it.
+
+**The rest of the bundle.** `hardWinter` joins `BALANCE_SCENARIOS`, so
+`tests/unit/balanceDeterminism.spec.ts` - which walks the directory against the
+registry in both directions - covers it, and a future scenario without a twin
+stays a red build. Its twin is deliberately ONE world, the harsh arm of the
+reference seed: that is the arm which draws from the weather stream and the
+only surface this scenario adds, the off arm being `buildCoalLine()` played by
+scenario 2's own guard. The cost is stated where the other ten are, in
+`determinism.ts`: the file measures 32.5 s, of which the twin is 2.3-3.2 s.
+**Scenarios 1-4 and every other band of section 19.4 go on running with the
+rule off** (Fehlerkatalog 34); `buildCoalLine` defaults to off and says why.
+
+**Ledger.** `SAVE_VERSION` unchanged at **29** (M18's one Z5 bump is D-200's;
+this bundle adds no state at all), `SNAPSHOT_LAYOUT_VERSION` unchanged at
+**10**, atlas zero cells, no migration edit, no protocol field, no i18n string,
+no allowlist line, and not one byte under `src/` - the bundle is a balancing
+scenario, a shared fixture, a registry row and documentation. Verified by
+running rather than assumed: canonical cross-OS pin `5a2a6cf73f4107bb`, corpus
+manifest `c0a021f5d1ee8619`, soak fixture `e6c5e33d8e7607ec` at 698 recorded
+commands, all eight shipped scenarios hash-identical over two runs with their
+world-claims, briefing-numeral and place-name audits green, and scenario 5 back
+at D-158's 1,119,720 EUR. Main bundle re-measured with `npm run build` (twice,
+byte-identical): **934,926 B against the 950,000 B budget, headroom 15,074 B**;
+`SimWorker` 328,296 B, `replay` 200,040 B, the scenario catalogue 13,319 B, CSS
+13,427 B - all unchanged, as a bundle that touched no `src/` file must be.
+D-202 recorded 934,751 B for the same `src/` tree; the 175 B are not accounted
+for by anything this bundle did, and the discrepancy is written down rather
+than smoothed away.
+
+Suite after: **119 files, 1,369 passing plus 2 skipped** against D-202's 118
+and 1,363 + 2 (the six assertions of the new scenario), plus the 14 perf tests
+- `npm test`, `npm run typecheck` and `npm run lint` all green,
+`npm run test:soak` green at the unchanged fixture and
+`npm run test:balance:full` green including all eleven desync twins. Tick
+re-measured on two clean runs of the 1,500-vehicle reference fixture: **p50
+1.531 / 1.508 ms, p99 3.006 / 3.225 ms** against the M10 baseline 1.45 / 3.26
+on a row that allows +0.15 - both p99 land below the baseline, and the bundle
+touches no simulation code at all. Render tripwires green on the same runs
+(sprite pool median 1.71, draw prep 2.33 in the consist scene, E-18 full block
+2.60, chunk bake 0.59, particles 0.28, weather particles 0.21, aspect 0.04,
+emissive 0.05, flow prep 0.27 ms).
