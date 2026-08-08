@@ -573,7 +573,9 @@ function runFrame(): void {
     // modulo on every tick and an encode once a game year (SPEC2 M16). Not
     // during a replay: the ring the file carries is the recording's own, and
     // re-recording it would cost an encode a game year for nothing.
-    if (replay === null) checkpoints.record(current);
+    // The queue is handed over with the world: a checkpoint commits to the
+    // schedule of its own year as well as to the state (D-191).
+    if (replay === null) checkpoints.record(current, queue);
     accumulatorMs -= TICK_MS;
     ticks++;
   }
@@ -612,7 +614,7 @@ function startGame(message: Extract<MainToWorkerMessage, { type: 'init' }>): voi
   // Tick 0 is a year boundary, so the genesis of a game is a checkpoint like
   // any other - and it is the one that makes "replay this game from its first
   // day" a decode rather than a reconstruction (SPEC2 M16).
-  checkpoints.record(world);
+  checkpoints.record(world, queue);
   writer = new SnapshotWriter(message.buffer);
 
   if (timer !== null) clearInterval(timer);
@@ -679,7 +681,7 @@ function loadSave(bytes: Uint8Array): void {
   // A world loaded exactly on a year boundary is a checkpoint the ring may
   // not have (a pre-M16 save has none at all); `record` is idempotent by
   // tick, so this can only ever add the missing one.
-  checkpoints.record(world);
+  checkpoints.record(world, queue);
   adoptWorld(world, sink);
 }
 
@@ -709,7 +711,7 @@ function restart(options: NewGameOptions): void {
   );
   queue = new CommandQueue();
   checkpoints = new CheckpointRing();
-  checkpoints.record(world);
+  checkpoints.record(world, queue);
   adoptWorld(world, sink);
 }
 

@@ -71,8 +71,11 @@ export const SAVE_MAGIC = 'IRVN';
  * layer as zeros, which is exactly what those worlds did and knew. 27 is M16's
  * one bump and, like 23, a CONTAINER-only one: the checkpoint ring, the tick
  * the retained command log starts from, and the claim a `.ironreplay` makes
- * about where the recording ends. Not one byte of the hashed world state
- * moves, which the migration test proves by hash identity.
+ * about where the recording ends - extended IN PLACE by M16's correction
+ * bundle (Z5, D-191) with one schedule digest per mark, so a command MOVED
+ * inside a bracket is detectable instead of silently renaming the divergent
+ * tick. Not one byte of the hashed world state moves, which the migration test
+ * proves by hash identity.
  */
 export const SAVE_VERSION = 27;
 
@@ -111,6 +114,17 @@ export interface Checkpoint {
   readonly worldDigest: string;
   /** zlib(MessagePack(WorldStateData)). */
   readonly payload: Uint8Array;
+  /**
+   * Digest of the SCHEDULE - the `(tick, seq)` pairs - of the commands in the
+   * year that ends here (`save/schedule.ts`, D-191).
+   *
+   * `worldDigest` says what the commands did; this says when they ran, which
+   * is the assumption every attempt to name a divergent TICK makes and which
+   * nothing checked before. Empty means "committed to nothing": a recording
+   * written before this commitment existed, or a segment the retained log no
+   * longer holds. An empty digest costs exactly the exactness claim.
+   */
+  readonly scheduleDigest: string;
 }
 
 /**
@@ -125,6 +139,15 @@ export interface Checkpoint {
 export interface ReplayClaim {
   readonly finalTick: number;
   readonly finalHash: string;
+  /**
+   * Schedule digest of the part-year tail between the last year boundary and
+   * {@link finalTick} - the segment no checkpoint covers (D-191).
+   *
+   * Without it the tail would be the one bracket in every recording where a
+   * command could be moved unseen, and the tail is where a tamper lands most
+   * often: it is the part of the game that was played last.
+   */
+  readonly scheduleDigest: string;
 }
 
 /** Decoded, validated save payload. */
@@ -259,6 +282,23 @@ function asDigest(value: unknown, path: string): string {
   return text;
 }
 
+/**
+ * A digest a file may legitimately not carry at all.
+ *
+ * Exactly one kind of field uses this: the schedule commitments D-191 added to
+ * the checkpoint ring and the replay claim, INSIDE version 27 rather than as a
+ * version of their own (Z5 - v27 is M16's one bump and this is M16's own
+ * correction). A recording written by an earlier build of this version has
+ * none, and the honest reading of that is the one the empty string already
+ * carries everywhere else in this file: nothing was committed, so nothing can
+ * be checked - and verification withdraws the exactness claim rather than
+ * inventing one (`save/replay.ts`).
+ */
+function asOptionalDigest(value: unknown, path: string): string {
+  if (value === undefined || value === null) return '';
+  return asDigest(value, path);
+}
+
 // -------------------------------------------------------------- sub-sections
 
 function parseRngState(value: unknown, path: string): RngState {
@@ -323,7 +363,8 @@ function parseAiProject(value: unknown, path: string): AiProject {
     // Absent in every save written before M11 stage C2, when the AI could
     // only lay single track - which is exactly what a default of ONE says
     // (the D-146 pattern: the old wire format keeps parsing).
-    railTrains: raw['railTrains'] === undefined ? 1 : asInt(raw['railTrains'], `${path}.railTrains`),
+    railTrains:
+      raw['railTrains'] === undefined ? 1 : asInt(raw['railTrains'], `${path}.railTrains`),
     lineId: asInt(raw['lineId'], `${path}.lineId`),
   };
 }
@@ -1062,7 +1103,12 @@ function parseCheckpoints(value: unknown, path: string, lastTick: number): Check
         `${path}[${i}].payload`,
       );
     }
-    ring.push({ tick, worldDigest: digest, payload });
+    ring.push({
+      tick,
+      worldDigest: digest,
+      payload,
+      scheduleDigest: asOptionalDigest(raw['scheduleDigest'], `${path}[${i}].scheduleDigest`),
+    });
   }
   return ring;
 }
@@ -1085,7 +1131,11 @@ function parseReplayClaim(value: unknown, path: string, baseTick: number): Repla
       `${path}.finalHash`,
     );
   }
-  return { finalTick, finalHash };
+  return {
+    finalTick,
+    finalHash,
+    scheduleDigest: asOptionalDigest(raw['scheduleDigest'], `${path}.scheduleDigest`),
+  };
 }
 
 /**

@@ -57,9 +57,24 @@ export interface ReplayMeta {
   readonly companies: readonly ReplayCompanyMeta[];
   /** Ticks a jump lands on exactly - the ring, oldest first. */
   readonly checkpointTicks: readonly number[];
+  /**
+   * The scrub chips: the jump ticks with the calendar year each lands in.
+   *
+   * The label travels WITH the tick because the calendar lives in the
+   * simulation and the panel is on the other side of the worker boundary -
+   * asking it to compute the year would pull `World` into the main bundle for
+   * one modulo (measured at +248 kB when it did).
+   */
+  readonly jumps: readonly ReplayJump[];
   readonly commandCount: number;
   /** Whether this build may judge the recording at all (E-11, D-131). */
   readonly verifiable: boolean;
+}
+
+/** One scrub chip: where it lands, and the year it is labelled with. */
+export interface ReplayJump {
+  readonly tick: number;
+  readonly year: number;
 }
 
 /** Reasons a file cannot be opened as a recording, as translation keys. */
@@ -94,6 +109,7 @@ export function replayMeta(loaded: LoadedGame, currentGameVersion: string): Repl
   const finalTick = loaded.replay === null ? loaded.world.tick : loaded.replay.finalTick;
   const aiCompanyIds = new Set<number>();
   for (const state of loaded.world.ai) aiCompanyIds.add(state.companyId);
+  const checkpointTicks = loaded.ring.all.map((entry) => entry.tick);
 
   return {
     gameVersion: loaded.gameVersion,
@@ -110,7 +126,11 @@ export function replayMeta(loaded: LoadedGame, currentGameVersion: string): Repl
       colorIndex: company.colorIndex,
       ai: aiCompanyIds.has(company.id),
     })),
-    checkpointTicks: loaded.ring.all.map((entry) => entry.tick),
+    checkpointTicks,
+    jumps: jumpTicksOf(checkpointTicks, baseTick, finalTick).map((tick) => ({
+      tick,
+      year: replayCheckpointYear(tick),
+    })),
     commandCount: loaded.queue.log.length,
     // A recording with no claim cannot be verified whatever the versions say -
     // there is nothing to compare the re-simulation against (D-189).
@@ -127,11 +147,20 @@ export function replayMeta(loaded: LoadedGame, currentGameVersion: string): Repl
  * (D-188). Exported so the panel and the tests read the same rule.
  */
 export function replayJumpTicks(meta: ReplayMeta): readonly number[] {
+  return jumpTicksOf(meta.checkpointTicks, meta.baseTick, meta.finalTick);
+}
+
+/** The same rule over the raw ring, for the meta that is assembled from it. */
+function jumpTicksOf(
+  checkpointTicks: readonly number[],
+  baseTick: number,
+  finalTick: number,
+): number[] {
   const ticks: number[] = [];
-  for (const tick of meta.checkpointTicks) {
-    if (tick >= meta.baseTick && tick <= meta.finalTick) ticks.push(tick);
+  for (const tick of checkpointTicks) {
+    if (tick >= baseTick && tick <= finalTick) ticks.push(tick);
   }
-  if (ticks.length === 0) ticks.push(meta.baseTick);
+  if (ticks.length === 0) ticks.push(baseTick);
   return ticks;
 }
 

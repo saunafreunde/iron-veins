@@ -16,6 +16,7 @@ import {
   checkLogIntegrity,
   encodeReplay,
   narrowDivergence,
+  scheduleCommitmentsOf,
   verifyReplay,
 } from '../../src/sim/save/replay';
 import {
@@ -72,10 +73,10 @@ function play(ticks: number, aiCompanies = 0): Game {
   }
 
   const ring = new CheckpointRing();
-  ring.record(world);
+  ring.record(world, queue);
   for (let i = 0; i < ticks; i++) {
     world.step(queue, null);
-    ring.record(world);
+    ring.record(world, queue);
   }
   return { world, queue, ring };
 }
@@ -280,11 +281,12 @@ describe('verification names the first divergent tick', () => {
     const result = verifyReplay(decodeSave(bytes), GAME_VERSION);
 
     expect(result.ok).toBe(false);
-    expect(result.firstDivergentTick).toBe(REPAY_TICK);
-    expect(result.exact).toBe(true);
+    expect(result.verdict.kind).toBe('divergedAt');
+    if (result.verdict.kind !== 'divergedAt') throw new Error('not a tick verdict');
+    expect(result.verdict.tick).toBe(REPAY_TICK);
     expect(result.lastMatchingTick).toBe(CHECKPOINT_INTERVAL_TICKS);
     expect(result.logBreak).toBeNull();
-    expect(result.reasonKey).toBe('ui.replay.verify.exact');
+    expect(result.reasonKey).toBe('ui.replay.verify.divergedAt');
     expect(result.actualHash).not.toBe(result.expectedHash);
   });
 
@@ -299,8 +301,12 @@ describe('verification names the first divergent tick', () => {
     expect(result.ok).toBe(false);
     // Two commands live in year 0 - the loan and the rename - and the
     // recording committed to nothing between them.
-    expect(result.firstDivergentTick).toBe(CHECKPOINT_INTERVAL_TICKS);
-    expect(result.exact).toBe(false);
+    expect(result.verdict).toEqual({
+      kind: 'divergedInBracket',
+      fromTick: 0,
+      toTick: CHECKPOINT_INTERVAL_TICKS,
+      whyKey: 'ui.replay.bracket.multipleCommands',
+    });
     expect(result.lastMatchingTick).toBe(0);
     expect(result.reasonKey).toBe('ui.replay.verify.bracket');
   });
@@ -318,14 +324,16 @@ describe('verification names the first divergent tick', () => {
     expect(result.logBreak!.reasonKey).toBe('ui.replay.break.sequence');
     // A structural break withdraws the exactness argument: the executed
     // sequence is not the recorded one, so the candidate rule cannot hold.
-    expect(result.exact).toBe(false);
-    expect(result.reasonKey).toBe('ui.replay.verify.logBreak');
+    expect(result.verdict.kind).toBe('divergedInBracket');
+    if (result.verdict.kind !== 'divergedInBracket') throw new Error('not a bracket verdict');
+    expect(result.verdict.whyKey).toBe('ui.replay.bracket.logBreak');
+    expect(result.reasonKey).toBe('ui.replay.verify.bracket');
   });
 
   it('reproduces the untouched recording and says so', () => {
     const result = verifyReplay(decodeSave(recording().bytes), GAME_VERSION);
     expect(result.ok).toBe(true);
-    expect(result.firstDivergentTick).toBe(-1);
+    expect(result.verdict).toEqual({ kind: 'verified' });
     expect(result.logBreak).toBeNull();
     expect(result.checkedTicks).toEqual([CHECKPOINT_INTERVAL_TICKS, recording().finalTick]);
     expect(result.reasonKey).toBe('ui.replay.verify.ok');
@@ -345,12 +353,23 @@ describe('verification names the first divergent tick', () => {
   it('translates every verdict it can reach, in both catalogues', () => {
     const keys = [
       'ui.replay.verify.ok',
-      'ui.replay.verify.exact',
+      'ui.replay.verify.divergedAt',
+      'ui.replay.verify.proof',
       'ui.replay.verify.bracket',
-      'ui.replay.verify.logBreak',
+      'ui.replay.verify.corrupt',
       'ui.replay.verify.hashes',
+      'ui.replay.bracket.multipleCommands',
+      'ui.replay.bracket.noCommands',
+      'ui.replay.bracket.schedule',
+      'ui.replay.bracket.logBreak',
+      'ui.replay.bracket.uncommitted',
+      'ui.replay.bracket.unproven',
+      'ui.replay.corrupt.checkpointDigest',
+      'ui.replay.corrupt.checkpointPayload',
+      'ui.replay.corrupt.checkpointUnreachable',
       'ui.replay.break.tickOrder',
       'ui.replay.break.sequence',
+      'ui.replay.break.schedule',
     ];
     for (const key of keys) {
       expect(de, key).toHaveProperty(key);
@@ -397,48 +416,63 @@ describe('a plain save is a recording that makes no claim', () => {
 
 describe('the two locators are pure and say only what they know', () => {
   it('finds a reordered entry and a numbering gap, and nothing in a healthy log', () => {
-    const log = decodeSave(recording().bytes).queue.log;
-    expect(checkLogIntegrity(log)).toBeNull();
+    const loaded = decodeSave(recording().bytes);
+    const log = loaded.queue.log;
+    const commitments = scheduleCommitmentsOf(loaded);
+    expect(commitments.length).toBeGreaterThan(0);
+    expect(checkLogIntegrity(log, commitments)).toBeNull();
 
     // Two entries swapped whole: the NUMBERING is what catches that, because
     // the sequence stops following before the ticks do.
     const swapped = [log[0]!, { ...log[2]! }, { ...log[1]! }];
-    expect(checkLogIntegrity(swapped)?.reasonKey).toBe('ui.replay.break.sequence');
+    expect(checkLogIntegrity(swapped, [])?.reasonKey).toBe('ui.replay.break.sequence');
 
     // Ticks moved while the numbering was kept tidy - the other check.
     const retimed = [log[0]!, { ...log[1]!, tick: REPAY_TICK }, { ...log[2]!, tick: NAME_TICK }];
-    const timeBreak = checkLogIntegrity(retimed);
+    const timeBreak = checkLogIntegrity(retimed, []);
     expect(timeBreak?.reasonKey).toBe('ui.replay.break.tickOrder');
     expect(timeBreak?.index).toBe(2);
 
     const renumbered = [log[0]!, { ...log[1]!, seq: log[1]!.seq + 5 }, log[2]!];
-    expect(checkLogIntegrity(renumbered)?.reasonKey).toBe('ui.replay.break.sequence');
+    expect(checkLogIntegrity(renumbered, [])?.reasonKey).toBe('ui.replay.break.sequence');
   });
 
   it('narrows to a tick only when the bracket holds exactly one command tick', () => {
-    const log = decodeSave(recording().bytes).queue.log;
-    expect(narrowDivergence(log, CHECKPOINT_INTERVAL_TICKS, RECORDING_TICKS, null)).toEqual({
-      tick: REPAY_TICK,
-      exact: true,
+    const loaded = () => decodeSave(recording().bytes);
+    expect(
+      narrowDivergence(loaded(), CHECKPOINT_INTERVAL_TICKS, RECORDING_TICKS, null),
+    ).toMatchObject({ kind: 'divergedAt', tick: REPAY_TICK });
+    expect(narrowDivergence(loaded(), 0, CHECKPOINT_INTERVAL_TICKS, null)).toEqual({
+      kind: 'divergedInBracket',
+      fromTick: 0,
+      toTick: CHECKPOINT_INTERVAL_TICKS,
+      whyKey: 'ui.replay.bracket.multipleCommands',
     });
-    expect(narrowDivergence(log, 0, CHECKPOINT_INTERVAL_TICKS, null)).toEqual({
-      tick: CHECKPOINT_INTERVAL_TICKS,
-      exact: false,
-    });
-    // A bracket with no command in it cannot be explained by the log at all;
+    // A bracket with no command in it cannot be explained by the log at all -
+    // a divergence with no input behind it may have begun at any tick, and
     // saying "exactly here" would be an invention.
-    expect(narrowDivergence(log, 10_000, 20_000, null)).toEqual({
-      tick: 20_000,
-      exact: false,
+    expect(narrowDivergence(loaded(), 10_000, 20_000, null)).toEqual({
+      kind: 'divergedInBracket',
+      fromTick: 10_000,
+      toTick: 20_000,
+      whyKey: 'ui.replay.bracket.noCommands',
     });
     // ... and a broken log withdraws the argument even for the single case.
     expect(
-      narrowDivergence(log, CHECKPOINT_INTERVAL_TICKS, RECORDING_TICKS, {
+      narrowDivergence(loaded(), CHECKPOINT_INTERVAL_TICKS, RECORDING_TICKS, {
+        kind: 'sequence',
         index: 1,
         tick: NAME_TICK,
         seq: 1,
+        fromTick: NAME_TICK,
+        toTick: NAME_TICK,
         reasonKey: 'ui.replay.break.sequence',
       }),
-    ).toEqual({ tick: RECORDING_TICKS, exact: false });
+    ).toEqual({
+      kind: 'divergedInBracket',
+      fromTick: CHECKPOINT_INTERVAL_TICKS,
+      toTick: RECORDING_TICKS,
+      whyKey: 'ui.replay.bracket.logBreak',
+    });
   });
 });

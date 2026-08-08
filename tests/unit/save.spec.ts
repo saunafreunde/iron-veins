@@ -553,7 +553,12 @@ describe('the registered migrations', () => {
     expect(fresh['state']).toBe(state);
 
     // The corpus trick - a CURRENT container wrapped in an old version - must
-    // not flatten a real ring back to empty.
+    // not flatten a real ring back to empty. What it DOES get, since M16's
+    // correction bundle extended this migration in place, is the empty
+    // schedule digest on every mark: the recorded fact "this mark committed to
+    // no command times", which costs the exactness claim and nothing else
+    // (D-191). A digest invented from the log the file carries would certify
+    // whatever a tamper had already done.
     const ring = [{ tick: 0, worldDigest: '0123456789abcdef', payload: new Uint8Array([7]) }];
     const carried = migrateSavePayload(
       {
@@ -568,8 +573,12 @@ describe('the registered migrations', () => {
       27,
     );
     expect(carried['logBaseTick']).toBe(72_000);
-    expect(carried['checkpoints']).toBe(ring);
-    expect(carried['replay']).toEqual({ finalTick: 80_000, finalHash: 'fedcba9876543210' });
+    expect(carried['checkpoints']).toEqual([{ ...ring[0]!, scheduleDigest: '' }]);
+    expect(carried['replay']).toEqual({
+      finalTick: 80_000,
+      finalHash: 'fedcba9876543210',
+      scheduleDigest: '',
+    });
   });
 
   it('migrates a v26 save to v27 without moving the world hash', () => {

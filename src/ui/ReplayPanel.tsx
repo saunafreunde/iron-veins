@@ -2,7 +2,6 @@ import { useEffect, type ReactElement } from 'react';
 import { t } from '../i18n';
 import { COMPANY_COLORS } from '../shared/palette';
 import { SAVE_VERSION } from '../sim/save/format';
-import { replayCheckpointYear, replayJumpTicks } from '../sim/save/replaySession';
 import { TICKS_PER_YEAR } from '../sim/constants';
 import {
   exportReplayNamed,
@@ -27,6 +26,13 @@ import { useSimStore } from './store';
  * playback queue is sealed and the worker refuses commands by name (D-189) -
  * but the interface says the same thing by not offering any: while a recording
  * plays, the build tools and every panel that issues a command are gone.
+ *
+ * Nothing here imports the simulation for a VALUE. The years a chip and a
+ * verdict are labelled with travel in the metadata and in the verdict, because
+ * the calendar lives in `src/sim` and a static import of it pulls the whole
+ * world into the main bundle (measured: +248 kB, D-191). The sim reaches the
+ * main thread through the dynamic import in `sessionReplay.ts` and nowhere
+ * else.
  */
 
 /** The years a recording covers, as the browser prints them. */
@@ -139,7 +145,14 @@ export function ReplayBrowser({
   );
 }
 
-/** The verdict line of "Replay prüfen", in the recording's own terms. */
+/**
+ * The verdict of "Replay prüfen", as the four different things it can be.
+ *
+ * A divergent tick and a broken file are printed differently on purpose
+ * (D-191): the first is a statement about the SIMULATION and comes with the
+ * proof behind it, the second is a statement about the FILE and deliberately
+ * names no tick at all.
+ */
 function VerdictLine(): ReactElement | null {
   const checking = useSimStore((s) => s.replayChecking);
   const result = useSimStore((s) => s.replayVerification);
@@ -155,7 +168,8 @@ function VerdictLine(): ReactElement | null {
   }
   if (result === null) return null;
 
-  if (result.ok) {
+  const verdict = result.verdict;
+  if (verdict.kind === 'verified') {
     return (
       <p className="panel__hint value--success">
         {t('ui.replay.verify.ok', { ticks: result.checkedTicks.length })}
@@ -163,27 +177,70 @@ function VerdictLine(): ReactElement | null {
     );
   }
 
+  const hashes = (
+    <p className="row__meta">
+      {t('ui.replay.verify.hashes', { expected: result.expectedHash, actual: result.actualHash })}
+    </p>
+  );
+
+  if (verdict.kind === 'corruptRecording') {
+    return (
+      <div className="panel__hint value--danger">
+        <p>
+          {t('ui.replay.verify.corrupt', {
+            where: verdict.where,
+            tick: verdict.tick,
+            year: result.years[0] ?? 0,
+          })}
+        </p>
+        <p className="row__meta">{t(verdict.whatKey)}</p>
+        {hashes}
+      </div>
+    );
+  }
+
+  if (verdict.kind === 'divergedAt') {
+    return (
+      <div className="panel__hint value--danger">
+        <p>
+          {t('ui.replay.verify.divergedAt', {
+            tick: verdict.tick,
+            year: result.years[0] ?? 0,
+            from: verdict.proof.fromTick,
+          })}
+        </p>
+        <p className="row__meta">
+          {t('ui.replay.verify.proof', {
+            tick: verdict.tick,
+            matched: verdict.proof.matchedHash,
+            after: verdict.proof.hashAfter,
+          })}
+        </p>
+        {hashes}
+      </div>
+    );
+  }
+
   return (
     <div className="panel__hint value--danger">
       <p>
-        {t(result.reasonKey, {
-          tick: result.firstDivergentTick,
-          year: replayCheckpointYear(result.firstDivergentTick),
-          from: result.lastMatchingTick,
+        {t('ui.replay.verify.bracket', {
+          from: verdict.fromTick,
+          to: verdict.toTick,
+          fromYear: result.years[0] ?? 0,
+          toYear: result.years[1] ?? 0,
         })}
       </p>
-      <p className="row__meta">
-        {t('ui.replay.verify.hashes', {
-          expected: result.expectedHash,
-          actual: result.actualHash,
-        })}
-      </p>
+      <p className="row__meta">{t(verdict.whyKey)}</p>
+      {hashes}
       {result.logBreak !== null && (
         <p className="row__meta">
           {t(result.logBreak.reasonKey, {
             tick: result.logBreak.tick,
             seq: result.logBreak.seq,
             index: result.logBreak.index,
+            from: result.logBreak.fromTick,
+            to: result.logBreak.toTick,
           })}
         </p>
       )}
@@ -199,7 +256,7 @@ export function ReplayBar({ client }: { readonly client: SimClient }): ReactElem
 
   if (meta === null) return null;
 
-  const jumps = replayJumpTicks(meta);
+  const jumps = meta.jumps;
   const span = Math.max(1, meta.finalTick - meta.baseTick);
   const progress = Math.min(100, Math.round(((tick - meta.baseTick) / span) * 100));
 
@@ -239,16 +296,16 @@ export function ReplayBar({ client }: { readonly client: SimClient }): ReactElem
 
       <p className="panel__hint">{t('ui.replay.jumpHint')}</p>
       <div className="button-row">
-        {jumps.map((jumpTick) => (
+        {jumps.map((jump) => (
           <button
-            key={jumpTick}
+            key={jump.tick}
             type="button"
             className={
-              tick >= jumpTick && tick < jumpTick + TICKS_PER_YEAR ? 'chip chip--active' : 'chip'
+              tick >= jump.tick && tick < jump.tick + TICKS_PER_YEAR ? 'chip chip--active' : 'chip'
             }
-            onClick={() => client.seekReplay(jumpTick)}
+            onClick={() => client.seekReplay(jump.tick)}
           >
-            {replayCheckpointYear(jumpTick)}
+            {jump.year}
           </button>
         ))}
       </div>

@@ -985,13 +985,51 @@ const v25_to_v26: SaveMigration = (payload) => {
  *
  * Fields already present are kept, so the corpus trick of wrapping a CURRENT
  * container in an old version cannot flatten a real ring back to empty.
+ *
+ * M16's correction bundle EXTENDS this migration in place rather than adding a
+ * v28 (Z5: v28 belongs to M17): every mark also carries a schedule digest now,
+ * and a payload that has none is given the empty one - see
+ * {@link withScheduleDigests} for why that is a fact and not a placeholder.
  */
 const v26_to_v27: SaveMigration = (payload) => ({
   ...payload,
   logBaseTick: payload['logBaseTick'] ?? 0,
-  checkpoints: payload['checkpoints'] ?? [],
-  replay: payload['replay'] ?? null,
+  checkpoints: withScheduleDigests(payload['checkpoints']),
+  replay: withClaimScheduleDigest(payload['replay']),
 });
+
+/**
+ * The empty schedule digest, entered where a recording carries none.
+ *
+ * M16's correction bundle added one hash per committed mark - the schedule of
+ * the commands in the segment leading up to it (D-191) - and it did so INSIDE
+ * version 27, because v27 is M16's one Z5 bump and this is M16's own defect.
+ * A version 26 container carries no ring and no claim at all, so nothing here
+ * fires for the migration's own case; what it does cover is the two ways a
+ * v27-shaped payload can reach this code without the field - the corpus trick
+ * of wrapping a CURRENT container in an old version header, and a recording
+ * written by an earlier build of version 27.
+ *
+ * The empty string is not a placeholder to be filled in later: it is the
+ * recorded fact that this mark committed to no schedule, and the verifier
+ * answers with a bracket rather than a tick wherever it finds one. Inventing a
+ * digest from the log the file carries would be the opposite - it would
+ * certify whatever a tamper had already done.
+ */
+function withScheduleDigests(value: unknown): unknown {
+  if (!Array.isArray(value)) return [];
+  return value.map((entry) =>
+    typeof entry === 'object' && entry !== null && !Array.isArray(entry)
+      ? { scheduleDigest: '', ...(entry as Record<string, unknown>) }
+      : entry,
+  );
+}
+
+/** The same for the end claim of a `.ironreplay`; a plain save has none. */
+function withClaimScheduleDigest(value: unknown): unknown {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
+  return { scheduleDigest: '', ...(value as Record<string, unknown>) };
+}
 
 /**
  * Registry keyed by the version a migration reads (section 19.1).

@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { parseSaveFile, SAVE_MAGIC, SAVE_VERSION } from '../../src/sim/save/format';
+import { scheduleDigest } from '../../src/sim/save/schedule';
 import { hashWorld, World } from '../../src/sim/World';
 import roadFixture from '../determinism/fixtures/road-line-commands.json';
 import { advance, createScenario, parseScenarioFixture } from '../determinism/runner';
@@ -57,6 +58,18 @@ const PARSER_IGNORED: readonly { path: string; reason: string }[] = [
       'absent in every save written before M11 stage C2 and parsed to 1, the single track ' +
       'the old AI laid (the D-146 wire pattern, D-153); the value itself is hashed, so the ' +
       'change probe still watches it',
+  },
+  {
+    path: 'checkpoints[].scheduleDigest',
+    reason:
+      'absent in every recording written before M16 bundle 4 and parsed to the empty string, ' +
+      'which is the recorded fact "this mark committed to no schedule" - verification then ' +
+      'answers with a bracket instead of a tick rather than inventing a commitment (D-191); ' +
+      'the value itself is shape-checked, so the change probe still watches it',
+  },
+  {
+    path: 'replay.scheduleDigest',
+    reason: 'the same commitment for the part-year tail no checkpoint covers (D-191)',
   },
 ];
 
@@ -368,8 +381,19 @@ beforeAll(() => {
     // decodes a checkpoint payload, so a short blob under a real-looking
     // digest exercises exactly the fields the parser reads. Tick 0 because the
     // ring may not reach past the recording, and this world is two months old.
-    checkpoints: [{ tick: 0, worldDigest: hashWorld(world), payload: new Uint8Array([1, 2, 3]) }],
-    replay: { finalTick: world.tick, finalHash: hashWorld(world) },
+    checkpoints: [
+      {
+        tick: 0,
+        worldDigest: hashWorld(world),
+        payload: new Uint8Array([1, 2, 3]),
+        scheduleDigest: scheduleDigest(scenario.queue.log, 0, 0),
+      },
+    ],
+    replay: {
+      finalTick: world.tick,
+      finalHash: hashWorld(world),
+      scheduleDigest: scheduleDigest(scenario.queue.log, 0, world.tick),
+    },
   };
 
   leaves = [];

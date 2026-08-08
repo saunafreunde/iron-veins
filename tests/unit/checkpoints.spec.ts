@@ -18,6 +18,7 @@ import {
   trimLogAtNewestCheckpoint,
 } from '../../src/sim/save/checkpoints';
 import { SaveCorruptionError, SAVE_VERSION } from '../../src/sim/save/format';
+import { scheduleDigest } from '../../src/sim/save/schedule';
 import { decodeSave, encodeSave } from '../../src/sim/save/serialize';
 import { hashWorld, World } from '../../src/sim/World';
 
@@ -54,10 +55,10 @@ function playedGame(ticks: number): { world: World; queue: CommandQueue; ring: C
   );
 
   const ring = new CheckpointRing();
-  ring.record(world);
+  ring.record(world, queue);
   for (let i = 0; i < ticks; i++) {
     world.step(queue, null);
-    ring.record(world);
+    ring.record(world, queue);
   }
   return { world, queue, ring };
 }
@@ -85,17 +86,18 @@ describe('the checkpoint ring records a year at a time', () => {
       companyColorIndex: 3,
     });
     const ring = new CheckpointRing();
+    const queue = new CommandQueue();
 
-    expect(ring.record(world)).not.toBeNull();
+    expect(ring.record(world, queue)).not.toBeNull();
     // Idempotent by tick: the scheduler records after every step AND after
     // adopting a loaded world, and a world loaded on a boundary must not push
     // a duplicate of the checkpoint it just read.
-    expect(ring.record(world)).toBeNull();
+    expect(ring.record(world, queue)).toBeNull();
 
     world.tick = CHECKPOINT_INTERVAL_TICKS - 1;
-    expect(ring.record(world)).toBeNull();
+    expect(ring.record(world, queue)).toBeNull();
     world.tick = CHECKPOINT_INTERVAL_TICKS;
-    expect(ring.record(world)).not.toBeNull();
+    expect(ring.record(world, queue)).not.toBeNull();
     expect(ring.size).toBe(2);
   });
 
@@ -103,11 +105,11 @@ describe('the checkpoint ring records a year at a time', () => {
     // The ring policy is arithmetic over ticks, so it is driven over ticks:
     // stepping twenty game years to prove an eviction rule would be a minute
     // of CPU for a property that never looks at the world.
-    const { world } = playedGame(0);
+    const { world, queue } = playedGame(0);
     const ring = new CheckpointRing();
     for (let year = 0; year <= CHECKPOINT_RING_CAPACITY + 3; year++) {
       world.tick = year * CHECKPOINT_INTERVAL_TICKS;
-      ring.record(world);
+      ring.record(world, queue);
     }
 
     expect(ring.size).toBe(CHECKPOINT_RING_CAPACITY);
@@ -118,6 +120,27 @@ describe('the checkpoint ring records a year at a time', () => {
     expect(ring.baseTick).toBe(0);
     expect(ring.newestTick).toBe((CHECKPOINT_RING_CAPACITY + 3) * CHECKPOINT_INTERVAL_TICKS);
     expect(ring.all[1]!.tick).toBe(5 * CHECKPOINT_INTERVAL_TICKS);
+  });
+
+  it('commits to the schedule of the year it closes, and to no other', () => {
+    // The second half of what a checkpoint promises (D-191): the world digest
+    // says what that year's commands DID, this says WHEN they ran. The segment
+    // is the checkpoint's own year and nothing else, so a checkpoint stays
+    // recomputable after eviction has taken its neighbours out of the ring.
+    const { queue, ring } = playedGame(CHECKPOINT_INTERVAL_TICKS * 2 + 500);
+    const log = queue.log;
+
+    expect(ring.at(0)!.scheduleDigest).toBe(scheduleDigest(log, 0, 0));
+    expect(ring.at(CHECKPOINT_INTERVAL_TICKS)!.scheduleDigest).toBe(
+      scheduleDigest(log, 0, CHECKPOINT_INTERVAL_TICKS),
+    );
+    expect(ring.at(CHECKPOINT_INTERVAL_TICKS * 2)!.scheduleDigest).toBe(
+      scheduleDigest(log, CHECKPOINT_INTERVAL_TICKS, CHECKPOINT_INTERVAL_TICKS * 2),
+    );
+    // An empty year is committed to as an empty year - "no commands ran" is a
+    // statement, and it is a different one from "nothing was committed".
+    expect(ring.at(0)!.scheduleDigest).not.toBe('');
+    expect(ring.at(0)!.scheduleDigest).not.toBe(ring.at(CHECKPOINT_INTERVAL_TICKS)!.scheduleDigest);
   });
 
   it('answers with the newest checkpoint at or before a tick', () => {
@@ -136,8 +159,8 @@ describe('the checkpoint ring records a year at a time', () => {
 
 describe('a checkpoint restores the world it recorded', () => {
   it('rebuilds a bit-identical world', () => {
-    const { world } = playedGame(CHECKPOINT_INTERVAL_TICKS + 120);
-    const entry = encodeCheckpoint(world);
+    const { world, queue } = playedGame(CHECKPOINT_INTERVAL_TICKS + 120);
+    const entry = encodeCheckpoint(world, queue);
     const restored = restoreCheckpoint(entry);
 
     expect(restored.tick).toBe(world.tick);
@@ -162,8 +185,8 @@ describe('a checkpoint restores the world it recorded', () => {
   });
 
   it('refuses a payload that no longer hashes to its digest', () => {
-    const { world } = playedGame(0);
-    const entry = encodeCheckpoint(world);
+    const { world, queue } = playedGame(0);
+    const entry = encodeCheckpoint(world, queue);
     const wrong = { ...entry, worldDigest: '0123456789abcdef' };
 
     expect(() => restoreCheckpoint(wrong)).toThrow(SaveCorruptionError);
@@ -171,8 +194,8 @@ describe('a checkpoint restores the world it recorded', () => {
   });
 
   it('refuses bytes that are not a world at all', () => {
-    const { world } = playedGame(0);
-    const entry = encodeCheckpoint(world);
+    const { world, queue } = playedGame(0);
+    const entry = encodeCheckpoint(world, queue);
 
     expect(() => restoreCheckpoint({ ...entry, payload: new Uint8Array([1, 2, 3, 4]) })).toThrow(
       SaveCorruptionError,
@@ -180,8 +203,8 @@ describe('a checkpoint restores the world it recorded', () => {
   });
 
   it('refuses a payload whose world stands at another tick', () => {
-    const { world } = playedGame(0);
-    const entry = encodeCheckpoint(world);
+    const { world, queue } = playedGame(0);
+    const entry = encodeCheckpoint(world, queue);
 
     expect(() => restoreCheckpoint({ ...entry, tick: CHECKPOINT_INTERVAL_TICKS })).toThrow(
       /holds a world at tick/,

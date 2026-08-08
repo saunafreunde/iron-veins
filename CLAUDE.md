@@ -873,12 +873,26 @@ change, zero atlas cell, zero tick cost.
   player gets a sentence rather than a silence. Entering a replay REPLACES
   the world, so leaving one loads the game that was put aside through the
   ordinary load path. Scrubbing IS the ring, which is what makes a jump
-  exact. "Replay pruefen" names the first divergent tick EXACTLY when the
-  bracket between two committed hashes holds one command tick, and says
-  `exact: false` honestly when it holds more - the floor is stated, not
-  dressed up, and `checkLogIntegrity` withdraws the claim when the log's own
-  numbering was tampered with. A file this build had to MIGRATE is shelved
-  as it stands and is `verifiable: false` before the button is pressed.
+  exact. A file this build had to MIGRATE is shelved as it stands and is
+  `verifiable: false` before the button is pressed. **Its exactness claim was
+  false and D-191 supersedes it** - read that before touching the verifier.
+- **"Replay pruefen" answers with a VERDICT, never with a bare number**
+  (D-191). `Verified`; `DivergedAt(tick)` ONLY with a re-simulation proof
+  attached; `DivergedInBracket(from, to, why)` when narrowing could not go
+  finer, and it says which of six reasons stopped it; `CorruptRecording(where,
+  what)` for a file that contradicts itself - a broken FILE is never reported
+  as a diverged SIM and never gets a tick. What makes an exact tick provable
+  is that every mark (each checkpoint, and the end claim for the part-year
+  tail) now commits to the SCHEDULE of its own segment - the `(tick, seq)`
+  pairs, ONE hash, `save/schedule.ts`: a command MOVED inside a bracket breaks
+  neither `seq` contiguity nor tick monotonicity, so D-189's candidate rule was
+  trusting the tamper's own timings. The commitment covers the schedule and
+  deliberately NOT the payloads - a payload tamper is exactly the case where a
+  tick IS provable, and what a command DID is what the world digest covers.
+  The proof is two real re-simulations of the bracket (the log's, and a
+  command-free control), and a proof that does not come off is reported as a
+  bracket rather than dressed up. Container-only inside v27 (Z5, extended in
+  place); pin and corpus manifest unmoved.
 - **A bug report is a repro now** (D-190). The crash bundle carries an
   `.ironreplay` of the session beside the autosave it was converted from -
   same conversion as the shelf's ("export replay from save"), extracted to
@@ -918,6 +932,16 @@ checkpoint is encoded once a game year on the SAVE path (25-39 kB
 compressed against 1.2 MB raw, 24-41 ms). A recording of the twenty-five
 year game costs 582,520 B against the save's 593,434 B; the ring is
 566,367 B of both.
+
+**The main bundle is a budget too, and `src/sim` reaches `src/ui` through
+DYNAMIC imports only** (D-191). One static `import { fn } from '../sim/save/…'`
+in a panel pulls `serialize` and with it the whole `World` into the main chunk
+and silently defeats the dynamic import somebody else wrote; it cost +248 kB
+before it was found. Display values a panel needs from the simulation - the
+calendar year of a scrub chip, of a verdict - travel WITH the data instead.
+Measured after the fix: main chunk 936.94 kB (gzip 283.96) against 1,083.31 kB
+(328.26) before, with the replay half in its own lazily loaded chunk.
+`npm run build` prints the table; check it when a panel grows an import.
 
 ## Still outstanding
 

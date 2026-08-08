@@ -56,10 +56,10 @@ function play(): Game {
   );
 
   const ring = new CheckpointRing();
-  ring.record(world);
+  ring.record(world, queue);
   for (let i = 0; i < PLAYED_TICKS; i++) {
     world.step(queue, null);
-    ring.record(world);
+    ring.record(world, queue);
   }
   return { world, queue, ring };
 }
@@ -149,7 +149,7 @@ describe('the crash bundle carries a recording of the session', () => {
 
     const verified = session.verify();
     expect(verified.ok).toBe(true);
-    expect(verified.firstDivergentTick).toBe(-1);
+    expect(verified.verdict).toEqual({ kind: 'verified' });
     // Compared at every committed tick on the way, not only at the end.
     expect(verified.checkedTicks).toEqual([CHECKPOINT_INTERVAL_TICKS, savedTick]);
   });

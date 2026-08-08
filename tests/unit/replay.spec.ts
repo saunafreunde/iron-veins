@@ -19,6 +19,7 @@ import {
   ReplayVersionError,
   verifyReplay,
 } from '../../src/sim/save/replay';
+import { scheduleDigest } from '../../src/sim/save/schedule';
 import { decodeSave, encodeSave } from '../../src/sim/save/serialize';
 import { hashWorld, World } from '../../src/sim/World';
 
@@ -64,10 +65,10 @@ function play(ticks = PLAYED_TICKS): Game {
   );
 
   const ring = new CheckpointRing();
-  ring.record(world);
+  ring.record(world, queue);
   for (let i = 0; i < ticks; i++) {
     world.step(queue, null);
-    ring.record(world);
+    ring.record(world, queue);
   }
   return { world, queue, ring };
 }
@@ -104,7 +105,13 @@ describe('a replay is the save container with the recording settled', () => {
     expect(loaded.queue.executedCount).toBe(0);
     expect(loaded.queue.pendingCount).toBe(loaded.queue.log.length);
     expect(loaded.queue.log.length).toBe(3);
-    expect(loaded.replay).toEqual({ finalTick, finalHash });
+    // The claim is three things now: where it ends, what it hashes to there,
+    // and the schedule of the part-year tail no checkpoint covers (D-191).
+    expect(loaded.replay).toEqual({
+      finalTick,
+      finalHash,
+      scheduleDigest: scheduleDigest(loaded.queue.log, CHECKPOINT_INTERVAL_TICKS, finalTick),
+    });
     // The ring travels whole: the genesis it starts from and the year it
     // passed through.
     expect(loaded.ring.all.map((entry) => entry.tick)).toEqual([0, CHECKPOINT_INTERVAL_TICKS]);
@@ -124,7 +131,7 @@ describe('verification re-simulates and compares', () => {
     const result = verifyReplay(loaded, GAME_VERSION);
 
     expect(result.ok).toBe(true);
-    expect(result.firstDivergentTick).toBe(-1);
+    expect(result.verdict).toEqual({ kind: 'verified' });
     expect(result.startedAtTick).toBe(0);
     // Compared at the year checkpoint on the way AND at the end - the ring is
     // what gives a divergence a year rather than only a verdict.
@@ -142,7 +149,15 @@ describe('verification re-simulates and compares', () => {
     const result = verifyReplay(decodeSave(bytes), GAME_VERSION);
 
     expect(result.ok).toBe(false);
-    expect(result.firstDivergentTick).toBe(CHECKPOINT_INTERVAL_TICKS);
+    // Two commands live in the first year - the loan and the rename - so the
+    // year is as fine as this recording gets, and the verdict says so instead
+    // of picking one of them (D-191).
+    expect(result.verdict).toEqual({
+      kind: 'divergedInBracket',
+      fromTick: 0,
+      toTick: CHECKPOINT_INTERVAL_TICKS,
+      whyKey: 'ui.replay.bracket.multipleCommands',
+    });
     expect(result.actualHash).not.toBe(result.expectedHash);
   });
 
@@ -161,8 +176,13 @@ describe('verification re-simulates and compares', () => {
     // the repayment actually runs at (D-189).
     expect(result.checkedTicks).toContain(replayBytes().finalTick);
     expect(result.lastMatchingTick).toBe(CHECKPOINT_INTERVAL_TICKS);
-    expect(result.firstDivergentTick).toBe(CHECKPOINT_INTERVAL_TICKS + 400);
-    expect(result.exact).toBe(true);
+    expect(result.verdict.kind).toBe('divergedAt');
+    if (result.verdict.kind !== 'divergedAt') throw new Error('not a tick verdict');
+    expect(result.verdict.tick).toBe(CHECKPOINT_INTERVAL_TICKS + 400);
+    // And it is proven rather than deduced: the bracket was re-simulated and
+    // the state entering that tick is the one the recording had (D-191).
+    expect(result.verdict.proof.fromTick).toBe(CHECKPOINT_INTERVAL_TICKS);
+    expect(result.verdict.proof.hashAfter).not.toBe(result.verdict.proof.controlHashAfter);
   });
 
   it('refuses a file that claims no end at all', () => {

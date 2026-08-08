@@ -12,7 +12,7 @@ no entry below. A number may appear under several topics.
 
 - **Determinism, RNG & hashing:** D-001, D-002, D-003, D-004, D-009, D-010,
   D-024, D-093, D-106, D-128, D-137, D-142, D-145, D-146, D-149, D-153, D-178,
-  D-181, D-184, D-185, D-188, D-189, D-190
+  D-181, D-184, D-185, D-188, D-189, D-190, D-191
 - **Commands, snapshot & worker boundary:** D-004, D-005, D-006, D-011, D-032,
   D-100, D-111, D-145, D-146, D-148, D-162, D-174, D-176, D-179, D-187, D-189
 - **Lines & timetables:** D-145, D-146, D-147, D-148, D-149, D-150, D-151,
@@ -23,7 +23,7 @@ no entry below. A number may appear under several topics.
   D-141
 - **Save format, migrations & replays:** D-007, D-025, D-026, D-027, D-048,
   D-111, D-130, D-131, D-134, D-142, D-144, D-145, D-146, D-147, D-153, D-178,
-  D-181, D-184, D-185, D-188, D-189, D-190
+  D-181, D-184, D-185, D-188, D-189, D-190, D-191
 - **Rail & track:** D-042, D-043, D-044, D-045, D-046, D-047, D-053, D-141,
   D-153, D-157, D-184
 - **Signals & reservations:** D-054, D-055, D-056, D-057, D-058, D-059, D-060,
@@ -48,17 +48,17 @@ no entry below. A number may appear under several topics.
   D-171, D-172, D-173, D-174, D-175, D-177, D-179, D-186
 - **UI & input:** D-011, D-013, D-015, D-035, D-110, D-113, D-114, D-119,
   D-126, D-148, D-165, D-166, D-177, D-179, D-180, D-181, D-182, D-183, D-184,
-  D-186, D-187, D-189
+  D-186, D-187, D-189, D-191
 - **Performance & measurement:** D-002, D-120, D-135, D-136, D-161, D-162,
   D-163, D-164, D-167, D-170, D-171, D-172, D-173, D-174, D-176, D-177, D-184,
-  D-185, D-186, D-187
+  D-185, D-186, D-187, D-191
 - **Platform, tooling & build:** D-012, D-014, D-015, D-016, D-017, D-029,
   D-030, D-031, D-160, D-168, D-169, D-170, D-172, D-175
 - **Crash safety:** D-132, D-139, D-190
 - **Testing method & fixtures:** D-010, D-038, D-072, D-074, D-084, D-133,
-  D-167, D-183, D-186, D-188, D-189, D-190
+  D-167, D-183, D-186, D-188, D-189, D-190, D-191
 - **Process & specification:** D-070, D-123, D-129, D-133, D-138, D-140,
-  D-185
+  D-185, D-191
 
 ---
 
@@ -6432,3 +6432,156 @@ change, no atlas cell, no tick cost - every line of this bundle is test
 infrastructure, a crash-path conversion and a build file. The one production
 change a running game can see is the extracted `replayFromSaveBytes`, which the
 worker already ran verbatim.
+
+## M16 - the proof chain, bundle 4: the verdict taxonomy (2026-08-08)
+
+### D-191 A verification answers with a verdict rather than a number: the tick only when a re-simulation proved it, the bracket when it could not, and a broken FILE is never reported as a diverged SIM - superseding the exactness claim of D-189
+
+D-189 gave "Replay pruefen" one answer, `firstDivergentTick`, with a boolean
+beside it saying whether to believe it. An independent verifier took that
+apart, and it was right to: a milestone whose whole identity is provable truth
+had shipped a confident wrong answer, which is worse than an honest vague one.
+Three findings, all reproduced in `tests/unit/replayVerdict.spec.ts` exactly as
+they were found.
+
+**D-189's stated justification is empirically false, and this entry says so
+plainly.** It argued that the candidate rule was safe because "an entry
+inserted, removed or moved breaks one of them" - `seq` contiguity or tick
+monotonicity. A MOVED entry breaks NEITHER. Take the recording's second-year
+command at tick 100,000 and stamp it 130,000: the sequence numbers are
+untouched, the ticks still rise, `checkLogIntegrity` returns null, and the old
+verifier then reported tick 130,000 as the exact first divergent tick - the
+tick the TAMPER chose, while the two worlds really parted at 100,000, where the
+recording ran the command and the re-simulation did not. The test asserts the
+counter-example directly (same `seq` list, non-decreasing ticks, `null` from
+the order checks) so the false claim cannot come back.
+
+**Tampering the CLAIM rather than the history produced the same false
+confidence.** Zeroing the `worldDigest` of the ring entry at tick 144,000, with
+the log untouched, made the running comparison fail at that mark, and the
+report named a divergent tick although nothing had diverged: the file was
+broken, not the simulation. A verification that cannot tell those two apart is
+not evidence about a simulation at all.
+
+**The answer is a taxonomy, not a patch.** `ReplayVerification.verdict` is a
+union of four, and each one is a different kind of statement:
+
+* `verified` - every commitment the recording made was reproduced.
+* `divergedAt(tick)` - and it comes with the `DivergenceProof` behind it. This
+  is the only member that names a tick.
+* `divergedInBracket(fromTick, toTick, whyKey)` - the world provably parted
+  somewhere in there and this build cannot honestly go finer. `whyKey` is one
+  of six sentences, because "several commands live in this stretch" and "the
+  file's own timings are not evidence any more" are very different findings and
+  a reader needs to know which one they are being told.
+* `corruptRecording(where, tick, whatKey, detail)` - the file contradicts
+  itself. It names no tick, ever.
+
+**A recording now commits to WHEN its commands ran, and that is what makes an
+exact tick provable at all.** The world digest says what the commands DID;
+nothing said when they were issued, which is precisely the assumption the
+candidate argument makes. So every mark - each checkpoint and the end claim of
+a `.ironreplay` - carries one more hash: the SCHEDULE of the segment leading up
+to it, the `(tick, seq)` pairs in log order, bounds hashed first and count
+hashed last (`src/sim/save/schedule.ts`). A checkpoint commits to its own year
+`[tick - 72,000, tick)`, a fixed rule that survives eviction and trimming; the
+end claim commits to the part-year tail no checkpoint covers, which is the one
+bracket in every recording where a command could otherwise be moved unseen and
+also the part of the game that was played last.
+
+**It covers the schedule and deliberately NOT the payloads, and that line is
+load-bearing.** A digest over whole envelopes would catch more - and would cost
+the exact answer in the only case that has one, because a tampered payload
+would then be indistinguishable from a retiming. A payload change moves the
+WORLD, and the world digest is what covers that; what no hash covered was the
+timing. The commitment is exactly the assumption, and nothing more.
+
+**Narrowing is now a chain of conditions, each of which can refuse.**
+`narrowDivergence` answers with the bracket unless: the log agrees with itself
+and with its commitments; the bracket is covered by a schedule commitment
+(otherwise `uncommitted` - which is also what every recording written before
+this bundle honestly gets, since its marks carry the empty digest); exactly one
+command tick lies in the bracket (none means the divergence has no input behind
+it and may have begun at any tick, several means naming one would be a guess
+that is wrong whenever the tamper is the second one); and the proof comes off.
+
+**The proof is a real re-simulation, and it is what "resim to t-1 matched,
+resim to t did not" means here.** `proveDivergentTick` restores the checkpoint
+at the bracket floor - a state the running comparison has already matched - and
+runs the bracket TWICE: once with the recording's log, once with an empty
+sealed queue that is handed no command at all. Up to `t` the two must agree,
+and their agreeing is not decoration: the committed schedule says the recording
+had no command before `t` either, so the control run IS the recorded trajectory
+there, and the measured equality is the literal statement "the re-simulation
+reproduces the recording up to `t`". A disagreement means the reasoning behind
+the candidate is wrong, and the verdict falls back to the bracket
+(`unproven`) - a proof that does not come off is never dressed up as a tick.
+Then one tick more, with and without that command, and both hashes go into the
+verdict. That the state at `t` differs from the recording's is the one step
+that stays an argument rather than a measurement, and it is a closed one: the
+states were equal entering `t`, no further command runs before the bracket end,
+and the bracket end disagreed - so they must part at `t`. The unit test closes
+even that loop, because a TEST has the reference the verifier cannot have: it
+re-simulates the untampered recording from the same checkpoint and asserts the
+proof's `matchedHash` at `t` and a different hash after `t`.
+
+**A failing mark is asked whether it agrees with ITSELF before anything else.**
+A checkpoint carries a payload and a digest OF that payload, so the zeroed-
+digest case answers itself: the payload decodes, hashes to something else, and
+that is a broken file - `corruptRecording`, with `where` naming the ring entry
+and the failing detail carried in plain text for a bug report. A payload that
+is not a world, or one standing at another tick, is the same finding. One more
+case needs a second look: both halves replaced consistently with a coherent
+world from another game. Self-consistency cannot see that, so the walk carries
+on to the NEXT mark, and if the very trajectory that failed the earlier one
+reproduces the later one exactly, the earlier claim is a claim about nobody's
+world (`checkpointUnreachable`). The lookahead is ONE mark deep on purpose: it
+costs one more bracket of re-simulation, and a diagnosis may cost that, while a
+full walk of a quarter century after every divergence may not.
+
+**Two floors are stated rather than hidden.** A tampered `replay.finalHash` has
+no payload to be checked against, so it reads as a divergence in the tail -
+which the tail's own schedule commitment then usually reports as
+`noCommands`, the honest "no input can explain this". And a file that is BOTH
+corrupt and divergent cannot be told apart from one that is only divergent:
+when every mark from the first failure onwards disagrees, the earliest of them
+is taken as the bracket. Both are limits of what a file commits to, not
+oversights, and neither of them produces a confident tick.
+
+**Ledger: no new `SAVE_VERSION`.** The schedule digests are container fields
+and they extend v27 IN PLACE, which is Z5 read literally - v27 is M16's one
+bump and this is M16's own defect; v28 belongs to M17. Nothing under
+`hashWorld` moved, so the canonical cross-OS pin stays `50c7d6a38f6da052` and
+the corpus manifest stays `17f7f507023b91d8` (both re-verified, not assumed:
+the corpus fixtures carry no ring at all, and the audit's checkpoint and claim
+sections gained the two fields). `v26_to_v27` grew the normalisation that gives
+a payload without them the empty digest, and the parser accepts their absence
+for the same reason - a recording written by an earlier build of version 27
+committed to no schedule, and the honest consequence is a bracket instead of a
+tick, never an invented commitment. The field audit gained two PARSER_IGNORED
+entries with that reason (the `railTrains` precedent, D-153); the UNHASHED
+allowlist is unchanged, because a perturbed digest fails the shape check. The
+price of the commitment, measured on the twenty-five year soak: the
+`.ironreplay` grows from 582,520 B to **582,995 B** - 475 bytes for sixteen
+checkpoints and a claim, against a ring of 566,367 B - and the soak reproduces
+the same final hash `615d0259186b89dc` at all sixteen committed ticks. Tick
+cost: none. A schedule digest is computed once a game year on the SAVE path,
+beside the checkpoint encode it rides with (24-41 ms), and the recomputation
+during verification is a walk of the log on the failure path.
+
+**Bundle size, measured.** The verifier also found a +248 kB main-bundle
+regression from a static import chain, and it ran straight through the file
+this bundle rewrites: `ReplayPanel.tsx` imported `replayCheckpointYear` from
+`save/replaySession`, which pulls `serialize` and with it the whole `World`
+into the main chunk and defeats the dynamic import `sessionReplay.ts` makes.
+The fix is the same one the verdict needed anyway - the label travels WITH the
+data: `ReplayMeta.jumps` carries each scrub chip's calendar year and
+`ReplayVerification.years` carries the verdict's, both computed where the
+calendar lives. No file under `src/ui` now imports a sim VALUE heavier than a
+constant table. Measured with `npm run build`, before and after this bundle:
+main chunk **1,083.31 kB -> 936.94 kB** (gzip 328.26 -> 283.96), the replay
+half of the sim leaving for its own lazily loaded chunks (`replay` 158.36 kB,
+`replaySession` 2.27 kB) that a session only pays for when a crash bundle is
+assembled, and both vite warnings about the defeated dynamic import are gone.
+The worker bundle carries this bundle's own new code and grew by what it is
+worth: **309.23 -> 313.12 kB**.

@@ -115,11 +115,11 @@ function record(): Recorded {
   });
   const queue = new CommandQueue();
   const ring = new CheckpointRing();
-  ring.record(world);
+  ring.record(world, queue);
 
   for (let tick = 0; tick < YEARS * TICKS_PER_YEAR; tick++) {
     world.step(queue, null);
-    ring.record(world);
+    ring.record(world, queue);
   }
 
   return {
@@ -163,8 +163,8 @@ describe('long-run soak: a recorded twenty-five year AI game', () => {
           `ring ${run.ringBytes} B compressed`,
       );
 
-      expect(verified.ok, `first divergent tick ${verified.firstDivergentTick}`).toBe(true);
-      expect(verified.firstDivergentTick).toBe(-1);
+      expect(verified.ok, `verdict ${JSON.stringify(verified.verdict)}`).toBe(true);
+      expect(verified.verdict).toEqual({ kind: 'verified' });
       expect(verified.logBreak).toBeNull();
       // The comparison really did walk the whole quarter century: every ring
       // entry above the start, plus the recorded end.

@@ -4,6 +4,7 @@ import type { CommandQueue } from '../commands/queue';
 import { CHECKPOINT_INTERVAL_TICKS, CHECKPOINT_RING_CAPACITY } from '../constants';
 import { hashWorld, World } from '../World';
 import { parseWorldState, SaveCorruptionError, type Checkpoint } from './format';
+import { checkpointSegmentStart, retainedScheduleDigest, type RetainedLog } from './schedule';
 
 /**
  * The checkpoint ring of SPEC2 M16 - ONE mechanism for three jobs.
@@ -32,6 +33,13 @@ import { parseWorldState, SaveCorruptionError, type Checkpoint } from './format'
  * checkpoint and leave a recording that begins at a world nobody holds.
  * Eviction therefore takes the second-oldest entry, so a long game keeps its
  * base plus the newest `CHECKPOINT_RING_CAPACITY - 1` years.
+ *
+ * **A checkpoint commits to a schedule as well as to a world** (D-191). The
+ * world digest says what the commands of that year DID; the schedule digest
+ * says WHEN they ran, which is the assumption every attempt to name a
+ * divergent tick makes. That is why `record` takes the log: a ring recorded
+ * without one would commit to a world and to nothing else, and the verifier
+ * would be back to trusting a file's own timings (`save/schedule.ts`).
  */
 export class CheckpointRing {
   private readonly entries: Checkpoint[] = [];
@@ -76,7 +84,7 @@ export class CheckpointRing {
    * AND after adopting a loaded world, and a world loaded exactly on a year
    * boundary must not push a duplicate of a checkpoint it just read.
    */
-  record(world: World): Checkpoint | null {
+  record(world: World, source: RetainedLog): Checkpoint | null {
     if (world.tick % CHECKPOINT_INTERVAL_TICKS !== 0) return null;
     if (this.entries.some((entry) => entry.tick === world.tick)) return null;
     if (world.tick < this.newestTick) {
@@ -88,7 +96,7 @@ export class CheckpointRing {
       );
     }
 
-    const entry = encodeCheckpoint(world);
+    const entry = encodeCheckpoint(world, source);
     this.entries.push(entry);
     // Never entry 0: the base is what makes the retained log reachable. A ring
     // read from a file written under a larger capacity collapses to this one
@@ -123,50 +131,97 @@ export class CheckpointRing {
   }
 }
 
-/** Encode the world as a checkpoint payload plus its digest. */
-export function encodeCheckpoint(world: World): Checkpoint {
+/**
+ * Encode the world as a checkpoint payload plus its two digests.
+ *
+ * The log is not decoration here and the parameter is deliberately required: a
+ * checkpoint commits to the world AND to the schedule of the year that ends at
+ * it (D-191), and a caller that could omit the second would silently record a
+ * commitment saying "no commands ran that year".
+ */
+export function encodeCheckpoint(world: World, source: RetainedLog): Checkpoint {
   return {
     tick: world.tick,
     worldDigest: hashWorld(world),
     payload: zlibSync(encode(world.toData()), { level: 6 }),
+    scheduleDigest: retainedScheduleDigest(source, checkpointSegmentStart(world.tick), world.tick),
   };
 }
 
 /**
- * Rebuild the world a checkpoint holds.
+ * How a checkpoint can fail to be the world it says it is.
+ *
+ * `payload` - the bytes are not a readable world standing at that tick;
+ * `digest` - they are, but not the world the entry put its name to. The
+ * distinction is the module's own to make, because this module is where the
+ * three failures happen, and the replay verifier needs it to tell a broken
+ * FILE from a diverged SIM (D-191).
+ */
+export type CheckpointFault = 'payload' | 'digest';
+
+/** A checkpoint restored, or the reason it could not be. */
+export type CheckpointRestore =
+  | { readonly ok: true; readonly world: World }
+  | { readonly ok: false; readonly fault: CheckpointFault; readonly message: string };
+
+/**
+ * Rebuild the world a checkpoint holds, or say what is wrong with it.
  *
  * The digest is verified HERE rather than at load time: opening a save must
  * not decompress a history nobody asked to see, and a checkpoint that fails
  * its own digest is a corrupt file in exactly the sense D-130 gave the word.
  */
-export function restoreCheckpoint(entry: Checkpoint): World {
+export function tryRestoreCheckpoint(entry: Checkpoint): CheckpointRestore {
   let payload: unknown;
   try {
     payload = decode(unzlibSync(entry.payload));
   } catch (error) {
-    throw new SaveCorruptionError(
-      `checkpoint at tick ${entry.tick} could not be decoded: ` +
+    return {
+      ok: false,
+      fault: 'payload',
+      message:
+        `checkpoint at tick ${entry.tick} could not be decoded: ` +
         `${error instanceof Error ? error.message : String(error)}`,
-      'save.checkpoints',
-    );
+    };
   }
 
-  const world = World.fromData(parseWorldState(payload, `checkpoint@${entry.tick}.state`));
+  let world: World;
+  try {
+    world = World.fromData(parseWorldState(payload, `checkpoint@${entry.tick}.state`));
+  } catch (error) {
+    return {
+      ok: false,
+      fault: 'payload',
+      message:
+        `checkpoint at tick ${entry.tick} could not be decoded: ` +
+        `${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
   if (world.tick !== entry.tick) {
-    throw new SaveCorruptionError(
-      `checkpoint claims tick ${entry.tick} but holds a world at tick ${world.tick}`,
-      'save.checkpoints',
-    );
+    return {
+      ok: false,
+      fault: 'payload',
+      message: `checkpoint claims tick ${entry.tick} but holds a world at tick ${world.tick}`,
+    };
   }
   const actual = hashWorld(world);
   if (actual !== entry.worldDigest) {
-    throw new SaveCorruptionError(
-      `checkpoint at tick ${entry.tick} hashes to ${actual} but the file says ` +
+    return {
+      ok: false,
+      fault: 'digest',
+      message:
+        `checkpoint at tick ${entry.tick} hashes to ${actual} but the file says ` +
         `${entry.worldDigest} - the recording is corrupt`,
-      'save.checkpoints',
-    );
+    };
   }
-  return world;
+  return { ok: true, world };
+}
+
+/** The same, for every caller that has nothing to do with a broken one. */
+export function restoreCheckpoint(entry: Checkpoint): World {
+  const result = tryRestoreCheckpoint(entry);
+  if (!result.ok) throw new SaveCorruptionError(result.message, 'save.checkpoints');
+  return result.world;
 }
 
 /**

@@ -1,8 +1,15 @@
 import { CommandQueue } from '../commands/queue';
 import type { CommandEnvelope } from '../commands/types';
-import { hashWorld, World } from '../World';
-import { restoreCheckpoint, type CheckpointRing } from './checkpoints';
-import { SaveFormatError, SAVE_VERSION, type ReplayClaim } from './format';
+import { calendarFromTick, hashWorld, World } from '../World';
+import { restoreCheckpoint, tryRestoreCheckpoint, type CheckpointRing } from './checkpoints';
+import { SaveFormatError, SAVE_VERSION, type Checkpoint, type ReplayClaim } from './format';
+import {
+  checkpointSegmentStart,
+  claimSegmentStart,
+  retainedScheduleDigest,
+  scheduleDigest,
+  type ScheduleCommitment,
+} from './schedule';
 import { decodeSave, encodeSave, type LoadedGame } from './serialize';
 
 /**
@@ -180,7 +187,13 @@ export function encodeReplay(
   ring: CheckpointRing,
   gameVersion: string,
 ): Uint8Array {
-  const claim: ReplayClaim = { finalTick: world.tick, finalHash: hashWorld(world) };
+  const claim: ReplayClaim = {
+    finalTick: world.tick,
+    finalHash: hashWorld(world),
+    // The part-year tail no checkpoint covers - the one bracket in which a
+    // command could otherwise be moved unseen (D-191).
+    scheduleDigest: retainedScheduleDigest(queue, claimSegmentStart(world.tick), world.tick),
+  };
   const base = queue.baseTick;
 
   let baseWorld: World;
@@ -245,56 +258,125 @@ export function replayFromSaveBytes(bytes: Uint8Array): ConvertedReplay {
 }
 
 /**
- * A recording whose command log contradicts its own bookkeeping.
+ * A recording whose command log contradicts what the recording committed to.
  *
- * `CommandQueue.enqueue` stamps every envelope with the next sequence number
- * and refuses a tick older than the last one, so within ONE recording the
- * retained log is contiguous in `seq` and non-decreasing in `tick` by
- * construction - a trim keeps both properties, because it drops a prefix and
- * renumbers nothing (D-188). An entry inserted, removed or moved by hand
- * breaks one of the two, and this is what says where.
+ * Two different kinds of contradiction live here, and the difference between
+ * them is the whole of D-191:
+ *
+ *  - **order** (`tickOrder`, `sequence`). `CommandQueue.enqueue` stamps every
+ *    envelope with the next sequence number and refuses a tick older than the
+ *    last one, so within ONE recording the retained log is contiguous in `seq`
+ *    and non-decreasing in `tick` by construction - a trim keeps both, because
+ *    it drops a prefix and renumbers nothing (D-188). An entry inserted or
+ *    removed breaks one of the two.
+ *  - **schedule**. An entry MOVED to another tick inside the same bracket
+ *    breaks NEITHER: the sequence is untouched and the ticks still rise. D-189
+ *    claimed otherwise and was wrong. Only a commitment in the FILE can see
+ *    that, and since the correction bundle there is one: every mark carries
+ *    the schedule digest of its own segment (`save/schedule.ts`).
  *
  * It is a LOCATOR, never the verdict: what decides whether a recording
- * reproduces is the hash comparison, and this only ever explains a divergence
- * the hashes already found.
+ * reproduces is the hash comparison, and this only ever explains - or refuses
+ * to explain - a divergence the hashes already found.
  */
 export interface ReplayLogBreak {
-  /** Index into the retained log of the first entry that breaks the order. */
+  readonly kind: 'tickOrder' | 'sequence' | 'schedule';
+  /** Index into the retained log of the entry that breaks the order; -1 for a schedule break. */
   readonly index: number;
   readonly tick: number;
   readonly seq: number;
+  /** The segment a schedule break was found in; the entry's own tick otherwise. */
+  readonly fromTick: number;
+  readonly toTick: number;
   /** Translation key naming what broke. */
   readonly reasonKey: string;
 }
 
+/**
+ * The evidence behind a `divergedAt` verdict.
+ *
+ * An exact tick is only ever reported with one of these attached, and every
+ * field of it is MEASURED rather than argued:
+ *
+ *  - `matchedHash` is the hash reached at `tick` by two independent
+ *    re-simulations from the checkpoint at `fromTick`: the recording's own log,
+ *    and a control that is handed NO commands at all. The recording committed
+ *    to the schedule of that segment and it says there is exactly one command
+ *    in it, at `tick` - so the recording, too, ran no command before `tick`,
+ *    and the control IS the recorded trajectory there. The two agreeing is
+ *    therefore the literal statement "the re-simulation reproduces the
+ *    recording up to `tick`".
+ *  - `hashAfter` and `controlHashAfter` are the same two worlds one tick
+ *    later, with and without that command. They differ from the recording's
+ *    own next state by the contradiction the bracket end already showed: the
+ *    state at `tick` was the recorded one, no other command runs before the
+ *    bracket end, and the bracket end disagreed - so `tick` is where the two
+ *    part.
+ */
+export interface DivergenceProof {
+  /** The first tick at which the re-simulation and the recording part. */
+  readonly tick: number;
+  /** The committed state the two re-simulations started from. */
+  readonly fromTick: number;
+  /** What both re-simulations reach at {@link tick} - the recorded state there. */
+  readonly matchedHash: string;
+  /** The recording's own log, one tick on. */
+  readonly hashAfter: string;
+  /** The control, one tick on: the world had that command not been there. */
+  readonly controlHashAfter: string;
+}
+
+/**
+ * What a verification found - the four answers it is allowed to give.
+ *
+ * The taxonomy is the correction D-191 makes to D-189. A single
+ * `firstDivergentTick` had to answer four different questions at once, so it
+ * answered three of them with a confident number that was not true: a bracket
+ * dressed as a tick, a retimed command reported at the tick the tamper chose,
+ * and a broken FILE reported as a diverged SIM.
+ *
+ *  - `verified` - every commitment the recording made was reproduced.
+ *  - `divergedAt` - the tick is PROVEN, and the proof is attached.
+ *  - `divergedInBracket` - the world provably parted somewhere in
+ *    `[fromTick, toTick)` and this build cannot honestly go finer. `whyKey`
+ *    says what stopped it, because "we could not narrow" and "the file's
+ *    timings cannot be trusted" are very different findings.
+ *  - `corruptRecording` - the file contradicts ITSELF, so there is nothing to
+ *    compare. Never reported as a tick: no tick diverged.
+ */
+export type ReplayVerdict =
+  | { readonly kind: 'verified' }
+  | { readonly kind: 'divergedAt'; readonly tick: number; readonly proof: DivergenceProof }
+  | {
+      readonly kind: 'divergedInBracket';
+      readonly fromTick: number;
+      readonly toTick: number;
+      /** Translation key of the sentence saying why it could not be narrowed. */
+      readonly whyKey: string;
+    }
+  | {
+      readonly kind: 'corruptRecording';
+      /** Field path of the self-contradicting part, e.g. `save.checkpoints[2]`. */
+      readonly where: string;
+      /** Tick the contradicting claim stands at. */
+      readonly tick: number;
+      /** Translation key naming the contradiction. */
+      readonly whatKey: string;
+      /** The failing detail in plain text, for a bug report. */
+      readonly detail: string;
+    };
+
 /** What a verification found. */
 export interface ReplayVerification {
-  /** True when every checkpoint and the final hash matched. */
+  /** The answer. Everything else here is the evidence behind it. */
+  readonly verdict: ReplayVerdict;
+  /** True exactly when the verdict is `verified` - every commitment reproduced. */
   readonly ok: boolean;
-  /**
-   * The first tick at which the recording and this build provably differ, or
-   * -1 when nothing did. Exactly the tick when {@link exact} is true, and the
-   * first COMMITTED tick (a checkpoint, or the recorded end) that disagreed
-   * otherwise - see {@link exact} for what separates the two.
-   */
-  readonly firstDivergentTick: number;
-  /**
-   * Whether {@link firstDivergentTick} is the exact tick or the upper bound of
-   * the bracket the recording committed to.
-   *
-   * A recording commits to a hash once a game year, so the running comparison
-   * alone can only ever name a year. Inside that bracket the world is a pure
-   * function of its start state - which matched - and of the commands that
-   * ran, so a divergence must begin at a COMMAND's tick; when the bracket
-   * holds exactly one such tick, that tick IS the answer. The argument needs
-   * the log's own numbering to be truthful, which {@link logBreak} is the
-   * check on: with an entry inserted or removed the executed sequence is not
-   * the recorded one and no exactness is claimed.
-   */
-  readonly exact: boolean;
+  /** Calendar years of the ticks the verdict names, for the sentence on screen. */
+  readonly years: readonly number[];
   /** Newest committed tick that still agreed - the floor of the bracket. */
   readonly lastMatchingTick: number;
-  /** The hash the recording claims at the divergent committed tick. */
+  /** The hash the recording claims at the committed tick that disagreed. */
   readonly expectedHash: string;
   /** The hash this build reached there. */
   readonly actualHash: string;
@@ -302,42 +384,119 @@ export interface ReplayVerification {
   readonly checkedTicks: readonly number[];
   /** Where the re-simulation started from. */
   readonly startedAtTick: number;
-  /** The recording's own log order broken, or null. */
+  /** The recording's own log contradicting itself or its commitments, or null. */
   readonly logBreak: ReplayLogBreak | null;
   /** Translation key of the sentence the panel prints for this verdict. */
   readonly reasonKey: string;
 }
 
+/** The sentence each verdict prints; one key per kind, so the panel cannot invent one. */
+const VERDICT_KEYS: Record<ReplayVerdict['kind'], string> = {
+  verified: 'ui.replay.verify.ok',
+  divergedAt: 'ui.replay.verify.divergedAt',
+  divergedInBracket: 'ui.replay.verify.bracket',
+  corruptRecording: 'ui.replay.verify.corrupt',
+};
+
 /**
- * Walk the retained log and return the first entry that breaks the order the
- * queue writes it in, or null.
+ * Walk the retained log against everything the recording committed about it,
+ * and return the first contradiction, or null.
  *
- * The first entry sets the baseline: a trimmed recording legitimately starts
- * at a sequence number well above zero (`trimBefore` deliberately does not
- * renumber, D-188), so what is checked is the STEP from one entry to the next.
+ * Two passes, and the second one is what D-189 lacked:
+ *
+ *  - the STEP from one entry to the next, which catches an entry inserted or
+ *    removed. The first entry sets the baseline rather than being checked
+ *    against zero: a trimmed recording legitimately starts at a sequence
+ *    number well above zero (`trimBefore` deliberately does not renumber).
+ *  - the SCHEDULE of every committed segment, recomputed from the log and
+ *    compared with the digest the mark carries. This is the only thing that
+ *    can see a command MOVED inside a bracket, and a recording that carries no
+ *    commitment for a segment is simply not asked about it - `verifyReplay`
+ *    then refuses the exactness claim instead (`ui.replay.bracket.uncommitted`).
  */
-export function checkLogIntegrity(log: readonly CommandEnvelope[]): ReplayLogBreak | null {
+export function checkLogIntegrity(
+  log: readonly CommandEnvelope[],
+  commitments: readonly ScheduleCommitment[],
+): ReplayLogBreak | null {
   for (let i = 1; i < log.length; i++) {
     const previous = log[i - 1]!;
     const entry = log[i]!;
     if (entry.tick < previous.tick) {
       return {
+        kind: 'tickOrder',
         index: i,
         tick: entry.tick,
         seq: entry.seq,
+        fromTick: entry.tick,
+        toTick: entry.tick,
         reasonKey: 'ui.replay.break.tickOrder',
       };
     }
     if (entry.seq !== previous.seq + 1) {
       return {
+        kind: 'sequence',
         index: i,
         tick: entry.tick,
         seq: entry.seq,
+        fromTick: entry.tick,
+        toTick: entry.tick,
         reasonKey: 'ui.replay.break.sequence',
       };
     }
   }
+
+  for (let i = 0; i < commitments.length; i++) {
+    const commitment = commitments[i]!;
+    if (scheduleDigest(log, commitment.fromTick, commitment.toTick) === commitment.digest) continue;
+    return {
+      kind: 'schedule',
+      index: -1,
+      tick: commitment.fromTick,
+      seq: -1,
+      fromTick: commitment.fromTick,
+      toTick: commitment.toTick,
+      reasonKey: 'ui.replay.break.schedule',
+    };
+  }
   return null;
+}
+
+/**
+ * Every schedule a recording committed to and that this build can recompute.
+ *
+ * A commitment is skipped for exactly two reasons, and both of them are the
+ * absence of evidence rather than the presence of a problem: the mark carries
+ * no digest (a recording written before the commitment existed), or its
+ * segment reaches under `logBaseTick` and the log no longer holds it.
+ */
+export function scheduleCommitmentsOf(loaded: LoadedGame): ScheduleCommitment[] {
+  const commitments: ScheduleCommitment[] = [];
+  const baseTick = loaded.queue.baseTick;
+  const ring = loaded.ring.all;
+  for (let i = 0; i < ring.length; i++) {
+    const entry = ring[i]!;
+    const fromTick = checkpointSegmentStart(entry.tick);
+    if (entry.scheduleDigest === '' || fromTick < baseTick) continue;
+    commitments.push({
+      fromTick,
+      toTick: entry.tick,
+      digest: entry.scheduleDigest,
+      where: `save.checkpoints[${i}]`,
+    });
+  }
+  const claim = loaded.replay;
+  if (claim !== null && claim.scheduleDigest !== '') {
+    const fromTick = claimSegmentStart(claim.finalTick);
+    if (fromTick >= baseTick) {
+      commitments.push({
+        fromTick,
+        toTick: claim.finalTick,
+        digest: claim.scheduleDigest,
+        where: 'save.replay',
+      });
+    }
+  }
+  return commitments;
 }
 
 /** The ticks inside a bracket that carry a command - the only candidates. */
@@ -359,25 +518,144 @@ function candidateTicks(
 }
 
 /**
- * Narrow a divergence from the year the ring commits to down to the tick, when
- * the recording allows it.
+ * Try to PROVE that `tick` is where the re-simulation and the recording part,
+ * by re-simulating the bracket twice. Returns null when the proof does not
+ * come off, and a null answer is never dressed up as an exact tick.
  *
- * Between two committed hashes only a command can move the world apart, so the
- * candidates are the command ticks of the bracket. One candidate is an answer;
- * several are a bracket, and saying which of them it was would be a guess. A
- * broken log order withdraws the argument altogether - the executed sequence
- * is then not the recorded one and even the candidate set is unreliable.
+ * The two runs both start from the checkpoint at `fromTick`, whose world the
+ * running comparison has already matched. One is handed the recording's log,
+ * the other nothing at all. Up to `tick` they must agree - the committed
+ * schedule says the only command of the segment is the one at `tick` - and
+ * their agreeing is the measurement that says the re-simulation is still ON the
+ * recorded trajectory there. Then one tick more, with and without that command.
+ *
+ * Neither run is the playback the player is watching and neither touches the
+ * world the running comparison used: this is a diagnosis, and it runs on the
+ * failure path only.
+ */
+export function proveDivergentTick(
+  loaded: LoadedGame,
+  fromTick: number,
+  tick: number,
+): DivergenceProof | null {
+  const entry = loaded.ring.at(fromTick);
+  // No committed state to re-simulate from: the bracket floor is a state this
+  // build reached rather than one the recording put its name to, and a proof
+  // that starts from an unverified world proves nothing.
+  if (entry === null || tick < fromTick) return null;
+
+  const recorded = restoreCheckpoint(entry);
+  const recordedQueue = new CommandQueue();
+  recordedQueue.loadLog(loaded.queue.log, 0, loaded.queue.baseTick);
+  recordedQueue.seekToTick(fromTick);
+  recordedQueue.seal();
+
+  // The control is the same world with an empty, sealed queue: no logged
+  // command, and no AI move re-derived on top of one either (D-189).
+  const control = restoreCheckpoint(entry);
+  const controlQueue = new CommandQueue();
+  controlQueue.seal();
+
+  while (recorded.tick < tick) recorded.step(recordedQueue, null);
+  while (control.tick < tick) control.step(controlQueue, null);
+  const matchedHash = hashWorld(recorded);
+  if (matchedHash !== hashWorld(control)) return null;
+
+  recorded.step(recordedQueue, null);
+  control.step(controlQueue, null);
+  return {
+    tick,
+    fromTick,
+    matchedHash,
+    hashAfter: hashWorld(recorded),
+    controlHashAfter: hashWorld(control),
+  };
+}
+
+/**
+ * Narrow a divergence from the bracket the ring commits to down to the tick,
+ * when - and only when - the recording allows it to be PROVEN.
+ *
+ * The chain of conditions is the argument, written out:
+ *
+ *  1. the log must not contradict itself or its own commitments, or the
+ *     executed sequence is not the recorded one and nothing below holds;
+ *  2. the bracket must be covered by a schedule commitment, or the file's
+ *     command ticks are the tamper's word for when the commands ran (this is
+ *     the retiming D-189 believed it had ruled out);
+ *  3. exactly one command tick may lie in it. None means the divergence cannot
+ *     be explained by an input at all - it is then a difference between two
+ *     simulations and can begin anywhere; several means saying which one it was
+ *     would be a guess that is wrong whenever the tamper is the second one;
+ *  4. the resimulation proof has to come off (`proveDivergentTick`).
  */
 export function narrowDivergence(
-  log: readonly CommandEnvelope[],
+  loaded: LoadedGame,
   fromTick: number,
   toTick: number,
   logBreak: ReplayLogBreak | null,
-): { readonly tick: number; readonly exact: boolean } {
-  if (logBreak !== null) return { tick: toTick, exact: false };
-  const candidates = candidateTicks(log, fromTick, toTick);
-  if (candidates.length === 1) return { tick: candidates[0]!, exact: true };
-  return { tick: toTick, exact: false };
+): ReplayVerdict {
+  const bracket = (whyKey: string): ReplayVerdict => ({
+    kind: 'divergedInBracket',
+    fromTick,
+    toTick,
+    whyKey,
+  });
+
+  if (logBreak !== null) {
+    return bracket(
+      logBreak.kind === 'schedule' ? 'ui.replay.bracket.schedule' : 'ui.replay.bracket.logBreak',
+    );
+  }
+  const covered = scheduleCommitmentsOf(loaded).some(
+    (commitment) => commitment.fromTick <= fromTick && commitment.toTick >= toTick,
+  );
+  if (!covered) return bracket('ui.replay.bracket.uncommitted');
+
+  const candidates = candidateTicks(loaded.queue.log, fromTick, toTick);
+  if (candidates.length === 0) return bracket('ui.replay.bracket.noCommands');
+  if (candidates.length > 1) return bracket('ui.replay.bracket.multipleCommands');
+
+  const proof = proveDivergentTick(loaded, fromTick, candidates[0]!);
+  if (proof === null) return bracket('ui.replay.bracket.unproven');
+  return { kind: 'divergedAt', tick: proof.tick, proof };
+}
+
+/** One thing a recording committed to: a world hash at a tick. */
+interface Mark {
+  readonly tick: number;
+  readonly hash: string;
+  /** The ring entry behind it, or null for the end claim (which has no payload). */
+  readonly checkpoint: Checkpoint | null;
+  readonly where: string;
+}
+
+/**
+ * Ask a failing checkpoint whether it agrees with ITSELF.
+ *
+ * A checkpoint carries a payload and a digest of that payload, so a claim this
+ * build cannot reproduce has two possible readings and they are told apart
+ * here rather than guessed: if the payload hashes to the digest, the mark is a
+ * coherent recorded state and the disagreement is a real divergence; if it does
+ * not - or the payload is not a world at all, or stands at another tick - the
+ * FILE is broken, and a broken file has no divergent tick to name.
+ *
+ * Returns null when the checkpoint is self-consistent (or is the end claim,
+ * which carries nothing to check itself against).
+ */
+function checkpointSelfContradiction(
+  entry: Checkpoint | null,
+): { readonly whatKey: string; readonly detail: string } | null {
+  if (entry === null) return null;
+  const result = tryRestoreCheckpoint(entry);
+  if (result.ok) return null;
+  return {
+    whatKey:
+      result.fault === 'digest'
+        ? 'ui.replay.corrupt.checkpointDigest'
+        : 'ui.replay.corrupt.checkpointPayload',
+    detail: result.message,
+  };
 }
 
 /**
@@ -385,10 +663,22 @@ export function narrowDivergence(
  *
  * The running comparison happens at every checkpoint the ring carries and at
  * the final tick - each of those is a hash the recording committed to on the
- * way, so a divergence is LOCATED rather than only announced. That is the
- * granularity the ring gives; {@link narrowDivergence} then takes the bracket
- * down to the tick wherever the recording's own log allows it, and says so
- * through {@link ReplayVerification.exact} when it cannot.
+ * way, so a divergence is LOCATED rather than only announced. What the
+ * correction bundle adds is what happens at the first mark that disagrees, and
+ * it is two questions rather than one (D-191):
+ *
+ *  - **is the file even self-consistent?** A checkpoint whose payload does not
+ *    hash to its own digest is a broken recording, not a diverged simulation,
+ *    and reporting a tick for it would be a confident answer to a question
+ *    nobody asked. The same is true one step further out: if a LATER
+ *    commitment is reproduced by the very trajectory that failed this one,
+ *    then this build is on the recorded trajectory and the mark it failed is a
+ *    claim about nobody's world. That lookahead is deliberately ONE mark deep
+ *    - it costs one more bracket of re-simulation, and a diagnosis may cost
+ *    that; a full walk of a quarter century after every divergence may not.
+ *  - **can the bracket be narrowed to a tick, provably?** That is
+ *    {@link narrowDivergence}, and it answers with the bracket - saying why -
+ *    far more often than D-189's version did.
  *
  * Refuses a recording from another version before touching a single command
  * (E-11, D-131).
@@ -409,58 +699,140 @@ export function verifyReplay(loaded: LoadedGame, currentGameVersion: string): Re
   const world = start.world;
   const queue = start.queue;
   const startedAtTick = world.tick;
-  const log = loaded.queue.log;
-  const logBreak = checkLogIntegrity(log);
+  const logBreak = checkLogIntegrity(loaded.queue.log, scheduleCommitmentsOf(loaded));
 
-  const marks: { tick: number; hash: string }[] = [];
-  for (const entry of loaded.ring.all) {
-    if (entry.tick > startedAtTick) marks.push({ tick: entry.tick, hash: entry.worldDigest });
+  const marks: Mark[] = [];
+  const ring = loaded.ring.all;
+  for (let i = 0; i < ring.length; i++) {
+    const entry = ring[i]!;
+    if (entry.tick > startedAtTick) {
+      marks.push({
+        tick: entry.tick,
+        hash: entry.worldDigest,
+        checkpoint: entry,
+        where: `save.checkpoints[${i}]`,
+      });
+    }
   }
-  marks.push({ tick: claim.finalTick, hash: claim.finalHash });
+  marks.push({
+    tick: claim.finalTick,
+    hash: claim.finalHash,
+    checkpoint: null,
+    where: 'save.replay',
+  });
 
   const checkedTicks: number[] = [];
   let lastMatchingTick = startedAtTick;
+  let failedMark: Mark | null = null;
+  let failedFrom = startedAtTick;
+  let failedHash = '';
+
+  const verdictOf = (verdict: ReplayVerdict, expected: string, actual: string) =>
+    finish(verdict, {
+      lastMatchingTick,
+      expectedHash: expected,
+      actualHash: actual,
+      checkedTicks,
+      startedAtTick,
+      logBreak,
+    });
+
   for (const mark of marks) {
     while (world.tick < mark.tick) world.step(queue, null);
     checkedTicks.push(mark.tick);
     const actual = hashWorld(world);
-    if (actual !== mark.hash) {
-      const narrowed = narrowDivergence(log, lastMatchingTick, mark.tick, logBreak);
-      return {
-        ok: false,
-        firstDivergentTick: narrowed.tick,
-        exact: narrowed.exact,
-        lastMatchingTick,
-        expectedHash: mark.hash,
-        actualHash: actual,
-        checkedTicks,
-        startedAtTick,
-        logBreak,
-        reasonKey:
-          logBreak !== null
-            ? 'ui.replay.verify.logBreak'
-            : narrowed.exact
-              ? 'ui.replay.verify.exact'
-              : 'ui.replay.verify.bracket',
-      };
+
+    if (actual === mark.hash) {
+      if (failedMark !== null) {
+        // The trajectory that failed the earlier mark reproduces this one, so
+        // it is the recorded trajectory and the earlier claim is not.
+        return verdictOf(
+          {
+            kind: 'corruptRecording',
+            where: failedMark.where,
+            tick: failedMark.tick,
+            whatKey: 'ui.replay.corrupt.checkpointUnreachable',
+            detail:
+              `the recording claims ${failedMark.hash} at tick ${failedMark.tick} and this ` +
+              `build reaches ${failedHash} there, yet the same re-simulation reproduces the ` +
+              `recording's own hash at tick ${mark.tick}`,
+          },
+          failedMark.hash,
+          failedHash,
+        );
+      }
+      lastMatchingTick = mark.tick;
+      continue;
     }
-    lastMatchingTick = mark.tick;
+
+    if (failedMark === null) {
+      failedMark = mark;
+      failedFrom = lastMatchingTick;
+      failedHash = actual;
+      const contradiction = checkpointSelfContradiction(mark.checkpoint);
+      if (contradiction !== null) {
+        return verdictOf(
+          {
+            kind: 'corruptRecording',
+            where: mark.where,
+            tick: mark.tick,
+            whatKey: contradiction.whatKey,
+            detail: contradiction.detail,
+          },
+          mark.hash,
+          actual,
+        );
+      }
+      // One mark of lookahead, and no more: see the note above.
+      continue;
+    }
+    break;
   }
 
+  if (failedMark === null) {
+    return verdictOf({ kind: 'verified' }, claim.finalHash, claim.finalHash);
+  }
+  return verdictOf(
+    narrowDivergence(loaded, failedFrom, failedMark.tick, logBreak),
+    failedMark.hash,
+    failedHash,
+  );
+}
+
+/** Assemble the verification around a verdict - one place decides the key and the years. */
+function finish(
+  verdict: ReplayVerdict,
+  evidence: {
+    lastMatchingTick: number;
+    expectedHash: string;
+    actualHash: string;
+    checkedTicks: readonly number[];
+    startedAtTick: number;
+    logBreak: ReplayLogBreak | null;
+  },
+): ReplayVerification {
+  const ticks =
+    verdict.kind === 'divergedAt'
+      ? [verdict.tick]
+      : verdict.kind === 'divergedInBracket'
+        ? [verdict.fromTick, verdict.toTick]
+        : verdict.kind === 'corruptRecording'
+          ? [verdict.tick]
+          : [];
   return {
-    ok: true,
-    firstDivergentTick: -1,
-    exact: true,
-    lastMatchingTick,
-    expectedHash: claim.finalHash,
-    actualHash: claim.finalHash,
-    checkedTicks,
-    startedAtTick,
+    verdict,
+    ok: verdict.kind === 'verified',
+    years: ticks.map((tick) => calendarFromTick(tick).year),
+    lastMatchingTick: evidence.lastMatchingTick,
+    expectedHash: evidence.expectedHash,
+    actualHash: evidence.actualHash,
+    checkedTicks: evidence.checkedTicks,
+    startedAtTick: evidence.startedAtTick,
     // A log whose own numbering is broken but that still reproduces every
     // committed hash is reported as reproducing: the hashes are the authority
     // and they say the world is the recorded one (the break is then the
     // recording's bookkeeping, not its history).
-    logBreak,
-    reasonKey: 'ui.replay.verify.ok',
+    logBreak: evidence.logBreak,
+    reasonKey: VERDICT_KEYS[verdict.kind],
   };
 }
