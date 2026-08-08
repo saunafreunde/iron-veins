@@ -210,18 +210,23 @@ rewrites nothing - the cached-rm is what forces the re-checkout.
   a WORLD RULE: scenario 2's railway - literally, both files build it from
   `tests/balance/coalLine.ts` - played twice over the same nine years, once
   with the weather rule off and once harsh. Band: the freight year drops
-  **3-7 %**, measured 4.95 %. **SPEC2 asked for 8-15 % and this is a
-  re-band, not a miss** (D-203): the route to 8-15 % was measured (frost
-  weight 14 -> 90 takes the winter from 9.6 % to 70 % frost days and the
-  effect to 9.30 %) and refused, because `WEATHER_FROST_SEASON` is
-  climate-blind, so a frozen winter is a frozen TROPICAL January too - the
-  booking belongs with M23's climate sets. It is an ENSEMBLE of six seeds
-  because one coal train is chaotic (per-seed 3.33-8.15 %), and its two
-  independent halves are that the loss is winter-loaded on two instruments
-  that are not the band (breakdowns +29.2 % against +12.9 %, mean speed
-  -4.87 % against -3.00 %) and that no seed earns more in the weather. It
-  owns no constant; D-203 carries the channel decomposition and the
-  permanent-winter ceiling of 26.4 % that says the seams are not too weak.
+  **3-7 %**, measured **4.36 %**. **SPEC2 asked for 8-15 % and this is a
+  re-band, not a miss** - and read D-204 rather than D-203 for why: D-203
+  banded it at 4.95 % and named a DEFECT (`WEATHER_FROST_SEASON` was
+  climate-blind, so a tropical January could freeze) as the reason the
+  effect was small, which is not an admissible justification. D-204 fixed
+  the defect FIRST - the frost gate is the season's own climate-aware
+  winter curve now - and re-measured: 4.36 %, so **the gap to 8-15 % was
+  never the tropics.** It is an ENSEMBLE of six seeds because one coal
+  train is chaotic (per-seed 1.48-6.31 %), and its two independent halves
+  are that the loss is winter-loaded on two instruments that are not the
+  band (breakdowns +32.9 % against +7.3 %, mean speed -4.94 % against
+  -2.97 %) and that no seed earns more in the weather. It owns no
+  constant. D-204 carries the re-measured channel decomposition - the
+  breakdown threshold is worth ~3.8 of the 4.36 points and **every other
+  channel is inside the noise, two of them measuring negative**, so
+  D-203's ordering below the leading term does not hold - plus the
+  permanent-winter ceiling of 25.2 % that says the seams are not too weak.
 
 - **An industry is judged on what left ON A VEHICLE**, never on what a station
   took (D-085). Crediting the deposit makes the growth signal meaningless: a
@@ -1235,9 +1240,11 @@ The environment becomes simulation reality (SPEC2 E-01). ONE save bump
 (v28 -> v29, owned by the weather rule and its field, and never extended
 after it); ONE snapshot-layout bump (9 -> 10, the weather block); zero atlas
 cells. The milestone is complete, and its balance band is the one thing in
-it that reads differently from the specification: measured 4.95 % against
-SPEC2's 8-15 %, re-banded to 3-7 % with the trace (D-203, the D-158
-precedent). Read that entry before touching a weather constant.
+it that reads differently from the specification: measured **4.36 %**
+against SPEC2's 8-15 %, banded 3-7 % with the trace (D-204, the D-158
+precedent; D-203 is superseded - it banded the same sentence on a build
+that still carried the defect it blamed). Read D-204 before touching a
+weather constant.
 
 ### Bundle 1 - the rule, the field and the daily draw (D-200)
 
@@ -1440,29 +1447,78 @@ field, no atlas cell, no i18n string; every pin re-verified by running.
   2.4 by the neighbour pull.
 - **The route to 8-15 % was measured and refused**, and the refusal is the
   entry worth reading (D-203): frost weight 14 -> 90 makes 70 % of winter days
-  frost and the effect 9.30 %. Refused because `WEATHER_FROST_SEASON` is
-  indexed by MONTH and by nothing else - so a frozen winter is a frozen
-  tropical January - because the constant would have been set FROM the run the
-  band then validates (D-197's defect), and because it changes what "harsh"
-  MEANS everywhere to move one line's number. **M23's climate sets are where
-  that booking belongs**, and the sweep in D-203 is the map for it.
+  frost and the effect 9.30 %. Refused for three reasons - and **the first of
+  them was a DEFECT, which is what made this bundle's re-band inadmissible
+  until bundle 5 fixed it** (see below). The other two stand: the constant
+  would have been set FROM the run the band then validates (D-197's defect),
+  and it changes what "harsh" MEANS everywhere to move one line's number.
+
+### Bundle 5 - the sky gets a climate, and the band is re-measured (D-204)
+
+D-203's re-band rested on a bug, so bundle 5 fixed the bug first and measured
+second. Three files under `src/`, no bump, no migration edit, no snapshot byte,
+no protocol field, no atlas cell, no i18n string - and every pin re-verified by
+running.
+
+- **The frost gate is the SEASON's own winter curve, read forwards** (D-204,
+  the D-202 device inverted). M18 shipped two winter calendars: the season's
+  climate-aware severity, and `WEATHER_FROST_SEASON`, a twelve-entry month
+  table with no climate term at all. That table is deleted;
+  `frostSeasonFactor(month, climate)` divides the ONE severity by
+  `WEATHER_FROST_FULL_SEVERITY`, which is a temperate January's own severity
+  computed from the two tables - so **a temperate January is EXACTLY
+  unchanged** while the tropics become an exact zero (measured: zero frosty
+  region-days over a harsh game year) and the arctic freezes harder AND longer
+  (5.2 % of region-days against temperate 3.1 % and desert 0.8 %). Height is
+  deliberately not a parameter: a weather cell covers a 16x16 REGION and is
+  not a place, so the gate is read at `SEA_LEVEL` and the height half of the
+  season goes on entering at the vehicle's tile and at the snow line. One
+  hemisphere, verified rather than assumed - the latitude term is a monotone
+  gradient inside a climate, never an equator.
+- **Re-measured: 4.36 % against D-203's 4.95 %** on the identical off
+  baseline, so the fix moved it 0.59 points DOWNWARD and **the gap to 8-15 %
+  was never the tropics.** The band stays 3-7 % and now rests on a
+  measurement. The channel decomposition was re-run and is sharper AND
+  different: the breakdown threshold carries ~3.8 of the 4.36 points and
+  everything else is inside the noise, with two channels measuring NEGATIVE -
+  a chaotic one-train line reshuffles its year around which day a breakdown
+  lands on, so D-203's four positive channels summing to eight were never
+  separable. Ceiling unchanged in meaning: a permanent winter costs 25.24 %.
+- **Two of M18's four seams are structurally inert on the reference line** -
+  a coal mine is neither farm nor forestry, and coal does not perish - which
+  is a property of the scenario and is now written down.
+- **Heat is still climate-blind, and that is the named residual.** Frost could
+  be fixed by REUSING a table; heat cannot - there is no summer term to reuse
+  (`SEASON_CLIMATE_AMPLITUDE` is the harvest swing and is zero in the
+  tropics, which would forbid a tropical heat wave), so giving heat a climate
+  means inventing one. **M23's climate sets are where that booking belongs**,
+  and the frost-weight sweep in D-203 is still the map for whoever raises the
+  band there.
+- Verified by running: canonical pin `5a2a6cf73f4107bb`, corpus
+  `c0a021f5d1ee8619`, soak `e6c5e33d8e7607ec` at 698 commands, all eight
+  scenarios hash-identical with their audits, scenario 2 at 249,980 EUR and
+  payback year 6, scenario 5 at 1,119,720 EUR. Main bundle 934,926 ->
+  **935,002 B** against the 950,000 B budget.
 
 Measured (reference machine): bundle 1 tick p50 1.296 / p99 2.841 ms,
 bundle 2 p50 1.613 / p99 2.934 ms, bundle 3 p50 1.702 / 1.554 / 1.650 /
 1.542 and p99 3.796 / 3.456 / 3.239 / 3.156 over four runs, bundle 4
-p50 1.531 / 1.508 and p99 3.006 / 3.225 over two, against the
+p50 1.531 / 1.508 and p99 3.006 / 3.225 over two, bundle 5 p50 1.431 /
+1.548 / 1.449 and p99 3.108 / 3.890 / 2.768 over three, against the
 M10 baseline
 1.45 / 3.26 on a row that allows +0.15 - the reference fleet runs the
 rule off throughout, and the ON-path per-vehicle cost (one array read,
 two table reads, a `baseHeight`) is NOT measured on that fixture, which
 D-201 says. **Main bundle 924,308 -> 926,473 -> 927,719 -> 934,751 ->
-934,926 B, and bundle 3 raised the budget 930,000 -> 950,000 B with that
-measurement beside it** (D-192's rule, D-202): bundle 2's share was five
-constant tables that reach the main chunk because the interface imports
-`constants.ts`, bundle 3's is the two new render modules, the atlas
-repaint and the MapView scheduler, and bundle 4's 175 B are unexplained -
+934,926 -> 935,002 B, and bundle 3 raised the budget 930,000 -> 950,000 B
+with that measurement beside it** (D-192's rule, D-202): bundle 2's share
+was five constant tables that reach the main chunk because the interface
+imports `constants.ts`, bundle 3's is the two new render modules, the atlas
+repaint and the MapView scheduler, bundle 4's 175 B are unexplained -
 it changed no file under `src/`, and the discrepancy is written down
-rather than smoothed away.
+rather than smoothed away - and bundle 5's +76 B are the new pure function
+and the derived constant, which cost a little more than the deleted
+twelve-entry table saved.
 
 ## Still outstanding
 
@@ -1473,14 +1529,16 @@ rather than smoothed away.
   honestly closes a line whose economics sag in year three, and the
   company never rebuilds (thin offer, graveyard rule, a retry that could
   not afford its train). Both have their baseline traces in D-158.
-- **The sky has no climate** (D-203). `WEATHER_FROST_SEASON` is indexed by
-  month and by nothing else, while the SEASON half is climate-aware and
-  gives tropical an exact zero - so a tropical January gets the odd frost
-  today (3.1 % of the year), and any attempt to make a harsh winter
-  properly frosty would freeze the tropics with it. That is why M18's
-  balance band is 3-7 % rather than SPEC2's 8-15 %, and **M23's climate
-  sets are where the booking belongs**; D-203 carries the frost-weight
-  sweep as the map for whoever takes it.
+- **Half the sky has a climate now; the other half does not** (D-204).
+  Frost is fixed - `frostSeasonFactor` is the season's own climate-aware
+  curve, the tropics are an exact zero and the arctic is harder and longer.
+  **HEAT is still indexed by month alone**, so an arctic July can be a heat
+  wave, and it could not be fixed the same way because the season has no
+  summer term to reuse. **M23's climate sets are where that booking
+  belongs.** Fixing frost did NOT close M18's band gap (4.95 % -> 4.36 %,
+  the wrong way): what bounds the effect is the share of the year the
+  expensive sky owns, and the frost-weight sweep in D-203 is still the map
+  for raising it - honestly, in M23, not by tuning a constant here.
 - **Undo and redo** (section 17.2). See D-114.
 - The installer BUILDS: `npm run build:desktop` produced both bundles in about
   eight minutes, and Tauri fetched WiX and NSIS itself. Neither is signed, so

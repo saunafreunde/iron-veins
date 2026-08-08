@@ -5,6 +5,7 @@ import {
   MapClimate,
   MAX_HEIGHT,
   MONTHS_PER_YEAR,
+  SEA_LEVEL,
   SEASON_AMPLITUDE_MAX,
   SEASON_CLIMATE_AMPLITUDE,
   SEASON_FARM_OUTPUT_PERCENT,
@@ -17,6 +18,7 @@ import {
   WEATHER_CELL_COUNT,
   WEATHER_DRAG_FACTOR,
   WEATHER_EXPIRY_FACTOR,
+  WEATHER_FROST_FULL_SEVERITY,
   WEATHER_ROLLING_FACTOR,
   WeatherCell,
   WeatherRule,
@@ -34,6 +36,7 @@ import { VehicleState } from '../../src/sim/vehicles/VehicleStore';
 import { seasonalOutputAt, weatherCellAt, winterFrictionAt } from '../../src/sim/weather/effects';
 import {
   calendarMonthOf,
+  frostSeasonFactor,
   seasonalOutputFactor,
   winterFrictionFactor,
 } from '../../src/sim/weather/seasons';
@@ -498,6 +501,112 @@ describe('the season is a pure and total function of month, height and climate',
     // either constant without the other turns the build red.
     const deepest = Math.min(...SEASON_FARM_OUTPUT_PERCENT) / 100;
     expect(1 + (deepest - 1) * SEASON_AMPLITUDE_MAX).toBeGreaterThan(0);
+  });
+});
+
+// ====================================== the sky's frost gate has a climate
+
+/**
+ * The frost gate of D-204, which closed the defect D-203 named as the reason
+ * M18's balance band is smaller than SPEC2 asked for.
+ *
+ * Until D-204 the sky carried a twelve-entry month table of its own
+ * (`WEATHER_FROST_SEASON`) with no climate term anywhere near it, while the
+ * SEASON half was climate-aware and gave the tropics an exact zero. So a
+ * tropical January could freeze. The gate is the season's own winter severity
+ * now - ONE winter curve, read by the ground for friction and by the sky for
+ * frost - and the properties below are what that buys.
+ *
+ * **What is evidence and what is a read-back.** That the arctic freezes harder
+ * than the temperate world and the desert less is a read-back of
+ * `SEASON_CLIMATE_WINTER`, whose numbers were chosen. What is independent of
+ * every number in that table:
+ *
+ *  - the tropics are an EXACT zero, so no draw and no persistence bonus can
+ *    produce a frost there - the field test below plants one and plays a year;
+ *  - a climate with more winter clears every threshold in at least as many
+ *    months, which is what "longer" means and follows from the gate being one
+ *    curve scaled by one factor rather than two independent tables;
+ *  - July is a hard zero in every climate, unchanged from D-200;
+ *  - and a temperate January is EXACTLY 1, which is the fix declining to
+ *    recalibrate the climate the rule was measured in.
+ */
+describe('the frost gate is the season read forwards (D-204)', () => {
+  const january = 0;
+  const july = 6;
+
+  it('gives the tropics an exact zero in every month of the year', () => {
+    for (let month = 0; month < MONTHS_PER_YEAR; month++) {
+      expect(frostSeasonFactor(month, MapClimate.Tropical)).toBe(0);
+    }
+  });
+
+  it('leaves a temperate January exactly where the rule shipped it', () => {
+    // Exact, not close: WEATHER_FROST_FULL_SEVERITY is that month's own
+    // severity, so the division is a number divided by itself.
+    expect(frostSeasonFactor(january, MapClimate.Temperate)).toBe(1);
+  });
+
+  it('has no frost in July, in any climate', () => {
+    for (const climate of EVERY_CLIMATE) {
+      expect(frostSeasonFactor(july, climate)).toBe(0);
+    }
+  });
+
+  it('freezes the arctic harder AND longer than the temperate world', () => {
+    // Harder: greater in every month that has any winter at all.
+    // Longer: at every threshold, at least as many months clear it - and
+    // strictly more at the thresholds in between, which is the half a climate
+    // COLUMN on the old table could never have produced.
+    let strictlyMore = 0;
+    for (const threshold of [0.25, 0.5, 0.75, 1]) {
+      const months = (climate: MapClimate): number => {
+        let count = 0;
+        for (let month = 0; month < MONTHS_PER_YEAR; month++) {
+          if (frostSeasonFactor(month, climate) >= threshold) count++;
+        }
+        return count;
+      };
+      const temperate = months(MapClimate.Temperate);
+      const arctic = months(MapClimate.Arctic);
+      expect(arctic).toBeGreaterThanOrEqual(temperate);
+      if (arctic > temperate) strictlyMore++;
+    }
+    expect(strictlyMore).toBeGreaterThan(0);
+
+    for (let month = 0; month < MONTHS_PER_YEAR; month++) {
+      const temperate = frostSeasonFactor(month, MapClimate.Temperate);
+      if (temperate === 0) continue;
+      expect(frostSeasonFactor(month, MapClimate.Arctic)).toBeGreaterThan(temperate);
+      expect(frostSeasonFactor(month, MapClimate.Desert)).toBeLessThan(temperate);
+    }
+  });
+
+  it('is the same winter curve the ground reads, in every climate', () => {
+    // The coupling, stated so that giving the sky a table of its own again
+    // turns the build red: wherever the season says a month has no winter, the
+    // sky has no frost, and the two orderings agree month by month.
+    for (const climate of EVERY_CLIMATE) {
+      for (let month = 0; month < MONTHS_PER_YEAR; month++) {
+        const ground = winterFrictionFactor(month, SEA_LEVEL, climate) - 1;
+        const sky = frostSeasonFactor(month, climate);
+        expect(ground === 0).toBe(sky === 0);
+        if (ground > 0) {
+          expect(sky).toBeCloseTo(ground / SEASON_FRICTION_GAIN / WEATHER_FROST_FULL_SEVERITY, 12);
+        }
+      }
+    }
+  });
+
+  it('is pure and finite for every month and climate', () => {
+    for (const climate of EVERY_CLIMATE) {
+      for (let month = 0; month < MONTHS_PER_YEAR; month++) {
+        const value = frostSeasonFactor(month, climate);
+        expect(Number.isFinite(value)).toBe(true);
+        expect(value).toBeGreaterThanOrEqual(0);
+        expect(frostSeasonFactor(month, climate)).toBe(value);
+      }
+    }
   });
 });
 

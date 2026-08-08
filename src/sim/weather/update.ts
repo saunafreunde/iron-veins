@@ -4,7 +4,6 @@ import {
   TICKS_PER_DAY,
   WEATHER_BASE_WEIGHT,
   WEATHER_CELL_COUNT,
-  WEATHER_FROST_SEASON,
   WEATHER_GRID_SIZE,
   WEATHER_HEAT_SEASON,
   WEATHER_NEIGHBOUR_PULL,
@@ -15,6 +14,7 @@ import {
 } from '../constants';
 import { streamSalt } from '../rng';
 import type { World } from '../World';
+import { frostSeasonFactor } from './seasons';
 
 /**
  * Advance the weather field by one game day (SPEC2 M18, E-01).
@@ -66,7 +66,13 @@ export function updateWeather(world: World): void {
   const month = ((day % DAYS_PER_YEAR) / DAYS_PER_MONTH) | 0;
 
   const base = WEATHER_BASE_WEIGHT[world.weather]!;
-  const frostGate = WEATHER_FROST_SEASON[month]!;
+  // Both gates are looked up ONCE for the day, outside the region loop: they
+  // depend on the calendar and the world's climate and on nothing a region
+  // holds. The frost gate is the season's own winter curve (D-204), so a
+  // tropical January cannot freeze and an arctic one freezes harder and for
+  // longer; the heat gate is still a bare month table and `WEATHER_HEAT_SEASON`
+  // says why.
+  const frostGate = frostSeasonFactor(month, world.climate);
   const heatGate = WEATHER_HEAT_SEASON[month]!;
   const stream = world.streamFor((streamSalt(WEATHER_STREAM_NAME) + day) | 0);
 

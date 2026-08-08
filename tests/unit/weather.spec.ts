@@ -248,6 +248,79 @@ describe('the field evolves', () => {
     expect(agreeing / pairs).toBeGreaterThan((expected / pairs) * 1.03);
   });
 
+  it('never freezes the tropics, whatever was standing there (D-204)', () => {
+    // The defect D-203 named and D-204 closed, at the level of the FIELD
+    // rather than of the gate function: `WEATHER_FROST_SEASON` was indexed by
+    // month and by nothing else, so a tropical January drew frost like a
+    // temperate one. The gate is the season's own winter severity now, which
+    // is an exact zero in the tropics - so this holds by the same arithmetic
+    // that keeps frost out of July, and a planted frost is gone the next day
+    // rather than merely rare.
+    const tropics = World.create({
+      seed: SEED,
+      difficulty: Difficulty.Normal,
+      climate: MapClimate.Tropical,
+      mapSize: MAP_SIZE,
+      companyName: 'Wetterdienst',
+      companyColorIndex: 1,
+      weather: WeatherRule.Harsh,
+    });
+    const queue = new CommandQueue();
+    // A whole year of harsh weather, sampled every day: not one frosty region.
+    let frostDays = 0;
+    for (let i = 0; i < TICKS_PER_YEAR; i++) {
+      tropics.step(queue, null);
+      if (tropics.tick % TICKS_PER_DAY !== 0) continue;
+      frostDays += census(tropics)[WeatherCell.Frost]!;
+    }
+    expect(frostDays).toBe(0);
+    // And it is a real sky, not a field that quietly went flat.
+    expect(census(tropics)[WeatherCell.Clear]).toBeLessThan(WEATHER_REGION_COUNT);
+
+    // Planted in deep January, gone in a day.
+    tropics.weatherField.cells.fill(WeatherCell.Frost);
+    play(tropics, TICKS_PER_DAY, queue);
+    expect(census(tropics)[WeatherCell.Frost]).toBe(0);
+  });
+
+  it('freezes the arctic harder than the temperate world and the desert less', () => {
+    // READ-BACK of `SEASON_CLIMATE_WINTER`, and the reason the gate reads it:
+    // the three climates order themselves, on one seed, one map and one rule -
+    // the only thing that differs is the climate.
+    const frostShare = (climate: MapClimate): number => {
+      const world = World.create({
+        seed: SEED,
+        difficulty: Difficulty.Normal,
+        climate,
+        mapSize: MAP_SIZE,
+        companyName: 'Wetterdienst',
+        companyColorIndex: 1,
+        weather: WeatherRule.Harsh,
+      });
+      const queue = new CommandQueue();
+      let frost = 0;
+      let sampled = 0;
+      for (let i = 0; i < TICKS_PER_YEAR; i++) {
+        world.step(queue, null);
+        if (world.tick % TICKS_PER_DAY !== 0) continue;
+        frost += census(world)[WeatherCell.Frost]!;
+        sampled += WEATHER_REGION_COUNT;
+      }
+      return frost / sampled;
+    };
+
+    const arctic = frostShare(MapClimate.Arctic);
+    const temperate = frostShare(MapClimate.Temperate);
+    const desert = frostShare(MapClimate.Desert);
+    console.log(
+      `frost share of region-days over one harsh year: arctic ${(arctic * 100).toFixed(1)} %, ` +
+        `temperate ${(temperate * 100).toFixed(1)} %, desert ${(desert * 100).toFixed(1)} %`,
+    );
+    expect(arctic).toBeGreaterThan(temperate);
+    expect(temperate).toBeGreaterThan(desert);
+    expect(desert).toBeGreaterThan(0);
+  });
+
   it('has no frost in July and no heat in January, whatever was standing', () => {
     // INDEPENDENT of the weights: the season gate multiplies BEFORE the
     // persistence bonus, so a zero gate takes a standing sky's weight to zero

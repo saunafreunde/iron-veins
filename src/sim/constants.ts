@@ -1815,17 +1815,27 @@ export const WEATHER_PERSISTENCE = 6;
 export const WEATHER_NEIGHBOUR_PULL = 0.35;
 
 /**
- * Seasonal gate on Frost and Heat, one entry per calendar month (0 = January).
+ * Seasonal gate on Heat, one entry per calendar month (0 = January).
  * [multiplier on the base weight]
  *
  * A pure function of the calendar with no randomness and no state, which is
  * the shape SPEC2 M18 asks seasons to have. The hard zeros are load-bearing:
- * a weight of zero applies to the persistence bonus as well, so a frost that
- * is standing when the season ends CANNOT survive into a month whose gate is
- * zero - there is no frost in July, and that is a property rather than an
+ * a weight of zero applies to the persistence bonus as well, so a heat wave
+ * that is standing when the season ends CANNOT survive into a month whose gate
+ * is zero - there is no heat in January, and that is a property rather than an
  * unlikely event.
+ *
+ * **Frost has no table here any more.** Its gate is
+ * `weather/seasons.ts#frostSeasonFactor`, which reads the SEASON's own winter
+ * severity, so the sky and the ground share one winter calendar and one climate
+ * table (D-204). This row is deliberately NOT given the same treatment: the
+ * season half has no summer term at all to reuse - `SEASON_CLIMATE_WINTER` is
+ * about winter and `SEASON_CLIMATE_AMPLITUDE` is the harvest swing, which is
+ * exactly zero in the tropics and would forbid a tropical heat wave - so
+ * giving heat a climate would mean INVENTING a table rather than reusing one.
+ * That booking belongs to M23's climate sets, and D-204 names it as the
+ * residual it is.
  */
-export const WEATHER_FROST_SEASON: readonly number[] = [1, 1, 0.5, 0, 0, 0, 0, 0, 0, 0, 0.5, 1];
 export const WEATHER_HEAT_SEASON: readonly number[] = [0, 0, 0, 0, 0.5, 1, 1, 1, 0.5, 0, 0, 0];
 
 // --------------------------------------- what the weather costs (SPEC2 M18)
@@ -1974,6 +1984,23 @@ export const SEASON_CLIMATE_WINTER: readonly number[] = [
   0, // Tropical
   0.35, // Desert - cold nights, no snow on the road
 ];
+
+/**
+ * The winter severity at which the SKY's frost gate stands fully open.
+ * [dimensionless, on the same scale as the severity of `winterFrictionFactor`]
+ *
+ * Not a new number: it is computed from the two tables above and is exactly the
+ * severity of a January at the shore in the temperate climate - the month and
+ * the climate the shipped frost gate was a flat 1 for. Dividing by it is what
+ * lets the sky read the SEASON's winter curve (D-204) while a temperate
+ * January keeps precisely the frost weight it had before, so the reference coal
+ * line's own winter is not silently recalibrated by a fix aimed at the tropics.
+ *
+ * Derived rather than written out so the two cannot drift: change a month or a
+ * climate above and this moves with it.
+ */
+export const WEATHER_FROST_FULL_SEVERITY =
+  (SEASON_WINTER_SEVERITY_PERCENT[0]! / 100) * SEASON_CLIMATE_WINTER[MapClimate.Temperate]!;
 
 /**
  * How much sharper a season gets per height level above {@link SEA_LEVEL}.

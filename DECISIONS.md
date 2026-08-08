@@ -13,7 +13,7 @@ no entry below. A number may appear under several topics.
 - **Determinism, RNG & hashing:** D-001, D-002, D-003, D-004, D-009, D-010,
   D-024, D-093, D-106, D-128, D-137, D-142, D-145, D-146, D-149, D-153, D-178,
   D-181, D-184, D-185, D-188, D-189, D-190, D-191, D-193, D-194, D-195,
-  D-196, D-200, D-201, D-202
+  D-196, D-200, D-201, D-202, D-204
 - **Commands, snapshot & worker boundary:** D-004, D-005, D-006, D-011, D-032,
   D-100, D-111, D-145, D-146, D-148, D-162, D-174, D-176, D-179, D-187, D-189,
   D-192, D-193, D-196, D-200, D-202
@@ -41,7 +41,7 @@ no entry below. A number may appear under several topics.
   D-180, D-193, D-196
 - **Balancing & scenarios:** D-038, D-039, D-040, D-041, D-066, D-087, D-088,
   D-116, D-151, D-152, D-156, D-158, D-159, D-187, D-190, D-194, D-195,
-  D-196, D-197, D-198, D-199, D-200, D-203
+  D-196, D-197, D-198, D-199, D-200, D-203, D-204
 - **Vehicles & fleet:** D-043, D-044, D-045, D-068, D-076, D-089, D-093,
   D-096, D-142, D-143, D-145, D-146, D-155, D-157, D-171, D-174, D-181, D-185,
   D-201
@@ -62,9 +62,9 @@ no entry below. A number may appear under several topics.
 - **Crash safety:** D-132, D-139, D-190
 - **Testing method & fixtures:** D-010, D-038, D-072, D-074, D-084, D-133,
   D-167, D-183, D-186, D-188, D-189, D-190, D-191, D-192, D-193, D-194,
-  D-195, D-196, D-197, D-198, D-199, D-200, D-201, D-202, D-203
+  D-195, D-196, D-197, D-198, D-199, D-200, D-201, D-202, D-203, D-204
 - **Process & specification:** D-070, D-123, D-129, D-133, D-138, D-140,
-  D-185, D-191, D-197, D-198, D-199, D-203
+  D-185, D-191, D-197, D-198, D-199, D-203, D-204
 
 ---
 
@@ -8490,3 +8490,203 @@ touches no simulation code at all. Render tripwires green on the same runs
 (sprite pool median 1.71, draw prep 2.33 in the consist scene, E-18 full block
 2.60, chunk bake 0.59, particles 0.28, weather particles 0.21, aspect 0.04,
 emissive 0.05, flow prep 0.27 ms).
+
+---
+
+## M18 - weather, bundle 5: the sky gets a climate, and the band is re-measured on the fixed build (2026-08-08)
+
+### D-204 The frost gate is the season's own winter curve; the defect D-203 named is fixed, and the band re-measured at 4.36 %
+
+**Supersedes D-203.** That entry re-banded M18's balance sentence from SPEC2's
+8-15 % to 3-7 % on a measured 4.95 %, and named as its first reason for
+refusing the route to 8-15 % that `WEATHER_FROST_SEASON` was CLIMATE-BLIND -
+indexed by month and by nothing else, so a tropical January could freeze. That
+is a defect, and a re-band whose stated justification is a defect is not
+admissible: the project's own rule (D-158's precedent) permits an
+evidence-based re-band, never a bug-based one. So the defect was fixed first,
+the effect re-measured second, and the band decided third. **The band survives
+at 3-7 %; the measured figure moves from 4.95 % to 4.36 %; every claim below
+was re-measured on the fixed build and none of it is quoted from D-203.**
+
+**The defect, precisely.** M18 shipped two winter calendars. The SEASON half
+(`SEASON_WINTER_SEVERITY_PERCENT` x `SEASON_CLIMATE_WINTER` x height) knew
+about climate and gave the tropics an exact zero, which is why
+`winterFrictionFactor` and the snow line of D-202 are already honest there. The
+SKY half was a twelve-entry table of its own, `[1, 1, 0.5, 0, ..., 0.5, 1]`,
+with no climate term anywhere near it. Two tables answering "how much winter
+has month M" is the defect; a climate COLUMN bolted onto the sky's table would
+have been the instance patched and the class left standing - two month SHAPES
+free to drift apart at the next edit, which is the D-187 argument ("the number
+that calibrated and the number that divides must be one number") applied to a
+calendar.
+
+**The fix is one curve, read twice.** `winterSeverity(month, height, climate)`
+is now the private core of `weather/seasons.ts`; `winterFrictionFactor` is
+`1 + severity * SEASON_FRICTION_GAIN` and the new
+`frostSeasonFactor(month, climate)` is that same severity divided by
+`WEATHER_FROST_FULL_SEVERITY`. `WEATHER_FROST_SEASON` is deleted. The device is
+D-202's, one bundle on: there the snow line asked the friction where the ground
+has gone hard, here the sky asks the same function which months can freeze.
+
+- **The tropics cannot freeze**, as an exact zero rather than a rarity: a
+  weight of zero beats the persistence bonus, so a planted frost is gone the
+  next day. Measured over a harsh game year on a tropical world: **zero** frosty
+  region-days out of 92,160, on a field that is otherwise fully alive.
+- **The arctic freezes harder and longer.** The gate is 1.5x the temperate one
+  in every month that has any winter, so every threshold is cleared in at least
+  as many months and strictly more in between - three months reach a full
+  temperate January against one, five reach three quarters of it against three.
+  Measured frost share of region-days over one harsh year: arctic **5.2 %**,
+  temperate **3.1 %**, desert **0.8 %**, tropical **0.0 %**.
+- **The southern hemisphere does not arise, verified rather than assumed.** This
+  game has one. `CLIMATE_LATITUDE_RANGE_C` is a monotone temperature gradient
+  from the north edge to the south edge WITHIN a climate (`mapgen/climate.ts`),
+  never a crossing of the equator, and one `SEASON_WINTER_SEVERITY_PERCENT` is
+  applied to the whole world - January is winter everywhere or nowhere.
+- **Height is deliberately not a parameter of the sky.** The season takes one
+  everywhere it is evaluated AT a place - the vehicle's tile, the snow line's
+  height sweep. A weather cell is not a place: it covers a whole 16x16 region, 4
+  tiles across on the smallest map and 128 on the largest, spanning every height
+  in it. The gate is read at `SEA_LEVEL`, where `heightGain` is exactly 1, and
+  the height half of the season goes on entering where a height exists.
+- **A temperate January is EXACTLY unchanged**, by construction:
+  `WEATHER_FROST_FULL_SEVERITY` is that month's own severity, computed from the
+  two tables rather than written out, so the division is a number divided by
+  itself and the climate the rule was measured in is not silently recalibrated
+  by a fix aimed at the tropics. What does move in the temperate world is the
+  shoulders: December and February carry 0.917 of a full winter month instead of
+  a flat 1, March 0.583 instead of 0.5, and April and October gain 0.20 and
+  0.167 where the old table had nothing. The ground has always said a temperate
+  April carries a tenth of a winter; the sky agrees now.
+- **Heat is NOT given the same treatment, and that is the named residual.**
+  `WEATHER_HEAT_SEASON` is still a bare month table, so an arctic July can be a
+  heat wave. Frost could be fixed by REUSING a table; heat cannot - the season
+  half has no summer term at all, `SEASON_CLIMATE_WINTER` is about winter, and
+  `SEASON_CLIMATE_AMPLITUDE` is the harvest swing and is exactly zero in the
+  tropics, which would forbid a tropical heat wave. Giving heat a climate means
+  INVENTING a table, and that booking belongs to M23's climate sets. The
+  asymmetry is written down rather than smoothed away.
+
+**The re-measurement, same harness, same six seeds, same nine years**
+(`tests/balance/hardWinter.spec.ts`, unchanged but for its documentation and its
+recorded figures): **3,510,797 EUR of freight with the rule off against
+3,357,840 EUR under the harsh rule, -4.36 %**, against D-203's -4.95 % on the
+identical off baseline. The fix moved the number by 0.59 points and DOWNWARD,
+because the reference line is temperate and a temperate deep winter now gets
+marginally less frost. **The gap to 8-15 % was never the tropics.** Per-seed:
+-4.89 / -6.31 / -4.81 / -5.46 / -3.14 / -1.48 %, a spread of 1.48-6.31 against
+D-203's 3.33-8.15 on the same seeds - the mean moved by 0.59 points and
+individual seeds by up to 2.3, which is the chaos of one train and is why the
+band is on the ensemble. The two independent instruments SEPARATED further than
+they had: breakdowns rise 32.9 % in December/January/February against 7.3 % in
+the other nine months (D-203 measured 29.2 against 12.9), and mean speed while
+moving falls 4.94 % against 2.97 %. No seed earns more in the weather;
+non-clear region-days off 0, harsh 2,360,218.
+
+**Which channel actually drives a winter, re-measured by neutralising one at a
+time against the same off baseline.** This is the step D-203's own case (b)
+asks for, and the answer is sharper than D-203's - and different:
+
+| channel neutralised | measured | the channel is worth |
+| --- | --- | --- |
+| nothing (the band) | -4.36 % | - |
+| `WEATHER_BREAKDOWN_FACTOR` to all 1 | -0.54 % | ~3.8 points |
+| `WEATHER_ROLLING_FACTOR` + `WEATHER_DRAG_FACTOR` to all 1 | -5.50 % | ~-1.1 points |
+| `SEASON_FRICTION_GAIN` to 0 | -5.29 % | ~-0.9 points |
+| `WEATHER_EXPIRY_FACTOR` to all 1 | -4.38 % | ~0.0 points |
+| `SEASON_WINTER_SEVERITY_PERCENT` to all 0 (friction AND frost sky) | -3.93 % | ~0.4 points |
+
+**Only one channel stands clear of the noise.** The breakdown threshold carries
+3.8 of the 4.36 points; two of the other three measure NEGATIVE - removing them
+makes the loss BIGGER - which is not an error but the honest reading of a
+single-train line whose year is reshuffled by every change to which day a
+breakdown lands on. D-203 reported all four channels positive and summing to
+eight points against a whole of five; on the fixed build two of them changed
+sign. **So the sub-dominant channels were never separable, and D-203's ordering
+of them beyond the leading term should not be relied on.** What survives both
+measurements is that the breakdown threshold is the seam with the reach.
+
+Two structural facts about the reference line that the table makes obvious and
+that no constant can change: the seasonal PRODUCTION seam cannot reach it at all
+(a coal mine is neither a farm nor a forestry, so that factor is exactly 1 every
+month of the nine years), and the heat expiry seam measures nothing because coal
+does not perish and the heat gate is zero in the months the frost gate is open.
+Two of M18's four seams are inert on the line M18's band is measured on - which
+is a property of the scenario, stated here rather than discovered again.
+
+**The seams are not too weak, re-measured.** With every sky behaving as FROST at
+both weather seams and the season at full severity in all twelve months - a
+permanent winter far beyond anything the rule can draw - the same six seeds over
+the same nine years lose **25.24 %** (D-203 measured 26.39 % before the fix).
+What is small is how much of the year the expensive sky owns: under the harsh
+rule frost holds **9.1 %** of December/January/February region-days (D-203:
+9.6 %) and 3.2 % of the year, because its weight is 14 and never boosted while
+rain's 20 is multiplied by up to 2.4 by the neighbour pull.
+
+**So the band stays 3-7 %, and it now rests on a measurement rather than on a
+defect.** No constant was tuned towards it: the only constant this bundle adds
+is derived from two existing tables, and the only one it removes is the
+defective one. Three routes to a bigger number were considered and refused, each
+with its reason, because refusing them is what keeps the figure honest:
+
+1. **Raising the frost weight** (D-203's sweep: 14 -> 90 buys 70 % frost days
+   and -9.30 %). With the gate climate-aware, D-203's first reason is gone - but
+   its second and third stand untouched, and they were always the load-bearing
+   ones: the constant would be set FROM the run the band then validates, which
+   is exactly the defect D-197 was written about, and it would change what
+   "harsh" means everywhere in order to move one line's number.
+2. **Giving frost the neighbour pull.** `wetness()` counts Rain and Storm, so a
+   cold snap cannot form a front while a rain front can, and that is the direct
+   reason frost holds a tenth of the winter rather than a third. It is a bounded
+   model, not a defect - `WEATHER_NEIGHBOUR_PULL` is documented as the wet-front
+   term and was measured as such (D-200) - and changing it would raise the band.
+   With no independent evidence that frost SHOULD cluster, changing it is
+   indistinguishable from tuning, so it is named here as the next honest
+   question and left alone.
+3. **Widening the ensemble** past six seeds to shrink the error bar. It would
+   buy a tighter band at a linear cost in CI minutes on a scenario that already
+   measures 30-34 s, and the spread is reported rather than hidden, which is
+   what an error bar is for.
+
+**SPEC2 is amended rather than left to disagree with the test** (the
+D-158/D-191 precedent, which D-203 did not apply): section 8's M18 MUSS bullet
+and its Fertig-wenn sentence now carry a bracketed note recording that 8-15 % is
+superseded by the measured 3-7 %, with this entry named. SPEC.md is untouched
+(D-123).
+
+**Ledger.** `SAVE_VERSION` unchanged at **29** - M18's one Z5 bump is D-200's
+and this bundle adds no state at all; `SNAPSHOT_LAYOUT_VERSION` unchanged at
+**10**; zero atlas cells, no migration edit, no protocol field, no i18n string,
+no allowlist line. A constants-table change does not move `hashWorld`, and that
+was verified by running rather than assumed: canonical cross-OS pin
+`5a2a6cf73f4107bb`, corpus manifest `c0a021f5d1ee8619` (all eight fixtures
+decode to one world), soak fixture `e6c5e33d8e7607ec` at 698 recorded commands,
+all eight shipped scenarios hash-identical over two runs with their
+world-claims, briefing-numeral and place-name audits green, scenario 2 at
+investment 249,980 EUR and payback in year 6 with the same nine balances,
+scenario 1 at payback year 3, scenario 5 at D-158's 1,119,720 EUR. **Nothing a
+world with the rule OFF does changed**: the frost gate is read inside
+`updateWeather`, which returns on its first line there. Draw-count invariance
+(Z3) is unmoved and instrumented as before - the weather pass takes exactly one
+draw per region per day in every climate including the tropics, where the frost
+weight is zero, and the shared gameplay stream is untouched.
+
+Main bundle re-measured with `npm run build`: **935,002 B against the 950,000 B
+budget, headroom 14,998 B** (D-203 recorded 934,926 B; the +76 B is the new
+function and the derived constant reaching the main chunk through
+`constants.ts`); `SimWorker` 328,296 -> 328,376 B, `replay` 200,040 -> 200,050 B,
+the scenario catalogue 13,319 B and CSS 13,427 B both unchanged.
+
+Suite after: **119 files, 1,377 passing plus 2 skipped** against D-203's 1,369
++ 2 (six assertions for the new gate function, two for the field), plus the 14
+perf tests - `npm test`, `npm run typecheck` and `npm run lint` all green,
+`npm run test:soak` green at the unchanged fixture and
+`npm run test:balance:full` green including all eleven desync twins. Tick
+re-measured on three clean runs of the 1,500-vehicle reference fixture: **p50
+1.431 / 1.548 / 1.449 ms, p99 3.108 / 3.890 / 2.768 ms** against the M10
+baseline 1.45 / 3.26 on a row that allows +0.15. Two of the three p99 land below
+the baseline and the second is 0.63 ms above it, inside this machine's
+documented +-0.7 ms run-to-run noise; the reference fleet runs the rule OFF,
+where the changed line is never reached at all, so the honest reading is noise
+rather than cost. The ON-path cost is one extra function call per game DAY,
+hoisted out of the region loop, and it is not measured on that fixture.

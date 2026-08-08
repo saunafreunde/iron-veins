@@ -26,16 +26,35 @@ import { hashTwin } from './determinism';
  *
  * **The band is 3-7 % and SPEC2 asked for 8-15 %. That is a re-band, and the
  * measurement is why.** Measured on this build: 3,510,797 EUR of freight over
- * six seeds and nine years with no weather against 3,336,995 EUR under the
- * harsh rule, a drop of **4.95 %**. No constant was tuned towards the
- * sentence, and the route that WOULD have reached it was found, measured and
- * refused with its reason - DECISIONS.md D-203 carries the whole trace: the
- * channel decomposition, a permanent-winter ceiling of 26.4 % (so the seams
- * are not too weak), and a frost-frequency sweep that reaches 9.3 % only when
- * seven of ten winter days are frost in every climate the rule can be switched
- * on in. This is the D-158 precedent: a number written before the physics
+ * six seeds and nine years with no weather against 3,357,840 EUR under the
+ * harsh rule, a drop of **4.36 %**. No constant was tuned towards the
+ * sentence. This is the D-158 precedent: a number written before the physics
  * existed, replaced by the number the physics pays, with the trace beside it
  * so nobody "fixes" it again.
+ *
+ * **D-203 banded this at 4.95 % and named a DEFECT as the reason it was not
+ * larger; D-204 fixed the defect first and then re-measured** (which is the
+ * order the project's own rule requires - an evidence-based re-band is allowed,
+ * one whose stated justification is a bug is not). The defect was that the
+ * sky's frost gate was indexed by month and by nothing else, so a tropical
+ * January could freeze; the gate is the SEASON's own climate-aware winter
+ * curve now. It moved the number by 0.59 points, and DOWNWARD: a temperate
+ * December and February carry 0.917 of a full winter month against the flat 1
+ * the old table gave them, so the reference line - which is temperate - gets
+ * marginally less frost in the deep winter and a little in April and October
+ * instead. The gap to 8-15 % was never the tropics.
+ *
+ * **What actually bounds the effect, re-measured on the fixed build**
+ * (DECISIONS.md D-204 carries the table): the breakdown threshold is worth
+ * ~3.8 of the 4.36 points and every other channel is inside the noise of a
+ * six-seed ensemble - two of them measure NEGATIVE, which is what a chaotic
+ * one-train line does to a single-channel neutralisation. The seams are not
+ * too weak: a permanent winter (every sky behaving as frost, full severity in
+ * all twelve months) costs the same six seeds **25.24 %**. What is small is
+ * how much of the year the expensive sky owns - frost holds 9.1 % of
+ * December/January/February region-days under the harsh rule, because its
+ * weight is 14 and never boosted while rain's 20 is multiplied by up to 2.4 by
+ * the neighbour pull.
  *
  * **Why an ensemble rather than one world.** One coal line is a chaotic
  * system: a breakdown that falls on the wrong day costs a month of trips, and
@@ -45,8 +64,11 @@ import { hashTwin } from './determinism';
  * than the effect (seed 9 with the rule off runs between 45 k and 75 k EUR
  * from one year to the next). Six seeds are therefore played in both arms and
  * the ENSEMBLE is banded; the per-seed figures are printed and their spread -
- * measured 3.33 % to 8.15 %, so one seed alone lands outside the band on
- * either side of it - is the honest error bar on the mean.
+ * measured 1.48 % to 6.31 %, so a single seed lands well outside the band - is
+ * the honest error bar on the mean. It is a wider spread than D-203 recorded
+ * (3.33-8.15 %) on the same six seeds: the frost gate moved, so the days the
+ * two arms diverge on moved, and a chaotic line reshuffles its year around
+ * them. The MEAN moved by 0.59 points; the seeds moved by up to 2.3.
  *
  * **What is evidence and what is a read-back.** The band itself is a
  * measurement of this build and nothing more: it restates what D-201's four
@@ -59,10 +81,11 @@ import { hashTwin } from './determinism';
  *
  *  - the loss is winter-loaded, on two instruments that are not the banded
  *    figure. Breakdowns rise further in December, January and February
- *    (measured +29.2 %) than in the other nine months (+12.9 %), and the
- *    train's mean speed while it is moving falls further (-4.87 % against
- *    -3.00 %). Both point at the months `WEATHER_FROST_SEASON` opens its gate
- *    for;
+ *    (measured +32.9 %) than in the other nine months (+7.3 %), and the
+ *    train's mean speed while it is moving falls further (-4.94 % against
+ *    -2.97 %). Both point at the months `frostSeasonFactor` opens its gate
+ *    for, and both separated FURTHER under D-204 than they had under the
+ *    climate-blind table;
  *  - the sky never pays: not one of the six seeds earns more with weather than
  *    without;
  *  - and the two arms really are two arms - the off world's field is clear on
@@ -77,10 +100,11 @@ const WINTER_MONTHS: readonly number[] = [11, 0, 1];
 
 /**
  * The band, as a share of the freight revenue a weather-free world earns over
- * the same span. Re-banded from SPEC2 M18's 8-15 % in D-203; measured 4.95 %.
+ * the same span. Re-banded from SPEC2 M18's 8-15 % in D-203 and CONFIRMED on
+ * the defect-free build in D-204; measured 4.36 %.
  *
  * It is a band on the ENSEMBLE and not on a seed: the per-seed figures span
- * 3.33 % to 8.15 % on this build, which is the chaos of one train and not
+ * 1.48 % to 6.31 % on this build, which is the chaos of one train and not
  * disagreement about what a winter costs.
  */
 const DROP_MIN = 0.03;
@@ -282,9 +306,9 @@ describe('scenario "harter Winter": what the sky costs the reference coal line',
 
   it('is a WINTER effect: the frost months lose more than the other nine', () => {
     // Two instruments, neither of them the banded figure. The breakdown
-    // threshold is the seam with the most reach (D-203) and its frost entry is
+    // threshold is the seam with the most reach (D-204) and its frost entry is
     // the largest in the table; the solver seams show up as speed. Both are
-    // gated to the winter by `WEATHER_FROST_SEASON`, so both have to be deeper
+    // gated to the winter by `frostSeasonFactor`, so both have to be deeper
     // there - if they were not, the scenario would be measuring a climate
     // rather than a season.
     const breakdownRise = (arm: Arm, winter: boolean): number =>
