@@ -13,7 +13,7 @@ no entry below. A number may appear under several topics.
 - **Determinism, RNG & hashing:** D-001, D-002, D-003, D-004, D-009, D-010,
   D-024, D-093, D-106, D-128, D-137, D-142, D-145, D-146, D-149, D-153, D-178,
   D-181, D-184, D-185, D-188, D-189, D-190, D-191, D-193, D-194, D-195,
-  D-196, D-200
+  D-196, D-200, D-201
 - **Commands, snapshot & worker boundary:** D-004, D-005, D-006, D-011, D-032,
   D-100, D-111, D-145, D-146, D-148, D-162, D-174, D-176, D-179, D-187, D-189,
   D-192, D-193, D-196, D-200
@@ -35,7 +35,7 @@ no entry below. A number may appear under several topics.
 - **Cargo, payment & routing:** D-036, D-037, D-065, D-067, D-075, D-077,
   D-078, D-118, D-142, D-151, D-176, D-178, D-187
 - **Industry & production:** D-022, D-062, D-063, D-064, D-069, D-071, D-079,
-  D-085, D-086, D-174
+  D-085, D-086, D-174, D-201
 - **Towns, council & ownership:** D-101, D-102, D-103, D-104
 - **Economy, finance & emissions:** D-008, D-090, D-091, D-092, D-105, D-154,
   D-180, D-193, D-196
@@ -43,7 +43,8 @@ no entry below. A number may appear under several topics.
   D-116, D-151, D-152, D-156, D-158, D-159, D-187, D-190, D-194, D-195,
   D-196, D-197, D-198, D-199, D-200
 - **Vehicles & fleet:** D-043, D-044, D-045, D-068, D-076, D-089, D-093,
-  D-096, D-142, D-143, D-145, D-146, D-155, D-157, D-171, D-174, D-181, D-185
+  D-096, D-142, D-143, D-145, D-146, D-155, D-157, D-171, D-174, D-181, D-185,
+  D-201
 - **Water & air:** D-094, D-095, D-096, D-097, D-098, D-099
 - **Competitors, AI & tenders:** D-107, D-108, D-109, D-115, D-116, D-121,
   D-122, D-147, D-152, D-153, D-154, D-155, D-156, D-158
@@ -55,13 +56,13 @@ no entry below. A number may appear under several topics.
   D-186, D-187, D-189, D-191, D-192, D-193, D-194, D-195, D-196, D-200
 - **Performance & measurement:** D-002, D-120, D-135, D-136, D-161, D-162,
   D-163, D-164, D-167, D-170, D-171, D-172, D-173, D-174, D-176, D-177, D-184,
-  D-185, D-186, D-187, D-191, D-192, D-193, D-196, D-200
+  D-185, D-186, D-187, D-191, D-192, D-193, D-196, D-200, D-201
 - **Platform, tooling & build:** D-012, D-014, D-015, D-016, D-017, D-029,
   D-030, D-031, D-160, D-168, D-169, D-170, D-172, D-175, D-192
 - **Crash safety:** D-132, D-139, D-190
 - **Testing method & fixtures:** D-010, D-038, D-072, D-074, D-084, D-133,
   D-167, D-183, D-186, D-188, D-189, D-190, D-191, D-192, D-193, D-194,
-  D-195, D-196, D-197, D-198, D-199, D-200
+  D-195, D-196, D-197, D-198, D-199, D-200, D-201
 - **Process & specification:** D-070, D-123, D-129, D-133, D-138, D-140,
   D-185, D-191, D-197, D-198, D-199
 
@@ -7943,3 +7944,163 @@ with its own measurement (D-192); 3,527 B is not room for one.**
 Suite after: **115 files, 1,303 passing plus 2 skipped** against D-199's 114 and
 1,282 + 2, and the 13 perf tests - `npm test`, `npm run typecheck` and
 `npm run lint` all green; `npm run test:soak` re-recorded and green.
+
+## M18 - weather, bundle 2: what the sky costs, and the seasons (2026-08-08)
+
+### D-201 The weather reaches the simulation as four multipliers and nothing else, and the season is the calendar read as a pure function
+
+D-200 built the authority half of E-01 - the rule, the field, the daily draw,
+the save and the snapshot seam - and named the seams the effects would use so
+that nobody would invent a second one. This is those effects. SPEC2 M18 spells
+the shape out and it was followed literally: "sim effects exclusively as
+multiplier lookups at existing seams". Not one new mechanic, not one new state
+field, not one new draw, **no save bump and no migration edit** - the v29
+migration D-200 owns needed nothing added to it, because a multiplier at a seam
+carries no state of its own.
+
+**There are exactly four seams and there is no fifth.** Each is a factor
+multiplied into a number the simulation already computed, at the line it
+already computed it:
+
+- `ROLLING_RESISTANCE_RAIL`/`_ROAD` and `DRAG_TRAIN`/`_ROAD`/`_SHIP`/`_AIR` in
+  the longitudinal solver of section 11.1 (`WEATHER_ROLLING_FACTOR`,
+  `WEATHER_DRAG_FACTOR`);
+- the daily breakdown threshold of section 11.3 (`WEATHER_BREAKDOWN_FACTOR`);
+- `CARGO_EXPIRY_FRACTION_PER_DAY` at the daily station sweep
+  (`WEATHER_EXPIRY_FACTOR`, heat only - SPEC2 names heat and names nothing
+  else, so the other four entries are exactly 1 and a test holds them there);
+- the monthly output of a farm and a forestry in section 7.3's own production
+  pass (the season, not the sky).
+
+`src/sim/weather/effects.ts` is the only file that knows a `World` has weather
+at all outside `updateWeather`, and every function in it answers with the exact
+identity on its first line for a world with the rule off.
+
+**The gate is the RULE and never the FIELD, and that is what makes the off path
+provable.** `weatherCellAt` answers `Clear` for a world with the rule off
+without reading a cell, and every table is exactly 1 at `Clear`, so the whole
+arithmetic collapses to `x * 1 === x` - exact in IEEE-754, in the order the
+factors were inserted (each new factor sits immediately beside the coefficient
+it modifies, so the multiplication SEQUENCE of a pre-M18 world is reproduced
+term for term, not merely its value). The consequence is measured rather than
+asserted: **the canonical cross-OS pin stayed `5a2a6cf73f4107bb`, the corpus
+manifest stayed `c0a021f5d1ee8619`, the soak fixture stayed
+`e6c5e33d8e7607ec` at unchanged 698 commands, and scenario 5 measured
+1,119,720 EUR - D-158's recorded figure to the cent.** A test nails a sky of
+storms over an off world and plays the recorded road line two thousand ticks
+against a clear twin: same generator state, same cash, same tile, same speed,
+same `progressM` for every vehicle.
+
+**Z3, and the property that would have broken every seed in silence.** The
+breakdown roll is modulated by moving the THRESHOLD, and the discipline is
+exactly the one Z3 writes down: `rollBreakdowns` still takes one `nextFloat`
+per eligible vehicle per game day, unconditionally, before the sky is consulted
+at all - the sky only multiplies the number that draw is compared against. So
+the shared gameplay stream advances by the same number of words under every
+weather state there is. This is instrumented rather than argued:
+`weatherEffects.spec.ts` shadows `Rng.nextUint32` for the length of a call and
+counts, because `nextFloat` and `nextInt` both go through it, so the count IS
+the stream position (rejection retries included). Three statements are held:
+
+- a fabricated fleet of 512 at full reliability cannot break down under any
+  sky, and the five runs draw exactly 512 words each AND leave the generator in
+  the **identical state** - the strongest form of "the threshold shift itself
+  spends nothing";
+- the same fleet at reliability 5,000 draws exactly `512 + breakdowns` under
+  every sky, which is the total statement: **the draw count is a function of
+  the outcomes and of nothing else**, so a weather that spent a draw of its own
+  would break it for all five skies at once;
+- and the same holds on the played road line, so it is not a rule only a
+  hand-filled store obeys.
+
+The fleet is fabricated for exactly one reason and the test says so: the
+recorded fixture has ONE bus rolling at any moment, which is enough to show a
+seam is wired and far too few to tell a moved threshold from a coin that fell
+differently. `rollBreakdowns` reads four vehicle fields and the sky, so filling
+those fields is the whole of its input.
+
+**The season is a pure function of (month, height, climate) and the rule
+decides only whether the simulation consults it.** `seasons.ts` imports no
+`World`, draws nothing, remembers nothing and takes three numbers; the gate
+lives one file up in `effects.ts`. Both halves of that split are load-bearing.
+The function must stay free of the rule because the renderer will read it for
+the snow line without asking the simulation anything (Z1) - and the simulation
+must not consult it in an off world, because seasonal production alone would
+move every band this game owns inside the milestone that introduces it
+(Fehlerkatalog 34). What it produces:
+
+- a **winter friction** multiplier on the rolling resistance coefficient,
+  `1 + severity * SEASON_FRICTION_GAIN`, where the severity is a monthly table
+  times a climate factor times a height gain, clamped into [0, 1]. Total by
+  construction: finite and inside [1, 1.2] for every month, every height a map
+  can hold and every climate, walked in full by the test rather than sampled.
+  Measured: January at the shore 1.1272, at height 15 1.2000, arctic shore
+  1.1908, and every July in every climate exactly 1;
+- a **seasonal output** multiplier for a farm and a forestry, `1 + (t - 1) * a`
+  over integer-percent tables that sum to exactly 1,200. The transform is
+  affine around 1 and an affine image of a mean-1 table has mean 1 for any
+  amplitude, so the climate and the height change the SHAPE of the year and
+  never its total - asserted exactly on the tables and to nine places through
+  the transform, for every height and climate. `SEASON_AMPLITUDE_MAX` is
+  totality and not taste: the farm's deepest month is 40 %, so an amplitude
+  above 1.666 would ask a farm for negative output, and the test states that
+  arithmetic so moving one constant without the other is a red build.
+  **Tropical is an exact zero in both climate tables**, so a tropical world has
+  no season at all rather than a small one.
+
+**Which assertions are evidence and which are read-back**, stated in the test's
+own header the way `weather.spec.ts` states it. The four factor tables were
+CHOSEN - each fixes the ratio between the five skies at one seam - so every
+"a storm is slower than a clear sky" assertion is a read-back of that choice,
+worth having because a seam that stopped being wired has to turn the build red
+and worth nothing as evidence about the numbers. Independent of every one of
+them: the draw-count invariance, the off path, the purity and totality walk,
+and the exact identities (a sky whose factor is 1 moves its seam by exactly
+zero float - not nearly).
+
+Measured on this build, and quoted nowhere without having been re-measured:
+
+- breakdowns over 512 vehicles in one game day, the generator restored between
+  skies so the draws are literally the same: clear 69, rain 83, storm 109,
+  frost 124, heat 105;
+- the road fleet from a standstill over 180 ticks (under one game day, so no
+  calendar hook fires and the solver is the only difference): clear 97.6 m,
+  rain 97.4 (-0.17 %), storm 97.1 (-0.50 %), frost 96.8 (-0.87 %), **heat
+  exactly the clear figure**;
+- of 100 stale units at a station, left after one daily sweep: 90.00 under
+  clear, rain, storm and frost alike - the same float - and 82.50 under heat;
+- a farm's twelve months on flat ground at height 5, sheds emptied so the
+  7.3 store throttle cannot drown the signal: 267/273/280/286/292/298/303/308/
+  313/316/319/322 with the rule off against 87/151/249/351/423/499/541/498/
+  348/228/105/106 with it on - a year total within 0.2 % and a coal mine in
+  the same world identical month for month.
+
+**What is deliberately NOT in this bundle.** The M18 balance band ("a hard
+winter drops the reference coal line's annual revenue by 8-15 %") is not
+claimed here and no constant was tuned towards it: the tables were chosen for
+the ratios they state, and a band measured against them belongs with the
+milestone's own new scenario, beside the seasonal atlas and the storm warnings.
+Saying so is the point - a constant set from the run a band then validates is
+the defect D-197 was written about.
+
+**Ledger.** `SAVE_VERSION` unchanged at **29** (M18's one Z5 bump is D-200's;
+this bundle adds no state, so `v28_to_v29` needed no extension at all),
+`SNAPSHOT_LAYOUT_VERSION` unchanged at **10**, atlas zero cells, no new
+protocol field, no new i18n string, no UNHASHED or PARSER_IGNORED allowlist
+line. Tick measured on the 1,500-vehicle reference fixture: **p50 1.613 /
+p99 2.934 ms** (max 19.086 ms over 6,500 ticks) against the M10 baseline
+1.45 / 3.26 on a row that allows +0.15 - the reference fleet runs the rule OFF,
+where `weatherCellAt` returns on its first line and `winterFrictionAt` with it;
+the per-vehicle cost with the rule ON is one array read plus two table reads
+plus a `baseHeight`, and it is NOT measured on that fixture, which is stated
+here rather than implied. Main bundle measured with `npm run build`:
+926,473 -> **927,719 B against the 930,000 B budget, headroom 2,281 B** - all
+of it the five new constant tables, which reach the main chunk because the
+interface imports `constants.ts`; `SimWorker` 326,656 -> 327,698 B, `replay`
+200,046 -> 199,950 B, the scenario catalogue unchanged at 13,319 B, CSS
+unchanged. **2,281 B is not room for the seasonal-optics bundle's panel or
+text: it books the raise with its own measurement (D-192).** Suite after:
+**116 files, 1,320 passing plus 2 skipped** against D-200's 115 and 1,303 + 2,
+plus the 13 perf tests - `npm test`, `npm run typecheck` and `npm run lint` all
+green, `npm run test:soak` green at the unchanged fixture and
+`npm run test:balance:full` green including all nine desync twins.

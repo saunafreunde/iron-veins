@@ -38,6 +38,8 @@ import {
   TILE_DIAGONAL_M,
   TILE_SIZE_M,
   VEHICLE_REPATH_INTERVAL_TICKS,
+  WEATHER_DRAG_FACTOR,
+  WEATHER_ROLLING_FACTOR,
 } from '../constants';
 import {
   curveRadiusM,
@@ -76,6 +78,7 @@ import {
   releaseConnectionWaiters,
   taktOf,
 } from '../lines/takt';
+import { weatherCellAt, winterFrictionAt } from '../weather/effects';
 import type { World } from '../World';
 import { holdBody, releaseAll, releaseBehind, tryClaim } from './reservations';
 import { pathDirection, pathStepM, routeLengthM } from './route';
@@ -308,13 +311,27 @@ function stepPhysics(world: World, id: number, braking: boolean, speedLimit: num
   const mode = vehicles.kind[id]!;
   const ship = mode === VehicleKind.Ship;
   const flying = mode === VehicleKind.Aircraft;
+  // The weather's two seams in the solver (SPEC2 M18). Both are multipliers on
+  // coefficients that were already here, and both are exactly 1 over a clear
+  // sky - which is what every tile of a world with the rule off reads, so the
+  // arithmetic below is bit for bit the arithmetic of a pre-M18 world.
+  const tile = vehicles.tileIndex[id]!;
+  const sky = weatherCellAt(world, tile);
   // Neither a hull nor a wing touches the ground: their resistance is all in
   // the fluid, which the drag term carries. An aircraft's drag coefficient is
   // low because it is written against a speed an order of magnitude higher.
+  // Which is also why only the ground vehicles read the rolling factors: a
+  // frozen road under a ship is not a thing.
   const rollingCoefficient =
-    ship || flying ? 0 : rail ? ROLLING_RESISTANCE_RAIL : ROLLING_RESISTANCE_ROAD;
+    ship || flying
+      ? 0
+      : (rail ? ROLLING_RESISTANCE_RAIL : ROLLING_RESISTANCE_ROAD) *
+        WEATHER_ROLLING_FACTOR[sky]! *
+        winterFrictionAt(world, tile);
   const rolling = rollingCoefficient * mass * GRAVITY;
-  const dragCoefficient = flying ? DRAG_AIR : ship ? DRAG_SHIP : rail ? DRAG_TRAIN : DRAG_ROAD;
+  const dragCoefficient =
+    (flying ? DRAG_AIR : ship ? DRAG_SHIP : rail ? DRAG_TRAIN : DRAG_ROAD) *
+    WEATHER_DRAG_FACTOR[sky]!;
   const drag = dragCoefficient * speed * speed;
   const grade = mass * GRAVITY * (gradePermille(world, id) / 1000);
   const brake = braking ? mass * vehicles.brakeMs2[id]! : 0;

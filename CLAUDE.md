@@ -1211,14 +1211,16 @@ with a measurement. Read D-199 before touching a briefing or that table.
   claim each entry makes"; both now say exactly what holds, with the residual
   named.
 
-## M18 - weather as a world rule (bundle 1 of the milestone)
+## M18 - weather as a world rule (bundles 1 and 2 of the milestone)
 
 The environment becomes simulation reality (SPEC2 E-01). ONE save bump
-(v28 -> v29, owned by the weather rule and its field, extended in place by
-the later bundles); ONE snapshot-layout bump (9 -> 10, the weather block).
-The milestone is NOT finished: the multiplier lookups that make weather
-cost money, the seasonal production and friction modifiers, the seasonal
-atlas regeneration and the storm warnings are still to come.
+(v28 -> v29, owned by the weather rule and its field); ONE snapshot-layout
+bump (9 -> 10, the weather block). The milestone is NOT finished: the
+seasonal atlas regeneration, the storm warnings and the new balance band
+(a hard winter costs the reference coal line 8-15 % of its year) are still
+to come.
+
+### Bundle 1 - the rule, the field and the daily draw (D-200)
 
 - **`weather` is a world rule, off/mild/harsh, saved and hashed
   unconditionally** (D-200). D-110's split for the fourth time, and OFF
@@ -1256,12 +1258,62 @@ atlas regeneration and the storm warnings are still to come.
   All eight corpus fixtures - seven written by seven earlier builds and
   untouched on disk - still decode to ONE world.
 
-Measured (reference machine): tick p50 1.296 / p99 2.841 ms against the M10
-baseline 1.45 / 3.26 on a row that allows +0.15, with the reference fleet
-running the rule off. **Main bundle 924,308 -> 926,473 B against the 930,000 B
-budget - 3,527 B of headroom left**, all of it five new i18n sentences in two
-languages plus three buttons; the next M18 bundle that adds text or a panel
-books the raise with its own measurement (D-192).
+### Bundle 2 - what the sky costs, and the seasons (D-201)
+
+Four multiplier lookups at seams that already existed, plus a season that
+is a pure calendar function. **No save bump, no migration edit, no
+snapshot byte, no atlas cell, no new i18n string** - a multiplier at a
+seam carries no state, and every pin held: canonical `5a2a6cf73f4107bb`,
+corpus `c0a021f5d1ee8619`, soak `e6c5e33d8e7607ec` at 698 commands, and
+scenario 5 back at D-158's 1,119,720 EUR to the cent.
+
+- **The gate is the RULE and never the FIELD** (D-201).
+  `weather/effects.ts` is the only file outside `updateWeather` that knows
+  a world has weather, and every function in it answers with the exact
+  identity on its first line when the rule is off. Every factor table is
+  exactly 1 at `Clear`, and each factor was inserted immediately beside
+  the coefficient it modifies, so an off world reproduces the pre-M18
+  multiplication SEQUENCE term for term rather than merely its value. A
+  test nails a sky of storms over an off world and plays 2,000 ticks
+  against a clear twin: same generator, same cash, same tiles, same
+  speeds.
+- **The four seams and there is no fifth**: `ROLLING_RESISTANCE_*` and
+  `DRAG_*` in the longitudinal solver, the 11.3 breakdown threshold,
+  `CARGO_EXPIRY_FRACTION_PER_DAY` under heat (the other four skies are
+  exactly 1 there, and a test holds them), and the 7.3 monthly output of a
+  farm and a forestry.
+- **The breakdown roll moves its THRESHOLD and never its draw** (Z3).
+  `rollBreakdowns` takes one `nextFloat` per eligible vehicle per game day
+  BEFORE the sky is consulted; the sky only multiplies what it is compared
+  against. Instrumented, not argued: the test shadows `Rng.nextUint32` and
+  counts, so 512 perfectly reliable vehicles draw exactly 512 words under
+  all five skies AND leave the generator in the identical state, and a
+  worn fleet draws exactly `512 + breakdowns` under every one - **the draw
+  count is a function of the outcomes and of nothing else**. Measured
+  breakdowns on identical draws: clear 69, rain 83, storm 109, frost 124,
+  heat 105.
+- **The season is a pure function of (month, height, climate)**; the rule
+  decides only whether the SIMULATION consults it (`seasons.ts` knows
+  nothing of `World`, so the renderer can read it for the snow line under
+  Z1). Winter friction is total by construction - inside [1, 1.2] for
+  every month, height and climate, walked in full. The harvest tables are
+  integer percent summing to exactly 1,200 and the transform is affine
+  around 1, so height and climate change the SHAPE of a farm's year and
+  never its total. Tropical is an exact zero in both climate tables.
+- **The M18 balance band is deliberately not claimed here.** No constant
+  was tuned towards "a hard winter costs 8-15 %"; the tables were chosen
+  for the ratios they state, and the band belongs with the scenario that
+  will measure it (D-197's rule).
+
+Measured (reference machine): bundle 1 tick p50 1.296 / p99 2.841 ms,
+bundle 2 p50 1.613 / p99 2.934 ms against the M10 baseline 1.45 / 3.26 on
+a row that allows +0.15, with the reference fleet running the rule off -
+the ON-path per-vehicle cost (one array read, two table reads, a
+`baseHeight`) is NOT measured on that fixture and D-201 says so. **Main
+bundle 924,308 -> 926,473 -> 927,719 B against the 930,000 B budget -
+2,281 B of headroom left**; bundle 2's share is five constant tables that
+reach the main chunk because the interface imports `constants.ts`. The
+seasonal-optics bundle books the raise with its own measurement (D-192).
 
 ## Still outstanding
 

@@ -12,6 +12,7 @@ import {
   INDUSTRY_STORE_FULL_SHARE,
 } from '../constants';
 import { stationRating } from '../station/types';
+import { seasonalOutputAt } from '../weather/effects';
 import type { World } from '../World';
 import { coveredShareOf } from './catchment';
 import { closeIndustry } from './lifecycle';
@@ -112,7 +113,14 @@ export function produceIndustryCargo(world: World): void {
     const outputs = INDUSTRY_OUTPUT_PER_BATCH[industry.type]!;
     const cap = industryStockCap(industry.type);
 
-    let target = (industryBaseOutput(industry, world.tick) * industry.productionLevel) / 100;
+    // The season decides what the land yields this month, before the shed
+    // decides whether it is worth making (SPEC2 M18). A pure function of
+    // month, height and climate - no randomness, no state - and exactly 1 for
+    // every industry but a farm and a forestry, and for every world whose
+    // weather rule is off.
+    let target =
+      ((industryBaseOutput(industry, world.tick) * industry.productionLevel) / 100) *
+      seasonalOutputAt(world, industry.type, industry.x, industry.y);
     if (outputStoreFull(industry)) target *= INDUSTRY_FULL_STORE_RATE;
     if (target <= 0) continue;
 

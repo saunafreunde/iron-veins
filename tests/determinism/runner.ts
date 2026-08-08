@@ -1,6 +1,6 @@
 import { CommandQueue } from '../../src/sim/commands/queue';
 import type { Command } from '../../src/sim/commands/types';
-import { Difficulty, MapClimate } from '../../src/sim/constants';
+import { Difficulty, MapClimate, WeatherRule } from '../../src/sim/constants';
 import { parseCommand } from '../../src/sim/save/format';
 import { hashWorld, World } from '../../src/sim/World';
 
@@ -53,11 +53,21 @@ export const SCENARIO_MAP_SIZE = 128;
 
 export const SCENARIO_COMPANY_NAME = 'Iron Veins Reference Co.';
 
-/** Build a world and pre-load the whole command script into its queue. */
+/**
+ * Build a world and pre-load the whole command script into its queue.
+ *
+ * `weather` defaults to off, which is what every scenario recorded before M18
+ * was played under and what `World.create` reads from an absent field anyway -
+ * so passing it explicitly changes neither the world nor its hash. It is a
+ * parameter because the weather EFFECTS of M18 have to be provable on a fleet
+ * that is actually running, and this is the one recorded fleet the suite has
+ * (`tests/unit/weatherEffects.spec.ts`).
+ */
 export function createScenario(
   seed: number,
   script: readonly ScheduledCommand[],
   difficulty: Difficulty = Difficulty.Normal,
+  weather: WeatherRule = WeatherRule.Off,
 ): Scenario {
   const world = World.create({
     seed,
@@ -66,6 +76,7 @@ export function createScenario(
     mapSize: SCENARIO_MAP_SIZE,
     companyName: SCENARIO_COMPANY_NAME,
     companyColorIndex: 1,
+    weather,
   });
   const queue = new CommandQueue();
   for (const entry of script) {

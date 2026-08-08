@@ -1,6 +1,6 @@
 import { CommandQueue } from '../../src/sim/commands/queue';
 import { CommandKind, type Command } from '../../src/sim/commands/types';
-import { Difficulty, MapClimate, TICKS_PER_YEAR } from '../../src/sim/constants';
+import { Difficulty, MapClimate, TICKS_PER_YEAR, WeatherRule } from '../../src/sim/constants';
 import { industrySpec, type Industry } from '../../src/sim/industry/types';
 import { TileMap } from '../../src/sim/map/TileMap';
 import { Terrain } from '../../src/sim/map/terrain';
@@ -110,6 +110,14 @@ export function flatScenario(
   seed = 9,
   aiCompanies = 0,
   emissions = true,
+  /**
+   * The weather rule of SPEC2 M18. Off by default and off in every balancing
+   * scenario: all five bands of section 19.4 were measured by a simulation
+   * with no weather in it, and a rule that shipped on by default would re-band
+   * the lot (Fehlerkatalog 34). It is a parameter because the seasonal seams
+   * have to be provable on a controlled world.
+   */
+  weather: WeatherRule = WeatherRule.Off,
 ): Scenario {
   const map = new TileMap(size);
   map.cornerHeight.fill(GROUND_HEIGHT);
@@ -135,6 +143,7 @@ export function flatScenario(
       companyColorIndex: 1,
       aiCompanies,
       emissions,
+      weather,
     },
     { map, towns, industries, seedUsed: seed },
   );

@@ -1828,6 +1828,228 @@ export const WEATHER_NEIGHBOUR_PULL = 0.35;
 export const WEATHER_FROST_SEASON: readonly number[] = [1, 1, 0.5, 0, 0, 0, 0, 0, 0, 0, 0.5, 1];
 export const WEATHER_HEAT_SEASON: readonly number[] = [0, 0, 0, 0, 0.5, 1, 1, 1, 0.5, 0, 0, 0];
 
+// --------------------------------------- what the weather costs (SPEC2 M18)
+
+/**
+ * The four tables below are the WHOLE economic reach of the weather rule.
+ *
+ * SPEC2 M18 spells the shape out: "sim effects exclusively as multiplier
+ * lookups at existing seams". There is no new mechanic behind any of them -
+ * each is a factor multiplied into a number the simulation already computed at
+ * a place it already computed it, so a sky can make a journey dearer, a
+ * failure likelier or a cargo age faster, and can do nothing else at all.
+ *
+ * **Clear is exactly 1 in every one of them, and that is load-bearing.** A
+ * world with the rule off looks the sky up through `weatherCellAt`, which
+ * answers Clear on its first line, so every factor is the multiplicative
+ * identity and `x * 1 === x` exactly in IEEE-754. That is what makes "a v28
+ * save loads and behaves exactly as before" a property of the arithmetic
+ * rather than a hope, and it is why the canonical cross-OS pin did not move
+ * when these effects were added.
+ *
+ * **The numbers are CHOSEN, in the shape of the weight table above, and
+ * `tests/unit/weatherEffects.spec.ts` says which of its assertions are
+ * read-backs of that choice and which are evidence about the machinery.**
+ * What each row fixes is the RATIO between the five skies at one seam; the
+ * reasoning per row is with the row.
+ */
+
+/**
+ * What one sky does to the rolling resistance coefficient of the longitudinal
+ * solver (section 11.1), indexed by {@link WeatherCell}.
+ * [multiplier on ROLLING_RESISTANCE_RAIL / ROLLING_RESISTANCE_ROAD]
+ *
+ * Rolling resistance is what happens between a wheel and the ground, so the
+ * skies that change the ground are the ones that count: a film of water and
+ * the grit it carries costs a little, ice and packed snow cost a lot. Heat
+ * leaves the wheel alone and is exactly 1 here - what heat costs is in the
+ * cargo table below.
+ *
+ * A hull and a wing have no rolling resistance at all (D-096), so a ship and
+ * an aircraft never read this row - their whole resistance is the drag term.
+ */
+export const WEATHER_ROLLING_FACTOR: readonly number[] = [
+  1, // Clear - the identity
+  1.05, // Rain
+  1.1, // Storm
+  1.3, // Frost - ice and packed snow, the winter failure
+  1, // Heat
+];
+
+/**
+ * What one sky does to the drag coefficient of the longitudinal solver,
+ * indexed by {@link WeatherCell}. [multiplier on DRAG_TRAIN/ROAD/SHIP/AIR]
+ *
+ * Drag is the term that lives in the fluid, so wind is the only sky that has
+ * anything to say to it - which is also why this is the row a SHIP feels
+ * hardest: a hull's resistance is drag and nothing else (D-096), so a storm at
+ * sea is the most expensive weather in the game. Frost and heat are exactly 1:
+ * inventing a density correction for them would be inventing a mechanic, which
+ * M18 forbids in as many words.
+ */
+export const WEATHER_DRAG_FACTOR: readonly number[] = [
+  1, // Clear - the identity
+  1.05, // Rain
+  1.4, // Storm - the wind
+  1, // Frost
+  1, // Heat
+];
+
+/**
+ * What one sky does to the daily breakdown chance of section 11.3, indexed by
+ * {@link WeatherCell}. [multiplier on the chance, before the draw]
+ *
+ * This is the Z3 seam, and the discipline it is under is the whole reason it
+ * is a multiplier on a THRESHOLD rather than anything else: the roll itself is
+ * unchanged, one `nextFloat` per eligible vehicle per game day whatever the
+ * sky, so the weather spends no draw of its own and cannot shift the shared
+ * gameplay stream (Fehlerkatalog 25). The extremes are the failure weather -
+ * frozen points and boiling engines - with the storm between them.
+ */
+export const WEATHER_BREAKDOWN_FACTOR: readonly number[] = [
+  1, // Clear - the identity
+  1.15, // Rain
+  1.6, // Storm
+  1.9, // Frost
+  1.5, // Heat
+];
+
+/**
+ * What one sky does to {@link CARGO_EXPIRY_FRACTION_PER_DAY}, indexed by
+ * {@link WeatherCell}. [multiplier on the daily share written off]
+ *
+ * SPEC2 M18 names heat and names nothing else here, so four of the five
+ * entries are exactly 1 and a test holds them there. A cold store still stops
+ * perishable cargo spoiling outright and a canopy still holds back its third -
+ * heat multiplies what is left, so the station modules of section 10 keep
+ * exactly the meaning they had.
+ */
+export const WEATHER_EXPIRY_FACTOR: readonly number[] = [
+  1, // Clear - the identity
+  1, // Rain
+  1, // Storm
+  1, // Frost
+  1.75, // Heat
+];
+
+// -------------------------------------------------- the seasons (SPEC2 M18)
+
+/**
+ * The season is a PURE FUNCTION of month, height and climate - no randomness,
+ * no state, nothing saved (SPEC2 M18, E-01). The five constants below are the
+ * whole of it; `src/sim/weather/seasons.ts` is the only file that reads them.
+ *
+ * Whether the SIMULATION consults that function is the weather rule, which is
+ * a different question and is answered in `weather/effects.ts`: a world with
+ * the rule off must behave exactly as it did before M18, and seasonal
+ * production would move every balancing band in the game (Fehlerkatalog 34).
+ * The function itself stays free of the rule so the renderer can read it for
+ * the snow line without asking the simulation anything (Z1).
+ */
+
+/**
+ * How much winter there is in each calendar month, 0 = January.
+ * [percent of full winter severity]
+ *
+ * Integer percent so the table can be summed and compared exactly. The values
+ * are deliberately short of 100 at the peak: the climate and the height
+ * multiply this up, and a January that already saturated at sea level would
+ * make an arctic mountain indistinguishable from a temperate lowland.
+ */
+export const SEASON_WINTER_SEVERITY_PERCENT: readonly number[] = [
+  60, 55, 35, 12, 0, 0, 0, 0, 0, 10, 30, 55,
+];
+
+/**
+ * How much winter a climate has, indexed by {@link MapClimate}.
+ * [multiplier on the monthly severity]
+ *
+ * Tropical is a hard zero and is the reason `seasonalOutputFactor` can return
+ * exactly 1 for a whole climate: a world that has no winter reads every one of
+ * these tables and comes back with the identity.
+ */
+export const SEASON_CLIMATE_WINTER: readonly number[] = [
+  1, // Temperate
+  1.5, // Arctic
+  0, // Tropical
+  0.35, // Desert - cold nights, no snow on the road
+];
+
+/**
+ * How much sharper a season gets per height level above {@link SEA_LEVEL}.
+ * [addend to the climate multiplier, per level]
+ *
+ * ONE constant for both halves of the season - the friction and the harvest -
+ * because it answers one question: how much more of the year the weather owns
+ * as you climb. Playable land runs from level 4 to 15, so the top of the map
+ * carries 0.72 more season than the shore.
+ */
+export const SEASON_HEIGHT_GAIN_PER_LEVEL = 0.06;
+
+/**
+ * What full winter severity adds to the rolling resistance coefficient.
+ * [addend to the multiplier at severity 1]
+ *
+ * The season's friction and the sky's friction are separate multipliers on the
+ * same coefficient on purpose: a frosty day in July is weather, a hard road in
+ * January is the season, and a frosty day in January is both.
+ */
+export const SEASON_FRICTION_GAIN = 0.2;
+
+/**
+ * How strongly the harvest tables below are felt, indexed by
+ * {@link MapClimate}. [multiplier on the table's deviation from 1]
+ *
+ * The factor is `1 + (table - 1) * amplitude`, so an amplitude of zero is a
+ * year with no season in it and an amplitude of two doubles the swing. The
+ * mean of the table is exactly 1, and an affine transform of a mean-1 table
+ * has mean 1 whatever the amplitude - which is what makes a season move WHEN
+ * a farm produces rather than how much it produces in a year.
+ */
+export const SEASON_CLIMATE_AMPLITUDE: readonly number[] = [
+  1, // Temperate
+  1.4, // Arctic - a short violent growing season
+  0, // Tropical - no season at all
+  0.6, // Desert
+];
+
+/**
+ * Ceiling on the amplitude after the height gain. [dimensionless]
+ *
+ * Totality, not taste: the deepest month of the farm table is 40 percent, so
+ * an amplitude above 1.666 would ask a farm for negative output. The cap keeps
+ * every factor the function can return strictly positive for every month,
+ * height and climate, which is a property `weatherEffects.spec.ts` walks in
+ * full rather than sampling.
+ */
+export const SEASON_AMPLITUDE_MAX = 1.5;
+
+/**
+ * A farm's output over the year, one entry per calendar month (0 = January).
+ * [percent of the flat monthly rate]
+ *
+ * Integer percent summing to exactly 1,200, so the year's total is exactly
+ * what it was without seasons - a test asserts the sum rather than trusting
+ * it. Sowing in spring, the harvest in August, and a winter that produces
+ * little but is never zero (an industry that produced nothing is DORMANT
+ * under D-086's closure clock, and a farm that stopped every January would
+ * spend four months a year looking neglected).
+ */
+export const SEASON_FARM_OUTPUT_PERCENT: readonly number[] = [
+  40, 40, 60, 90, 120, 140, 160, 170, 155, 110, 75, 40,
+];
+
+/**
+ * A forestry's output over the year, on the same terms - integer percent
+ * summing to exactly 1,200.
+ *
+ * A gentler swing than the farm's: timber grows all year and what the season
+ * really moves is how well the ground carries a load out of the wood.
+ */
+export const SEASON_FORESTRY_OUTPUT_PERCENT: readonly number[] = [
+  50, 50, 80, 110, 130, 140, 140, 140, 130, 110, 70, 50,
+];
+
 // -------------------------------------------------- road traffic (SPEC.md 8.4)
 
 /**
