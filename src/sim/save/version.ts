@@ -74,7 +74,10 @@
  * and what the simulation has decided about it - plus the per-company lifetime
  * tonnage a cargo goal reads. A world that predates M17 asked nothing, so the
  * migration gives it no goals and a zeroed tally, which is exactly what it
- * knew.
+ * knew. The scenario bundle of the SAME milestone extends that one migration in
+ * place (Z5) with the `.ironscenario` metadata block - a CONTAINER field like
+ * the checkpoint ring, so it moves no hashed byte and the pins do not move
+ * again.
  */
 export const SAVE_VERSION = 28;
 
@@ -91,3 +94,18 @@ export const SAVE_EXTENSION = '.ironsave';
  * parser falls silently behind the command set (D-133).
  */
 export const REPLAY_EXTENSION = '.ironreplay';
+
+/**
+ * File extension of a scenario (SPEC2 M17).
+ *
+ * Not a second format either, and for the same reason: a scenario is the save
+ * container plus one UNHASHED metadata block (`save/scenarioMeta.ts`) - SPEC2's
+ * own "Ein Serializer: Szenario-Kompatibilitaet IST Save-Kompatibilitaet". One
+ * container, one parser, one migration chain.
+ *
+ * It stands in this import-free leaf beside the other two because the browser
+ * and the file dialogs of the scenario UI only NAME files; taking the string
+ * from `format.ts` would pull the parser and the entity codecs into the main
+ * bundle, which is the +32 kB half of D-191 measured above.
+ */
+export const SCENARIO_EXTENSION = '.ironscenario';

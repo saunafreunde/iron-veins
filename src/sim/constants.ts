@@ -1453,6 +1453,19 @@ export const MAX_GOALS = 8;
  */
 export const GOAL_PROGRESS_SCALE = 1_000;
 
+/**
+ * Longest a single `.ironscenario` metadata string may be - title, author,
+ * briefing half or goal caption (SPEC2 M17).
+ *
+ * Two thousand characters is about a printed page, which is the most a
+ * briefing panel can show before it becomes a document nobody reads; the eight
+ * shipped scenarios use 300-900. It is a bound on a file somebody else wrote,
+ * not a balancing figure: the block is UNHASHED, so it costs the world nothing
+ * - but an unbounded string in a file the player was handed is a megabyte the
+ * loader has no reason to accept. [characters]
+ */
+export const SCENARIO_TEXT_MAX_CHARS = 2_000;
+
 // ------------------------------------------------- timetable (section 12.3)
 
 /**

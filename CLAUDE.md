@@ -967,6 +967,40 @@ lets the bar say before the jump whether it is a decode or ninety game days of
 re-simulation. A save is watched in ONE click: `makeReplay.play` makes the
 worker shelve and enter in the same round trip.
 
+## M17 - the goal machine and the scenario format
+
+The game gets an end, goals and provable medals. ONE save bump (v27 -> v28,
+owned by the goal machine and extended in place afterwards); snapshot
+layout 8 -> 9 for the goal block.
+
+- **A goal is the tutorial's predicate moved into the daily hook** (D-193).
+  The vocabulary is D-113's and not one new signal was invented; what
+  changed is WHERE it runs, because a medal decided in a panel is a medal no
+  replay can reproduce. Verdict and descriptor are both saved and hashed, a
+  verdict is FINAL, and the medal bands are descriptor fields rather than
+  briefing text - a band decided from unhashed bytes is a band a typo can
+  change. `CompanyState.cargoDeliveredUnits` joined the save because no
+  twelve-month window can rebuild a lifetime.
+- **A scenario is a save with a briefing, and the briefing is kept out of
+  the hash by an audit rather than by a promise** (D-194). ONE serializer -
+  `encodeSave` with a sixth argument, one more section in `parseSaveFile`,
+  the v28 migration extended in place with a CONTAINER default, so not one
+  hashed byte moved and no pin was re-recorded. Fehler 35 is answered by
+  three audits that are each fed a planted violation:
+  `tests/unit/scenarioCoupling.spec.ts` perturbs every leaf of a real
+  `.ironscenario` against `hashWorld` (its meta-test folds the briefing INTO
+  the digest and requires the audit to name it), walks `src/sim` so the
+  vocabulary can live only under `save/`, and holds the lock table against
+  the real `NewGameParams`, the saved world state and `AppSettings`. Unhashed
+  is not unchecked: every field is validated, the goal captions are
+  cross-checked against `state.goals.length` - a caption may describe a goal,
+  never define one - and the lock list is strictly ascending. A locked rule
+  binds the START SCREEN and never the simulation, because enforcing it
+  sim-side would be a simulation decision reading unhashed bytes. The
+  reference final hash is compared with the container's own `ReplayClaim` and
+  then handed to M16's `verifyReplay` unchanged - re-simulated, never
+  believed.
+
 ## Still outstanding
 
 - **The two named walls of D-158.** A passenger pile a fleet merely

@@ -1053,6 +1053,15 @@ function withClaimScheduleDigest(value: unknown): unknown {
  * state in an old container cannot flatten a real goal list back to empty. A
  * payload with no state or no company section is passed through as it is: the
  * decoder is the one that refuses it (the v17_to_v18 precedent).
+ *
+ * M17's scenario bundle EXTENDS this migration in place rather than adding a
+ * v29 (Z5: v28 is M17's one bump): the `.ironscenario` metadata block joins the
+ * CONTAINER, beside the checkpoint ring and the replay claim rather than inside
+ * the hashed state, because it is what a file says ABOUT itself
+ * (Fehlerkatalog 35, `save/scenarioMeta.ts`). Null is the only honest entry -
+ * a save is not a scenario, and no migration can invent a briefing - and
+ * because it is a container field, not one byte of hashed world state moves:
+ * the canonical pin and the corpus manifest stay where D-193 left them.
  */
 const v27_to_v28: SaveMigration = (payload) => {
   const inner = state(payload);
@@ -1060,6 +1069,7 @@ const v27_to_v28: SaveMigration = (payload) => {
 
   return {
     ...payload,
+    scenario: payload['scenario'] ?? null,
     state: {
       ...inner,
       goals: inner['goals'] ?? [],

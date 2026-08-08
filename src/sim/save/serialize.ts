@@ -13,6 +13,7 @@ import {
   type SaveFile,
 } from './format';
 import { migrateSavePayload } from './migrations';
+import type { ScenarioMeta } from './scenarioMeta';
 
 /** zlib level 6 - roughly 3x smaller than raw MessagePack at a few ms per MB. */
 const COMPRESSION_LEVEL = 6;
@@ -32,6 +33,15 @@ export interface LoadedGame {
   readonly saveVersion: number;
   /** Where the recording claims to end - present in a replay, null in a save. */
   readonly replay: ReplayClaim | null;
+  /**
+   * The metadata block of a `.ironscenario`, or null (SPEC2 M17).
+   *
+   * It arrives here through the ONE load path because scenario compatibility
+   * IS save compatibility: a scenario is a save with this section filled in,
+   * and a save the player made INSIDE a scenario keeps it, so the briefing and
+   * the goal captions survive being played and put away.
+   */
+  readonly scenario: ScenarioMeta | null;
 }
 
 /**
@@ -46,6 +56,11 @@ export interface LoadedGame {
  * reason: it is HISTORY, like the command log, not state. Passing none writes
  * an empty ring, which is what every caller that does not keep one - the
  * balancing scenarios, the determinism fixtures - honestly has.
+ *
+ * The scenario metadata block of SPEC2 M17 is the third member of that family
+ * and the most emphatic one: it is what a file says ABOUT itself, it is
+ * UNHASHED by construction (Fehlerkatalog 35), and there is exactly one
+ * serializer for it because scenario compatibility IS save compatibility.
  */
 export function encodeSave(
   world: World,
@@ -53,6 +68,7 @@ export function encodeSave(
   gameVersion: string,
   ring: CheckpointRing | null = null,
   replay: ReplayClaim | null = null,
+  scenario: ScenarioMeta | null = null,
 ): Uint8Array {
   const file: SaveFile = {
     magic: SAVE_MAGIC,
@@ -67,6 +83,7 @@ export function encodeSave(
     logBaseTick: queue.baseTick,
     checkpoints: ring === null ? [] : ring.all,
     replay,
+    scenario,
   };
   return zlibSync(encode(file), { level: COMPRESSION_LEVEL });
 }
@@ -132,5 +149,6 @@ export function decodeSave(bytes: Uint8Array): LoadedGame {
     gameVersion: file.gameVersion,
     saveVersion: header.saveVersion,
     replay: file.replay,
+    scenario: file.scenario,
   };
 }

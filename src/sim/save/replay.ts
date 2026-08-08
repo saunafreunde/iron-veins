@@ -87,6 +87,14 @@ export function replayRefusal(
  * and a recording that needs it is a recording from another save version -
  * which verification refuses anyway (D-131). It is a playback affordance, not
  * evidence.
+ *
+ * The goals travel as DESCRIPTORS, which is what `World.create` takes: a
+ * genesis world has been asked the same questions and has answered none of
+ * them, so `GoalStore.add` enters each one Open with no medal. Passing them is
+ * not optional detail - goals are hashed world state (D-193), so a genesis
+ * rebuilt without them would be a different world at tick 0 and every scenario
+ * whose log had to be replayed from a reconstruction would diverge on its first
+ * comparison.
  */
 export function replayGenesis(world: World): World {
   return World.create({
@@ -102,6 +110,7 @@ export function replayGenesis(world: World): World {
     signalPenalty: world.signalPenalty,
     roadCongestion: world.roadCongestion,
     aiCompanies: world.ai.length,
+    goals: world.goals.toData(),
   });
 }
 

@@ -12,7 +12,7 @@ no entry below. A number may appear under several topics.
 
 - **Determinism, RNG & hashing:** D-001, D-002, D-003, D-004, D-009, D-010,
   D-024, D-093, D-106, D-128, D-137, D-142, D-145, D-146, D-149, D-153, D-178,
-  D-181, D-184, D-185, D-188, D-189, D-190, D-191, D-193
+  D-181, D-184, D-185, D-188, D-189, D-190, D-191, D-193, D-194
 - **Commands, snapshot & worker boundary:** D-004, D-005, D-006, D-011, D-032,
   D-100, D-111, D-145, D-146, D-148, D-162, D-174, D-176, D-179, D-187, D-189,
   D-192, D-193
@@ -24,7 +24,7 @@ no entry below. A number may appear under several topics.
   D-141
 - **Save format, migrations & replays:** D-007, D-025, D-026, D-027, D-048,
   D-111, D-130, D-131, D-134, D-142, D-144, D-145, D-146, D-147, D-153, D-178,
-  D-181, D-184, D-185, D-188, D-189, D-190, D-191, D-192, D-193
+  D-181, D-184, D-185, D-188, D-189, D-190, D-191, D-192, D-193, D-194
 - **Rail & track:** D-042, D-043, D-044, D-045, D-046, D-047, D-053, D-141,
   D-153, D-157, D-184
 - **Signals & reservations:** D-054, D-055, D-056, D-057, D-058, D-059, D-060,
@@ -38,7 +38,7 @@ no entry below. A number may appear under several topics.
 - **Economy, finance & emissions:** D-008, D-090, D-091, D-092, D-105, D-154,
   D-180, D-193
 - **Balancing & scenarios:** D-038, D-039, D-040, D-041, D-066, D-087, D-088,
-  D-116, D-151, D-152, D-156, D-158, D-159, D-187, D-190
+  D-116, D-151, D-152, D-156, D-158, D-159, D-187, D-190, D-194
 - **Vehicles & fleet:** D-043, D-044, D-045, D-068, D-076, D-089, D-093,
   D-096, D-142, D-143, D-145, D-146, D-155, D-157, D-171, D-174, D-181, D-185
 - **Water & air:** D-094, D-095, D-096, D-097, D-098, D-099
@@ -49,7 +49,7 @@ no entry below. A number may appear under several topics.
   D-171, D-172, D-173, D-174, D-175, D-177, D-179, D-186
 - **UI & input:** D-011, D-013, D-015, D-035, D-110, D-113, D-114, D-119,
   D-126, D-148, D-165, D-166, D-177, D-179, D-180, D-181, D-182, D-183, D-184,
-  D-186, D-187, D-189, D-191, D-192, D-193
+  D-186, D-187, D-189, D-191, D-192, D-193, D-194
 - **Performance & measurement:** D-002, D-120, D-135, D-136, D-161, D-162,
   D-163, D-164, D-167, D-170, D-171, D-172, D-173, D-174, D-176, D-177, D-184,
   D-185, D-186, D-187, D-191, D-192, D-193
@@ -57,7 +57,7 @@ no entry below. A number may appear under several topics.
   D-030, D-031, D-160, D-168, D-169, D-170, D-172, D-175, D-192
 - **Crash safety:** D-132, D-139, D-190
 - **Testing method & fixtures:** D-010, D-038, D-072, D-074, D-084, D-133,
-  D-167, D-183, D-186, D-188, D-189, D-190, D-191, D-192, D-193
+  D-167, D-183, D-186, D-188, D-189, D-190, D-191, D-192, D-193, D-194
 - **Process & specification:** D-070, D-123, D-129, D-133, D-138, D-140,
   D-185, D-191
 
@@ -6825,3 +6825,122 @@ Bundle, measured with `npm run build`: main chunk **907.18 -> 907.53 kB**
 block's constants in the shared channel; the `replay` chunk 190.41 -> 196.46 kB
 and the worker 313.15 -> 319.89 kB, both of which carry the simulation and are
 not the budget.
+
+### D-194 A scenario is a save with a briefing, and the briefing is kept out of the hash by an audit rather than by a promise
+
+SPEC2 M17 asks for `.ironscenario` as "eine Save-Obermenge mit ungehashtem
+Metadatenblock" and settles the architecture in one sentence: **ein Serializer -
+Szenario-Kompatibilitaet IST Save-Kompatibilitaet**. Taken literally that is the
+whole design, and taking it literally is what kept this bundle small: there is
+no scenario encoder, no scenario decoder, no scenario migration chain. There is
+`encodeSave` with a sixth argument, one more section in `parseSaveFile`, and the
+v27 -> v28 migration extended in place with a container default (Z5 - v28 is
+M17's one bump and it belongs to the goal machine, D-193).
+
+**The block is a CONTAINER field, so no hashed byte moved.** It joins
+`gameVersion`, the command log, the checkpoint ring and the replay claim - the
+family of things a file says ABOUT itself rather than IN itself (D-131). The
+canonical cross-OS pin stays `4dff3f3f216385e6`, the corpus manifest stays
+`f1dcab2a374ab728` and the soak fixture stays `ed8ac72cd1d6284d`; nothing was
+re-recorded because nothing could have moved. Snapshot layout unchanged at 9,
+atlas 0, tick 0.
+
+**Fehler 35 is answered by three audits, and each one is fed a planted
+violation.** "Ein Briefing-Tippfehler wird zum Desync" is a failure a comment
+cannot prevent, so `tests/unit/scenarioCoupling.spec.ts` is built the way
+`commandCoupling.spec.ts` is - pure audit functions over their inputs, with
+meta-tests that prove they fire:
+
+- **behaviour.** Every leaf of a real encoded `.ironscenario` is perturbed and
+  the world hash compared. The meta-test hands the same audit a `hashWorld` that
+  has the title and the German briefing folded INTO it, and requires the audit
+  to report exactly those two leaves. That is SPEC2's acceptance sentence
+  executed: planting a briefing field into the hash turns the build red. Two
+  leaves get explicit replacements rather than a blind "append an X" - the lock
+  list and the reference digest are shape-constrained, and a perturbation the
+  parser refuses proves nothing about the digest.
+- **reach.** A walk over `src/sim` fails the day a file outside `src/sim/save/`
+  names the metadata vocabulary (the D-176/D-186 pattern). The first audit
+  proves the digest does not read the block; this one proves nothing else does
+  either, which is the stronger statement - a briefing that reached a pathfinder
+  would desync without ever touching `hashWorld`.
+- **the save-field audit itself.** The M10 field audit (D-134) now walks a
+  payload that carries a scenario block, with ONE `scenario.*` entry in its
+  UNHASHED allowlist and the reason written out. The metadata is therefore
+  declared unwatched budget in the same place every other exception is, and a
+  stale entry there fails like any other.
+
+**Unhashed is not unchecked.** The parser validates every field: non-empty
+strings under a bound (`SCENARIO_TEXT_MAX_CHARS`), both languages present, a
+span that runs forwards, a reference hash that is a digest or nothing. Two
+checks are worth their own sentence. The goal captions are cross-checked against
+`state.goals.length`, which is the ONLY coupling between the unhashed block and
+the hashed state there can be: a caption may describe a goal, never define one.
+And the lock list must be strictly ascending, which gives a scenario's lock set
+one canonical wire form and rules out duplicates in the same comparison.
+
+**Medal bands and goals are not in the block, and SPEC2 lists both.** D-193
+already refused the bands - a medal decided from unhashed bytes is a medal a
+typo can change - and the same argument disposes of the goals: the descriptors
+are hashed world state, and what the metadata carries is one CAPTION per goal so
+the browser can say in German or English what the player is being asked for. The
+briefing prose may name the bands; the descriptor is what decides them. This is
+the one place the bundle deviates from the letter of SPEC2's list, and it
+deviates towards SPEC2's own Fehler 35.
+
+**Locked world rules are a list of names, honoured by the screen that offers the
+choices.** `SCENARIO_LOCKABLE_RULES` names ten `NewGameParams` fields, and the
+third audit holds all three properties D-110 and Z2 demand: every one of them is
+a real `NewGameParams` field (a complete `Record<keyof Required<NewGameParams>>`
+in the test, so a NEW world rule is a compile error until somebody decides about
+it), every one is a top-level field of the saved world state (so it is saved,
+hashed and migrated - a rule, not a setting), and none of them is an
+`AppSettings` field. Three fields are excluded with reasons the audit checks for
+staleness: the company name and colour are the player's identity rather than the
+world's rules, and `aiCompanies` has no top-level saved field because the ROSTER
+is the lock - a scenario ships its competitors already created and none can join
+later (D-108).
+
+The lock is deliberately advisory to the SIMULATION and binding on the
+INTERFACE, and that is forced rather than chosen. Enforcing it sim-side would
+mean a simulation decision reading unhashed metadata, which is precisely what
+Fehler 35 forbids. It does not need to: the values that apply are the ones in
+the shipped world state and they are hashed. A player who worked around the lock
+would not be playing the scenario differently - they would be playing a
+different world, and its hash would say so.
+
+**The date span decides nothing on purpose.** A span that ENDED the game would
+be a world rule and would have to be saved and hashed (Z2, Fehler 24). What
+actually ends a scenario is a goal's `bronzeTick`, in hashed descriptor state.
+`fromTick`/`toTick` are what the browser card prints.
+
+**The reference final hash is a claim that is re-simulated, never believed.**
+`verifyScenarioReference` compares it with the container's own `ReplayClaim`
+FIRST - a file whose two halves name different ends is answering the question
+before it is asked, and no re-simulation is run because it could only confirm
+one of them and which one is exactly what is in doubt - and then hands the whole
+job to `verifyReplay` unchanged: same version pinning (E-11), same verdict
+taxonomy, same proofs (D-191). A scenario is not a special case of a recording,
+it is a recording with a briefing. The answer is four-valued for D-191's reason:
+`noReference`, `noRecording` and `claimMismatch` are three different findings,
+and reporting "not verified" for all of them would be the confident non-answer
+D-191 removed. The test that matters is the tamper: the metadata still names the
+right hash and the claim still agrees with it, and only a real re-simulation of
+the altered log sees that the recording no longer gets there.
+
+**One latent defect fixed on the way.** `replayGenesis` rebuilt a world from its
+saved rules but did not pass the goals, which have been hashed world state since
+D-193. Every pre-M17 recording has none, so nothing measured moved - but a
+scenario replayed from a reconstructed genesis would have diverged on its first
+comparison, silently and for a reason that reads like a determinism bug.
+
+**Ledger.** No `SAVE_VERSION` bump (v28's own migration extended in place, Z5),
+no pin, no corpus, no snapshot byte, no atlas cell, no tick cost - the
+simulation never touches this block. One new constant
+(`SCENARIO_TEXT_MAX_CHARS`, 2,000 characters) and three new translation keys.
+Bundle, measured with `npm run build`: main chunk **907.53 -> 908.59 kB** (gzip
+277.16 -> 277.50) against the 930,000 B budget, and all of that is the three
+German and English sentences - the main chunk contains no scenario code at all,
+which was checked rather than assumed by grepping the built chunk for the
+vocabulary. `replay` 196.46 -> 198.15 kB and the worker 319.89 -> 321.58 kB,
+both of which carry the simulation and are not the budget.

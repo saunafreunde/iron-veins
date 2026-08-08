@@ -13,12 +13,19 @@ import {
   LEDGER_HISTORY_MONTHS,
   LINK_SAMPLE_COUNT,
   MapClimate,
+  SCENARIO_TEXT_MAX_CHARS,
 } from '../constants';
 import { INDUSTRY_TYPE_COUNT, type Industry } from '../industry/types';
 import { TownSize, type Town } from '../town/types';
 import type { TileMapData, WorldStateData } from '../World';
 import { decodeGoals, decodeLines, decodeStations, decodeVehicles } from './entities';
-import { REPLAY_EXTENSION, SAVE_EXTENSION, SAVE_VERSION } from './version';
+import {
+  isLockableRule,
+  type ScenarioMeta,
+  type ScenarioRule,
+  type ScenarioText,
+} from './scenarioMeta';
+import { REPLAY_EXTENSION, SAVE_EXTENSION, SAVE_VERSION, SCENARIO_EXTENSION } from './version';
 import type { CompanyState, RngState } from '../types';
 
 /** Four byte marker at the start of every save payload. */
@@ -33,7 +40,7 @@ export const SAVE_MAGIC = 'IRVN';
  * codecs behind them into the main bundle. See `./version.ts` for the
  * measurement that made the split.
  */
-export { SAVE_VERSION, SAVE_EXTENSION, REPLAY_EXTENSION };
+export { SAVE_VERSION, SAVE_EXTENSION, REPLAY_EXTENSION, SCENARIO_EXTENSION };
 
 /**
  * One entry of the checkpoint ring: the whole world at a year boundary.
@@ -123,6 +130,15 @@ export interface SaveFile {
   readonly checkpoints: readonly Checkpoint[];
   /** Where the recording ends, for a `.ironreplay`; null for a plain save. */
   readonly replay: ReplayClaim | null;
+  /**
+   * The metadata block of a `.ironscenario`; null for a plain save (SPEC2 M17).
+   *
+   * The one section of this file that is deliberately NOT covered by the world
+   * digest (Fehlerkatalog 35) - see `save/scenarioMeta.ts` for why, and
+   * `tests/unit/scenarioCoupling.spec.ts` for the audit that keeps it that way.
+   * It is validated here like every other section: unhashed is not unchecked.
+   */
+  readonly scenario: ScenarioMeta | null;
 }
 
 /**
@@ -1097,6 +1113,111 @@ function parseReplayClaim(value: unknown, path: string, baseTick: number): Repla
 }
 
 /**
+ * One metadata string: present, non-empty and bounded.
+ *
+ * Unhashed is not unchecked. The block cannot corrupt a world - that is what
+ * keeping it out of the digest buys - but it can still be a file that says
+ * nothing, or a briefing of a megabyte, and neither is something the loader has
+ * any reason to accept from a file the player was handed.
+ */
+function asMetaText(value: unknown, path: string): string {
+  const text = asString(value, path);
+  if (text.length === 0) throw new SaveFormatError(`${path}: expected a non-empty string`, path);
+  if (text.length > SCENARIO_TEXT_MAX_CHARS) {
+    throw new SaveFormatError(
+      `${path}: ${text.length} characters is more than the ${SCENARIO_TEXT_MAX_CHARS} allowed`,
+      path,
+    );
+  }
+  return text;
+}
+
+/** A bilingual metadata field; both halves are required (de/en parity). */
+function parseScenarioText(value: unknown, path: string): ScenarioText {
+  const raw = asRecord(value, path);
+  return {
+    de: asMetaText(raw['de'], `${path}.de`),
+    en: asMetaText(raw['en'], `${path}.en`),
+  };
+}
+
+/**
+ * The `.ironscenario` metadata block (SPEC2 M17); null for a plain save.
+ *
+ * Three things are checked that the type alone cannot say:
+ *
+ *  - the goal captions match the goals the WORLD carries, one for one. A
+ *    scenario that briefs three goals and sets four would show the player a
+ *    scoreboard with a nameless row, and the count is the only coupling between
+ *    the unhashed block and the hashed state there can be - a caption may
+ *    describe a goal, never define one (D-193).
+ *  - every locked rule is a rule this build knows, and the list is strictly
+ *    ascending. Ascending gives the lock set ONE wire form, so re-encoding a
+ *    scenario cannot change its bytes, and it rules out duplicates in the same
+ *    comparison.
+ *  - the span is a span. It decides nothing (the deadline that does is a goal's
+ *    `bronzeTick`, in hashed state), but a card that prints 1975-1950 is a file
+ *    contradicting itself and is refused like any other.
+ */
+function parseScenario(value: unknown, path: string, goalCount: number): ScenarioMeta | null {
+  if (value === null || value === undefined) return null;
+  const raw = asRecord(value, path);
+
+  const goals = asArray(raw['goals'], `${path}.goals`).map((entry, i) =>
+    parseScenarioText(entry, `${path}.goals[${i}]`),
+  );
+  if (goals.length !== goalCount) {
+    throw new SaveFormatError(
+      `${path}.goals: ${goals.length} captions for ${goalCount} goals - a scenario briefs ` +
+        'every goal it sets',
+      `${path}.goals`,
+    );
+  }
+
+  const rules = asArray(raw['lockedRules'], `${path}.lockedRules`);
+  const lockedRules: ScenarioRule[] = [];
+  let previous = '';
+  for (let i = 0; i < rules.length; i++) {
+    const name = asString(rules[i], `${path}.lockedRules[${i}]`);
+    if (!isLockableRule(name)) {
+      throw new SaveFormatError(
+        `${path}.lockedRules[${i}]: "${name}" is not a world rule a scenario may pin`,
+        `${path}.lockedRules[${i}]`,
+      );
+    }
+    if (name <= previous) {
+      throw new SaveFormatError(
+        `${path}.lockedRules[${i}]: "${name}" does not follow "${previous}"; the list is ` +
+          'ascending and carries no duplicates',
+        `${path}.lockedRules[${i}]`,
+      );
+    }
+    previous = name;
+    lockedRules.push(name);
+  }
+
+  const fromTick = asInt(raw['fromTick'], `${path}.fromTick`);
+  const toTick = asInt(raw['toTick'], `${path}.toTick`);
+  if (fromTick < 0 || toTick < fromTick) {
+    throw new SaveFormatError(
+      `${path}: the span ${fromTick}..${toTick} does not run forwards`,
+      `${path}.toTick`,
+    );
+  }
+
+  return {
+    title: asMetaText(raw['title'], `${path}.title`),
+    author: asMetaText(raw['author'], `${path}.author`),
+    briefing: parseScenarioText(raw['briefing'], `${path}.briefing`),
+    goals,
+    lockedRules,
+    fromTick,
+    toTick,
+    referenceFinalHash: asDigest(raw['referenceFinalHash'], `${path}.referenceFinalHash`),
+  };
+}
+
+/**
  * Strictly validate one world state.
  *
  * Split out of {@link parseSaveFile} for the checkpoint ring: a checkpoint
@@ -1233,5 +1354,6 @@ export function parseSaveFile(value: unknown): SaveFile {
     logBaseTick,
     checkpoints,
     replay,
+    scenario: parseScenario(raw['scenario'], 'save.scenario', state.goals.length),
   };
 }

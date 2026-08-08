@@ -43,7 +43,8 @@ const AUDIT_TICKS = 12_000;
 const PARSER_IGNORED: readonly { path: string; reason: string }[] = [
   {
     path: 'state.stations[].acceptedCargo',
-    reason: 'derived from the map on load (see save/entities.ts); written only so the shape matches',
+    reason:
+      'derived from the map on load (see save/entities.ts); written only so the shape matches',
   },
   {
     path: 'state.stations[].servedIndustries',
@@ -114,6 +115,16 @@ const UNHASHED: readonly { path: string; reason: string }[] = [
     reason:
       'the claim a recording makes about where it ends; replay verification judges it, and a ' +
       'claim that disagrees with the re-simulation is what a divergence report is made of (D-131)',
+  },
+  {
+    path: 'scenario.*',
+    reason:
+      'the `.ironscenario` metadata block, UNHASHED by construction and on purpose (SPEC2 ' +
+      'Fehlerkatalog 35): a briefing typo must never become a desync, so title, author, ' +
+      'briefing, goal captions, lock list, date span and reference hash are all outside the ' +
+      'world digest. Unhashed is not unchecked - the parser validates every one of them, which ' +
+      'is why several of these leaves refuse a change instead of surviving it - and the ' +
+      'boundary has its own audit with a meta-test in tests/unit/scenarioCoupling.spec.ts',
   },
 ];
 
@@ -414,6 +425,22 @@ beforeAll(() => {
       finalTick: world.tick,
       finalHash: hashWorld(world),
       scheduleDigest: scheduleDigest(scenario.queue.log, 0, world.tick),
+    },
+    // The M17 metadata block needs a representative like every other section a
+    // played fixture leaves empty - and it needs one MORE than the others do:
+    // a section this audit never walks is a section whose absence from the
+    // digest is an assumption rather than a finding. One caption, because the
+    // state above carries exactly one goal and the parser holds the two to the
+    // same count.
+    scenario: {
+      title: 'Audit-Szenario',
+      author: 'Audit',
+      briefing: { de: 'Bauen Sie eine Linie.', en: 'Build one line.' },
+      goals: [{ de: 'Firmenwert erreichen', en: 'Reach the company value' }],
+      lockedRules: ['goals', 'inflation'],
+      fromTick: 0,
+      toTick: 720_000,
+      referenceFinalHash: hashWorld(world),
     },
   };
 
