@@ -1,8 +1,8 @@
-import { useEffect, type ReactElement } from 'react';
+import { useEffect, useRef, useState, type ReactElement } from 'react';
 import { t } from '../i18n';
 import { COMPANY_COLORS } from '../shared/palette';
-import { SAVE_VERSION } from '../sim/save/format';
-import { TICKS_PER_YEAR } from '../sim/constants';
+import { SAVE_VERSION } from '../sim/save/version';
+import { TICKS_PER_DAY } from '../sim/constants';
 import {
   exportReplayNamed,
   importReplayFile,
@@ -10,6 +10,7 @@ import {
   refreshReplays,
   removeReplayNamed,
 } from './replays';
+import { activeMarkTick, seekPlanFor } from './replayScrub';
 import type { SimClient } from './SimClient';
 import { useSimStore } from './store';
 
@@ -19,8 +20,16 @@ import { useSimStore } from './store';
  * Two components, because they answer two different questions. The BROWSER is
  * a full-screen overlay: which recordings are there, what is in them, and
  * which of them this build may judge. The BAR is what replaces the sidebar
- * while one is playing: where in the recording we are, which years can be
- * jumped to, whether it verifies, and the way out.
+ * while one is playing: where in the recording we are, where else it can be
+ * taken to, whether it verifies, and the way out.
+ *
+ * The bar's position IS the scrubber. The year chips are the ring, and the
+ * ring is sixteen entries deep - in a recording longer than that the early
+ * years have been evicted and would be unreachable, although the session can
+ * re-simulate from any surviving checkpoint below any tick (D-188). So the
+ * player asks for a TICK and the sentence under the bar says what that will
+ * cost: a chip year is a decode, anything else is re-simulated (`replayScrub`
+ * computes it from the same rule the session seeks by).
  *
  * Neither of them can change the world. That is not a promise made here - the
  * playback queue is sealed and the worker refuses commands by name (D-189) -
@@ -254,11 +263,40 @@ export function ReplayBar({ client }: { readonly client: SimClient }): ReactElem
   const tick = useSimStore((s) => s.tick);
   const checking = useSimStore((s) => s.replayChecking);
 
+  /**
+   * The tick the player is pointing at, while they are pointing at it.
+   *
+   * A drag emits a position on every pixel and a seek re-simulates - firing
+   * one per pixel would re-simulate the recording a hundred times on the way
+   * to one target. So the drag moves this local position and only the RELEASE
+   * asks the worker; the value then stays until the playback has actually
+   * arrived at it, or the bar would snap back for the frame or two the seek
+   * takes.
+   */
+  const [scrub, setScrub] = useState<number | null>(null);
+  const dragging = useRef(false);
+
+  useEffect(() => {
+    if (!dragging.current && scrub !== null && tick >= scrub) setScrub(null);
+  }, [tick, scrub]);
+
   if (meta === null) return null;
 
   const jumps = meta.jumps;
   const span = Math.max(1, meta.finalTick - meta.baseTick);
-  const progress = Math.min(100, Math.round(((tick - meta.baseTick) / span) * 100));
+  const shownTick = scrub ?? tick;
+  const progress = Math.min(100, Math.round(((shownTick - meta.baseTick) / span) * 100));
+  const activeTick = activeMarkTick(jumps, shownTick);
+  const plan = seekPlanFor(jumps, meta.baseTick, meta.finalTick, shownTick);
+  const resimDays = Math.round(plan.resimTicks / TICKS_PER_DAY);
+
+  /** Ask for the position the player let go of, and remember it until it lands. */
+  function commitSeek(): void {
+    if (!dragging.current) return;
+    dragging.current = false;
+    if (scrub === null) return;
+    client.seekReplay(scrub);
+  }
 
   return (
     <section className="panel">
@@ -286,13 +324,54 @@ export function ReplayBar({ client }: { readonly client: SimClient }): ReactElem
       </ul>
       <p className="row__meta">
         {t('ui.replay.position', {
-          tick,
+          tick: shownTick,
           finalTick: meta.finalTick,
           percent: progress,
           commands: meta.commandCount,
         })}
       </p>
-      <progress className="progress" value={tick - meta.baseTick} max={span} />
+
+      {/* The bar is the scrubber, not a read-out. The ring holds sixteen
+          years and a longer game has evicted the rest, so chips alone leave
+          the early years of a big recording unreachable - while the session
+          can restore the newest checkpoint below ANY tick and re-simulate the
+          remainder. A drag says which tick; the release asks for it. */}
+      <input
+        type="range"
+        className="replay-scrub"
+        min={meta.baseTick}
+        max={meta.finalTick}
+        step={1}
+        value={shownTick}
+        aria-label={t('ui.replay.scrubLabel')}
+        onChange={(event) => setScrub(Number(event.target.value))}
+        onPointerDown={(event) => {
+          dragging.current = true;
+          event.currentTarget.setPointerCapture(event.pointerId);
+        }}
+        onPointerUp={commitSeek}
+        onPointerCancel={commitSeek}
+        onKeyDown={() => {
+          dragging.current = true;
+        }}
+        onKeyUp={commitSeek}
+        onBlur={commitSeek}
+      />
+      {/* What the seek will COST, before it is asked for: a chip year is a
+          decode, anything between two of them is re-simulated, and a long one
+          says so rather than looking frozen. Only while a seek is pending -
+          the same sentence about a playback that is simply running would read
+          as if it were re-simulating right now. */}
+      {scrub !== null && (
+        <p className={plan.long ? 'panel__hint value--warning' : 'panel__hint'}>
+          {plan.exact
+            ? t('ui.replay.seekExact', { year: plan.fromYear })
+            : t(plan.long ? 'ui.replay.seekLong' : 'ui.replay.seekResim', {
+                days: resimDays,
+                year: plan.fromYear,
+              })}
+        </p>
+      )}
 
       <p className="panel__hint">{t('ui.replay.jumpHint')}</p>
       <div className="button-row">
@@ -300,9 +379,7 @@ export function ReplayBar({ client }: { readonly client: SimClient }): ReactElem
           <button
             key={jump.tick}
             type="button"
-            className={
-              tick >= jump.tick && tick < jump.tick + TICKS_PER_YEAR ? 'chip chip--active' : 'chip'
-            }
+            className={activeTick === jump.tick ? 'chip chip--active' : 'chip'}
             onClick={() => client.seekReplay(jump.tick)}
           >
             {jump.year}

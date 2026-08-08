@@ -35,6 +35,8 @@ export function SaveLoadPanel({
   useSimStore((s) => s.locale);
   const saves = useSimStore((s) => s.saves);
   const loadError = useSimStore((s) => s.loadError);
+  /** A conversion asked for HERE fails here, not on a screen nobody opened. */
+  const replayError = useSimStore((s) => s.replayError);
   const ready = useSimStore((s) => s.ready);
   const [label, setLabel] = useState('');
   /** The save whose `.bak` the failed load can fall back to, or null. */
@@ -120,6 +122,12 @@ export function SaveLoadPanel({
         </div>
       )}
 
+      {replayError !== null && (
+        <p className="panel__hint value--danger">
+          {t(replayError.reasonKey)} {replayError.detail}
+        </p>
+      )}
+
       {saves.length === 0 ? (
         <p className="panel__hint">{t('ui.save.empty')}</p>
       ) : (
@@ -137,8 +145,8 @@ export function SaveLoadPanel({
                   {entry.label === '' ? t(SLOT_KEYS[entry.slot] ?? '') : entry.label}
                 </span>
                 <span className="row__meta">
-                  {formatGameDate(entry.year, entry.month, 0)} ·{' '}
-                  {formatMoney(entry.companyValueCt)} · {t(SLOT_KEYS[entry.slot] ?? '')}
+                  {formatGameDate(entry.year, entry.month, 0)} · {formatMoney(entry.companyValueCt)}{' '}
+                  · {t(SLOT_KEYS[entry.slot] ?? '')}
                 </span>
               </span>
 
@@ -161,16 +169,34 @@ export function SaveLoadPanel({
                 >
                   {t('ui.save.export')}
                 </button>
-                {/* "Export replay from save" (SPEC2 M16): every save carries
-                    its own command log and, since v27, its checkpoint ring, so
-                    ANY save can become a recording. The conversion is the
-                    worker's - it is the only side that may decode a world. */}
+                {/* "Play as replay" (SPEC2 M16's acceptance sentence: EVERY
+                    save playable as a recording in ONE click). The same
+                    conversion as the button beside it - the worker's, since it
+                    is the only side that may decode a world - but it enters
+                    playback in the same message, instead of shelving a file
+                    the player then has to go and find on the F2 screen. */}
                 <button
                   type="button"
                   className="button"
                   onClick={() => {
                     void readSave(entry.name).then((bytes) => {
-                      if (bytes !== null) client.makeReplay(bytes, entry.label);
+                      if (bytes !== null) client.makeReplay(bytes, entry.label, true);
+                    });
+                  }}
+                >
+                  {t('ui.save.playReplay')}
+                </button>
+                {/* "Export replay from save": every save carries its own
+                    command log and, since v27, its checkpoint ring, so ANY
+                    save can become a recording. Kept beside the play button
+                    because shelving without watching is its own errand - a
+                    file to hand somebody else. */}
+                <button
+                  type="button"
+                  className="button"
+                  onClick={() => {
+                    void readSave(entry.name).then((bytes) => {
+                      if (bytes !== null) client.makeReplay(bytes, entry.label, false);
                     });
                   }}
                 >

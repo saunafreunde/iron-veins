@@ -403,8 +403,21 @@ export type MainToWorkerMessage =
    * recording already, which comes back unchanged. The answer is
    * `replayWritten`; the main thread owns the shelf, as with every save
    * (D-111).
+   *
+   * `play` is the one-click door of the milestone's acceptance sentence: the
+   * worker shelves AND enters the recording it just built, so "play this save
+   * as a replay" is one message rather than a conversion the player then has
+   * to go and find on another screen. It is decided by the CALLER and carried
+   * in the message rather than remembered on the main thread, because a
+   * pending intent would outlive a conversion that failed and start the next
+   * recording somebody shelved.
    */
-  | { readonly type: 'makeReplay'; readonly bytes: Uint8Array; readonly label: string }
+  | {
+      readonly type: 'makeReplay';
+      readonly bytes: Uint8Array;
+      readonly label: string;
+      readonly play: boolean;
+    }
   /** The same, for the game the worker is running right now. */
   | { readonly type: 'exportReplay'; readonly label: string }
   /**

@@ -939,9 +939,33 @@ in a panel pulls `serialize` and with it the whole `World` into the main chunk
 and silently defeats the dynamic import somebody else wrote; it cost +248 kB
 before it was found. Display values a panel needs from the simulation - the
 calendar year of a scrub chip, of a verdict - travel WITH the data instead.
-Measured after the fix: main chunk 936.94 kB (gzip 283.96) against 1,083.31 kB
-(328.26) before, with the replay half in its own lazily loaded chunk.
-`npm run build` prints the table; check it when a panel grows an import.
+
+- **The rule alone did not hold, so the number is a TEST** (D-192).
+  `tests/unit/bundleBudget.spec.ts` measures the entry chunk it reads out of
+  the built `index.html` against 930,000 B, builds one when `dist` is missing
+  (a guard that skips is green exactly where regressions land) and pins
+  `NODE_ENV=production` for that build - vitest sets it to `test`, and the
+  development React alone is +305 kB. Raising the budget is a booking with a
+  measurement beside it, like an atlas cell.
+- **Three constants can weigh 32 kB.** Four main-thread files imported
+  `SAVE_VERSION`/`REPLAY_EXTENSION` from `save/format.ts`, which imports the
+  entity codecs. The container's identity is now the import-free leaf
+  `src/sim/save/version.ts`; everything that DECODES stands above it.
+- Measured across the milestone: main chunk 1,083.31 -> 936.94 -> **907.18 kB**
+  (gzip 328.26 -> 283.96 -> 277.04), the replay half in its own lazily loaded
+  chunk. `npm run build` prints the table; check it when a panel grows an
+  import.
+
+**The scrub bar is the scrubber, not a read-out** (D-192). The ring is
+sixteen entries, so a longer recording has years with no chip - reachable
+only because `ReplaySession.seek` restores the newest checkpoint below ANY
+tick. The bar is a range input (click, drag, keyboard, screen reader); the
+drag moves a local position and only the RELEASE seeks, because every seek
+re-simulates. `src/ui/replayScrub.ts` is `CheckpointRing.bestFor` read from
+the main thread - import-free, tested against the ring itself - and it is what
+lets the bar say before the jump whether it is a decode or ninety game days of
+re-simulation. A save is watched in ONE click: `makeReplay.play` makes the
+worker shelve and enter in the same round trip.
 
 ## Still outstanding
 

@@ -14,7 +14,8 @@ no entry below. A number may appear under several topics.
   D-024, D-093, D-106, D-128, D-137, D-142, D-145, D-146, D-149, D-153, D-178,
   D-181, D-184, D-185, D-188, D-189, D-190, D-191
 - **Commands, snapshot & worker boundary:** D-004, D-005, D-006, D-011, D-032,
-  D-100, D-111, D-145, D-146, D-148, D-162, D-174, D-176, D-179, D-187, D-189
+  D-100, D-111, D-145, D-146, D-148, D-162, D-174, D-176, D-179, D-187, D-189,
+  D-192
 - **Lines & timetables:** D-145, D-146, D-147, D-148, D-149, D-150, D-151,
   D-152, D-155, D-159
 - **Map generation & terrain:** D-018, D-019, D-020, D-021, D-022, D-023,
@@ -23,7 +24,7 @@ no entry below. A number may appear under several topics.
   D-141
 - **Save format, migrations & replays:** D-007, D-025, D-026, D-027, D-048,
   D-111, D-130, D-131, D-134, D-142, D-144, D-145, D-146, D-147, D-153, D-178,
-  D-181, D-184, D-185, D-188, D-189, D-190, D-191
+  D-181, D-184, D-185, D-188, D-189, D-190, D-191, D-192
 - **Rail & track:** D-042, D-043, D-044, D-045, D-046, D-047, D-053, D-141,
   D-153, D-157, D-184
 - **Signals & reservations:** D-054, D-055, D-056, D-057, D-058, D-059, D-060,
@@ -48,15 +49,15 @@ no entry below. A number may appear under several topics.
   D-171, D-172, D-173, D-174, D-175, D-177, D-179, D-186
 - **UI & input:** D-011, D-013, D-015, D-035, D-110, D-113, D-114, D-119,
   D-126, D-148, D-165, D-166, D-177, D-179, D-180, D-181, D-182, D-183, D-184,
-  D-186, D-187, D-189, D-191
+  D-186, D-187, D-189, D-191, D-192
 - **Performance & measurement:** D-002, D-120, D-135, D-136, D-161, D-162,
   D-163, D-164, D-167, D-170, D-171, D-172, D-173, D-174, D-176, D-177, D-184,
-  D-185, D-186, D-187, D-191
+  D-185, D-186, D-187, D-191, D-192
 - **Platform, tooling & build:** D-012, D-014, D-015, D-016, D-017, D-029,
-  D-030, D-031, D-160, D-168, D-169, D-170, D-172, D-175
+  D-030, D-031, D-160, D-168, D-169, D-170, D-172, D-175, D-192
 - **Crash safety:** D-132, D-139, D-190
 - **Testing method & fixtures:** D-010, D-038, D-072, D-074, D-084, D-133,
-  D-167, D-183, D-186, D-188, D-189, D-190, D-191
+  D-167, D-183, D-186, D-188, D-189, D-190, D-191, D-192
 - **Process & specification:** D-070, D-123, D-129, D-133, D-138, D-140,
   D-185, D-191
 
@@ -6585,3 +6586,118 @@ half of the sim leaving for its own lazily loaded chunks (`replay` 158.36 kB,
 assembled, and both vite warnings about the defeated dynamic import are gone.
 The worker bundle carries this bundle's own new code and grew by what it is
 worth: **309.23 -> 313.12 kB**.
+
+## M16 - the proof chain, bundle 5: the budget, the scrubber and the one click (2026-08-08)
+
+### D-192 The main bundle is measured by a test rather than by a rule, a recording is scrubbed to a tick rather than to a chip, and a save is watched in one click
+
+Bundle 4 fixed a +248 kB main-bundle regression and wrote the rule down.
+Bundle 5 is what happens when a rule is checked: the same chain was still
+there in a smaller size, and nothing would have found it either.
+
+**A rule that nobody measures is a comment.** D-191 states that `src/sim`
+reaches `src/ui` through dynamic imports only, and it was already broken when
+it was written: four main-thread files imported `SAVE_VERSION` or
+`REPLAY_EXTENSION` from `save/format.ts`, and `format.ts` imports the entity
+codecs, which import the vehicle catalogue, the line store and the station
+types. Three constants dragged the parser into the main chunk - measured at
+**32 kB**, an eighth of the defect that produced the rule and far too small
+for anybody to notice by eye. So the container's IDENTITY is now a leaf,
+`src/sim/save/version.ts`, with no imports at all, and everything that DECODES
+stands above it; `format.ts` re-exports the three values, so the simulation's
+own call sites still see one door.
+
+**And the number is a test now** (`tests/unit/bundleBudget.spec.ts`). The main
+chunk is a shared resource with a budget, exactly like the tick millisecond
+and the atlas page, and it is the only one of the three that had no line in
+the ledger. The test reads the entry chunk out of the built `index.html`
+rather than guessing its name, measures the FILE (that is what a browser
+downloads) and holds it against **930,000 B** - the measurement plus ~2.4 %.
+Two decisions inside it are worth stating:
+
+* **it builds when there is no `dist`, rather than skipping.** A guard that
+  skips is green on every fresh checkout and on CI, which is exactly where a
+  regression lands. It runs `vite build` only (~10 s; the type check is
+  `npm run typecheck`'s job) and only when the artefact is missing or older
+  than the sources, the entry document or the lockfile.
+* **it pins `NODE_ENV=production` for that build.** The test runner sets it to
+  `test`, vite honours an inherited value, and the resulting bundle carries the
+  DEVELOPMENT React - measured +305 kB, a red build for a reason that has
+  nothing to do with what the budget is about. That is the failure mode the
+  test met on its first run, not one imagined for the comment.
+
+The budget is a LEDGER entry, not a property of the machine: raising it is a
+deliberate act with a fresh measurement beside it, an atlas-page booking in
+another currency (SPEC2 6.2, Fehlerkatalog 40), and the failure message says
+so - it asks the reader to look for a static sim import BEFORE raising the
+number.
+
+**A recording is scrubbed to a TICK, because the ring is sixteen entries and a
+game is longer.** D-189 offered the ring as chips and called that scrubbing.
+It is not: `CHECKPOINT_RING_CAPACITY` is 16, eviction takes the second-oldest
+entry (never entry zero, D-188), so a twenty-five year recording offers the
+genesis plus the last fifteen years and nine game years have no chip at all -
+unreachable through the interface, although `ReplaySession.seek` has always
+restored the newest checkpoint below ANY tick and re-simulated the remainder.
+The bar is therefore the scrubber, and it is an `<input type="range">` rather
+than a styled div: click, drag, keyboard and the screen reader's own value
+come with it. A drag emits a position per pixel and a seek RE-SIMULATES, so
+the drag moves a local position and only the release asks the worker; the
+position then stands until the playback has arrived at it, or the bar would
+snap back for the frame the seek takes.
+
+**And the seek says what it will cost before it is asked for.** A chip year is
+a decode; anything between two of them is re-simulated, and the sentence under
+the bar names the checkpoint and the game days. That sentence is about work
+the SESSION will do, so it is computed from the session's own rule -
+`src/ui/replayScrub.ts` is `CheckpointRing.bestFor` read from the main thread,
+and `tests/unit/replayScrub.spec.ts` holds the two against each other over a
+sweep and on the boundaries rather than against a written expectation. The
+module is deliberately import-free, which is the same lesson as the paragraph
+above: a panel that needed the simulation's arithmetic would have imported the
+simulation. `REPLAY_LONG_SEEK_TICKS` (18,000 ticks, a quarter game year) lives
+beside it, the `TOOLTIP_DELAY_MS` precedent - it changes no world and prices
+nothing. Its origin is the soak: 1,800,000 ticks in 48.9 s (D-190) is ~37,000
+ticks per second, so a quarter year is about half a second there. It is a
+threshold for a SENTENCE and never a refusal: the point of the arbitrary seek
+is that every tick stays reachable, and a bigger world is simply slower.
+
+**"Every save playable as a replay in ONE click" was two clicks across two
+screens.** The save row's "Als Replay" only shelved a recording; playing it
+needed F2 and a second button on another screen. The save row now has both
+verbs - shelve, and play - and the play one carries `play: true` in the
+`makeReplay` message, so the worker converts, answers with the recording for
+the shelf AND enters playback in the same round trip. The intent travels in
+the MESSAGE rather than as a pending flag on the main thread on purpose: a
+flag would outlive a conversion that failed and start whatever was shelved
+next. Two consequences follow and both are the honest half of the change: the
+crash log's `replay` marker moved to the `replayStarted` branch, because it is
+about a world that WAS replaced and there are two doors now; and the save
+screen displays `replayError`, because a conversion asked for there must fail
+there rather than on a screen nobody opened. The overlay closes on the
+`replaying` transition itself, which is one rule for both doors.
+
+**The repo-assets glob was not walking the files it was most likely to grow.**
+`tests/unit/repoAssets.spec.ts` enumerates binary extensions, and neither
+`.ironsave` nor `.ironreplay` was in the list - so the six committed corpus
+fixtures (D-130) were exempt by ACCIDENT, and a seventh, or a stray recording
+somebody force-added, would have been too. Both extensions are in the list now
+and the corpus is on the explicit allowlist with its reason: it is the only
+way to prove that a world written by an older build still loads, and it cannot
+be regenerated from code by definition - the build that wrote it no longer
+exists. A third assertion keeps the allowlist honest in the other direction:
+every prefix must actually excuse a tracked file the pattern matches, so an
+entry that stops matching fails the audit, exactly like a stale entry in the
+save-field audit.
+
+**Ledger.** No `SAVE_VERSION` bump and no migration: v27 is M16's one bump
+(Z5) and nothing serialised moved - `SAVE_VERSION` changed FILE, not value, so
+the canonical cross-OS pin stays `50c7d6a38f6da052` and the corpus manifest
+stays `17f7f507023b91d8`. One protocol message gained a field
+(`makeReplay.play`), which is main-thread traffic and touches no world. No
+snapshot change, no atlas cell, no tick cost - `npm run test:perf` measured
+tick p50 1.168 / p99 2.592 ms against the M10 baseline of 1.45 / 3.26. Bundle,
+measured with `npm run build` before and after: main chunk
+**936.94 kB -> 907.18 kB** (gzip 283.96 -> 277.04, 908,106 B on disk), the `replay` chunk growing
+158.57 -> 190.41 kB as the parser lands where it belongs, the worker unchanged
+at 313.15 kB.

@@ -8,7 +8,7 @@ import {
   type SaveEntry,
 } from '../platform/Storage';
 import type { Command } from '../sim/commands/types';
-import { SAVE_VERSION } from '../sim/save/format';
+import { SAVE_VERSION } from '../sim/save/version';
 import {
   assembleCrashBundle,
   bugReportFileName,

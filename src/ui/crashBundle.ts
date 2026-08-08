@@ -10,7 +10,7 @@
  * hands.
  */
 
-import { REPLAY_EXTENSION } from '../sim/save/format';
+import { REPLAY_EXTENSION } from '../sim/save/version';
 
 /**
  * Byte budget of the rolling command-log tail. [byte]

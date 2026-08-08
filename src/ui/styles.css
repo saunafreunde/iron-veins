@@ -1102,6 +1102,22 @@ body {
  * is the status bar's, deliberately - a competitor's colour on the map has to
  * be the colour beside its name here.
  */
+/* The scrub bar of SPEC2 M16: a range input rather than a styled div, so
+   click, drag, keyboard and the screen reader's own value come for free.
+   Shaped like the progress bar it replaced. */
+.replay-scrub {
+  width: 100%;
+  height: 18px;
+  margin: 2px 0;
+  cursor: pointer;
+  accent-color: var(--accent);
+}
+
+.replay-scrub:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .replay-cast {
   display: flex;
   flex-direction: column;

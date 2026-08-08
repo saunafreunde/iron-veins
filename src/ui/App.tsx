@@ -235,6 +235,14 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
     useSimStore.getState().setSelectedVehicle(null);
   }, [replaying, setTool]);
 
+  // A recording that STARTS takes the screen, whichever door it came through -
+  // the shelf's "play", or a save converted and entered in one click from the
+  // save screen. The overlay closes on the transition only, so opening the
+  // handbook or the replay browser during a playback still works.
+  useEffect(() => {
+    if (replaying) setOverlay(null);
+  }, [replaying, setOverlay]);
+
   // ------------------------------------------------------------- autosave
   //
   // Driven from here rather than from the worker because the SETTING lives

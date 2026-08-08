@@ -51,7 +51,12 @@ import { writeVehicleBlock } from './vehicles/snapshot';
 import { VehicleKind } from './vehicles/spec';
 import { SaveCorruptionError, SaveFormatError } from './save/format';
 import { CheckpointRing } from './save/checkpoints';
-import { encodeReplay, replayFromSaveBytes, ReplayVersionError } from './save/replay';
+import {
+  encodeReplay,
+  replayFromSaveBytes,
+  ReplayVersionError,
+  type ConvertedReplay,
+} from './save/replay';
 import {
   replayMeta,
   ReplaySession,
@@ -740,9 +745,10 @@ function postReplayFailure(reasonKey: string, error: unknown): void {
  * thread, over a worker that is by then dead. This function is the shelf's
  * door onto it: decode, describe, post.
  */
-function makeReplay(bytes: Uint8Array, label: string): void {
+function makeReplay(bytes: Uint8Array, label: string, play: boolean): void {
+  let converted: ConvertedReplay;
   try {
-    const converted = replayFromSaveBytes(bytes);
+    converted = replayFromSaveBytes(bytes);
     scope.postMessage({
       type: 'replayWritten',
       bytes: converted.bytes,
@@ -751,7 +757,14 @@ function makeReplay(bytes: Uint8Array, label: string): void {
     });
   } catch (error) {
     postReplayFailure(REPLAY_NOT_A_RECORDING, error);
+    return;
   }
+  // "Play this save as a replay" in one click: the conversion and the entry
+  // are one message, so nothing on the main thread has to hold an intent
+  // across the round trip and mis-apply it to the next recording shelved. The
+  // shelving happens in parallel over there and the order does not matter -
+  // both sides start from the same bytes.
+  if (play) enterReplay(converted.bytes);
 }
 
 /** The same, for the game that is running right now. */
@@ -949,7 +962,7 @@ function handleMessage(message: MainToWorkerMessage): void {
       return;
 
     case 'makeReplay':
-      makeReplay(message.bytes, message.label);
+      makeReplay(message.bytes, message.label, message.play);
       return;
 
     case 'exportReplay':

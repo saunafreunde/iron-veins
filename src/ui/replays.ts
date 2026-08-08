@@ -7,7 +7,7 @@ import {
   writeReplay,
   type ReplayEntry,
 } from '../platform/Storage';
-import { REPLAY_EXTENSION } from '../sim/save/format';
+import { REPLAY_EXTENSION } from '../sim/save/version';
 import type { ReplayMeta } from '../sim/save/replaySession';
 import type { SimClient } from './SimClient';
 import { useSimStore } from './store';
@@ -105,6 +105,6 @@ export async function exportReplayNamed(name: string): Promise<boolean> {
 export async function importReplayFile(client: SimClient): Promise<boolean> {
   const bytes = await importReplay();
   if (bytes === null) return false;
-  client.makeReplay(bytes, '');
+  client.makeReplay(bytes, '', false);
   return true;
 }

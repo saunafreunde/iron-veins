@@ -181,10 +181,19 @@ export class SimClient {
   // the worker: it is the only side that may decode a world, and this side is
   // the only one that may touch a file (D-111).
 
-  /** Turn a save (or a recording) into a `.ironreplay` and describe it. */
-  makeReplay(bytes: Uint8Array, label: string): void {
+  /**
+   * Turn a save (or a recording) into a `.ironreplay` and describe it.
+   *
+   * `play` makes it the one-click door of SPEC2 M16's acceptance sentence: the
+   * worker shelves the recording AND starts playing it, in one round trip, so
+   * "watch this save" is not a conversion on one screen followed by a play on
+   * another. The intent travels in the message rather than being remembered
+   * here - a flag on this side would survive a failed conversion and fire on
+   * whatever was shelved next.
+   */
+  makeReplay(bytes: Uint8Array, label: string, play: boolean): void {
     useSimStore.getState().setReplayError(null);
-    this.post({ type: 'makeReplay', bytes, label });
+    this.post({ type: 'makeReplay', bytes, label, play });
   }
 
   /** The same, for the game running right now. */
@@ -196,7 +205,6 @@ export class SimClient {
   /** Put the running game aside and watch a recording. */
   enterReplay(bytes: Uint8Array): void {
     useSimStore.getState().setReplayError(null);
-    recordWorldReplaced('replay');
     this.post({ type: 'enterReplay', bytes });
   }
 
@@ -353,6 +361,12 @@ export class SimClient {
         this.onReplayWritten?.(message);
         return;
       case 'replayStarted':
+        // The crash log's marker is written HERE rather than beside the
+        // request, because there are two doors into replay mode now - the
+        // shelf's "play", and a save converted and entered in one message -
+        // and the marker is about a world that WAS replaced, not one somebody
+        // asked to replace (a conversion that failed replaces nothing).
+        recordWorldReplaced('replay');
         store.setReplay(message.meta);
         return;
       case 'replayEnded':
