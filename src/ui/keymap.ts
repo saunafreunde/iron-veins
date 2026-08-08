@@ -54,6 +54,9 @@ export const KEY_BINDINGS: readonly KeyBinding[] = [
   { display: 'N', descriptionKey: 'ui.key.minimapMode' },
   // The flow atlas of SPEC2 M14: A as in "Atlas", free in both languages.
   { display: 'A', descriptionKey: 'ui.key.flowAtlas' },
+  // The utilisation heat map of SPEC2 M15: U for "Utilisation", and the
+  // reading letter of "Auslastung" - free in both languages.
+  { display: 'U', descriptionKey: 'ui.key.heatmap' },
   { display: 'F1', descriptionKey: 'ui.key.handbook' },
   { display: 'F3', descriptionKey: 'ui.key.debug' },
   { display: 'F5', descriptionKey: 'ui.key.quickSave' },

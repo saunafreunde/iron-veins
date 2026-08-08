@@ -59,6 +59,8 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
   const toggleDebug = useSimStore((s) => s.toggleDebug);
   const toggleFlow = useSimStore((s) => s.toggleFlow);
   const showFlow = useSimStore((s) => s.showFlow);
+  const toggleHeat = useSimStore((s) => s.toggleHeat);
+  const showHeat = useSimStore((s) => s.showHeat);
   const flowStats = useSimStore((s) => s.flowStats);
   const toggleList = useSimStore((s) => s.toggleList);
   const openList = useSimStore((s) => s.openList);
@@ -144,6 +146,12 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
         case 'A':
           toggleFlow();
           return;
+        // The utilisation heat map of SPEC2 M15 - U for Utilisation and for
+        // Auslastung's own reading (D-114 table entry).
+        case 'u':
+        case 'U':
+          toggleHeat();
+          return;
         case '1':
         case '2':
         case '3':
@@ -189,6 +197,7 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
     speedIndex,
     toggleDebug,
     toggleFlow,
+    toggleHeat,
     toggleList,
     overlay,
     setOverlay,
@@ -336,6 +345,13 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
           onClick={toggleFlow}
         >
           {t('ui.flow.toggle')}
+        </button>
+        <button
+          type="button"
+          className={showHeat ? 'chip chip--active' : 'chip'}
+          onClick={toggleHeat}
+        >
+          {t('ui.heat.toggle')}
         </button>
         {/* The honest "x weitere" indicator of the M14 order: legs that
             exist but were cut by the top-N cap of the flow atlas. */}

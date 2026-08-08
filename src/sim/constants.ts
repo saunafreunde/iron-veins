@@ -1669,6 +1669,48 @@ export const MAX_BLOCK_CLAIM_TILES = 4_096;
 export const DEADLOCK_WARN_TICKS = 1_200;
 
 /**
+ * How many trains stuck on ONE piece of track make it a bottleneck rather
+ * than an unlucky single train. [trains]
+ *
+ * Two, because two is the smallest number that is a QUEUE: one train held at
+ * a red is the ordinary 9.3 warning and says nothing about capacity, while a
+ * second train waiting for the identical tile says demand for that tile
+ * exceeds what it can pass. The threshold is deliberately not a throughput
+ * figure - the throughput counters are a derived instrument the news may
+ * never read (SPEC2 M15, D-186).
+ */
+export const BOTTLENECK_MIN_WAITERS = 2;
+
+// ------------------------------------------- throughput meter (SPEC2 M15)
+
+/**
+ * Train passes over one tile in a game month that the utilisation heat map
+ * draws as fully used. [train passes per tile per month]
+ *
+ * A game month is TICKS_PER_MONTH / 20 = 300 seconds of vehicle time, so a
+ * block's monthly capacity is 300 s divided by its cycle time. At the
+ * assistant's default spacing (AUTO_SIGNAL_SPACING_TILES = 12 tiles = 600 m)
+ * and a modest freight speed of 20 m/s a train needs 30 s to clear a block,
+ * which is ten passes a month; twelve is that with the headroom a shorter
+ * block buys. Everything above it saturates the ramp, which is what a heat
+ * map is for - the exact figure above "full" is not information.
+ */
+export const THROUGHPUT_FULL_SCALE_PASSES = 12;
+
+/**
+ * How many tiles may carry a throughput count at once. [tiles]
+ *
+ * The same argument as MAX_CONGESTED_TILES: the meter keeps the tiles that
+ * carry something so the monthly clear walks a list instead of the map, and
+ * the list is capped rather than grown. 65,536 is more track than MAX_VEHICLES
+ * trains can drive over in one game month (a train covers at most ~480 tiles
+ * in 300 s), and past it the meter REFUSES rather than evicting - a recorded
+ * tile the clear can never reach again would keep a phantom reading on the
+ * heat map for the rest of the game (the M13 particle-pool precedent).
+ */
+export const MAX_METERED_TILES = 65_536;
+
+/**
  * Node budget for one ship search.
  *
  * Larger than the road budget because open water is an eight-connected graph

@@ -39,6 +39,7 @@ function vehicle(overrides: Partial<VehicleMarker>): VehicleMarker {
     lengthM: 8,
     tileIndex: 10 * MAP_SIZE + 10,
     waitingTicks: 0,
+    blockedTile: -1,
     taktDelayTicks: 0,
     ...overrides,
   };

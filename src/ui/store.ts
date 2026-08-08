@@ -182,6 +182,12 @@ export interface SimUiState extends SnapshotValues {
   /** The flow atlas overlay of SPEC2 M14; the A key toggles it (D-114). */
   showFlow: boolean;
   /**
+   * The utilisation heat map of SPEC2 M15; the U key toggles it (D-114's
+   * table). Pure display over the derived throughput counters - no setting,
+   * no world rule, nothing the simulation can see (D-186).
+   */
+  showHeat: boolean;
+  /**
    * What the atlas currently shows against what the world measured: `drawn`
    * arrows on screen, `omitted` active legs cut by the top-N cap - the
    * honest "x weitere" indicator of the M14 order. Pushed change-detected
@@ -297,6 +303,7 @@ export interface SimUiState extends SnapshotValues {
   ) => void;
   toggleDebug: () => void;
   toggleFlow: () => void;
+  toggleHeat: () => void;
   setFlowStats: (drawn: number, omitted: number) => void;
   setFlowSource: (source: (() => { data: Int32Array; count: number; tick: number }) | null) => void;
 }
@@ -362,6 +369,7 @@ export const useSimStore = create<SimUiState>((set) => ({
   sharedMemoryAvailable: typeof SharedArrayBuffer !== 'undefined',
   showDebug: false,
   showFlow: false,
+  showHeat: false,
   flowStats: { drawn: 0, omitted: 0 },
   flowSource: null,
   rejectionKey: null,
@@ -472,6 +480,7 @@ export const useSimStore = create<SimUiState>((set) => ({
   setStoredCrashOffer: (storedCrashOffer) => set({ storedCrashOffer }),
   toggleDebug: () => set((state) => ({ showDebug: !state.showDebug })),
   toggleFlow: () => set((state) => ({ showFlow: !state.showFlow })),
+  toggleHeat: () => set((state) => ({ showHeat: !state.showHeat })),
   setFlowStats: (drawn, omitted) => set({ flowStats: { drawn, omitted } }),
   setFlowSource: (flowSource) => set({ flowSource }),
 }));

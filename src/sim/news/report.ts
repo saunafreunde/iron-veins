@@ -1,10 +1,12 @@
 import {
   BANKRUPTCY_MONTHS,
+  BOTTLENECK_MIN_WAITERS,
   COUNCIL_REFUSAL_RATING,
   DEADLOCK_WARN_TICKS,
   INDUSTRY_CLOSURE_MONTHS,
   INDUSTRY_WARNING_MONTHS,
 } from '../constants';
+import { analyseDeadlocks, type DeadlockReport } from '../net/deadlock';
 import { isInTrouble } from '../economy/company';
 import { industrySpec, type Industry } from '../industry/types';
 import { isObsolete } from '../vehicles/lifecycle';
@@ -26,20 +28,136 @@ import { NewsCategory, NewsSeverity } from './log';
  * ticks daily would otherwise fill the log with the same sentence.
  */
 export function reportNews(world: World): void {
-  reportStuckTrains(world);
+  reportNetwork(world);
   reportIndustries(world);
   reportFleet(world);
   reportSolvency(world);
 }
 
-/** Trains that have been standing at a red long enough to count (9.3). */
-function reportStuckTrains(world: World): void {
+/**
+ * What the network is doing wrong, in the sharpest terms available (9.3, and
+ * its SPEC2 M15 upgrade).
+ *
+ * The 9.3 clock says a train is stuck. This pass asks the waiting graph WHY
+ * and reports each stuck train under exactly ONE of three headings, sharpest
+ * first: a deadlock ring, a queue at a bottleneck, or the plain warning. One
+ * heading per train is not tidiness - `postOnce` suppresses a repeat only
+ * while it is the most recent entry, so two headings about one situation
+ * would take it in turns to be the newest and the daily clock would write
+ * both of them every game day, which is the exact spam the method exists to
+ * prevent.
+ *
+ * NOTHING HERE READS THE THROUGHPUT COUNTERS, and that is a decision rather
+ * than an omission (D-186). The news log is saved and hashed; the counters
+ * are derived and start empty after a load. A message that read them would
+ * make the saved log depend on unsaved state - a world that continued would
+ * report what a world that reloaded does not, which is Fehlerkatalog 2's
+ * Fehler 23 with a sentence instead of a route. The counters draw the heat
+ * map, the graph writes the log, and the two never cross.
+ */
+function reportNetwork(world: World): void {
+  const report = analyseDeadlocks(world, DEADLOCK_WARN_TICKS);
+  reportDeadlockCycles(world, report);
+  reportBottlenecks(world, report);
+  reportStuckTrains(world, report);
+}
+
+/** Tile index as the "(x, y)" a player reads off the map. */
+function tileLabel(world: World, tile: number): string {
+  const size = world.map.size;
+  return `(${tile % size}, ${(tile / size) | 0})`;
+}
+
+/**
+ * A ring of trains each holding what the next one needs (SPEC2 M15).
+ *
+ * The message names EVERY participant and EVERY contested tile, because a
+ * deadlock is only findable if the player knows how far round it goes -
+ * naming one train would send them to the symptom. `tileIndex` is the ring's
+ * lowest contested tile, which is a canonical key: the same ring produces the
+ * same entry however the search reached it, so `postOnce` recognises it the
+ * next day. No auto-fix (SPEC.md Fehler 18) - this is a sentence and a
+ * blinking overlay, nothing else.
+ */
+function reportDeadlockCycles(world: World, report: DeadlockReport): void {
+  for (let cycle = 0; cycle < report.cycleCount; cycle++) {
+    const from = report.cycleStarts[cycle]!;
+    const to = report.cycleStarts[cycle + 1]!;
+
+    let trains = '';
+    let tiles = '';
+    let lowestTile = -1;
+    for (let index = from; index < to; index++) {
+      const id = report.cycleMembers[index]!;
+      const tile = report.refusedAt[id]!;
+      trains += index === from ? `${id}` : `, ${id}`;
+      tiles += index === from ? tileLabel(world, tile) : `, ${tileLabel(world, tile)}`;
+      if (lowestTile < 0 || tile < lowestTile) lowestTile = tile;
+    }
+
+    world.news.postOnce({
+      tick: world.tick,
+      category: NewsCategory.Network,
+      severity: NewsSeverity.Alarm,
+      messageKey: 'news.deadlockCycle',
+      params: { count: to - from, trains, tiles },
+      tileIndex: lowestTile,
+    });
+  }
+}
+
+/**
+ * Several trains queueing for ONE piece of track: an Engpass (SPEC2 M15).
+ *
+ * The definition is the queue itself, not a throughput reading - see the note
+ * on `reportNetwork` for why the log may not read the derived counters. Two
+ * trains waiting for the identical tile is the smallest fact that says demand
+ * for it exceeds what it passes; one train waiting says nothing about
+ * capacity at all. Reported once per tile, by its lowest-id waiter, so the
+ * key is stable while the queue shuffles.
+ */
+function reportBottlenecks(world: World, report: DeadlockReport): void {
+  for (let i = 0; i < report.waiterCount; i++) {
+    const id = report.waiters[i]!;
+    if (report.inCycle[id] === 1) continue;
+    if (report.queueLength[id]! < BOTTLENECK_MIN_WAITERS) continue;
+    // Only the first waiter of this tile in ascending id order speaks for it.
+    const tile = report.refusedAt[id]!;
+    let first = true;
+    for (let k = 0; k < i && first; k++) {
+      if (
+        report.inCycle[report.waiters[k]!] !== 1 &&
+        report.refusedAt[report.waiters[k]!] === tile
+      ) {
+        first = false;
+      }
+    }
+    if (!first) continue;
+
+    world.news.postOnce({
+      tick: world.tick,
+      category: NewsCategory.Network,
+      severity: NewsSeverity.Warning,
+      messageKey: 'news.bottleneck',
+      params: { count: report.queueLength[id]!, place: tileLabel(world, tile) },
+      tileIndex: tile,
+    });
+  }
+}
+
+/**
+ * Trains that have been standing at a red long enough to count (9.3), and
+ * that neither of the two sharper headings above has already explained.
+ */
+function reportStuckTrains(world: World, report: DeadlockReport): void {
   const vehicles = world.vehicles;
 
   for (let id = 0; id < vehicles.count; id++) {
     if (vehicles.alive[id] !== 1) continue;
     const since = vehicles.waitingSinceTick[id]!;
     if (since < 0 || world.tick - since < DEADLOCK_WARN_TICKS) continue;
+    if (report.inCycle[id] === 1) continue;
+    if (report.queueLength[id]! >= BOTTLENECK_MIN_WAITERS) continue;
 
     world.news.postOnce({
       tick: world.tick,

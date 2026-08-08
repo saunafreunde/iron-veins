@@ -1438,6 +1438,13 @@ function stepVehicle(world: World, id: number): void {
         if (road && world.roadCongestion) {
           world.congestion.note(world.map.congestion, path[index + 1]!);
         }
+        // The throughput meter of SPEC2 M15, fed at the same event for
+        // trains. Ungated by any world rule, because unlike the layer above
+        // it is DERIVED and nothing in the simulation reads it: it cannot
+        // change a route, a price or a hash, so there is nothing for a rule
+        // to protect old seeds from (D-186). One clamped add per train per
+        // tile boundary, allocation free (law #7).
+        if (train) world.throughput.note(world.map.throughput, path[index + 1]!);
       }
       if (held) return;
       const atEnd = vehicles.pathIndex[id]! + 1 >= vehicles.pathLength[id]!;

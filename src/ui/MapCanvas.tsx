@@ -191,6 +191,7 @@ export function MapCanvas({ client }: { readonly client: SimClient }): ReactElem
   const mapBuffer = useSimStore((s) => s.mapBuffer);
   const showDebug = useSimStore((s) => s.showDebug);
   const showFlow = useSimStore((s) => s.showFlow);
+  const showHeat = useSimStore((s) => s.showHeat);
   const fleet = useSimStore((s) => s.fleet);
   const mapSize = useSimStore((s) => s.mapSize);
   const towns = useSimStore((s) => s.towns);
@@ -533,15 +534,27 @@ export function MapCanvas({ client }: { readonly client: SimClient }): ReactElem
   }, [showFlow]);
 
   useEffect(() => {
+    viewRef.current?.setHeatOverlay(showHeat);
+  }, [showHeat]);
+
+  useEffect(() => {
     viewRef.current?.setDayNight(dayNight);
   }, [dayNight]);
 
   useEffect(() => {
     // The deadlock markers of section 9.3. The clock lives per vehicle in the
     // simulation; nothing else surfaces it until the news log of M8.
-    const stuck = fleet
-      .filter((vehicle) => vehicle.waitingTicks >= DEADLOCK_WARN_TICKS)
-      .map((vehicle) => vehicle.tileIndex);
+    //
+    // Since SPEC2 M15 the marker set is the train AND the tile refusing it:
+    // in a deadlock ring every participant blinks together with the piece of
+    // track it is waiting for, which is what turns "these trains are stuck"
+    // into a picture of the ring the news message names (D-186).
+    const stuck: number[] = [];
+    for (const vehicle of fleet) {
+      if (vehicle.waitingTicks < DEADLOCK_WARN_TICKS) continue;
+      stuck.push(vehicle.tileIndex);
+      if (vehicle.blockedTile >= 0) stuck.push(vehicle.blockedTile);
+    }
     viewRef.current?.setDeadlockTiles(stuck);
     // The renderer reads two facts per vehicle from these markers: its
     // catalogue entry, which picks the baked sprite, and - for a train -

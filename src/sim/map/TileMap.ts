@@ -100,6 +100,21 @@ export class TileMap {
   readonly congestion: Uint8Array;
 
   /**
+   * Train passes over this tile in the game month now running - the per-block
+   * throughput counter of SPEC2 M15, in the units of `net/throughput.ts`.
+   *
+   * DERIVED, and the exact opposite of the layer above it: it is never saved,
+   * never hashed and no simulation decision may read it (`throughput.spec.ts`
+   * walks src/sim and fails the day one does). That is what lets it be
+   * derived at all - Z4 allows a historical quantity to stay derived only
+   * while it is a purely reading overlay, the ReservationTable pattern of
+   * D-054. It lives in the shared buffer beside `oceanMask` for the same
+   * reason `congestion` does: the heat map reads it in place and the snapshot
+   * pays nothing for it (D-186).
+   */
+  readonly throughput: Uint8Array;
+
+  /**
    * Connected land component per tile, -1 for water. Derived - recomputed on
    * load rather than serialised.
    */
@@ -166,6 +181,10 @@ export class TileMap {
     // M15 reads it in place and the snapshot needs not one byte for it.
     this.congestion = new Uint8Array(this.buffer, offset, tiles);
     offset += tiles;
+    // Derived like the ocean mask below it, and in the buffer for the same
+    // reason the congestion layer is: the M15 heat map reads it in place.
+    this.throughput = new Uint8Array(this.buffer, offset, tiles);
+    offset += tiles;
     this.oceanMask = new Uint8Array(this.buffer, offset, tiles);
 
     if (fresh) {
@@ -184,11 +203,11 @@ export class TileMap {
   static bufferBytes(size: number): number {
     const tiles = size * size;
     const corners = (size + 1) * (size + 1);
-    // 4-byte landmass, two 2-byte id layers, the corner heights, and thirteen
+    // 4-byte landmass, two 2-byte id layers, the corner heights, and fourteen
     // single-byte layers: terrain, road, track, rail type, signal, structure,
     // structure height, building kind, building level, owner, waypoint,
-    // congestion, ocean mask.
-    return tiles * 8 + corners + tiles * 13;
+    // congestion, throughput, ocean mask.
+    return tiles * 8 + corners + tiles * 14;
   }
 
   /** Read-side view on a map the worker owns. */

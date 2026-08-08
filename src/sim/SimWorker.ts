@@ -50,6 +50,8 @@ import {
 import type { NewGameOptions, SaveSlotKind } from '../shared/protocol';
 import { bookValueCt, companyValueCt, monthsInOrder } from './economy/ledger';
 import { contractProgress, isOpen } from './economy/contracts';
+import { refusedTile } from './vehicles/reservations';
+import { VehicleKind } from './vehicles/spec';
 import { SaveCorruptionError, SaveFormatError } from './save/format';
 import { decodeSave, encodeSave } from './save/serialize';
 import { councilRating, exclusiveRightsCostCt, TOWN_MEASURE_COUNT } from './town/council';
@@ -333,6 +335,14 @@ function postFleet(current: World): void {
       tileIndex: vehicles.tileIndex[id]!,
       waitingTicks:
         vehicles.waitingSinceTick[id]! < 0 ? 0 : current.tick - vehicles.waitingSinceTick[id]!,
+      // The contested tile of the M15 waiting graph, asked only of a train
+      // the 9.3 clock is already running on - `refusedTile` walks a section
+      // and possibly a block, which is not something to do per vehicle per
+      // refresh for a fleet that is running normally.
+      blockedTile:
+        vehicles.kind[id] === VehicleKind.Train && vehicles.waitingSinceTick[id]! >= 0
+          ? refusedTile(current, id)
+          : -1,
       taktDelayTicks: vehicles.taktDelayTicks[id]!,
     });
   }

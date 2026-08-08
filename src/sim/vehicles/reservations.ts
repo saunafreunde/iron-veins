@@ -87,6 +87,44 @@ export function sectionEnd(world: World, id: number, from: number): number {
 }
 
 /**
+ * Tiles of the block a claim beginning at route node `from` would take, into
+ * {@link blockScratch}. Zero unless the tile carries a block signal.
+ */
+function claimedBlockTiles(world: World, id: number, from: number): number {
+  const path = world.vehicles.paths[id]!;
+  if (!claimsWholeBlock(signalKind(world.map.signal[path[from]!]!))) return 0;
+  world.blocks.refresh(world.map);
+  const collected = world.blocks.collectBlock(world.map, path[from]!, blockScratch);
+  return collected < 0 ? 0 : collected;
+}
+
+/**
+ * First tile of a claim over `first..last` (plus `blockTiles` entries of
+ * {@link blockScratch}) that somebody OTHER than `id` holds, or -1.
+ *
+ * The whole test `tryClaim` makes before it writes anything, in one place -
+ * so that the M15 deadlock detector can ask "who is refusing this train"
+ * without a second opinion about what a refusal is.
+ */
+function firstForeignTile(
+  world: World,
+  id: number,
+  first: number,
+  last: number,
+  blockTiles: number,
+): number {
+  const path = world.vehicles.paths[id]!;
+  const reservations = world.reservations;
+  for (let index = first; index <= last; index++) {
+    if (!reservations.freeFor(path[index]!, id)) return path[index]!;
+  }
+  for (let i = 0; i < blockTiles; i++) {
+    if (!reservations.freeFor(blockScratch[i]!, id)) return blockScratch[i]!;
+  }
+  return -1;
+}
+
+/**
  * Claim from the train's tail through to the end of the section beginning at
  * `from`. Returns false and writes nothing when any tile is held by somebody
  * else.
@@ -98,27 +136,12 @@ export function tryClaim(world: World, id: number, from: number): boolean {
 
   const first = tailIndex(world, id);
   const last = sectionEnd(world, id, from);
-
   // A block signal takes the whole block, not just the line through it.
-  const kind = signalKind(world.map.signal[path[from]!]!);
-  let blockTiles = 0;
-  if (claimsWholeBlock(kind)) {
-    world.blocks.refresh(world.map);
-    const collected = world.blocks.collectBlock(world.map, path[from]!, blockScratch);
-    blockTiles = collected < 0 ? 0 : collected;
-  }
+  const blockTiles = claimedBlockTiles(world, id, from);
 
-  for (let index = first; index <= last; index++) {
-    if (!reservations.freeFor(path[index]!, id)) {
-      holdBody(world, id, first);
-      return false;
-    }
-  }
-  for (let i = 0; i < blockTiles; i++) {
-    if (!reservations.freeFor(blockScratch[i]!, id)) {
-      holdBody(world, id, first);
-      return false;
-    }
+  if (firstForeignTile(world, id, first, last, blockTiles) >= 0) {
+    holdBody(world, id, first);
+    return false;
   }
 
   for (let index = first; index <= last; index++) reservations.set(path[index]!, id);
@@ -128,6 +151,40 @@ export function tryClaim(world: World, id: number, from: number): boolean {
   vehicles.reservedToIndex[id] = last;
   if (blockTiles > 0) vehicles.reservedBlockTile[id] = path[from]!;
   return true;
+}
+
+/**
+ * The tile that is stopping this train from getting any further, or -1.
+ *
+ * The edge of the M15 waiting graph, and it is deliberately the ANSWER
+ * `tryClaim` would give rather than a second guess at it: the same range, the
+ * same block collection, the same `freeFor` test. A train's next claim starts
+ * one node past what it already holds (or one node past its head when it
+ * holds nothing yet, which is where the tile-boundary gate asks), and the
+ * first tile of that claim in somebody else's hands is what it is waiting
+ * for.
+ *
+ * -1 covers every case that is not a refusal: a vehicle with no route, a
+ * train at the end of one, and - importantly - a train standing still for a
+ * reason nobody else caused. Those stay the plain 9.3 warning; only a
+ * refusal by a NAMED other train can be part of a cycle.
+ *
+ * Shares `blockScratch` with the claim path above, which is sound for the
+ * same reason the claim path may: neither claiming nor diagnosing is ever
+ * concurrent, and the diagnosis runs on the news day, between ticks.
+ */
+export function refusedTile(world: World, id: number): number {
+  const vehicles = world.vehicles;
+  const length = vehicles.pathLength[id]!;
+  if (length === 0) return -1;
+
+  const held = vehicles.reservedToIndex[id]!;
+  const from = held >= 0 ? held + 1 : vehicles.pathIndex[id]! + 1;
+  if (from >= length) return -1;
+
+  const first = tailIndex(world, id);
+  const last = sectionEnd(world, id, from);
+  return firstForeignTile(world, id, first, last, claimedBlockTiles(world, id, from));
 }
 
 /**

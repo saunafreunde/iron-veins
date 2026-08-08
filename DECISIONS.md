@@ -27,7 +27,7 @@ no entry below. A number may appear under several topics.
 - **Rail & track:** D-042, D-043, D-044, D-045, D-046, D-047, D-053, D-141,
   D-153, D-157, D-184
 - **Signals & reservations:** D-054, D-055, D-056, D-057, D-058, D-059, D-060,
-  D-061, D-073, D-080, D-081, D-082, D-083, D-157, D-173, D-184, D-185
+  D-061, D-073, D-080, D-081, D-082, D-083, D-157, D-173, D-184, D-185, D-186
 - **Stations & catchment:** D-049, D-080, D-095, D-150, D-159, D-178, D-179
 - **Cargo, payment & routing:** D-036, D-037, D-065, D-067, D-075, D-077,
   D-078, D-118, D-142, D-151, D-176, D-178
@@ -45,17 +45,18 @@ no entry below. A number may appear under several topics.
   D-122, D-147, D-152, D-153, D-154, D-155, D-156, D-158
 - **Rendering & art:** D-013, D-014, D-033, D-035, D-112, D-117, D-125, D-127,
   D-136, D-140, D-160, D-161, D-162, D-163, D-164, D-165, D-166, D-169, D-170,
-  D-171, D-172, D-173, D-174, D-175, D-177, D-179
+  D-171, D-172, D-173, D-174, D-175, D-177, D-179, D-186
 - **UI & input:** D-011, D-013, D-015, D-035, D-110, D-113, D-114, D-119,
-  D-126, D-148, D-165, D-166, D-177, D-179, D-180, D-181, D-182, D-183, D-184
+  D-126, D-148, D-165, D-166, D-177, D-179, D-180, D-181, D-182, D-183, D-184,
+  D-186
 - **Performance & measurement:** D-002, D-120, D-135, D-136, D-161, D-162,
   D-163, D-164, D-167, D-170, D-171, D-172, D-173, D-174, D-176, D-177, D-184,
-  D-185
+  D-185, D-186
 - **Platform, tooling & build:** D-012, D-014, D-015, D-016, D-017, D-029,
   D-030, D-031, D-160, D-168, D-169, D-170, D-172, D-175
 - **Crash safety:** D-132, D-139
 - **Testing method & fixtures:** D-010, D-038, D-072, D-074, D-084, D-133,
-  D-167, D-183
+  D-167, D-183, D-186
 - **Process & specification:** D-070, D-123, D-129, D-133, D-138, D-140,
   D-185
 
@@ -5660,3 +5661,199 @@ connection bits and there is no diagonal road in this tile model, so an
 eight-neighbour search would route over connections the map cannot express.
 That departure predates M15 and is now written down rather than left as an
 undocumented one.
+
+## M15 - net value and road congestion, bundle 3: the diagnostics (2026-08-08)
+
+### D-186 The throughput counters may draw the picture but never write the log, and a deadlock is a ring the waiting graph is walked to find
+
+SPEC2 M15 asks for three instruments in one bundle: per-block throughput
+counters feeding a utilisation heat map, an "Engpass" message on the M8 news
+machinery, and a deadlock CYCLE detector that upgrades the 9.3 warning. They
+arrived as one bundle because they are one question - what is the network
+doing wrong, and where - and they are separated here by a line that was not
+obvious until it was drawn.
+
+**The counters are derived, and the whole licence for that is that nothing
+reads them.** SPEC2 says "derived, monatlich geleert wie D-091" and the
+mandate was to verify that the decision holds rather than to assume it. It
+holds, but only because of where the counters stop. Z4 makes every historical
+input to a SIMULATION DECISION save state - that is why the road congestion
+layer of D-185, counting the same kind of thing, is saved and hashed - and
+leaves exactly one exception: a purely reading overlay no simulation code ever
+consults, the ReservationTable pattern of D-054. So `TileMap.throughput` is a
+Uint8 tile layer in the map's shared buffer beside `oceanMask`: never
+serialised, never hashed, empty in a loaded world, and read by the renderer in
+place - which is why the "Stau-Overlay-Block" the M15 ledger row promised in
+the snapshot costs ZERO bytes for a second time (`SNAPSHOT_LAYOUT_VERSION`
+stays 7; the D-185 pattern, met again). The counters are also the reason
+SAVE_VERSION stays at v26: this bundle touches no saved shape at all, so there
+is nothing for D-184's one bump to be extended with.
+
+`tests/unit/throughput.spec.ts` walks every file under `src/sim` and fails the
+day anything but the meter, the layer, the world's monthly clear and the ONE
+write speaks the access - the D-176 read-back guard, applied to the
+expansion's second derived instrument. The pattern deliberately matches
+`.throughput` rather than the English word: signalling and AI prose use
+"throughput" freely and rightly, and what must not spread is the access.
+
+The increment is therefore UNGATED by any world rule, which is the mirror
+image of D-185's decision to gate everything: a derived counter cannot change
+a route, a price or a hash, so there is no old seed for a rule to protect. One
+clamped add per train per tile boundary, in the same place the congestion
+layer is fed, so what a train costs the network and what it earns on the heat
+map are recorded at one event.
+
+**Keyed by TILE although the counter is "per block".** Block ids are
+renumbered by every `BlockIndex` rebuild, which is every time a player lays a
+piece of track - D-054's argument verbatim, and a counter keyed by block id
+would silently retarget itself. A tile index survives it. The two readings
+agree where it matters: a train traversing a block enters every tile of its
+own path through it exactly once, so on plain line the per-tile count IS the
+block's throughput, and at a junction block the busiest tile is the throat -
+the more useful of the two numbers.
+
+**Monthly clearing is not a weaker congestion layer, it is the honest derived
+form.** A decaying window (D-185's shape) really is unreconstructible history:
+a derived one would read differently after a load than before a save, and
+while no rule reads it, that is still a lie on screen. A monthly counter is
+honest about being a monthly counter - it starts the month empty and it starts
+a loaded game empty, which is the price D-176's flow volumes already pay for
+the same reason. The clear walks the meter's dirty list, never the map (E-02's
+rule, the `RoadCongestion` shape), and the cap is a REFUSAL rather than an
+eviction: a tile the clear could never reach again would keep a phantom
+reading for the rest of the game.
+
+**And this is why the news may not read them.** The news log is SAVED and
+HASHED. A message conditioned on a derived counter would make saved state
+depend on unsaved state: a world that continued would report what a world that
+reloaded does not, which is Fehlerkatalog 2's Fehler 23 with a sentence
+instead of a route, and no test in this repository would have caught it. So
+SPEC2's arrow from the counters to the "Engpass" message is deliberately not
+drawn. The counters draw the heat map; the waiting graph - a pure function of
+saved state - writes the log. An Engpass is therefore defined by the QUEUE and
+not by a reading: `BOTTLENECK_MIN_WAITERS` = 2 trains refused at the identical
+tile, two being the smallest number that is a queue at all. One train held at
+a red says nothing about capacity; a second waiting for the same tile says
+demand for it exceeds what it passes.
+
+**The waiting graph is `tryClaim`'s own test read backwards.** The edge of the
+graph is `refusedTile(world, id)` in `vehicles/reservations.ts`, and it is in
+that file rather than in the detector because it must be the same answer the
+claim gives: the same range (tail through the end of the section being
+entered), the same block collection for a block signal, the same `freeFor`.
+`tryClaim` was refactored onto the extracted check, which is
+behaviour-preserving - the order of the two scans cannot change a boolean - so
+there is one definition of "refused" instead of two that drift. -1 covers
+every case that is not a refusal, including a train standing still for a
+reason nobody caused; those stay the plain 9.3 warning, because only a refusal
+by a NAMED other train can be part of a ring.
+
+**Membership is the 9.3 clock, not a third definition of stuck.** The detector
+composes with the two decisions that taught that clock to see rather than
+repeating them: D-083 taught it the train that never reaches a signal at all
+(standing still, holding nothing beyond its own body), and D-157 widened it to
+"standing still mid-route, whatever it holds" when the arrival-gate freeze
+stood at speed zero holding its whole approach. `analyseDeadlocks` takes
+`waitingSinceTick` as given and adds the one thing a ring needs on top. The
+threshold is `DEADLOCK_WARN_TICKS`: a ring that forms and clears inside a
+minute was a queue, and the M15 reroute of D-184 exists precisely so that some
+of them clear themselves. The end-to-end test measured the composition rather
+than assuming it - after four thousand ticks the two deadlocked trains are NOT
+in `WaitingForPath` but braked to a stand in Driving/Braking at speed zero,
+which is exactly D-157's observation and exactly why keying on the state would
+have found nothing.
+
+**The search is a walk, because the graph has out-degree one.** Every node is
+a stuck train and its single edge points at the holder of the tile its next
+claim needs, so cycle detection is: follow the pointers, colour the nodes on
+the current walk, and a walk that re-enters its own colour has found the ring.
+Iterative with an explicit walk buffer (architecture law #8 - and here the law
+is not theoretical: the pointer chain on a busy network is as long as the
+queue), linear in the number of stuck trains, module-level buffers in the
+`waitingOrder` shape. Each ring is rotated to start at its LOWEST id, which is
+a canonical form: the same deadlock reads the same way whichever train the
+outer loop reached first, so the message it produces is stable and `postOnce`
+recognises it the next day.
+
+**One heading per stuck train, sharpest first, and that is what keeps
+`postOnce` working.** A stuck train is reported as exactly one of: a ring
+(`news.deadlockCycle`, one entry naming EVERY participant and EVERY contested
+tile), a queue (`news.bottleneck`, one entry per tile, spoken for by its
+lowest-id waiter), or the plain `news.trainStuck`. That is not tidiness.
+`postOnce` suppresses a repeat only while it is the most recent entry, so two
+headings about one situation would take it in turns to be the newest and the
+daily clock would write both of them every game day - the exact spam the
+method exists to prevent. Naming one train of a ring would also send the
+player to the symptom, which is why the message carries the whole ring;
+`tileIndex` is the ring's lowest contested tile, so the click jumps to the
+deadlock rather than to one of its trains.
+
+**No auto-fix, and it is tested as such** (SPEC.md Fehler 18): a thousand
+ticks after the detector has spoken, both trains are on the tile they were on,
+at speed zero, and the ring is still there. The game helps the player FIND it.
+
+**The F3 highlight learns the contested tile.** `VehicleMarker.blockedTile`
+joins the marker channel (E-05: low-frequency facts never ride the 20 Hz
+stride) and is asked only of a train the 9.3 clock is already running on,
+because `refusedTile` walks a section and possibly a block. The overlay now
+blinks the train AND the track refusing it, so a ring is a picture and not
+just a sentence - the tile a stuck train stands on is never the tile it is
+waiting for, which is why the old marker set could not show one.
+
+**The heat map is the flow atlas's structure with a tile walk in it**
+(D-161/D-177): an own `Graphics` sibling of `art`, OUTSIDE the D-127 day/night
+tint because an instrument does not dim at night, and outside every chunk bake
+because the counters move whenever a train crosses a tile and a baked chunk
+would have to be re-baked for each. It is event-driven rather than per frame:
+camera window, zoom and map revision force a redraw at once, and otherwise a
+repaint happens at most every `HEAT_REFRESH_TICKS` (20, one real second at 1x,
+the congestion layer's own epoch) - the underlying quantity is monthly, so
+sixty repaints a second would redraw the identical picture some three thousand
+times per meaningful change. The ramp is pure and headless-tested
+(`heatmap.ts`, the `water.ts` pattern) and reuses the interface's own
+success/warning/danger stops, so the overlay reads like every other warning in
+the game. No render tripwire was added, and that is an argument rather than an
+omission: the walk is bounded by the visible window and is the same walk the
+F3 block overlay has run PER FRAME since M4, so a once-a-second version of it
+is strictly cheaper than something that already ships unmeasured.
+
+`U` toggles it (D-114's one table, plus a chip beside the flow one), free in
+both locales - "Utilisation" and "Auslastung".
+
+**The M4 regression network is the no-false-positives case, and it is RUN.**
+Twenty trains queueing round a one-way ring is congestion, not deadlock -
+D-084 measured the worst standstill at 3,300 ticks and explained why that is
+correct - so a detector that called it a deadlock would be worse than none.
+The fixture moved to `tests/helpers/regressionNetwork.ts` for the second
+reader (the `transferNetwork.ts` precedent, D-177); nothing in it changed, and
+its own acceptance test still passes unaltered. The new test samples the whole
+acceptance run every 250 ticks and asserts zero cycles at every sample, plus
+an empty `news.deadlockCycle` in the log.
+
+The three-train ring is CONSTRUCTED on the graph instead of on a geometry, and
+the split is deliberate: a three-way ring needs a track layout whose own
+quirks would then be doing the arguing, so the trains and their claims are
+placed by hand and the detector is asked the one question it exists to answer.
+The nose-to-nose case of D-059 is the end-to-end evidence that such a graph is
+a real state of this simulation - two railbuses, a signalled single-track
+line, no passing loop, and they drive into each other.
+
+**Measured on the reference machine** (Ryzen 5 7520U, `npm run test:perf`
+2026-08-08): tick p50 **1.383 ms** / p99 **2.785 ms** on the 1,500-vehicle
+fixture (max 16.6 ms over 6,500 ticks), against the M10 baseline of 1.45 /
+3.26 - a p99 delta of **-0.48 ms** where the M15 ledger row allows +0.50 ms
+for the whole milestone. The bundle's tick share is one clamped add per train
+per tile boundary; the detector and the news pass run once per game day.
+Render tripwires unchanged and green (sprite pool median 1.62, draw prep 2.32,
+chunk bake 0.44, particles 0.35, aspect 0.03, emissive 0.04, flow prep
+0.27 ms); flow export median 0.057 ms; the big save reads back in 604 ms and
+is unchanged at 187,272 B.
+
+**The pins did not move, verified rather than assumed.** Nothing this bundle
+writes is saved or hashed except news entries, and the canonical cross-OS
+world (D-137, seed 424,242, tick 10,000) replays the ROAD fixture - no trains,
+so no ring, no queue and no counter: the pin `50c7d6a38f6da052` stands
+untouched, as does the corpus manifest (D-130), both green in the suite. Had a
+train been deadlocked in either, re-recording under the documented protocol
+would have been the correct act; it was not needed, and saying so precisely is
+the point of checking.

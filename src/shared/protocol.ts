@@ -279,6 +279,16 @@ export interface VehicleMarker {
    */
   readonly waitingTicks: number;
   /**
+   * Tile that is refusing this train, or -1 - the edge of the M15 waiting
+   * graph, on the marker channel because it moves on the fleet cadence and
+   * never per tick (E-05).
+   *
+   * The F3 overlay blinks it beside the train itself: a deadlock is only
+   * findable if the CONTESTED track is visible too, and the tile a stuck
+   * train stands on is never the tile it is waiting for.
+   */
+  readonly blockedTile: number;
+  /**
    * How late the vehicle left its last takt point, or 0 - the "Verspätung in
    * Spieltagen" of section 12.3, converted to days by the panel. [ticks]
    */

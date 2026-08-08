@@ -35,6 +35,7 @@ import { RailPathfinder } from './net/railPath';
 import { WaterPathfinder } from './net/waterPath';
 import { ReservationTable } from './net/reservations';
 import { RoadCongestion } from './net/congestion';
+import { ThroughputMeter } from './net/throughput';
 import { BlockIndex } from './signals/blocks';
 import { RoadPathfinder } from './net/roadPath';
 import {
@@ -257,6 +258,19 @@ export class World {
    */
   readonly congestion = new RoadCongestion();
   /**
+   * Which track tiles have carried how many trains this game month - the
+   * per-block throughput counters of SPEC2 M15, feeding the utilisation heat
+   * map and NOTHING ELSE.
+   *
+   * Derived in the full sense: the counts live in a tile layer that is never
+   * saved and never hashed, the meter starts empty in a loaded world, and no
+   * simulation decision reads either (`tests/unit/throughput.spec.ts` walks
+   * `src/sim` and fails the day one does). That is what keeps it out of Z4's
+   * save requirement - the exception for purely reading overlays (D-054's
+   * ReservationTable pattern, D-186).
+   */
+  readonly throughput = new ThroughputMeter();
+  /**
    * How long cargo takes to get from any station to any other, measured from
    * the trips the fleet actually made (section 7.4).
    *
@@ -478,6 +492,12 @@ export class World {
       // Close the month on every station's cargo-history ring (SPEC2 M14):
       // the day's collections above already landed in the month being closed.
       rollStationHistories(this);
+      // And empty the throughput meter for the month that starts now - the
+      // D-091 posture, one instrument further: a meter is cleared by the
+      // calendar, and the walk is the list of tiles that carry something,
+      // never the map. Nothing in the simulation reads it, so where in the
+      // monthly block this sits cannot influence anything (D-186).
+      this.throughput.clearMonth(this.map.throughput);
       for (let index = 0; index < this.companies.length; index++) {
         closeMonth(this.companies[index]!);
       }

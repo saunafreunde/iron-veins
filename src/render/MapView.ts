@@ -51,6 +51,8 @@ import {
   flowStrokeColor,
   selectTopFlows,
 } from './flowAtlas';
+import { HEAT_REFRESH_TICKS, heatAlpha, heatColor } from './heatmap';
+import { utilisationOf } from '../sim/net/throughput';
 
 /** The company palette as Pixi tints, parsed once. */
 const COMPANY_TINTS: readonly number[] = COMPANY_COLORS.map((hex) =>
@@ -866,6 +868,27 @@ export class MapView {
    */
   private readonly flowLayer = new Graphics();
   private flowOverlay = false;
+
+  /**
+   * The utilisation heat map of SPEC2 M15 (D-186): every track tile tinted by
+   * the trains that ran over it this game month, read straight out of the
+   * map's shared buffer.
+   *
+   * Follows the flow atlas in every structural respect (D-161/D-177): a
+   * sibling of `art` OUTSIDE the D-127 tint, never part of a chunk bake - the
+   * counters move every time a train crosses a tile and a baked chunk would
+   * have to be re-baked for each - and event-driven rather than per frame.
+   * Its inputs are the camera window, the zoom, the map revision and the
+   * published tick; a redraw on the last of those is rate-limited, because
+   * the picture is a monthly quantity and repainting it sixty times a second
+   * would show nothing a once-a-second repaint does not.
+   */
+  private readonly heatLayer = new Graphics();
+  private heatOverlay = false;
+  private heatDrawnTick = -1;
+  private heatDrawnZoom = -1;
+  private heatDrawnRevision = -1;
+  private heatDrawnBounds = { minX: 0, minY: 0, maxX: -1, maxY: -1 };
   private flowSource: (() => { data: Int32Array; count: number; tick: number }) | null = null;
   /** Row indices of the drawn legs, filled by `selectTopFlows`. */
   private readonly flowScratch = new Int32Array(FLOW_TOP_N);
@@ -1167,6 +1190,11 @@ export class MapView {
     }
     this.art.addChild(this.particleLayer);
     this.world.addChild(this.art);
+    // The heat map (M15) sits directly on the world art and under every other
+    // instrument: it is a wash over the ground, and the flow arrows and the
+    // F3 blocks have to stay readable on top of it.
+    this.heatLayer.eventMode = 'none';
+    this.world.addChild(this.heatLayer);
     // The flow atlas (M14) above the world art and outside its tint, below
     // the selection overlay: an arrow must not cover the marker of the tile
     // the player is pointing at.
@@ -1296,6 +1324,11 @@ export class MapView {
   /** Turn the flow atlas overlay on or off (M14; the A key of D-114's table). */
   setFlowOverlay(on: boolean): void {
     this.flowOverlay = on;
+  }
+
+  /** Turn the utilisation heat map on or off (M15; the U key of D-114's table). */
+  setHeatOverlay(on: boolean): void {
+    this.heatOverlay = on;
   }
 
   /** Where the flow atlas reads the published FlowMarker block from (D-176). */
@@ -1761,6 +1794,7 @@ export class MapView {
     this.drawVehicles(map, abstract);
     this.updateParticles(map, abstract);
     this.maintainFlow(map, generationMoved);
+    this.maintainHeat(map, bounds, phase);
     this.drawOverlay(map);
 
     // Map text (SPEC2 M12): re-laid-out only when zoom, lists or revision
@@ -4129,6 +4163,70 @@ export class MapView {
     this.publishFlowStats(drawn, flow.count - drawn);
   }
 
+  /**
+   * The utilisation heat map of SPEC2 M15 (D-186): the throughput counters
+   * of the map's own shared buffer, painted over the track that earned them.
+   *
+   * Read IN PLACE - the counters ride the tile-layer buffer exactly as
+   * terrain and track do, so the snapshot carries not one byte for this
+   * overlay (the D-185 pattern, met a second time).
+   *
+   * Event-driven like the flow atlas (D-177) rather than per frame: the
+   * layer is rebuilt when the camera window, the zoom or the map revision
+   * moved, and otherwise at most once every {@link HEAT_REFRESH_TICKS}
+   * published ticks. A monthly counter does not need sixty repaints a
+   * second, and the walk is bounded by the visible window in either case -
+   * the same bound the F3 block overlay has run under since M4.
+   */
+  private maintainHeat(
+    map: TileMap,
+    bounds: { minX: number; minY: number; maxX: number; maxY: number },
+    tick: number,
+  ): void {
+    if (!this.heatOverlay) {
+      if (this.heatDrawnTick !== -1) {
+        this.heatLayer.clear();
+        this.heatDrawnTick = -1;
+      }
+      return;
+    }
+    if (
+      this.heatDrawnTick >= 0 &&
+      this.zoom === this.heatDrawnZoom &&
+      map.revision === this.heatDrawnRevision &&
+      bounds.minX === this.heatDrawnBounds.minX &&
+      bounds.minY === this.heatDrawnBounds.minY &&
+      bounds.maxX === this.heatDrawnBounds.maxX &&
+      bounds.maxY === this.heatDrawnBounds.maxY &&
+      tick - this.heatDrawnTick < HEAT_REFRESH_TICKS
+    ) {
+      return;
+    }
+
+    const layer = this.heatLayer;
+    layer.clear();
+    for (let y = bounds.minY; y <= bounds.maxY; y++) {
+      for (let x = bounds.minX; x <= bounds.maxX; x++) {
+        if (x < 0 || y < 0 || x >= map.size || y >= map.size) continue;
+        const tile = y * map.size + x;
+        if (map.trackBits[tile] === 0) continue;
+
+        // The one definition of utilisation, imported from the simulation
+        // module that owns the counters - the overlay never invents a scale.
+        const fraction = utilisationOf(map.throughput[tile]!);
+        if (fraction <= 0) continue;
+        const centre = tileToWorld(x, y, map.railHeight(x, y));
+        this.diamondOn(layer, centre.x, centre.y);
+        layer.fill({ color: heatColor(fraction), alpha: heatAlpha(fraction) });
+      }
+    }
+
+    this.heatDrawnTick = tick;
+    this.heatDrawnZoom = this.zoom;
+    this.heatDrawnRevision = map.revision;
+    this.heatDrawnBounds = bounds;
+  }
+
   /** Push the drawn/omitted counts to the interface, only on a change. */
   private publishFlowStats(drawn: number, omitted: number): void {
     if (drawn === this.sentFlowDrawn && omitted === this.sentFlowOmitted) return;
@@ -4285,7 +4383,12 @@ export class MapView {
 
   /** Trace the diamond of one tile onto the overlay. */
   private diamond(x: number, y: number): void {
-    this.overlay
+    this.diamondOn(this.overlay, x, y);
+  }
+
+  /** The same outline on any Graphics - the heat map draws its own layer. */
+  private diamondOn(target: Graphics, x: number, y: number): void {
+    target
       .moveTo(x, y)
       .lineTo(x + TILE_W / 2, y + TILE_H / 2)
       .lineTo(x, y + TILE_H)
