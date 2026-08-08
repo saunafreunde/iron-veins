@@ -12,7 +12,7 @@ no entry below. A number may appear under several topics.
 
 - **Determinism, RNG & hashing:** D-001, D-002, D-003, D-004, D-009, D-010,
   D-024, D-093, D-106, D-128, D-137, D-142, D-145, D-146, D-149, D-153, D-178,
-  D-181, D-184, D-185, D-188, D-189, D-190, D-191, D-193, D-194
+  D-181, D-184, D-185, D-188, D-189, D-190, D-191, D-193, D-194, D-195
 - **Commands, snapshot & worker boundary:** D-004, D-005, D-006, D-011, D-032,
   D-100, D-111, D-145, D-146, D-148, D-162, D-174, D-176, D-179, D-187, D-189,
   D-192, D-193
@@ -38,7 +38,7 @@ no entry below. A number may appear under several topics.
 - **Economy, finance & emissions:** D-008, D-090, D-091, D-092, D-105, D-154,
   D-180, D-193
 - **Balancing & scenarios:** D-038, D-039, D-040, D-041, D-066, D-087, D-088,
-  D-116, D-151, D-152, D-156, D-158, D-159, D-187, D-190, D-194
+  D-116, D-151, D-152, D-156, D-158, D-159, D-187, D-190, D-194, D-195
 - **Vehicles & fleet:** D-043, D-044, D-045, D-068, D-076, D-089, D-093,
   D-096, D-142, D-143, D-145, D-146, D-155, D-157, D-171, D-174, D-181, D-185
 - **Water & air:** D-094, D-095, D-096, D-097, D-098, D-099
@@ -49,7 +49,7 @@ no entry below. A number may appear under several topics.
   D-171, D-172, D-173, D-174, D-175, D-177, D-179, D-186
 - **UI & input:** D-011, D-013, D-015, D-035, D-110, D-113, D-114, D-119,
   D-126, D-148, D-165, D-166, D-177, D-179, D-180, D-181, D-182, D-183, D-184,
-  D-186, D-187, D-189, D-191, D-192, D-193, D-194
+  D-186, D-187, D-189, D-191, D-192, D-193, D-194, D-195
 - **Performance & measurement:** D-002, D-120, D-135, D-136, D-161, D-162,
   D-163, D-164, D-167, D-170, D-171, D-172, D-173, D-174, D-176, D-177, D-184,
   D-185, D-186, D-187, D-191, D-192, D-193
@@ -57,7 +57,8 @@ no entry below. A number may appear under several topics.
   D-030, D-031, D-160, D-168, D-169, D-170, D-172, D-175, D-192
 - **Crash safety:** D-132, D-139, D-190
 - **Testing method & fixtures:** D-010, D-038, D-072, D-074, D-084, D-133,
-  D-167, D-183, D-186, D-188, D-189, D-190, D-191, D-192, D-193, D-194
+  D-167, D-183, D-186, D-188, D-189, D-190, D-191, D-192, D-193, D-194,
+  D-195
 - **Process & specification:** D-070, D-123, D-129, D-133, D-138, D-140,
   D-185, D-191
 
@@ -6944,3 +6945,110 @@ German and English sentences - the main chunk contains no scenario code at all,
 which was checked rather than assumed by grepping the built chunk for the
 vocabulary. `replay` 196.46 -> 198.15 kB and the worker 319.89 -> 321.58 kB,
 both of which carry the simulation and are not the budget.
+
+### D-195 A shipped scenario is text, its seeds were chosen by looking at the worlds they generate, and its briefing is content rather than chrome
+
+SPEC2 M17 asks for a scenario browser and "8 mitgelieferte Szenarien als
+Text-Fixtures (Seed + Regeln + Ziel-JSON), die zugleich Determinismus-Fixtures
+sind". Three decisions follow from taking that sentence literally, and the
+third one is the interesting one.
+
+**A shipped scenario is a definition, not a file.** `src/scenarios/catalog.ts`
+holds eight entries of seed, world rules, goal descriptors and briefing; the
+world is GENERATED when the player presses start. Nothing is stored, nothing is
+decoded, and the eight cost twelve kilobytes of text rather than eight
+megabytes of save. That is E-14's "no binary asset in git" applied to content
+instead of to art, and it is what makes the same eight entries determinism
+fixtures: same seed plus same rules is the same world (law #3), so the fixture
+IS the product.
+
+The `.ironscenario` file of D-194 is not made redundant by this - it is how a
+scenario TRAVELS. `scenarioMetaOf` turns a definition into the metadata block,
+and `tests/unit/shippedScenarios.spec.ts` writes every one of the eight out
+through `encodeScenario` and reads it back with its goals intact. One
+serializer, and the shipped catalogue is proven to be legal input to it.
+
+**One function builds the world, and the browser, the worker and the fixtures
+all call it.** `worldParamsFor(options)` came out of `SimWorker.restart` as a
+module of its own, so `newGameOptionsOf(scenario)` -> `worldParamsFor` ->
+`World.create` is the single path from a definition to a world. A determinism
+fixture that assembled its own `NewGameParams` from the same fields would hash
+its own copy of the rules and stay green while the game started something else
+- the D-133 defect in a different costume. `NewGameOptions` grew one field for
+this (`goals`), which is the door a scenario's goals travel through: the
+new-game screen cannot author goals and should not, because goals come from a
+scenario.
+
+**The seeds were chosen by generating the worlds and measuring them.** This is
+the part that cannot be shortcut and was not: two hundred seeds were generated
+at 256 tiles and scanned, and the entries record what their maps actually hold.
+What the scan established, beyond the eight choices:
+
+- **an archipelago is rare and small on this generator.** Every seed is ~70 %
+  land in one dominant mass, because the edge falloff plus the noise wavelength
+  make one continent; in four hundred seeds exactly three had three inhabited
+  land masses. Seed 67 is the best of them and is genuinely an island scenario:
+  Sandenheim (8,000) sits on a 252-tile island 52 tiles of open water from
+  Neu-Lindenried (8,000) on the mainland. No bridge spans that, so the
+  connection is a ship or it is nothing. Calling it an "archipelago" would have
+  been a briefing writing cheques the map does not cover, and the briefing does
+  not.
+- **relief varies less than it looks.** The global roughness of every 256 map
+  sits between 0.231 and 0.267 height levels per tile step, so "which seed is
+  mountainous" is not a question the histogram answers. What does answer it is
+  the CORRIDOR between the two towns a goal names: seed 148's Silberheim to
+  Ulmenburg is 60 tiles that climb and fall through 27 levels, span heights 2
+  to 13 and cross eight tiles of water - the steepest long pair of towns in two
+  hundred seeds. The test measures that corridor rather than the map.
+- **climate changes the industries, not the terrain.** Relief and hydrology run
+  before the biomes, so towns and heights are identical across climates for one
+  seed - but industry placement is not. Seed 148 under arctic grows two coal
+  mines and NOTHING that burns coal, which is why the mountain scenario's
+  tonnage goal is passengers. A coal goal there would have been unachievable by
+  construction, and the "producer and acceptor" audit is what would have caught
+  it (the D-118 question asked per world).
+
+**The thresholds are calibrated against measurements, and what is not measured
+is said so.** Four figures were taken on this build and the bands are built on
+them: four 1950 buses between two towns of 8,000 at 28 tiles deliver **21,400
+passengers a game year**; one 1950 coal train of eight wagons over 45 tiles
+delivers **~1,700 units of coal a year** (16,360 over ten); an unserved town of
+8,000 reaches **10,465 inhabitants in twenty-five years** temperate and 9,200
+arctic or desert, so a population goal above that line is a goal about SERVICE
+and one below it is a goal about waiting; and D-158's ceiling - a competent
+network gains at most ~840,000 EUR over a quarter century - caps every company
+value asked for. What is NOT claimed is that a human has played each gold band.
+The floor under that is a test rather than a hope: every scenario world runs a
+full game year with no player at all and every goal must still be Open, which
+catches the three cheap ways to ship a broken scenario (a value under the
+starting capital, a population the town passes by itself, a rating nobody has
+to earn).
+
+**A briefing goes through the metadata block, never through `t()`, and the
+distinction is the point.** The chrome around a scenario - the headings, the
+medal words, the rule labels, the button - is interface and lives in
+`src/i18n`, where the parity test is the guard. The briefing and the goal
+captions are CONTENT: they belong to the scenario the way a threshold does,
+they are authored with the seed they describe, and they travel in both
+languages in the `ScenarioMeta` block of the file. Putting them in `de.json`
+would mean a scenario somebody else writes could not carry its own words -
+exactly the property the unhashed metadata block exists to give it - so a test
+asserts the opposite direction too: no shipped briefing or caption may appear
+in either catalogue. A caption still only ever DESCRIBES; the descriptor beside
+it is what the daily hook measures (D-193), and the pair is kept in one object
+so a caption cannot drift onto the next slot's goal.
+
+**Ledger.** No `SAVE_VERSION` bump (v28 is M17's one bump and it belongs to the
+goal machine, Z5), no migration, no pin, no corpus, no snapshot byte, no atlas
+cell, no tick cost - a scenario is a set of new-game options and the simulation
+never learns that it came from one. One protocol field (`NewGameOptions.goals`,
+main-thread traffic). Bundle, measured with `npm run build` against the M17 B2
+figures: main chunk **908.59 -> 913.49 kB** (gzip 277.50 -> 278.87; 914,431 B
+on disk against the 930,000 B budget), and the catalogue is NOT in it - it
+loads as its own **12.59 kB** chunk (gzip 4.18) behind the browser's dynamic
+import, which was checked by grepping the built entry chunk for the scenario
+names rather than assumed (D-191/D-192). `replay` 198.15 -> 198.03 kB, worker
+321.58 -> 321.62 kB. The determinism suite grows by 14.5 s: eight worlds built
+twice and played a game year each, all eight hash-identical across the two runs
+and all eight hashing differently from one another, which is "genuinely
+different" as a number rather than as a promise.

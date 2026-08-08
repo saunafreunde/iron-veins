@@ -1,0 +1,753 @@
+import { Cargo } from '../sim/cargo/types';
+import {
+  CENTS_PER_EURO,
+  Difficulty,
+  MapClimate,
+  START_YEAR,
+  TICKS_PER_YEAR,
+} from '../sim/constants';
+import { GoalKind } from '../sim/goals/types';
+import type { ShippedScenario } from './types';
+
+/**
+ * The eight scenarios that ship with the game (SPEC2 M17).
+ *
+ * Every one of them is TEXT: a seed, a set of world rules, a goal list and a
+ * briefing in both languages. The world is generated when the player presses
+ * start, which is why eight scenarios cost eight paragraphs rather than eight
+ * megabytes, and why they double as determinism fixtures - the same seed and
+ * the same rules are the same world on every machine (law #3).
+ *
+ * **The seeds were chosen by generating the world and looking at it**, never by
+ * assertion. Each entry below records what its map actually holds, measured at
+ * 256 tiles with the climate the entry names: a mountain scenario has a ridge
+ * between the towns it names, an island scenario has a town on an island, a
+ * freight scenario has mines AND somewhere for their output to go. Terrain and
+ * town placement do not depend on the climate (relief and hydrology run before
+ * the biomes), but INDUSTRY placement does - which is why the arctic entry
+ * carries no freight goal: at that climate its map grows two coal mines and
+ * nothing that burns coal, so a coal goal there would be unachievable by
+ * construction.
+ *
+ * **The thresholds are calibrated against measurements, not against feeling.**
+ * The figures the bands are built on, all taken on this build:
+ *
+ *  - four 1950 buses between two towns of 8,000 at 28 tiles deliver
+ *    **21,400 passengers a game year** (the M6 bus-line world, four buses
+ *    instead of two).
+ *  - one 1950 coal train of eight wagons over 45 tiles delivers
+ *    **~1,600-1,800 units of coal a year** (the M6 coal world; 16,360 over ten
+ *    years).
+ *  - a town of 8,000 that nobody serves grows to **10,465 in twenty-five game
+ *    years** in a temperate climate and to 9,200 in an arctic or desert one.
+ *    Full passenger service multiplies the growth rate by 1.55, goods and food
+ *    by a further 0.35 each (`TOWN_GROWTH_*` in constants.ts), so a population
+ *    goal above the passive line is a goal about SERVICE.
+ *  - a competent network gains at most ~840,000 EUR of company value over a
+ *    quarter century, and the strongest measured AI company reached 1.12
+ *    million from a 500,000 start (D-158). Nothing here asks for more than
+ *    that.
+ *
+ * What is NOT claimed: that every gold band has been played to. The bands are
+ * anchored on those four measurements and on the structural checks in
+ * `tests/unit/shippedScenarios.spec.ts` - every named town exists, every cargo
+ * a goal counts has a producer and an acceptor on the map, and no goal is
+ * decided in the first game year by a player who does nothing.
+ */
+
+/** The last tick of `year` - "by the end of 1958" as the hook measures it. */
+function endOfYear(year: number): number {
+  return (year - START_YEAR + 1) * TICKS_PER_YEAR;
+}
+
+/** The calendar year a band tick falls in; the browser prints this. */
+export function scenarioYearOf(tick: number): number {
+  return START_YEAR + Math.ceil(tick / TICKS_PER_YEAR) - 1;
+}
+
+/** Money thresholds are cents like every other figure in the simulation. */
+function euro(amount: number): number {
+  return amount * CENTS_PER_EURO;
+}
+
+const AUTHOR = 'Iron Veins';
+
+// ---------------------------------------------------------------------------
+
+/**
+ * Seed 88, temperate, 256 tiles. Measured: four coal mines and TWO power
+ * plants, the closest pairs 59 and 66 tiles apart (mine 101,129 -> plant
+ * 148,83 and mine 177,167 -> plant 155,112), gentle ground between them
+ * (climb 24 over 89 tiles on the worst long corridor). A freight map.
+ */
+const FRACHTRAUSCH: ShippedScenario = {
+  id: 'frachtrausch',
+  title: 'Frachtrausch',
+  author: AUTHOR,
+  briefing: {
+    de:
+      'Vier Kohlegruben, zwei Kraftwerke, flaches Land dazwischen - und niemand, ' +
+      'der die Kohle bewegt. Die kuerzeste Paarung liegt 59 Tiles auseinander, die ' +
+      'zweite 66. Ein Zug mit acht Wagen schafft rund 1.700 Einheiten im Jahr; fuer ' +
+      'Gold brauchen Sie mehrere Zuege und einen frueheren Anfang, als Ihnen lieb ist.',
+    en:
+      'Four coal mines, two power stations, easy ground in between - and nobody ' +
+      'moving the coal. The closest pairing is 59 tiles apart, the second 66. One ' +
+      'train of eight wagons carries some 1,700 units a year; gold needs several ' +
+      'trains and an earlier start than is comfortable.',
+  },
+  goals: [
+    {
+      caption: {
+        de: '25.000 Einheiten Kohle ausliefern',
+        en: 'Deliver 25,000 units of coal',
+      },
+      spec: {
+        kind: GoalKind.CargoDeliveredTotal,
+        subjectA: Cargo.Coal,
+        subjectB: -1,
+        threshold: 25_000,
+        goldTick: endOfYear(1958),
+        silverTick: endOfYear(1963),
+        bronzeTick: endOfYear(1970),
+      },
+    },
+    {
+      caption: {
+        de: 'Firmenwert von 1,2 Mio. EUR erreichen',
+        en: 'Reach a company value of EUR 1.2m',
+      },
+      spec: {
+        kind: GoalKind.CompanyValueBy,
+        subjectA: -1,
+        subjectB: -1,
+        threshold: euro(1_200_000),
+        goldTick: endOfYear(1962),
+        silverTick: endOfYear(1968),
+        bronzeTick: endOfYear(1975),
+      },
+    },
+  ],
+  rules: {
+    seed: 88,
+    mapSize: 256,
+    climate: MapClimate.Temperate,
+    difficulty: Difficulty.Normal,
+    aiCompanies: 1,
+    inflation: true,
+    emissions: true,
+    occupancyPenalty: false,
+    signalPenalty: false,
+    roadCongestion: false,
+  },
+  lockedRules: ['climate', 'difficulty', 'goals', 'mapSize', 'seed'],
+  fromTick: 0,
+  toTick: endOfYear(1975),
+};
+
+/**
+ * Seed 10, temperate, 256 tiles. Measured: seventeen towns of 2,500 or more,
+ * EIGHT of them at 8,000 - Koenigsau (6) and Distelkirchen (32) 41 tiles
+ * apart, Ulmenhausen (7) another 48 beyond. The densest passenger map of the
+ * eight; a measured AI competitor here delivered 28,457 passengers in its
+ * first year from nineteen stops.
+ */
+const PASSAGIERNETZ: ShippedScenario = {
+  id: 'passagiernetz',
+  title: 'Passagiernetz',
+  author: AUTHOR,
+  briefing: {
+    de:
+      'Acht Grossstaedte zu je 8.000 Einwohnern liegen dicht beieinander - Koenigsau ' +
+      'und Distelkirchen trennen 41 Tiles, Ulmenhausen liegt weitere 48 dahinter. ' +
+      'Hier zaehlt nicht die eine gute Linie, sondern das Netz: vier Busse auf einem ' +
+      'Staedtepaar bringen rund 21.000 Fahrgaeste im Jahr, und 200.000 sind mit einem ' +
+      'Paar allein nicht zu holen. Zwei Konkurrenten fahren mit.',
+    en:
+      'Eight cities of 8,000 sit close together - 41 tiles between Koenigsau and ' +
+      'Distelkirchen, another 48 out to Ulmenhausen. This is not about one good ' +
+      'line but about a network: four buses on one pair of towns carry some 21,000 ' +
+      'passengers a year, and 200,000 will not come from one pair. Two competitors ' +
+      'are running as well.',
+  },
+  goals: [
+    {
+      caption: {
+        de: 'Koenigsau und Distelkirchen verbinden',
+        en: 'Connect Koenigsau and Distelkirchen',
+      },
+      spec: {
+        kind: GoalKind.ConnectStations,
+        subjectA: 6,
+        subjectB: 32,
+        threshold: 1,
+        goldTick: endOfYear(1953),
+        silverTick: endOfYear(1956),
+        bronzeTick: endOfYear(1960),
+      },
+    },
+    {
+      caption: {
+        de: '200.000 Fahrgaeste befoerdern',
+        en: 'Carry 200,000 passengers',
+      },
+      spec: {
+        kind: GoalKind.CargoDeliveredTotal,
+        subjectA: Cargo.Passengers,
+        subjectB: -1,
+        threshold: 200_000,
+        goldTick: endOfYear(1960),
+        silverTick: endOfYear(1965),
+        bronzeTick: endOfYear(1972),
+      },
+    },
+    {
+      caption: {
+        de: 'Eine Station 180 Tage lang auf Bewertung 70 halten',
+        en: 'Hold a station at a rating of 70 for 180 days',
+      },
+      spec: {
+        kind: GoalKind.StationRatingHold,
+        subjectA: -1,
+        subjectB: 180,
+        threshold: 70,
+        goldTick: endOfYear(1962),
+        silverTick: endOfYear(1968),
+        bronzeTick: endOfYear(1975),
+      },
+    },
+  ],
+  rules: {
+    seed: 10,
+    mapSize: 256,
+    climate: MapClimate.Temperate,
+    difficulty: Difficulty.Normal,
+    aiCompanies: 2,
+    inflation: true,
+    emissions: true,
+    occupancyPenalty: false,
+    signalPenalty: false,
+    roadCongestion: false,
+  },
+  lockedRules: ['climate', 'difficulty', 'goals', 'mapSize', 'seed'],
+  fromTick: 0,
+  toTick: endOfYear(1975),
+};
+
+/**
+ * Seed 148, arctic, 256 tiles. Measured: the straight line from Silberheim (3,
+ * 8,000) to Ulmenburg (18, 2,500) is 60 tiles long, climbs and falls through
+ * 27 height levels, spans heights 2 to 13 - eleven levels, 88 m - and crosses
+ * eight tiles of water. The steepest long corridor between two real towns in
+ * two hundred scanned seeds. At this climate the map grows two coal mines and
+ * nothing that accepts coal, so the tonnage goal here is passengers.
+ */
+const GEBIRGSLOGISTIK: ShippedScenario = {
+  id: 'gebirgslogistik',
+  title: 'Gebirgslogistik',
+  author: AUTHOR,
+  briefing: {
+    de:
+      'Zwischen Silberheim und Ulmenburg liegen 60 Tiles Luftlinie - und elf ' +
+      'Hoehenstufen, 88 Meter, dazu acht Tiles Wasser. Die gerade Linie ist die ' +
+      'teuerste; die Steigungsregel misst ueber ein Fenster, nicht von Tile zu Tile, ' +
+      'also gewinnt hier, wer den Umweg am Hang findet. Die Streckenkosten aus 8.4 ' +
+      'sind eingeschaltet: belegte Abschnitte und Signale kosten den Zug etwas.',
+    en:
+      'Sixty tiles of straight line lie between Silberheim and Ulmenburg - and ' +
+      'eleven height levels, 88 metres, plus eight tiles of water. The direct route ' +
+      'is the expensive one; the gradient rule measures over a window rather than ' +
+      'tile to tile, so the win goes to whoever finds the detour along the slope. ' +
+      'The 8.4 route costs are on: a claimed section and a signal both cost a train.',
+  },
+  goals: [
+    {
+      caption: {
+        de: 'Silberheim und Ulmenburg verbinden',
+        en: 'Connect Silberheim and Ulmenburg',
+      },
+      spec: {
+        kind: GoalKind.ConnectStations,
+        subjectA: 3,
+        subjectB: 18,
+        threshold: 1,
+        goldTick: endOfYear(1955),
+        silverTick: endOfYear(1960),
+        bronzeTick: endOfYear(1968),
+      },
+    },
+    {
+      caption: {
+        de: '60.000 Fahrgaeste ueber die Berge bringen',
+        en: 'Carry 60,000 passengers over the mountains',
+      },
+      spec: {
+        kind: GoalKind.CargoDeliveredTotal,
+        subjectA: Cargo.Passengers,
+        subjectB: -1,
+        threshold: 60_000,
+        goldTick: endOfYear(1963),
+        silverTick: endOfYear(1969),
+        bronzeTick: endOfYear(1975),
+      },
+    },
+  ],
+  rules: {
+    seed: 148,
+    mapSize: 256,
+    climate: MapClimate.Arctic,
+    difficulty: Difficulty.Normal,
+    aiCompanies: 1,
+    inflation: true,
+    emissions: true,
+    occupancyPenalty: true,
+    signalPenalty: true,
+    roadCongestion: false,
+  },
+  lockedRules: [
+    'climate',
+    'difficulty',
+    'goals',
+    'mapSize',
+    'occupancyPenalty',
+    'seed',
+    'signalPenalty',
+  ],
+  fromTick: 0,
+  toTick: endOfYear(1975),
+};
+
+/**
+ * Seed 67, tropical, 256 tiles. Measured: three inhabited land masses. The
+ * mainland carries Neu-Lindenried (23, 8,000); a 252-tile island off the
+ * south-east corner carries Sandenheim (8, 8,000) 52 tiles away across open
+ * water; a third islet of 27 tiles carries a village. Two cities of 8,000 with
+ * sea between them is what "island hopping" means here - no bridge can span
+ * it, so the connection is a ship or it is nothing.
+ */
+const INSELHUEPFEN: ShippedScenario = {
+  id: 'inselhuepfen',
+  title: 'Inselhuepfen',
+  author: AUTHOR,
+  briefing: {
+    de:
+      'Sandenheim hat 8.000 Einwohner und liegt auf einer Insel. Neu-Lindenried hat ' +
+      'ebenso viele und liegt 52 Tiles entfernt auf dem Festland. Dazwischen ist ' +
+      'offenes Meer - keine Bruecke, keine Strasse, kein Gleis. Ein Kai bewegt ' +
+      'uebrigens nie den Stationsmittelpunkt: die Reichweite wird vom Zentrum aus ' +
+      'gemessen, nicht von der Mole.',
+    en:
+      'Sandenheim has 8,000 inhabitants and sits on an island. Neu-Lindenried has ' +
+      'as many and sits 52 tiles away on the mainland. Between them is open sea - ' +
+      'no bridge, no road, no track. A quay never moves the station centre, by the ' +
+      'way: catchment is measured from the centre, not from the berth.',
+  },
+  goals: [
+    {
+      caption: {
+        de: 'Neu-Lindenried und Sandenheim verbinden',
+        en: 'Connect Neu-Lindenried and Sandenheim',
+      },
+      spec: {
+        kind: GoalKind.ConnectStations,
+        subjectA: 23,
+        subjectB: 8,
+        threshold: 1,
+        goldTick: endOfYear(1956),
+        silverTick: endOfYear(1962),
+        bronzeTick: endOfYear(1970),
+      },
+    },
+    {
+      caption: {
+        de: '40.000 Fahrgaeste ueber das Wasser bringen',
+        en: 'Carry 40,000 passengers across the water',
+      },
+      spec: {
+        kind: GoalKind.CargoDeliveredTotal,
+        subjectA: Cargo.Passengers,
+        subjectB: -1,
+        threshold: 40_000,
+        goldTick: endOfYear(1962),
+        silverTick: endOfYear(1968),
+        bronzeTick: endOfYear(1975),
+      },
+    },
+  ],
+  rules: {
+    seed: 67,
+    mapSize: 256,
+    climate: MapClimate.Tropical,
+    difficulty: Difficulty.Normal,
+    aiCompanies: 1,
+    inflation: true,
+    emissions: true,
+    occupancyPenalty: false,
+    signalPenalty: false,
+    roadCongestion: false,
+  },
+  lockedRules: ['climate', 'difficulty', 'goals', 'mapSize', 'seed'],
+  fromTick: 0,
+  toTick: endOfYear(1975),
+};
+
+/**
+ * Seed 12, temperate, 256 tiles, HARD (250,000 to start with). Measured: seven
+ * towns of 8,000, three farms and three food factories - the full food chain
+ * standing idle. Erlenbach (32) is one of the big towns; unserved it reaches
+ * 9,925 by 1970 and 10,465 by 1975, so the 11,000 asked for below cannot be
+ * waited out.
+ */
+const WIEDERAUFBAU: ShippedScenario = {
+  id: 'wiederaufbau',
+  title: 'Wiederaufbau',
+  author: AUTHOR,
+  briefing: {
+    de:
+      'Sieben Grossstaedte, drei Bauernhoefe, drei Lebensmittelwerke - und 250.000 ' +
+      'EUR Startkapital. Die Kette steht still, und eine Stadt waechst von allein ' +
+      'nur langsam: Erlenbach kaeme unbedient bis 1975 auf 10.465 Einwohner. Die ' +
+      '11.000 muessen Sie herbeifahren. Wer nur zusieht, ist vorher zahlungsunfaehig.',
+    en:
+      'Seven cities, three farms, three food factories - and 250,000 EUR to start ' +
+      'with. The chain is idle, and a town grows slowly on its own: unserved, ' +
+      'Erlenbach would reach 10,465 inhabitants by 1975. The 11,000 asked for has ' +
+      'to be carried in. Anybody who only watches is insolvent before then.',
+  },
+  goals: [
+    {
+      caption: {
+        de: '4.000 Einheiten Lebensmittel ausliefern',
+        en: 'Deliver 4,000 units of food',
+      },
+      spec: {
+        kind: GoalKind.CargoDeliveredTotal,
+        subjectA: Cargo.Food,
+        subjectB: -1,
+        threshold: 4_000,
+        goldTick: endOfYear(1960),
+        silverTick: endOfYear(1966),
+        bronzeTick: endOfYear(1974),
+      },
+    },
+    {
+      caption: {
+        de: 'Erlenbach auf 11.000 Einwohner bringen',
+        en: 'Grow Erlenbach to 11,000 inhabitants',
+      },
+      spec: {
+        kind: GoalKind.TownPopulationReach,
+        subjectA: 32,
+        subjectB: -1,
+        threshold: 11_000,
+        goldTick: endOfYear(1968),
+        silverTick: endOfYear(1972),
+        bronzeTick: endOfYear(1975),
+      },
+    },
+    {
+      caption: {
+        de: 'Bis 1975 zahlungsfaehig bleiben',
+        en: 'Stay solvent until 1975',
+      },
+      spec: {
+        kind: GoalKind.SurviveUntil,
+        subjectA: -1,
+        subjectB: -1,
+        threshold: endOfYear(1975),
+        goldTick: endOfYear(1975),
+        silverTick: endOfYear(1975),
+        bronzeTick: endOfYear(1975),
+      },
+    },
+  ],
+  rules: {
+    seed: 12,
+    mapSize: 256,
+    climate: MapClimate.Temperate,
+    difficulty: Difficulty.Hard,
+    aiCompanies: 0,
+    inflation: true,
+    emissions: true,
+    occupancyPenalty: false,
+    signalPenalty: false,
+    roadCongestion: false,
+  },
+  lockedRules: ['climate', 'difficulty', 'goals', 'inflation', 'mapSize', 'seed'],
+  fromTick: 0,
+  toTick: endOfYear(1975),
+};
+
+/**
+ * Seed 28, temperate, 256 tiles. Measured: NINE towns of 8,000 and only eleven
+ * industries - the map where the councils of 13.3 matter more than any chain.
+ * Falkenheim (16) is one of the nine; unserved it reaches 9,925 by 1970. Three
+ * competitors are courting the same councils, and road congestion is on, so a
+ * fourth bus on a full street buys less than the first one did.
+ */
+const RATSDIPLOMATIE: ShippedScenario = {
+  id: 'ratsdiplomatie',
+  title: 'Rats-Diplomatie',
+  author: AUTHOR,
+  briefing: {
+    de:
+      'Neun Staedte zu 8.000 Einwohnern, elf Industrien, drei Konkurrenten - hier ' +
+      'entscheidet nicht die Fracht, sondern der Stadtrat. Er bewertet, was eine ' +
+      'Firma TUT, und was er sieht, verfaellt langsam wieder. Ein ganzes Jahr lang ' +
+      'Bewertung 75 an einer Station zu halten heisst: Takt halten, wenn es teuer ' +
+      'wird. Der Strassenverkehr staut sich; die vierte Buslinie bringt weniger als ' +
+      'die erste.',
+    en:
+      'Nine towns of 8,000, eleven industries, three competitors - here it is the ' +
+      'council that decides rather than the freight. It rates what a company DOES, ' +
+      'and what it saw decays again. Holding a station at 75 for a whole year means ' +
+      'keeping the interval when it gets expensive. Road traffic jams: the fourth ' +
+      'bus line earns less than the first.',
+  },
+  goals: [
+    {
+      caption: {
+        de: 'Eine Station 360 Tage lang auf Bewertung 75 halten',
+        en: 'Hold a station at a rating of 75 for 360 days',
+      },
+      spec: {
+        kind: GoalKind.StationRatingHold,
+        subjectA: -1,
+        subjectB: 360,
+        threshold: 75,
+        goldTick: endOfYear(1958),
+        silverTick: endOfYear(1964),
+        bronzeTick: endOfYear(1972),
+      },
+    },
+    {
+      caption: {
+        de: 'Falkenheim auf 11.000 Einwohner bringen',
+        en: 'Grow Falkenheim to 11,000 inhabitants',
+      },
+      spec: {
+        kind: GoalKind.TownPopulationReach,
+        subjectA: 16,
+        subjectB: -1,
+        threshold: 11_000,
+        goldTick: endOfYear(1970),
+        silverTick: endOfYear(1973),
+        bronzeTick: endOfYear(1975),
+      },
+    },
+    {
+      caption: {
+        de: 'Firmenwert von 900.000 EUR erreichen',
+        en: 'Reach a company value of EUR 900,000',
+      },
+      spec: {
+        kind: GoalKind.CompanyValueBy,
+        subjectA: -1,
+        subjectB: -1,
+        threshold: euro(900_000),
+        goldTick: endOfYear(1962),
+        silverTick: endOfYear(1968),
+        bronzeTick: endOfYear(1975),
+      },
+    },
+  ],
+  rules: {
+    seed: 28,
+    mapSize: 256,
+    climate: MapClimate.Temperate,
+    difficulty: Difficulty.Normal,
+    aiCompanies: 3,
+    inflation: false,
+    emissions: true,
+    occupancyPenalty: false,
+    signalPenalty: false,
+    roadCongestion: true,
+  },
+  lockedRules: ['climate', 'difficulty', 'goals', 'mapSize', 'roadCongestion', 'seed'],
+  fromTick: 0,
+  toTick: endOfYear(1975),
+};
+
+/**
+ * Seed 27, temperate, 256 tiles, EASY (800,000 to start with), nobody else on
+ * the map. Measured: Nieder-Kaisershofen (5) and Haselstadt (18) are both
+ * 8,000 strong, 29 tiles apart, and the ground between them climbs three
+ * levels in total - the flattest big-town pair in two hundred scanned seeds.
+ * Four buses on a pair like that deliver 21,400 passengers a year, so the
+ * 20,000 below is roughly one year of a line that is already running: the
+ * whole scenario is how fast you can get it running.
+ */
+const SPEEDRUN: ShippedScenario = {
+  id: 'speedrun',
+  title: 'Speedrun',
+  author: AUTHOR,
+  briefing: {
+    de:
+      'Zwei Staedte zu 8.000 Einwohnern, 29 Tiles auseinander, drei Hoehenstufen ' +
+      'dazwischen - flacher wird es nicht. 800.000 EUR liegen bereit, niemand macht ' +
+      'Ihnen Konkurrenz. Vier Busse bringen auf so einem Paar 21.400 Fahrgaeste im ' +
+      'Jahr. Die Frage ist nur, wie schnell sie fahren.',
+    en:
+      'Two towns of 8,000, 29 tiles apart, three height levels between them - it ' +
+      'gets no flatter. 800,000 EUR are waiting and nobody is competing with you. ' +
+      'Four buses on a pair like that carry 21,400 passengers a year. The only ' +
+      'question is how quickly they start running.',
+  },
+  goals: [
+    {
+      caption: {
+        de: 'Nieder-Kaisershofen und Haselstadt verbinden',
+        en: 'Connect Nieder-Kaisershofen and Haselstadt',
+      },
+      spec: {
+        kind: GoalKind.ConnectStations,
+        subjectA: 5,
+        subjectB: 18,
+        threshold: 1,
+        goldTick: endOfYear(1950),
+        silverTick: endOfYear(1951),
+        bronzeTick: endOfYear(1953),
+      },
+    },
+    {
+      caption: {
+        de: '20.000 Fahrgaeste befoerdern',
+        en: 'Carry 20,000 passengers',
+      },
+      spec: {
+        kind: GoalKind.CargoDeliveredTotal,
+        subjectA: Cargo.Passengers,
+        subjectB: -1,
+        threshold: 20_000,
+        goldTick: endOfYear(1952),
+        silverTick: endOfYear(1954),
+        bronzeTick: endOfYear(1957),
+      },
+    },
+  ],
+  rules: {
+    seed: 27,
+    mapSize: 256,
+    climate: MapClimate.Temperate,
+    difficulty: Difficulty.Easy,
+    aiCompanies: 0,
+    inflation: false,
+    emissions: false,
+    occupancyPenalty: false,
+    signalPenalty: false,
+    roadCongestion: false,
+  },
+  lockedRules: ['climate', 'difficulty', 'goals', 'inflation', 'mapSize', 'seed'],
+  fromTick: 0,
+  toTick: endOfYear(1957),
+};
+
+/**
+ * Seed 69, desert, 256 tiles, HARD, four competitors, every world rule the
+ * game has switched ON. Measured: ten industries, only two towns of 8,000, the
+ * rest at 2,500 or below - the thinnest offer of the eight, and the towns grow
+ * to 9,200 rather than 10,465 because the desert grows slowly. Surviving a
+ * quarter century here is the goal, and it is not a formality: the measured
+ * quarter-century AI games wind up two companies in three (D-109).
+ */
+const UEBERLEBEN: ShippedScenario = {
+  id: 'ueberleben',
+  title: 'Ueberleben',
+  author: AUTHOR,
+  briefing: {
+    de:
+      'Wueste, zehn Industrien, zwei Grossstaedte - und vier Konkurrenten auf ' +
+      '250.000 EUR Startkapital. Jede Weltregel ist eingeschaltet: Inflation, ' +
+      'CO2-Abgabe, beide Streckenkosten aus 8.4 und der Strassenstau. Drei Monate ' +
+      'in den roten Zahlen sind eine Warnung, zwoelf das Ende. Bis 1975 zu ' +
+      'ueberleben ist hier keine Formsache.',
+    en:
+      'Desert, ten industries, two cities - and four competitors, on 250,000 EUR of ' +
+      'starting capital. Every world rule is on: inflation, the carbon levy, both ' +
+      '8.4 route costs and road congestion. Three months in the red are a warning, ' +
+      'twelve are the end. Surviving to 1975 here is not a formality.',
+  },
+  goals: [
+    {
+      caption: {
+        de: 'Bis 1975 zahlungsfaehig bleiben',
+        en: 'Stay solvent until 1975',
+      },
+      spec: {
+        kind: GoalKind.SurviveUntil,
+        subjectA: -1,
+        subjectB: -1,
+        threshold: endOfYear(1975),
+        goldTick: endOfYear(1975),
+        silverTick: endOfYear(1975),
+        bronzeTick: endOfYear(1975),
+      },
+    },
+    {
+      caption: {
+        de: 'Firmenwert von 400.000 EUR erreichen',
+        en: 'Reach a company value of EUR 400,000',
+      },
+      spec: {
+        kind: GoalKind.CompanyValueBy,
+        subjectA: -1,
+        subjectB: -1,
+        threshold: euro(400_000),
+        goldTick: endOfYear(1960),
+        silverTick: endOfYear(1967),
+        bronzeTick: endOfYear(1975),
+      },
+    },
+  ],
+  rules: {
+    seed: 69,
+    mapSize: 256,
+    climate: MapClimate.Desert,
+    difficulty: Difficulty.Hard,
+    aiCompanies: 4,
+    inflation: true,
+    emissions: true,
+    occupancyPenalty: true,
+    signalPenalty: true,
+    roadCongestion: true,
+  },
+  lockedRules: [
+    'climate',
+    'difficulty',
+    'emissions',
+    'goals',
+    'inflation',
+    'mapSize',
+    'occupancyPenalty',
+    'roadCongestion',
+    'seed',
+    'signalPenalty',
+  ],
+  fromTick: 0,
+  toTick: endOfYear(1975),
+};
+
+/**
+ * The eight, in the order the browser lists them: the two that teach the game
+ * first, the three that are about a landscape, then the three that are about a
+ * constraint.
+ */
+export const SHIPPED_SCENARIOS: readonly ShippedScenario[] = [
+  SPEEDRUN,
+  PASSAGIERNETZ,
+  FRACHTRAUSCH,
+  GEBIRGSLOGISTIK,
+  INSELHUEPFEN,
+  WIEDERAUFBAU,
+  RATSDIPLOMATIE,
+  UEBERLEBEN,
+];
+
+/** The scenario with this id, or null. */
+export function scenarioById(id: string): ShippedScenario | null {
+  for (let i = 0; i < SHIPPED_SCENARIOS.length; i++) {
+    const scenario = SHIPPED_SCENARIOS[i]!;
+    if (scenario.id === id) return scenario;
+  }
+  return null;
+}

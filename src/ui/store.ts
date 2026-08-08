@@ -26,7 +26,15 @@ import type { CrashBundleSummary } from './crashBundle';
  * whole window and two of them at once would mean deciding which is on top.
  */
 export type OverlayKind =
-  'menu' | 'newGame' | 'options' | 'saves' | 'replays' | 'handbook' | 'tutorial' | null;
+  | 'menu'
+  | 'newGame'
+  | 'scenarios'
+  | 'options'
+  | 'saves'
+  | 'replays'
+  | 'handbook'
+  | 'tutorial'
+  | null;
 
 /** What a left click on the map does. */
 export type Tool =
@@ -169,6 +177,17 @@ export interface SimUiState extends SnapshotValues {
     readonly path: string;
     readonly corrupt: boolean;
   } | null;
+  /**
+   * The shipped scenario the running game was started from, or null (M17).
+   *
+   * Identity only - the id the browser started and the title to put on the
+   * screen. What the scenario actually ASKS for lives in the world's goals,
+   * which are hashed state and travel with the save; this field is how the
+   * interface knows which briefing it may still show. It is cleared by
+   * `resetWorld`, so a plain new game or a loaded save can never inherit the
+   * previous scenario's name.
+   */
+  activeScenario: { readonly id: string; readonly title: string } | null;
   /** Which full-screen overlay is open, if any. */
   overlay: OverlayKind;
   /** Which entity list is open, or null. The V/L/H/T/I keys of section 17.2. */
@@ -286,6 +305,7 @@ export interface SimUiState extends SnapshotValues {
       readonly corrupt: boolean;
     } | null,
   ) => void;
+  setActiveScenario: (scenario: { readonly id: string; readonly title: string } | null) => void;
   setOverlay: (overlay: OverlayKind) => void;
   toggleList: (list: 'vehicles' | 'lines' | 'stations' | 'towns' | 'industries') => void;
   /** Wired to the map view so a list row can jump to what it names. */
@@ -382,6 +402,7 @@ export const useSimStore = create<SimUiState>((set) => ({
   replayChecking: false,
   replayError: null,
   loadError: null,
+  activeScenario: null,
   overlay: null,
   openList: null,
   selectedVehicleId: null,
@@ -461,6 +482,7 @@ export const useSimStore = create<SimUiState>((set) => ({
   setReplayChecking: (replayChecking) => set({ replayChecking }),
   setReplayError: (replayError) => set({ replayError, replayChecking: false }),
   setLoadError: (loadError) => set({ loadError }),
+  setActiveScenario: (activeScenario) => set({ activeScenario }),
   setOverlay: (overlay) => set({ overlay }),
   toggleList: (list) => set((state) => ({ openList: state.openList === list ? null : list })),
   centreOnTile: () => undefined,
@@ -485,6 +507,10 @@ export const useSimStore = create<SimUiState>((set) => ({
   resetWorld: () =>
     set({
       ready: false,
+      // A world that is being replaced takes its scenario with it: the briefing
+      // belongs to the goals in THAT world, and a stale title over a plain new
+      // game would claim the player is in a scenario they left.
+      activeScenario: null,
       camera: null,
       towns: [],
       industries: [],

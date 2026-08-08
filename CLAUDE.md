@@ -1000,6 +1000,29 @@ layout 8 -> 9 for the goal block.
   reference final hash is compared with the container's own `ReplayClaim` and
   then handed to M16's `verifyReplay` unchanged - re-simulated, never
   believed.
+- **A shipped scenario is TEXT, and its seed was chosen by looking at the
+  world it generates** (D-195). Eight definitions of seed + rules + goal
+  descriptors + briefing, twelve kilobytes, no file: the world is generated
+  when the player presses start, which is what makes the same eight
+  determinism fixtures (each built twice, played a game year, hash-identical
+  - and all eight hashing differently from each other). ONE path from a
+  definition to a world - `newGameOptionsOf` -> `worldParamsFor` ->
+  `World.create` - shared by the browser, `SimWorker.restart` and the
+  fixtures, because a fixture that builds its own params hashes its own copy
+  of the rules. The scan behind the seeds is worth knowing before adding a
+  ninth: this generator makes ONE continent (three of four hundred seeds had
+  three inhabited land masses), global roughness says nothing about
+  mountains (the CORRIDOR between the two towns a goal names does), and a
+  climate keeps the terrain but changes the industries - which is why the
+  arctic mountain scenario counts passengers, since at that climate its map
+  grows coal mines and nothing that burns coal. Thresholds are calibrated on
+  four measurements (four buses = 21,400 pax/year, one coal train = ~1,700
+  units/year, an unserved town of 8,000 reaches 10,465 in 25 years, D-158's
+  840,000 EUR ceiling); the floor under them is a test that runs every
+  scenario a game year with no player and requires every goal still Open.
+  **The briefing goes through the metadata block, never `t()`** - chrome is
+  interface, a briefing is content that travels with the scenario, and a
+  test asserts neither catalogue contains one.
 
 ## Still outstanding
 

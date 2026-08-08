@@ -45,6 +45,7 @@ import {
   stationWaitingUnits,
 } from './lines/metrics';
 import type { NewGameOptions, SaveSlotKind } from '../shared/protocol';
+import { worldParamsFor } from './newGame';
 import { bookValueCt, companyValueCt, monthsInOrder } from './economy/ledger';
 import { contractProgress, isOpen } from './economy/contracts';
 import { refusedTile } from './vehicles/reservations';
@@ -698,25 +699,9 @@ function restart(options: NewGameOptions): void {
   const sink = writer;
   if (sink === null) return;
 
-  world = World.create(
-    {
-      seed: options.seed,
-      difficulty: options.difficulty,
-      climate: options.climate,
-      mapSize: options.mapSize,
-      companyName: options.companyName,
-      companyColorIndex: options.companyColorIndex,
-      inflation: options.inflation,
-      emissions: options.emissions,
-      occupancyPenalty: options.occupancyPenalty,
-      signalPenalty: options.signalPenalty,
-      roadCongestion: options.roadCongestion,
-      aiCompanies: options.aiCompanies,
-    },
-    (phase, seedAttempt) => {
-      scope.postMessage({ type: 'generating', phase, seedAttempt });
-    },
-  );
+  world = World.create(worldParamsFor(options), (phase, seedAttempt) => {
+    scope.postMessage({ type: 'generating', phase, seedAttempt });
+  });
   queue = new CommandQueue();
   checkpoints = new CheckpointRing();
   checkpoints.record(world, queue);

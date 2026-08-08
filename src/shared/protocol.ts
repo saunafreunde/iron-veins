@@ -1,5 +1,6 @@
 import type { Command } from '../sim/commands/types';
 import type { Difficulty, MapClimate } from '../sim/constants';
+import type { GoalSpec } from '../sim/goals/types';
 import type { MapGenPhase } from '../sim/mapgen';
 import type { ReplayVerification } from '../sim/save/replay';
 import type { ReplayMeta } from '../sim/save/replaySession';
@@ -450,6 +451,16 @@ export interface NewGameOptions {
   /** The road half of 8.4: congestion recorded, priced, capped and crossed. */
   readonly roadCongestion: boolean;
   readonly aiCompanies: number;
+  /**
+   * The goals the world is created with (SPEC2 M17), or absent for none.
+   *
+   * A world rule like every other field here - saved, hashed and fixed at
+   * genesis (D-193) - and the one the new-game screen cannot author: goals come
+   * from a scenario. This is the door the scenario browser starts one through,
+   * which is why a shipped scenario needs no file: it is a seed, a set of rules
+   * and a goal list, and all three travel in this message.
+   */
+  readonly goals?: readonly GoalSpec[];
 }
 
 /**
