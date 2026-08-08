@@ -257,12 +257,12 @@ describe('save migrations', () => {
 
   it('pins the current save version', () => {
     // Bumping SAVE_VERSION has to be a conscious act, because from the first
-    // released build onwards it also requires a migration. 29 is M18's single
-    // bump (SPEC2 Z5): the weather world rule of E-01 owns it - off/mild/harsh
-    // plus the 16x16 region field it drives, both saved and hashed because
-    // weather is simulation reality; the milestone's later bundles extend that
+    // released build onwards it also requires a migration. 30 is M19's single
+    // bump (SPEC2 Z5): the two passenger classes of E-08 own it - the cargo
+    // table grew by two and every number that named the retired `Passengers`
+    // id now names `CommuterPax`; the milestone's later bundles extend that
     // migration and add no numbers.
-    expect(SAVE_VERSION).toBe(29);
+    expect(SAVE_VERSION).toBe(30);
   });
 
   it('has a real migration for every step from version 2 on', () => {

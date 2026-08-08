@@ -168,11 +168,14 @@ rewrites nothing - the cached-rm is what forces the re-checkout.
   | --- | --- | --- | --- |
   | 1 bus line | payback 2-4 yr | year 3 | the passenger and mail rates |
   | 2 coal train | payback 4-7 yr | year 6 | **the freight rates** (D-087) |
-  | 3 wood chain | 80-200 k/yr | 166 k | that a full chain is worth building |
+  | 3 wood chain | 80-200 k/yr | 160 k | that a full chain is worth building |
   | 4 idle company | bankrupt yr 6-9 | year 9 | **upkeep as a share of price** |
   | 6 mine closure | 24 +/- 1 months | month 25 | the closure clock on the calendar |
 
   M6's acceptance criterion is exactly this table being in band, and it is.
+  (The wood chain's row said 166 k until SPEC2 M19 bundle 1 re-read it: the
+  scenario measures 159,516 EUR/yr and did so BEFORE that bundle too, verified
+  by running it in a worktree at the previous commit. The band never moved.)
 
   Scenario 5 (an AI company alone on a 512 map, 25 years) is in the suite
   since M11 as `tests/balance/aiCompany.spec.ts`, on the band the economy
@@ -798,6 +801,31 @@ perf and environment notes above.
   4,273 -> **3,873**, p50 medians 8.378 -> 7.273 and 2.046 -> 1.963 ms on
   interleaved A/B runs, no tripwire re-derived. Zero sim bytes, zero atlas
   booking; main bundle +460 B.
+- **What the PLAYER builds stops being an orange box** (D-208, bundle 10,
+  2026-08-09). The baked manifest's target prefixes were exactly vehicle,
+  building, industry and tree: all thirteen `ModuleKind`s - stop, lorry bay,
+  both depots, platform, crane, canopy, cold store, quay, ship depot and the
+  three airports - still fell through `moduleFrame` to ONE white box at full
+  company tint, roughly 1,100 saturated pixels a tile on the objects a
+  transport game is looked at through. `module:<ModuleKindName>` is the
+  fourth static family now, `IndustryType` read backwards one enum along:
+  thirteen kit bodies, lifts **0.44-1.47 tile heights** (crane tallest, stop
+  shortest, airstrip < airport < international in both axes), all inside
+  D-206's 64 px rule, which `STATIC_TARGET` now enforces for `module:` too.
+  **The company colour is 4-141 px of accent** - a canopy, a row of roller
+  doors, a fascia, a crane collar, each a hue band measured off the model -
+  and five modules carry none because their kit body has no separable patch;
+  the two airports' band was written, baked, MEASURED at 42.2 %/32.3 % of the
+  cell and deleted, because a coloured terminal is the defect itself. A static
+  may now turn its camera (`facing`, `baseFacing`): at the kit's own facing the
+  bay's roller doors and the depot's portal point away and both are blank
+  boxes. Wired like the INDUSTRIES, not the buildings - modules may never
+  enter a chunk (D-161), so `placeStations` IS both paths - with base pass,
+  company mask at the same zIndex and the cell's own night twin.
+  **`PROCEDURAL_ONLY_MODULES` is empty on purpose**: the D-169 both-directions
+  audit now covers modules in two files, so an unmapped kind is a red build
+  instead of a silent box. Bake 145 -> 158 models, 2,430 -> 2,469 cells, ten
+  pages, twice bit-identical; zero sim bytes, zero atlas booking.
 
 ## M14 - instruments: flow atlas, station x-ray, statistics, tooltips
 
@@ -1594,6 +1622,80 @@ it changed no file under `src/`, and the discrepancy is written down
 rather than smoothed away - and bundle 5's +76 B are the new pure function
 and the derived constant, which cost a little more than the deleted
 twelve-entry table saved.
+
+## M19 - travellers with destinations: the two passenger classes
+
+Bundle 1 of the milestone, and its ONE save bump (v29 -> v30, Z5). The
+passenger trade is two cargo ids now, and which one a stop sells depends on
+what its catchment is zoned as - the first economic use of the 13.1 zones.
+Zero snapshot bytes, zero atlas cells, two i18n strings.
+
+- **The classes are OWN ids, and `Cargo.Passengers` is RETIRED at id 0**
+  (D-207, E-08). `CARGO_COUNT` 18 -> 20; nothing produces the old id,
+  nothing accepts it, no vehicle carries it, and `deliveries.spec.ts` holds
+  all three so the empty slot can never become a D-118 dead end. It is kept
+  rather than reused because a cargo id is a NUMBER in every save ever
+  written. **The commuter row IS the retired row** - 950 ct, four grace days,
+  5 % decay, the figures scenario 1 is calibrated on - and business is 1.6x
+  the fare with twice the decay beyond the SAME grace period.
+- **The seats are shared, and it is the one thing here SPEC2 did not ask for
+  by name** (D-207). A vehicle refitted to either class loads that class
+  first and fills the rest of its room with the other; the refit decides the
+  ORDER of boarding and nothing else. A station's capacity is checked against
+  the SUM over every stack, so a class nobody carries does not merely go
+  unserved - it fills the stop to its 2,000-unit cap and turns every later
+  deposit of the class that IS served into overflow. Measured: a stop at the
+  centre of a city of 8,000 covers twelve commercial tiles and no residential
+  ones at all.
+- **The split is the map's zoning and invents no constant.**
+  `station.commercialShare` is DERIVED like `acceptedCargo` beside it -
+  recomputed on load, never saved, never hashed - and deliberately not
+  `commercialCovered / buildingsCovered`, because that counter is saved and a
+  share above one would hand a town negative commuters. The town's total
+  output never moved; commuters are deposited FIRST, so a world with no
+  commercial zone makes exactly the call the pre-M19 code made (the D-201
+  device) and **every balancing band of section 19.4 is untouched by
+  construction** - those worlds are hand-built and residential.
+- **A passenger train nearly left its shed as a mail train.**
+  `consistDefaultCargo` broke ties on the lowest cargo id, and a coach has as
+  many "mail" units as it has seats; with the classes at 18 and 19, Mail won
+  every tie. What a consist was BUILT to carry now beats what it can be
+  converted to.
+- **The migration is the first REMAP in the chain** and it uncovered a latent
+  trap: `v24_to_v25` and `v27_to_v28` sized their zero-fills from the LIVE
+  constants, so a v22 save would have reached v30 with twenty-cargo rows and
+  left it with twenty-two. A migration writes the shape of its OWN target
+  version (`CARGO_COUNT_V29`). The command LOG is deliberately not remapped -
+  history, judged only by a build of its own version (D-131, E-11).
+- **Pins moved once each:** canonical `5a2a6cf73f4107bb` ->
+  **`40be7d25b1a6a90f`**, corpus `c0a021f5d1ee8619` ->
+  **`9800c136644b0199`** (all NINE fixtures still decode to ONE world), soak
+  `e6c5e33d8e7607ec` -> **`65d8cb57cf5edec5`** at 698 -> 800 commands.
+- **The tick could not be measured on this box** and no acceptance number is
+  claimed: the gate is red on the BASELINE commit too (other agents were
+  building on the same machine). Four alternating A/B pairs give a mean p50
+  delta of +0.10 ms - the ledger row exactly, inside the +-0.7 ms noise - with
+  the p99 sign flipping across pairs. NO O(stations) walk was added: the
+  routing decision at a stop and the destination search in the daily hook are
+  both SHARED between the classes, provably (both sit in
+  `STATION_ALWAYS_ACCEPTED`, so neither list can differ).
+- **Measured:** scenario 1 payback year 3, scenario 2 249,980 EUR / year 6,
+  scenario 3 159,516 EUR/yr, Netzdesign 3.73, takt -8.3 % / 0.57, Punktzahl
+  5,889 - all unchanged. Scenario 5 road 1,119,720 -> **1,122,965 EUR**
+  (+0.29 %, deep inside the band): the AI's buses run on GENERATED towns,
+  which do have commercial zones. **One band was re-banded with a trace**:
+  `aiGame`'s rail value floor -150,000 -> -250,000 EUR, because the road
+  company's extra premium moves the SHARED world and this run's rail husk
+  buys and writes off one train the M11 run never bought (-15,142 ->
+  -159,142 EUR, both measured on this machine an hour apart, the baseline in
+  a worktree at HEAD). At both figures it is the same stagnant husk D-158
+  names.
+- **The fare, on runs rather than off the table:** 1.6 at the counter, **1.291**
+  on twelve tiles of bus road, **0.664** on thirty - past twice the grace
+  period a business traveller is worth LESS per seat than the commuter beside
+  him, which is the whole mechanism.
+- Still open in M19: gravity in `chooseDestinations`, return trips, and the
+  AI's own use of the classes.
 
 ## Still outstanding
 

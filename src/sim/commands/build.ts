@@ -674,6 +674,9 @@ function attachModule(world: World, module: StationModule): Station {
       overflowUnits: 0,
       townId: -1,
       buildingsCovered: 0,
+      // Derived from the map by `assignStationCatchment` below, like
+      // `acceptedCargo`; zero is what "nothing scanned yet" is.
+      commercialShare: 0,
       transferNode: false,
       acceptedCargo: 0,
       servedIndustries: [],

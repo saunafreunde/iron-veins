@@ -6,6 +6,7 @@ import {
   WeatherRule,
 } from '../../constants';
 import { ACCOUNT_COUNT } from '../../economy/ledger';
+import { GoalKind } from '../../goals/types';
 import { STATION_HISTORY_SIZE, STATION_MONTH_COUNTER_SIZE } from '../../station/history';
 import { SaveFormatError, SAVE_VERSION } from '../format';
 
@@ -893,10 +894,11 @@ const v24_to_v25: SaveMigration = (payload) => {
         const previous = station as Record<string, unknown>;
         return {
           ...previous,
-          history: previous['history'] ?? new Array<number>(STATION_HISTORY_SIZE).fill(0),
+          // In the v25 LAYOUT, not in this build's - see CARGO_COUNT_V29.
+          history: previous['history'] ?? new Array<number>(STATION_HISTORY_SIZE_V29).fill(0),
           historyCursor: previous['historyCursor'] ?? 0,
           monthCounters:
-            previous['monthCounters'] ?? new Array<number>(STATION_MONTH_COUNTER_SIZE).fill(0),
+            previous['monthCounters'] ?? new Array<number>(STATION_MONTH_COUNTER_SIZE_V29).fill(0),
         };
       }),
       ...(vehicles === null
@@ -1085,8 +1087,9 @@ const v27_to_v28: SaveMigration = (payload) => {
               const previous = company as Record<string, unknown>;
               return {
                 ...previous,
+                // In the v28 LAYOUT, not in this build's - see CARGO_COUNT_V29.
                 cargoDeliveredUnits:
-                  previous['cargoDeliveredUnits'] ?? new Array<number>(CARGO_COUNT).fill(0),
+                  previous['cargoDeliveredUnits'] ?? new Array<number>(CARGO_COUNT_V29).fill(0),
               };
             }),
           }),
@@ -1139,6 +1142,242 @@ const v28_to_v29: SaveMigration = (payload) => {
   };
 };
 
+// ------------------------------------------------- M19: the passenger classes
+
+/**
+ * `CARGO_COUNT` as every save format up to and including 29 knew it.
+ *
+ * SPEC2 M19 grew the cargo table by two (E-08), and that turned a latent trap
+ * in this file into a real one: a migration must write the shape of ITS OWN
+ * target version, never the shape this build happens to compile with. The
+ * v24 -> v25 rings and the v27 -> v28 lifetime tally were sized from the live
+ * constants, so a version 22 save would have arrived at `v29_to_v30` carrying
+ * TWENTY-cargo rows that the remap below would have grown to twenty-two. Both
+ * are pinned to this number now, and the corpus - which walks the whole chain
+ * from 22 - is what proves it.
+ */
+const CARGO_COUNT_V29 = 18;
+
+/**
+ * The other two terms of the ring layout as versions 25..29 knew them, pinned
+ * for the same reason and held against the live constants by
+ * `tests/unit/save.spec.ts` - so the day a milestone changes the number of
+ * months or of counters, this file is named rather than silently wrong.
+ */
+const STATION_HISTORY_MONTHS_V29 = 12;
+const STATION_HISTORY_FIELDS_V29 = 3;
+
+/** The station history ring in the v25..v29 layout (station/history.ts). */
+const STATION_HISTORY_SIZE_V29 =
+  STATION_HISTORY_MONTHS_V29 * CARGO_COUNT_V29 * STATION_HISTORY_FIELDS_V29;
+
+/** The month-in-progress counters in the same layout. */
+const STATION_MONTH_COUNTER_SIZE_V29 = CARGO_COUNT_V29 * STATION_HISTORY_FIELDS_V29;
+
+/**
+ * The cargo id a version 29 save meant by 0.
+ *
+ * `Cargo.Passengers` is retired: the town splits its output into
+ * `Cargo.CommuterPax` and `Cargo.BusinessPax`, and the class a world played
+ * before M19 carried is the commuter - it was the fare every balancing band
+ * was measured on, and the business premium is new money that world never
+ * earned. Every other id keeps its number, which is the whole reason the
+ * retired slot was not reused.
+ *
+ * The 18 is a literal for the same reason `CARGO_COUNT_V29` is: this function
+ * writes the VERSION 30 shape, and version 30's commuter is 18 for ever. A
+ * later milestone that renumbers the table would have to add its own
+ * migration, not silently move this one's target under it.
+ */
+const CARGO_COMMUTER_PAX_V30 = 18;
+
+function remapCargoId(id: number): number {
+  return id === 0 ? CARGO_COMMUTER_PAX_V30 : id;
+}
+
+/** Remap a cargo id that may be the -1 "none" sentinel of an order refit. */
+function remapOptionalCargoId(value: unknown): unknown {
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) return value;
+  return remapCargoId(value);
+}
+
+/**
+ * Grow one CARGO_COUNT-sized row of figures into the new table.
+ *
+ * A row that is already the new length is left exactly as it is - the corpus
+ * trick of wrapping a CURRENT state in an old version header must not shift a
+ * real table sideways - and so is a row of any other length, which the decoder
+ * is the one to refuse (the v17_to_v18 precedent).
+ */
+function growCargoRow(value: unknown): unknown {
+  if (!Array.isArray(value) || value.length !== CARGO_COUNT_V29) return value;
+  const grown = new Array<number>(CARGO_COUNT).fill(0);
+  for (let cargo = 0; cargo < CARGO_COUNT_V29; cargo++) {
+    grown[remapCargoId(cargo)] = value[cargo] as number;
+  }
+  return grown;
+}
+
+/**
+ * The same for the twelve-month station ring, whose cargo index is the middle
+ * one of three (`(month * CARGO_COUNT + cargo) * fields + field`).
+ */
+function growHistoryRing(value: unknown): unknown {
+  if (!Array.isArray(value) || value.length !== STATION_HISTORY_SIZE_V29) return value;
+  const grown = new Array<number>(STATION_HISTORY_SIZE).fill(0);
+  for (let month = 0; month < STATION_HISTORY_MONTHS_V29; month++) {
+    for (let cargo = 0; cargo < CARGO_COUNT_V29; cargo++) {
+      const from = (month * CARGO_COUNT_V29 + cargo) * STATION_HISTORY_FIELDS_V29;
+      const to = (month * CARGO_COUNT + remapCargoId(cargo)) * STATION_HISTORY_FIELDS_V29;
+      for (let field = 0; field < STATION_HISTORY_FIELDS_V29; field++) {
+        grown[to + field] = value[from + field] as number;
+      }
+    }
+  }
+  return grown;
+}
+
+/** The month in progress, same layout without the month index. */
+function growMonthCounters(value: unknown): unknown {
+  if (!Array.isArray(value) || value.length !== STATION_MONTH_COUNTER_SIZE_V29) return value;
+  const grown = new Array<number>(STATION_MONTH_COUNTER_SIZE).fill(0);
+  for (let cargo = 0; cargo < CARGO_COUNT_V29; cargo++) {
+    const from = cargo * STATION_HISTORY_FIELDS_V29;
+    const to = remapCargoId(cargo) * STATION_HISTORY_FIELDS_V29;
+    for (let field = 0; field < STATION_HISTORY_FIELDS_V29; field++) {
+      grown[to + field] = value[from + field] as number;
+    }
+  }
+  return grown;
+}
+
+/** Rewrite the `refitTo` of one order list, leaving everything else alone. */
+function remapOrders(value: unknown): unknown {
+  if (!Array.isArray(value)) return value;
+  return value.map((order) =>
+    typeof order === 'object' && order !== null && !Array.isArray(order)
+      ? {
+          ...(order as Record<string, unknown>),
+          refitTo: remapOptionalCargoId((order as Record<string, unknown>)['refitTo']),
+        }
+      : order,
+  );
+}
+
+/** Rewrite the cargo id of every stack in a waiting or carried list. */
+function remapStacks(value: unknown): unknown {
+  if (!Array.isArray(value)) return value;
+  return value.map((stack) =>
+    typeof stack === 'object' && stack !== null && !Array.isArray(stack)
+      ? {
+          ...(stack as Record<string, unknown>),
+          cargo: remapOptionalCargoId((stack as Record<string, unknown>)['cargo']),
+        }
+      : stack,
+  );
+}
+
+function mapSection(inner: Record<string, unknown>, key: string, fn: (entry: unknown) => unknown) {
+  const section = inner[key];
+  return Array.isArray(section) ? { [key]: section.map(fn) } : {};
+}
+
+function withFields(entry: unknown, fields: Record<string, unknown>): unknown {
+  if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) return entry;
+  return { ...(entry as Record<string, unknown>), ...fields };
+}
+
+/**
+ * M19 split the passenger trade into two fare classes (SPEC2 E-08, M19's one
+ * Z5 bump - v30), and this is the first migration in the chain that REMAPS
+ * rather than defaults.
+ *
+ * A version 29 world knew one kind of passenger. This build knows two -
+ * `CommuterPax`, which a residential or industrial zone offers, and
+ * `BusinessPax`, which a commercial zone offers at 1.6 times the fare - and
+ * the old id is retired rather than reused, so that no OTHER cargo has to
+ * change its number. Every number that named a cargo therefore moves, and
+ * nothing else about the world does:
+ *
+ *  - every waiting and carried parcel, every vehicle refit, every order and
+ *    line-order `refitTo`, the AI's project cargo, a tender's cargo and a
+ *    cargo goal's subject become `CommuterPax` where they were `Passengers`;
+ *  - the two CARGO_COUNT-sized tables - a company's lifetime delivery tally
+ *    and every station's twelve-month ring plus its month in progress - grow
+ *    by two slots, with the old passenger figures moved to the commuter slot
+ *    and the business slots entered as zero. Zero is not a convenience here
+ *    either: that world earned no business fares, because it had none.
+ *
+ * The COMMAND LOG is deliberately not remapped. A log is history rather than
+ * state (D-131) and it is judged only by a build of its own version, because
+ * cross-version replay verification is refused rather than guessed (E-11,
+ * D-191). Rewriting a recorded `refitTo` would be inventing a command the
+ * player never gave.
+ *
+ * This bump moves hashed world state - two cargo table rows reach the digest
+ * through every station ring and every company row - so both pins were
+ * re-recorded under their own protocols (D-137, D-130) and the corpus is the
+ * evidence that nothing but the split moved.
+ */
+const v29_to_v30: SaveMigration = (payload) => {
+  const inner = state(payload);
+
+  return {
+    ...payload,
+    state: {
+      ...inner,
+      ...mapSection(inner, 'stations', (station) =>
+        withFields(station, {
+          waiting: remapStacks((station as Record<string, unknown>)['waiting']),
+          history: growHistoryRing((station as Record<string, unknown>)['history']),
+          monthCounters: growMonthCounters((station as Record<string, unknown>)['monthCounters']),
+        }),
+      ),
+      ...mapSection(inner, 'vehicles', (vehicle) =>
+        withFields(vehicle, {
+          cargo: remapStacks((vehicle as Record<string, unknown>)['cargo']),
+          refitCargo: remapOptionalCargoId((vehicle as Record<string, unknown>)['refitCargo']),
+          orders: remapOrders((vehicle as Record<string, unknown>)['orders']),
+        }),
+      ),
+      ...mapSection(inner, 'lines', (line) =>
+        withFields(line, { orders: remapOrders((line as Record<string, unknown>)['orders']) }),
+      ),
+      ...mapSection(inner, 'companies', (company) =>
+        withFields(company, {
+          cargoDeliveredUnits: growCargoRow(
+            (company as Record<string, unknown>)['cargoDeliveredUnits'],
+          ),
+        }),
+      ),
+      ...mapSection(inner, 'contracts', (contract) =>
+        withFields(contract, {
+          cargo: remapOptionalCargoId((contract as Record<string, unknown>)['cargo']),
+        }),
+      ),
+      ...mapSection(inner, 'goals', (goal) => {
+        const raw = goal as Record<string, unknown>;
+        // Only a CargoDeliveredTotal goal names a cargo in `subjectA`; every
+        // other kind names a town, a run of days, or nothing at all, and
+        // remapping those would silently re-aim the goal at another town.
+        return raw['kind'] === GoalKind.CargoDeliveredTotal
+          ? withFields(goal, { subjectA: remapOptionalCargoId(raw['subjectA']) })
+          : goal;
+      }),
+      ...mapSection(inner, 'ai', (entry) => {
+        const raw = entry as Record<string, unknown>;
+        const project = raw['project'];
+        if (typeof project !== 'object' || project === null || Array.isArray(project)) return entry;
+        return withFields(entry, {
+          project: withFields(project, {
+            cargo: remapOptionalCargoId((project as Record<string, unknown>)['cargo']),
+          }),
+        });
+      }),
+    },
+  };
+};
+
 /**
  * Registry keyed by the version a migration reads (section 19.1).
  *
@@ -1174,6 +1413,7 @@ export const SAVE_MIGRATIONS: ReadonlyMap<number, SaveMigration> = new Map<numbe
   [26, v26_to_v27],
   [27, v27_to_v28],
   [28, v28_to_v29],
+  [29, v29_to_v30],
 ]);
 
 /**

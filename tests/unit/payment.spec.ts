@@ -11,7 +11,7 @@ describe('the payment formula of section 7.5', () => {
     //   3.5 < 4             -> no decay either, so the time factor is 1.00
     //   200 * 950 * 0.60 * 1.00 * 1.00 * 1.00 = 114_000 cent = 1_140.00 EUR
     const revenue = deliveryRevenueCt({
-      cargo: Cargo.Passengers,
+      cargo: Cargo.CommuterPax,
       amount: 200,
       distanceTiles: 60,
       ticksInTransit: 3.5 * TICKS_PER_DAY,
@@ -22,9 +22,9 @@ describe('the payment formula of section 7.5', () => {
   });
 
   it('pays the premium for a fast delivery', () => {
-    const grace = cargoSpec(Cargo.Passengers).graceDays;
-    expect(timeFactor(Cargo.Passengers, grace * 0.5)).toBe(1.3);
-    expect(timeFactor(Cargo.Passengers, grace * 0.5 + 0.01)).toBe(1);
+    const grace = cargoSpec(Cargo.CommuterPax).graceDays;
+    expect(timeFactor(Cargo.CommuterPax, grace * 0.5)).toBe(1.3);
+    expect(timeFactor(Cargo.CommuterPax, grace * 0.5 + 0.01)).toBe(1);
   });
 
   it('pays full price inside the grace period and decays after it', () => {
@@ -65,7 +65,7 @@ describe('the payment formula of section 7.5', () => {
 
   it('scales linearly with amount and distance', () => {
     const base = {
-      cargo: Cargo.Passengers,
+      cargo: Cargo.CommuterPax,
       amount: 100,
       distanceTiles: 50,
       ticksInTransit: 3 * TICKS_PER_DAY,
@@ -80,7 +80,7 @@ describe('the payment formula of section 7.5', () => {
   it('splits a journey into legs without paying twice', () => {
     const leg = (distance: number) =>
       deliveryRevenueCt({
-        cargo: Cargo.Passengers,
+        cargo: Cargo.CommuterPax,
         amount: 80,
         distanceTiles: distance,
         ticksInTransit: TICKS_PER_DAY,

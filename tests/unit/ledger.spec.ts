@@ -53,7 +53,7 @@ function company() {
 describe('the accounts', () => {
   it('splits revenue three ways by what was carried', () => {
     const c = company();
-    bookRevenue(c, 100, Cargo.Passengers);
+    bookRevenue(c, 100, Cargo.CommuterPax);
     bookRevenue(c, 200, Cargo.Mail);
     bookRevenue(c, 400, Cargo.Coal);
     bookRevenue(c, 800, Cargo.Goods);
@@ -101,7 +101,7 @@ describe('the accounts', () => {
   it('files each month into the ring and into the year', () => {
     const c = company();
     for (let month = 0; month < MONTHS_PER_YEAR; month++) {
-      bookRevenue(c, 1_000, Cargo.Passengers);
+      bookRevenue(c, 1_000, Cargo.CommuterPax);
       bookExpense(c, 400, Account.Construction);
       closeMonth(c);
     }

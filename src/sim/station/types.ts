@@ -141,6 +141,20 @@ export interface Station {
   /** Building tiles of that town inside the catchment; the production share. */
   buildingsCovered: number;
   /**
+   * Share of the town buildings inside the catchment that are COMMERCIALLY
+   * zoned, 0..1 - the class split of SPEC2 M19 (section 13.1's zones put to
+   * economic use for the first time).
+   *
+   * DERIVED from the map in `assignStationIndustries`, exactly like
+   * `acceptedCargo` beside it: it is a pure function of the building layer and
+   * the catchment, both of which the save carries, so recomputing it on load
+   * cannot go stale and costs nothing the station was not already scanning.
+   * It is deliberately NOT `commercialCovered / buildingsCovered`: that
+   * counter is saved and can predate a demolition, and a share above one would
+   * hand a town negative commuters.
+   */
+  commercialShare: number;
+  /**
    * Marked as an "Umsteigeknoten" of section 12.3: departures of takted lines
    * hold here, up to the hard cap, for a connecting vehicle of the same
    * group. Per STATION - the section marks stations, not line stops - and

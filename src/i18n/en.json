@@ -354,6 +354,8 @@
   "veh.wagon_silo": "Wagon Z-1 \"Silo\"",
   "veh.wagon_heavy": "Wagon H-1 \"Heavy Duty\"",
   "cargo.passengers": "Passengers",
+  "cargo.commuterPax": "Commuters",
+  "cargo.businessPax": "Business travellers",
   "cargo.mail": "Mail",
   "cargo.coal": "Coal",
   "cargo.ironOre": "Iron ore",

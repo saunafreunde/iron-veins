@@ -1,6 +1,7 @@
 import { Cargo, CARGO_COUNT } from '../cargo/types';
 import { STATION_CATCHMENT_SCAN_RADIUS } from '../constants';
 import { inCatchment, type Station } from '../station/types';
+import { BuildingKind } from '../town/types';
 import type { World } from '../World';
 import { industrySpec, type Industry } from './types';
 
@@ -38,8 +39,16 @@ export function coveredShareOf(station: Station, industry: Industry): number {
  * these conditional on houses would mean a stop that serves a mine could not
  * also carry its workers, and it would change what M2's bus line is worth -
  * which is calibrated and in band.
+ *
+ * Both passenger classes of SPEC2 M19 are here and the retired `Passengers` id
+ * is not: a class that no station took would be a dead end the moment a town
+ * produced it (D-118), and the retired id is produced by nothing at all.
  */
-const ALWAYS_ACCEPTED: readonly Cargo[] = [Cargo.Passengers, Cargo.Mail];
+export const STATION_ALWAYS_ACCEPTED: readonly Cargo[] = [
+  Cargo.CommuterPax,
+  Cargo.BusinessPax,
+  Cargo.Mail,
+];
 
 /**
  * What a town consumes, and therefore only takes where it has houses.
@@ -69,6 +78,8 @@ export function assignStationIndustries(world: World, station: Station): void {
   const map = world.map;
   const served: number[] = [];
   const radius = STATION_CATCHMENT_SCAN_RADIUS;
+  let zoned = 0;
+  let commercial = 0;
 
   for (let dy = -radius; dy <= radius; dy++) {
     const y = station.y + dy;
@@ -78,17 +89,30 @@ export function assignStationIndustries(world: World, station: Station): void {
       if (x < 0 || x >= map.size) continue;
       if (!inCatchment(station, x, y)) continue;
 
-      const industryId = map.industryId[map.tileIndex(x, y)]!;
+      const index = map.tileIndex(x, y);
+      // The zone mix of SPEC2 M19, counted in the scan the station already
+      // makes. Only the station's OWN town counts, exactly as
+      // `assignStationCatchment` counts `buildingsCovered`.
+      if (station.townId >= 0 && map.townId[index] === station.townId) {
+        const kind = map.buildingKind[index]!;
+        if (kind !== BuildingKind.None) {
+          zoned++;
+          if (kind === BuildingKind.Commercial) commercial++;
+        }
+      }
+
+      const industryId = map.industryId[index]!;
       if (industryId < 0) continue;
       if (!served.includes(industryId)) served.push(industryId);
     }
   }
+  station.commercialShare = zoned > 0 ? commercial / zoned : 0;
   // Ascending id, so every pass over the list is in a fixed order.
   served.sort((a, b) => a - b);
   station.servedIndustries = served;
 
   let accepted = 0;
-  for (const cargo of ALWAYS_ACCEPTED) accepted |= 1 << cargo;
+  for (const cargo of STATION_ALWAYS_ACCEPTED) accepted |= 1 << cargo;
   for (const id of served) {
     const industry = world.industries[id];
     if (industry === undefined) continue;

@@ -269,12 +269,12 @@ const PASSAGIERNETZ: ShippedScenario = {
     },
     {
       caption: {
-        de: '200.000 Fahrgaeste befoerdern',
-        en: 'Carry 200,000 passengers',
+        de: '200.000 Pendler befoerdern',
+        en: 'Carry 200,000 commuters',
       },
       spec: {
         kind: GoalKind.CargoDeliveredTotal,
-        subjectA: Cargo.Passengers,
+        subjectA: Cargo.CommuterPax,
         subjectB: -1,
         threshold: 200_000,
         goldTick: endOfYear(1960),
@@ -366,12 +366,12 @@ const GEBIRGSLOGISTIK: ShippedScenario = {
     },
     {
       caption: {
-        de: '60.000 Fahrgaeste ueber die Berge bringen',
-        en: 'Carry 60,000 passengers over the mountains',
+        de: '60.000 Pendler ueber die Berge bringen',
+        en: 'Carry 60,000 commuters over the mountains',
       },
       spec: {
         kind: GoalKind.CargoDeliveredTotal,
-        subjectA: Cargo.Passengers,
+        subjectA: Cargo.CommuterPax,
         subjectB: -1,
         threshold: 60_000,
         goldTick: endOfYear(1963),
@@ -452,12 +452,12 @@ const INSELHUEPFEN: ShippedScenario = {
     },
     {
       caption: {
-        de: '40.000 Fahrgaeste ueber das Wasser bringen',
-        en: 'Carry 40,000 passengers across the water',
+        de: '40.000 Pendler ueber das Wasser bringen',
+        en: 'Carry 40,000 commuters across the water',
       },
       spec: {
         kind: GoalKind.CargoDeliveredTotal,
-        subjectA: Cargo.Passengers,
+        subjectA: Cargo.CommuterPax,
         subjectB: -1,
         threshold: 40_000,
         goldTick: endOfYear(1962),
@@ -718,12 +718,12 @@ const SPEEDRUN: ShippedScenario = {
     },
     {
       caption: {
-        de: '20.000 Fahrgaeste befoerdern',
-        en: 'Carry 20,000 passengers',
+        de: '20.000 Pendler befoerdern',
+        en: 'Carry 20,000 commuters',
       },
       spec: {
         kind: GoalKind.CargoDeliveredTotal,
-        subjectA: Cargo.Passengers,
+        subjectA: Cargo.CommuterPax,
         subjectB: -1,
         threshold: 20_000,
         goldTick: endOfYear(1952),

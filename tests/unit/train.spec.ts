@@ -904,12 +904,12 @@ describe('a working rail line', () => {
     run(bench, { kind: CommandKind.SetVehicleRunning, vehicleId: 0, running: true });
     expect(bench.world.vehicles.state[0]).toBe(VehicleState.Driving);
 
-    depositAtStation(bench.world, west, Cargo.Passengers, 120);
+    depositAtStation(bench.world, west, Cargo.CommuterPax, 120);
     const cashBefore = bench.world.company.cashCt;
 
     for (let i = 0; i < TICKS_PER_DAY * 20; i++) {
       bench.world.step(bench.queue, null);
-      depositAtStation(bench.world, west, Cargo.Passengers, 1);
+      depositAtStation(bench.world, west, Cargo.CommuterPax, 1);
     }
 
     expect(bench.world.company.cashCt).toBeGreaterThan(cashBefore);

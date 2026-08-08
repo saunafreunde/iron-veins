@@ -26,32 +26,33 @@ no entry below. A number may appear under several topics.
 - **Save format, migrations & replays:** D-007, D-025, D-026, D-027, D-048,
   D-111, D-130, D-131, D-134, D-142, D-144, D-145, D-146, D-147, D-153, D-178,
   D-181, D-184, D-185, D-188, D-189, D-190, D-191, D-192, D-193, D-194,
-  D-197, D-198, D-200
+  D-197, D-198, D-200, D-207
 - **Rail & track:** D-042, D-043, D-044, D-045, D-046, D-047, D-053, D-141,
   D-153, D-157, D-184
 - **Signals & reservations:** D-054, D-055, D-056, D-057, D-058, D-059, D-060,
   D-061, D-073, D-080, D-081, D-082, D-083, D-157, D-173, D-184, D-185, D-186
-- **Stations & catchment:** D-049, D-080, D-095, D-150, D-159, D-178, D-179
+- **Stations & catchment:** D-049, D-080, D-095, D-150, D-159, D-178, D-179,
+  D-208
 - **Cargo, payment & routing:** D-036, D-037, D-065, D-067, D-075, D-077,
-  D-078, D-118, D-142, D-151, D-176, D-178, D-187
+  D-078, D-118, D-142, D-151, D-176, D-178, D-187, D-207
 - **Industry & production:** D-022, D-062, D-063, D-064, D-069, D-071, D-079,
   D-085, D-086, D-174, D-201, D-202, D-205
-- **Towns, council & ownership:** D-101, D-102, D-103, D-104, D-205, D-206
+- **Towns, council & ownership:** D-101, D-102, D-103, D-104, D-205, D-207, D-206
 - **Economy, finance & emissions:** D-008, D-090, D-091, D-092, D-105, D-154,
   D-180, D-193, D-196
 - **Balancing & scenarios:** D-038, D-039, D-040, D-041, D-066, D-087, D-088,
   D-116, D-151, D-152, D-156, D-158, D-159, D-187, D-190, D-194, D-195,
-  D-196, D-197, D-198, D-199, D-200, D-203, D-204
+  D-196, D-197, D-198, D-199, D-200, D-203, D-204, D-207
 - **Vehicles & fleet:** D-043, D-044, D-045, D-068, D-076, D-089, D-093,
   D-096, D-142, D-143, D-145, D-146, D-155, D-157, D-171, D-174, D-181, D-185,
-  D-201
+  D-201, D-207
 - **Water & air:** D-094, D-095, D-096, D-097, D-098, D-099
 - **Competitors, AI & tenders:** D-107, D-108, D-109, D-115, D-116, D-121,
   D-122, D-147, D-152, D-153, D-154, D-155, D-156, D-158
 - **Rendering & art:** D-013, D-014, D-033, D-035, D-112, D-117, D-125, D-127,
   D-136, D-140, D-160, D-161, D-162, D-163, D-164, D-165, D-166, D-169, D-170,
   D-171, D-172, D-173, D-174, D-175, D-177, D-179, D-186, D-202, D-205, D-206,
-  D-209
+  D-208, D-209
 - **UI & input:** D-011, D-013, D-015, D-035, D-110, D-113, D-114, D-119,
   D-126, D-148, D-165, D-166, D-177, D-179, D-180, D-181, D-182, D-183, D-184,
   D-186, D-187, D-189, D-191, D-192, D-193, D-194, D-195, D-196, D-200, D-202
@@ -60,12 +61,12 @@ no entry below. A number may appear under several topics.
   D-185, D-186, D-187, D-191, D-192, D-193, D-196, D-200, D-201, D-202, D-205,
   D-206, D-209
 - **Platform, tooling & build:** D-012, D-014, D-015, D-016, D-017, D-029,
-  D-030, D-031, D-160, D-168, D-169, D-170, D-172, D-175, D-192, D-206
+  D-030, D-031, D-160, D-168, D-169, D-170, D-172, D-175, D-192, D-206, D-208
 - **Crash safety:** D-132, D-139, D-190
 - **Testing method & fixtures:** D-010, D-038, D-072, D-074, D-084, D-133,
   D-167, D-183, D-186, D-188, D-189, D-190, D-191, D-192, D-193, D-194,
   D-195, D-196, D-197, D-198, D-199, D-200, D-201, D-202, D-203, D-204,
-  D-205, D-206, D-209
+  D-205, D-207, D-206, D-208, D-209
 - **Process & specification:** D-070, D-123, D-129, D-133, D-138, D-140,
   D-185, D-191, D-197, D-198, D-199, D-203, D-204, D-205, D-206
 
@@ -9011,6 +9012,193 @@ taller than every ungrown one of the same zone at all three zooms; and a
 wooded tile carries three trees of visibly different heights spanning 2:1,
 scattered across the tile by up to a sixth of its width.
 
+## M19 - travellers with destinations, bundle 1: the two passenger classes (2026-08-09)
+
+### D-207 Two fare classes, one seat: `CommuterPax` and `BusinessPax` as own cargo ids, and the first remap in the save chain
+
+SPEC2 M19's first bundle, and the milestone's one Z5 bump (v29 -> v30). What
+lands here is E-08 literally: the passenger trade becomes two cargo ids, a
+residential or industrial zone offers commuters and a COMMERCIAL zone offers
+business travellers - the first economic use of the 13.1 zones - business pays
+1.6 times the fare and loses it twice as fast, the catalogue refits grow, and
+every save ever written is carried across. Gravity, return trips and the AI's
+own use of the classes are later bundles.
+
+**The classes are ids and never per-parcel attributes** (E-08, Fehlerkatalog
+28). The stack merge key, the M5 routing, the rating, the tariff table, the
+refit validation and the D-118 walk are untouched by construction, and the
+fixed-size cargo arrays grew by exactly two entries: `CARGO_COUNT` 18 -> 20.
+
+**`Cargo.Passengers` is RETIRED at id 0 rather than reused.** A cargo id is a
+number in every save ever written; renumbering the seventeen cargoes above it
+would rewrite every capacity map, every history-ring index and every stack in
+one edit, to save two table rows. Nothing produces it, nothing accepts it, no
+vehicle carries it, and `tests/unit/deliveries.spec.ts` holds all three - so
+the empty slot can never become the dead end D-118 is about. The alternative
+(rename 0 to `CommuterPax`, add only `BusinessPax`) was refused for the same
+reason SPEC2 wrote "+2 Cargo-IDs": it makes the remap vacuous and hides the
+fact that the class a pre-M19 world carried is a DECISION, not a rename.
+
+**The commuter row is the retired row, digit for digit.** 950 ct, four grace
+days, 5 % decay - the three numbers balancing scenario 1 is calibrated on
+(D-039). A test holds the two rows together so a later edit cannot separate
+them by accident, and scenario 1 measures **payback in game year 3** after the
+split, exactly as before: every balancing world of section 19.4 is hand-built
+and every one of its buildings is residential, so those worlds produce ONE
+class and the M6 bands cannot move. Business is 1,520 ct and 10 % decay beyond
+the SAME grace period: doubling the decay is what makes a slow line lose the
+premium, and halving the grace as well would have taken it away before the
+line's speed could decide anything.
+
+**The seats are shared, and that is the one thing here SPEC2 did not ask for
+by name.** A vehicle refitted to either class loads that class first and fills
+the rest of its room with the other; `refitCargo` decides the ORDER of
+boarding and nothing else. Two things forced it. The first is arithmetic: a
+station's capacity is checked against the SUM over every stack
+(`cargo/routing.ts`), so a class nobody carries does not merely go unserved -
+it fills the station to its 2,000-unit cap and then every later deposit of the
+class that IS served becomes overflow, which is a line that earns nothing at
+all. Measured on the generated map behind scenario 5: a stop at the centre of
+a city of 8,000 covers TWELVE commercial tiles and no residential ones, so a
+single-class bus there would have run out of traffic inside a few game years.
+The second reason is the milestone's own sentence - "speed finally becomes
+money for passengers" - which is only true if business travellers ride the
+lines that exist. The refit list, its price and its validation are unchanged,
+which is what E-08's "Refit unveraendert" actually claims; what changed is
+what a vehicle may LOAD, in one function, with one test, and with a catalogue
+coupling test that holds both classes to the same seat count so the
+subtraction is exact rather than approximately right.
+
+**The split is the map's zoning and invents no constant.** `commercialShare`
+is the share of the town buildings inside a station's catchment that are
+commercially zoned, counted in the scan `assignStationIndustries` already
+makes and DERIVED like `acceptedCargo` beside it - recomputed on load, never
+saved, never hashed (the landmass treatment). It is deliberately not
+`commercialCovered / buildingsCovered`: that counter IS saved and can predate
+a demolition, and a share above one would hand a town negative commuters. The
+town's total output is unchanged - `PASSENGERS_PER_INHABITANT_PER_MONTH` never
+moved, the split only says which fare it travels at - and commuters are
+deposited FIRST, so a world with no commercial zone makes exactly the one call
+the pre-M19 code made with exactly the arguments it made it with (the D-201
+device).
+
+**A passenger train nearly left its shed as a mail train.**
+`consistDefaultCargo` picked the lowest cargo id among the ties, and a
+passenger coach has exactly as many "mail" units as it has seats because a
+refit gives back the unit's own capacity. Until M19 that tie was settled by
+the accident that passengers were id 0; with the classes at 18 and 19, Mail
+(1) won every one of them. What a consist was BUILT to carry now beats what it
+could be converted to, and only a consist with no direct capacity at all -
+nothing but a locomotive - falls through to the old answer. Found by
+`train.spec.ts`, which stopped earning.
+
+**The migration is the first REMAP in the chain, and it uncovered a latent
+trap.** Every number that named a cargo moves - parcels waiting and aboard,
+`refitCargo`, order and line-order `refitTo`, the AI project's cargo, a
+tender's cargo, a `CargoDeliveredTotal` goal's subject - and the two
+CARGO_COUNT-sized tables grow with the old passenger figures moved to the
+commuter slot and the business slots entered as zero, which is not a
+convenience but what those worlds knew: they earned no business fares because
+they had none. The trap: `v24_to_v25` and `v27_to_v28` sized their zero-fills
+from the LIVE constants, so a version 22 save would have arrived at
+`v29_to_v30` carrying twenty-cargo rows and left it with twenty-two. A
+migration writes the shape of ITS OWN target version; both are pinned to
+`CARGO_COUNT_V29` now, and the corpus - which walks the whole chain from 22 -
+is what proves it.
+
+**The command log is deliberately NOT remapped.** A log is history rather than
+state (D-131) and it is judged only by a build of its own version, because
+cross-version replay verification is refused rather than guessed (E-11,
+D-191). Rewriting a recorded `refitTo` would invent a command the player never
+gave.
+
+**Losslessness is proved on a world that HAS parcels, not on the corpus
+alone.** The corpus game is station-less and vehicle-less by construction, so
+its v29 fixture can only prove the half it has - the company row grows without
+moving a figure, sum for sum, which the test asserts entry by entry. The other
+half is a round trip: a played two-town bus world (parcels waiting, parcels
+aboard, a per-order refit, a filled ring, a lifetime tally) is written DOWN
+into the v29 shape by an inverse that is legitimate only because the world
+provably contains no business passengers, migrated forward, and compared field
+by field with the original - and then the same v29 container is fed through
+`decodeSave` and hashes to the world the v30 encoder wrote. The corpus
+reconstructed the v22 container exactly once, for the same reason and under
+the same rule.
+
+**Every pin moved once, and the corpus is the proof nothing else did.**
+Canonical cross-OS `5a2a6cf73f4107bb` -> **`40be7d25b1a6a90f`** (D-137),
+corpus manifest `c0a021f5d1ee8619` -> **`9800c136644b0199`** with a new
+`v30-played.ironsave` - all NINE fixtures, eight of them written by eight
+earlier builds and untouched on disk, still decode to ONE world (D-130) - and
+the soak fixture `e6c5e33d8e7607ec` -> **`65d8cb57cf5edec5`** at 698 -> 800
+recorded commands, because the competitors now earn a business premium and
+therefore make different decisions.
+
+**Measured, and one band re-banded with the trace.** Scenario 1 payback year 3
+(unchanged), scenario 2 249,980 EUR and payback year 6 (unchanged), scenario 3
+159,516 EUR/yr (unchanged - and the "166 k" in CLAUDE.md was already stale
+BEFORE this bundle, verified by running the same scenario in a git worktree at
+HEAD), Netzdesign 3.73 (2.01x alignment, 1.86x capacity, unchanged), takt
+-8.3 % and rating variance 0.57 (unchanged), hard winter in band, Punktzahl
+5,889 with the identical quarter split (unchanged - the wood chain's world is
+hand-built and residential). Scenario 5 road 1,119,720 -> **1,122,965 EUR**
+(+0.29 %), deep inside D-158's 0.8-3.2 M band: the AI's bus lines run on
+GENERATED towns, which do have commercial zones, so a small part of its
+passenger revenue now carries the premium.
+
+The one band that broke is `aiGame`'s RAIL value floor, and the trace stands
+in the test beside it. Both figures were measured on this machine an hour
+apart, the second in a git worktree at HEAD: the road company earns the
+premium, builds ten more tiles of road (345 -> 355) and finishes at 550,942
+instead of 544,857 EUR; the three competitors share ONE world, so from there
+every later decision is a different decision, and this run's rail company buys
+and writes off one train (~144,000 EUR of depreciated asset) that the M11 run
+never bought. At BOTH figures it is the same stagnant husk D-158 names as an
+open bottleneck - no line, no vehicle, two stations - so what the floor is FOR
+still holds; it moves from -150,000 to -250,000 EUR, set from the measured run
+exactly as the original was, which is stated rather than hidden.
+
+**The fare, measured on runs rather than read off the table.** At the counter
+the ratio is exactly 1.6 (the payment formula, same amount, same distance, no
+time in transit). On two villages twelve tiles apart with four buses it is
+**1.291** - what is left of the premium after the queue and the drive - and on
+the SAME villages with the SAME four buses thirty tiles apart it is **0.664**:
+past twice the grace period a business traveller is worth LESS per seat than
+the commuter beside him. That crossing is the mechanism the milestone is
+about, and it is asserted by sign rather than banded tight, because the exact
+figure moves with every decision the payment formula makes.
+
+**The tick could not be measured on this box, and that is stated rather than
+rounded away.** The perf gate is red on the BASELINE commit too - measured in
+a git worktree at HEAD, 2.9-3.5 ms p50 against the 1.43/3.11 ms reference -
+because other agents were building and baking on the same machine throughout.
+Four A/B pairs, alternating: this build 2.958/9.848, 3.601/16.641,
+3.173/11.408, 3.102/12.924 ms p50/p99; the baseline 3.469/13.355, 2.886/8.529,
+2.963/8.106, 3.136/9.817. Mean p50 delta **+0.10 ms** - exactly the ledger
+row, and inside the documented +-0.7 ms noise - and mean p99 delta +2.76 ms
+with the SIGN FLIPPING across pairs (the first pair measures this build
+3.5 ms faster). p99 is the quantity D-167 describes as inflated by multiples
+under background load. **No acceptance number is claimed**; the clean
+measurement is outstanding and belongs to whoever takes the milestone's
+6.1.1 row.
+
+What the bundle actually adds per tick is stated instead of estimated: NO
+O(stations) walk anywhere. Both places where a second class would have cost
+one - the routing decision at a stop and the destination search in the daily
+hook - are SHARED between the classes, and the sharing is provable rather than
+convenient, because both classes sit in `STATION_ALWAYS_ACCEPTED` and neither
+the allowed-destination set nor the candidate list can differ between them.
+What is left is one more `transferCargo` scan per passenger stop, one more
+placement per station-with-a-commercial-zone per game day, and about twice as
+many cargo stacks at a town station - the last of which is inherent in having
+two ids and is what E-08 bought when it chose ids over per-parcel attributes.
+
+**What this bundle did NOT do**, so the next one knows: `chooseDestinations`
+has no gravity term yet, no return trips are generated, the AI still rates a
+town pair by the commuter class alone, and the four shipped scenarios that
+counted passengers now count COMMUTERS - their captions say so in both
+languages, and the thresholds were left where D-195 calibrated them.
+
 ## M13 - the static world, bundle 9: the wood (2026-08-09)
 
 ### D-209 A wood is a density, not a carpet: the stand field, the four-slot table and the size jitter that ended the wallpaper
@@ -9181,3 +9369,174 @@ owner has to make: does the countryside now read as woodland rather than as
 wallpaper. If it does not, the lever is more BODIES per climate and it costs
 a 6.2 booking; the density band and the slot table are two constants away
 from any other answer.
+
+## M13 - the static world, bundle 10: what the player builds (2026-08-09)
+
+### D-208 The thirteen station modules leave the orange box: `module:<ModuleKind>` in the bake, an accent-sized company colour, and an audit that makes an unmapped kind a red build
+
+The owner's verdict on the M13 build was that the game does not look modern.
+The loudest single reason was measurable: the baked manifest's target prefixes
+were exactly **vehicle, building, industry, tree**. Stations, lorry bays,
+depots, platforms, quays, canopies, cold stores, terminals and all three
+airports - **everything the PLAYER builds** - were never mapped, so all
+thirteen `ModuleKind`s fell through `moduleFrame` to one white box drawn at
+FULL company tint. On the 16.3 palette that box is `#f08020` at roughly 1,100
+opaque pixels a tile: a saturated orange block the size of a house, on the
+objects a transport game is looked at through. D-205 wired the bake's other
+1,670 cells and never asked about these, for the same reason M13's Fertig-wenn
+never asked about buildings - nothing in the repository read the module side of
+the manifest, so nothing could be red.
+
+**The mapping is thirteen of thirteen, and the register is below.** Target
+grammar `module:<ModuleKindName>`, which is `industry:<TypeName>` one enum
+along - `src/sim/station/types.ts`'s `ModuleKind` read backwards by name, so a
+fourteenth kind needs no edit in `staticArt.ts` and gets a red build until the
+manifest carries a model for it. Measured at zoom 1, `anchorY / TILE_H` in
+tile heights and `width / TILE_W` in tile widths, which is what a human can
+check against a screenshot:
+
+| module | kit body | lift (th) | width (tw) | accent | night |
+| --- | --- | --- | --- | --- | --- |
+| BusStop | commercial `detail-awning` | 0.44 | 0.36 | canopy, 77 px | - |
+| Canopy | commercial `detail-overhang-wide` | 0.66 | 0.56 | trim, 141 px | - |
+| RailPlatform | roads `tile-high` | 0.56 | 0.88 | neutral | - |
+| Quay | pirate `structure-platform-dock` | 0.63 | 0.84 | neutral | - |
+| RoadDepot | industrial `building-h`\* | 0.88 | 0.58 | door, 24 px | yes |
+| ColdStore | industrial `building-q`\* | 0.91 | 0.61 | neutral | yes |
+| LorryBay | industrial `building-p` | 0.91 | 0.56 | doors, 39 px | yes |
+| RailDepot | industrial `building-j`\* | 1.00 | 0.66 | neutral | - |
+| Airstrip | factory `machine` | 1.00 | 0.56 | skirt, 80 px | - |
+| Airport | commercial `low-detail-building-wide-a` | 1.03 | 0.72 | neutral | - |
+| ShipDepot | watercraft `boat-house-d` | 1.09 | 0.69 | trim, 129 px | yes |
+| InternationalAirport | commercial `low-detail-building-wide-b` | 1.19 | 0.75 | neutral | - |
+| FreightTerminal | factory `crane` | 1.47 | 0.30 | collar, 4 px | - |
+
+\* an honest reuse under D-169: `building:industrial:0`, `:0:2` and
+`industry:ElectronicsFactory` respectively, each with its own `facing`,
+`stretch` and (for the cold store) `recolor`, each carrying a manifest note
+that names the body it shares. Every lift is inside D-206's **64 px** rule
+(2.00 tile heights); the tallest is the freight crane at 47 px. The ladder is
+deliberate and is the D-117 argument applied to what the player builds: the
+crane is the landmark, the bus shelter the mark, and airstrip < airport <
+international airport in BOTH axes so the size a player pays for is visible
+without a label.
+
+**What was looked at, and what was rejected.** The kits were inventoried
+model by model rather than guessed at, and two guesses in the brief turned out
+to be wrong: the **Train Kit carries no station building, no platform and no
+shed** - it is locomotives, wagons, trams and track pieces, 103 models, none of
+them a station - and the **City Kit Roads carries no bus stop**. What the kits
+DO carry, and what was taken: a shop awning that is a bus shelter, a wide
+overhang that is a waiting hall, a raised paving slab that is a platform, a
+Factory Kit jib crane that is SPEC.md 10's "Kran/Rampe" exactly, a Pirate Kit
+timber dock that is literally a berth, a Watercraft Kit covered vessel for the
+depot that STANDS ON WATER, a barrel-roofed factory shell that is a hangar, and
+two low-detail commercial blocks that are terminals. Rejected after looking:
+`city-kit-industrial/building-f` for the cold store (it has a smokestack - a
+cold store does not burn anything), the Factory Kit boxes and a Watercraft
+Kit container (0.15-0.18 tile widths - specks), and `building-k`'s north-light
+hall (that is a factory silhouette and a cold store is not a factory).
+
+**Company colour is an accent, and where it cannot be, the module is neutral
+and SAYS so.** The two-pass tint of D-160 does the work: the base cell wears
+the kit's own greys, the mask cell carries only the zone, and the zone is a
+hue band measured off the model - the awning's green canopy (hue 145-161), the
+industrial kit's roller doors (hue 31-39 at saturation 1.00 exactly, against
+walls at hue 229/0.11), the Factory Kit's orange trim (hue 30-33), the
+commercial kit's dark fascia (hue 228-232 against neutrals at exactly 240).
+**Measured per cell, the accent is 4 to 141 opaque pixels** where the box it
+replaces was ~1,100, i.e. the loudest module on the screen now carries an
+eighth of the saturated area the quietest one used to.
+
+Five kinds carry no zone at all and the manifest note gives the reason for
+each: `tile-high` is twelve white triangles (nothing to separate - it is
+recoloured to concrete #b8b8b8 instead, 16.3's Beton), the dock is one timber
+family, `building-j` and `building-q` have nothing saturated but a shrub and a
+plant pot. **The two airports were the interesting case**: their band WAS
+written, baked and measured, and it took 42.2 % and 32.3 % of the cell - the
+kit body has two colour families and the only separable one is the whole
+wrap-around glazing. A 42 % company-coloured terminal is a coloured BUILDING,
+which is the defect this entry exists to remove, so the band was deleted and
+the note records the measurement rather than the taste. Ownership of a neutral
+module is read off the vehicle standing at it and the station label (D-165) -
+that is a stated loss against the old full-tint box, not an oversight.
+
+**A static may now choose which way it faces** (`facing` in the manifest,
+`baseFacing` in `BakeModelInput`). A vehicle bakes eight cells and its cell
+index IS its direction, which is what all of D-170 rests on; a static bakes
+ONE, and which way the kit pointed its model is an art fact. At the kit's own
+facing the lorry bay's roller doors and the road depot's vehicle portal point
+AWAY from the camera and both modules are blank boxes with roofs. The cell
+still records `facing: 0` - that is what identifies it as static art to
+`STATIC_FACING` - and only the camera moved; a model with no turn bakes
+byte-identical files to one that never asked, which is a test.
+
+**Wired the way D-205 wired the industries, and that is not the same thing as
+the buildings.** Buildings and trees go INTO the chunk textures; station
+modules may not and never did (D-161: they carry the company tint, and a
+company recolour must not force a chunk rebake). So the two render paths for a
+module are `rebuild` at 1x and up and `rebuildMarkers` at 0.5x, and they are
+one function - `placeStations` - which is why "sprite path AND chunk textures"
+is satisfied by editing one place. Per module: base pass, mask pass tinted
+`companyTint` at the SAME zIndex, and at night the cell's own emissive twin
+through `markEmissive` (four of the thirteen bodies carry glazing the depth
+pass let through). The per-entry fallback is one variable: `bakedModuleHandle`
+answers null and the old `moduleFrame` box is drawn - for a kind on
+`PROCEDURAL_ONLY_MODULES`, for a kind the manifest never mapped, and for every
+build with no bake at all (E-14's floor, unchanged: the game always starts).
+
+**`PROCEDURAL_ONLY_MODULES` is EMPTY, and that is the mechanism.** The audit
+that stops this class of hole recurring is the D-169 both-directions device
+applied to modules, in two places: `tests/unit/assetsBake.spec.ts` holds
+`tools/assets-manifest.json` against `ModuleKind` (a kind with no model and no
+entry on the procedural list is red; a `module:` target the enum does not know
+is red; a module entry with no `note` is red; a module entry with no `tint`
+must say NEUTRAL in its note), and `tests/unit/staticArt.spec.ts` holds the
+same agreement through the functions the renderer actually calls, plus the
+proportion and width table over the real bake when one is on disk. Twelve new
+assertions; `MODULE_KIND_COUNT` is asserted against the enum so a fourteenth
+kind cannot slip in as a hole either.
+
+The proportion rule itself grew one word: `STATIC_TARGET` in
+`tools/bake-lib.ts` is `^(building|industry|module|tree):` now, so a terminal
+that broke the 64 px headroom would be a FAILED BAKE exactly like D-206's
+skyscraper, not a needle at a chunk seam. `assetsBake.spec.ts` proves the
+refusal on synthetic geometry with no cache in sight.
+
+**Measured.** Bake: 145 -> **158 models**, 2,430 -> **2,469 cells**, ten pages
+unchanged, 6,371 KiB, and **baked twice bit-identically** (all eleven files
+hashed, twice, byte-equal). No procedural atlas cell was added, so there is no
+SPEC2 6.2 booking - the baked pages are a gitignored build artifact and the
+repo-glob test is green. Render tripwires re-run on this tree and all green:
+sprite-pool rebuild p50 6.752 / p99 16.222 ms (gates 15 / 60), chunk bake p50
+1.726 / p99 8.133 (5 / 30), draw prep 5.09 / 12.17 (10 / 60), E-18 full block
+3.94, aspect refresh 0.042, emissive twin walk 0.072, particles 0.486, weather
+particles 0.327, flow prep 0.436. Main chunk **942,637 B against the 950,000 B
+budget** (headroom 7,363 B); the figure is the artefact as it stands and this
+tree carried two other bundles' uncommitted work, so the delta is NOT
+attributable to this entry alone and is not claimed to be.
+`npm run typecheck`, `npm run lint` and `npx vitest run tests/unit` all green:
+**102 files, 1,356 passing** (1,344 before).
+
+**Zero sim contact**: not one byte under `src/sim`, `SAVE_VERSION` untouched,
+`SNAPSHOT_LAYOUT_VERSION` untouched, no migration, no protocol field, no i18n
+string. Render-only in the strictest sense.
+
+**Not verified, and it says so.** The drawing was not seen running. D-136's
+standing note applies unchanged and this session's browser pane rendered no
+frames. What WAS seen is every one of the thirteen baked cells, composited
+against a 16.3 meadow tile with the tile diamond drawn under it, base pass and
+mask pass separately - which is how the accent shares above were measured and
+how the two airports' band was caught. What only a human at the running game
+can confirm: that a station reads as a station AT PLAY, that thirteen
+silhouettes stay apart when they stand four tiles from each other in a real
+joined station, and that a neutral platform beside a coloured train is the
+right trade.
+
+**What this bundle did NOT do**, so the next one knows: the three airport
+sizes are three separate bodies but share no architectural family with each
+other beyond the kit; there is no runway art at all (the airstrip is its
+hangar, and no Kenney 3D aircraft kit exists - E-14); the freight crane does
+not animate; and a joined station's modules are still placed one per tile with
+no awareness of their neighbours, so a four-tile platform is four slabs that
+happen to abut rather than one modelled platform with ends.

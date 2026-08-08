@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { SHIPPED_SCENARIOS, scenarioById, scenarioYearOf } from '../../src/scenarios/catalog';
 import { newGameOptionsOf, scenarioMetaOf, type ShippedScenario } from '../../src/scenarios/types';
 import { CommandQueue } from '../../src/sim/commands/queue';
-import { Cargo } from '../../src/sim/cargo/types';
+import { Cargo, isPassengerClass } from '../../src/sim/cargo/types';
 import {
   BANKRUPTCY_MONTHS,
   BANKRUPTCY_WARNING_MONTHS,
@@ -689,7 +689,7 @@ function industryCount(world: World, type: IndustryType): number {
 
 /** Whether anything on this map makes `cargo` - a town counts for its own. */
 function hasProducer(world: World, cargo: Cargo): boolean {
-  if (cargo === Cargo.Passengers || cargo === Cargo.Mail) return world.towns.length > 0;
+  if (isPassengerClass(cargo) || cargo === Cargo.Mail) return world.towns.length > 0;
   for (const industry of world.industries) {
     if (industrySpec(industry.type).outputs.includes(cargo)) return true;
   }
@@ -698,7 +698,7 @@ function hasProducer(world: World, cargo: Cargo): boolean {
 
 /** Whether anything on this map TAKES `cargo` - the D-118 question, per world. */
 function hasAcceptor(world: World, cargo: Cargo): boolean {
-  if (cargo === Cargo.Passengers || cargo === Cargo.Mail) return world.towns.length > 0;
+  if (isPassengerClass(cargo) || cargo === Cargo.Mail) return world.towns.length > 0;
   if (TOWN_CARGO.includes(cargo)) return world.towns.length > 0;
   for (const industry of world.industries) {
     if (industrySpec(industry.type).inputs.includes(cargo)) return true;

@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import de from '../../src/i18n/de.json';
 import type { IndustryMarker, StationMarker, TownMarker } from '../../src/shared/protocol';
-import { Cargo } from '../../src/sim/cargo/types';
-import { TOWN_CARGO } from '../../src/sim/industry/catchment';
+import { Cargo, cargoSpec } from '../../src/sim/cargo/types';
+import { STATION_ALWAYS_ACCEPTED, TOWN_CARGO } from '../../src/sim/industry/catchment';
 import { IndustryType, INDUSTRY_SPECS } from '../../src/sim/industry/types';
+import { TOWN_OUTPUTS } from '../../src/sim/town/update';
+import { capacityFor, VEHICLE_SPECS } from '../../src/sim/vehicles/catalog';
 import { deliveryRoutes, supplyRoutes } from '../../src/ui/deliveries';
 
 /**
@@ -150,6 +152,69 @@ describe('the chains it names are the chains the simulation runs', () => {
         // display problem - and this is the cheapest place to notice one.
         expect(takenByIndustry || takenByTown, `nobody takes cargo ${cargo}`).toBe(true);
       }
+    }
+  });
+
+  /**
+   * The other half of the D-118 walk, and the half that only became necessary
+   * when SPEC2 M19 gave a TOWN more than one thing to produce.
+   *
+   * The loop above asks the question of every industry output. A town's own
+   * output was one cargo for eight milestones and nobody had to ask; it is
+   * three now - two passenger classes and mail - and a class that no station
+   * accepted would be exactly the dead end D-118 describes, one production
+   * chain further out: produced every game day, never collectable, silting the
+   * station up to its capacity and taking the classes that ARE served down
+   * with it.
+   */
+  it('finds an acceptor for every class a TOWN produces, and a producer for none but those', () => {
+    const catalogue = de as Record<string, string>;
+
+    for (const cargo of TOWN_OUTPUTS) {
+      expect(cargoSpec(cargo).nameKey in catalogue, cargoSpec(cargo).nameKey).toBe(true);
+      // Every station takes them wherever it stands - the ALWAYS_ACCEPTED
+      // rule of catchment.ts, asked of the exported table rather than of a
+      // copy of it.
+      expect(STATION_ALWAYS_ACCEPTED.includes(cargo), `nobody takes cargo ${cargo}`).toBe(true);
+    }
+
+    // And the retired id of SPEC2 M19 is a producer-less slot rather than a
+    // dead end: no industry makes it, no town offers it, and the migration
+    // rewrote every parcel that ever carried it.
+    expect(TOWN_OUTPUTS.includes(Cargo.Passengers)).toBe(false);
+    expect(INDUSTRY_SPECS.some((spec) => spec.outputs.includes(Cargo.Passengers))).toBe(false);
+  });
+
+  it('keeps the commuter fare exactly where the retired passenger fare was', () => {
+    // Balancing scenario 1 is calibrated on these three numbers and the class
+    // split must not have moved them: the commuter IS the traveller the band
+    // was measured on, under a new id.
+    const retired = cargoSpec(Cargo.Passengers);
+    const commuter = cargoSpec(Cargo.CommuterPax);
+    expect(commuter.baseRateCt).toBe(retired.baseRateCt);
+    expect(commuter.graceDays).toBe(retired.graceDays);
+    expect(commuter.decayPerDay).toBe(retired.decayPerDay);
+
+    // And the business premium is the two constants SPEC2 M19 names: 1.6x the
+    // fare, twice the decay, beyond the same grace period.
+    const business = cargoSpec(Cargo.BusinessPax);
+    expect(business.baseRateCt / commuter.baseRateCt).toBeCloseTo(1.6, 10);
+    expect(business.decayPerDay / commuter.decayPerDay).toBeCloseTo(2, 10);
+    expect(business.graceDays).toBe(commuter.graceDays);
+  });
+
+  it('gives both classes the same seat count in every vehicle that carries one', () => {
+    // The shared seat pool subtracts one class from the other's capacity
+    // (D-207). That subtraction is exact only while a vehicle offers the same
+    // number of seats to both, so the catalogue is held to it here rather than
+    // trusted - and a passenger vehicle that offered only one class would be a
+    // vehicle the other class could never board.
+    for (const spec of VEHICLE_SPECS) {
+      const commuter = capacityFor(spec, Cargo.CommuterPax);
+      const business = capacityFor(spec, Cargo.BusinessPax);
+      expect(business, `${spec.nameKey} seats`).toBe(commuter);
+      // Nothing carries the retired id at all.
+      expect(capacityFor(spec, Cargo.Passengers), `${spec.nameKey} retired`).toBe(0);
     }
   });
 });

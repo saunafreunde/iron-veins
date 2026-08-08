@@ -98,12 +98,30 @@ function quarterCentury(): { world: World; queue: CommandQueue } {
  * the measured run so a regression of the kind that stage fixed - a
  * personality that stops building, a renewal that eats a company, a loan
  * churn - goes red by name rather than shifting a printed number nobody
- * reads. Measured on this seed: road solvent at 544,857 EUR with a
+ * reads. Measured on this seed at M11: road solvent at 544,857 EUR with a
  * six-vehicle line, rail alive at -15,142 EUR (its train frozen by the
  * braking defect D-156 names), the town network wound up at 96,512 EUR.
+ *
+ * **The rail floor was re-banded in SPEC2 M19 bundle 1 (D-207), with both
+ * measurements taken on the same machine an hour apart.** The passenger trade
+ * became two fare classes, the towns of this generated map carry commercial
+ * zones, and the ROAD company - which runs the bus lines - therefore earns the
+ * business premium, builds ten more tiles of road (345 -> 355) and finishes at
+ * 550,942 EUR instead of 544,857. The three competitors share one world, so
+ * from there every later decision is a different decision: this run's rail
+ * company buys and writes off one train (~144,000 EUR of depreciated asset)
+ * that the M11 run never bought, and ends at -159,142 EUR instead of -15,142.
+ *
+ * What the floor is FOR is unchanged and still holds: at both figures the rail
+ * personality is the stagnant husk D-158 names as an open bottleneck - no
+ * line, no vehicle, two stations - and neither run is a company that stopped
+ * building. The floor is set from the measured run exactly as the original was
+ * (that is stated rather than hidden), one and a half times below it, so it
+ * still catches a rail company that loses its starting capital AND its whole
+ * credit line.
  */
 const VALUE_FLOOR_CT: ReadonlyMap<number, number> = new Map([
-  [Personality.Rail, -150_000_00],
+  [Personality.Rail, -250_000_00],
   [Personality.Road, 400_000_00],
   [Personality.TownNetwork, 0],
 ]);

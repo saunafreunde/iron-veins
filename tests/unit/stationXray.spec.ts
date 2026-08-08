@@ -72,7 +72,7 @@ describe('ratingTerms is the rating', () => {
     const c = world.stations[network.stations.c]!;
     c.waiting.length = 0;
     addCargo(c.waiting, {
-      cargo: Cargo.Passengers,
+      cargo: Cargo.CommuterPax,
       amount: 100,
       createdTick: world.tick - (RATING_WAIT_BAD_DAYS + 5) * TICKS_PER_DAY,
       originStationId: c.id,
@@ -246,7 +246,7 @@ describe('the station marker carries the x-ray', () => {
     // The network moved passengers, so station A has a passenger row - and
     // rows exist ONLY for cargos with recorded history.
     const a = markers[network.stations.a]!;
-    expect(a.history.some((row) => row.cargo === Cargo.Passengers)).toBe(true);
+    expect(a.history.some((row) => row.cargo === Cargo.CommuterPax)).toBe(true);
     expect(a.history.some((row) => row.cargo === Cargo.Coal)).toBe(false);
   });
 });

@@ -30,7 +30,7 @@ const BUS = 200;
 function fleetOf(count: number): VehicleStore {
   const store = new VehicleStore(MAX_VEHICLES);
   for (let i = 0; i < count; i++) {
-    const id = store.create(BUS, 0, i % (SIZE * SIZE), 0, Cargo.Passengers);
+    const id = store.create(BUS, 0, i % (SIZE * SIZE), 0, Cargo.CommuterPax);
     expect(id).toBe(i);
   }
   return store;

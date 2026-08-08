@@ -82,9 +82,15 @@
  * drives, both saved and hashed because weather is simulation reality rather
  * than render candy. A world that predates M18 had no weather, so the
  * migration enters the rule as off and the field as all-clear - which is
- * exactly what a world with the rule off holds for ever.
+ * exactly what a world with the rule off holds for ever. 30 is M19's one bump
+ * and the first REMAP in the chain: the passenger trade became two cargo
+ * classes (SPEC2 E-08), so the cargo arrays grew by two entries and every
+ * parcel, refit, order, history slot and lifetime tally that named the old
+ * `Passengers` id now names `CommuterPax`. A version 29 world carried exactly
+ * one kind of passenger; the migration says which of the two it was, and
+ * changes nothing else.
  */
-export const SAVE_VERSION = 29;
+export const SAVE_VERSION = 30;
 
 /** File extension used for manual and automatic saves. */
 export const SAVE_EXTENSION = '.ironsave';

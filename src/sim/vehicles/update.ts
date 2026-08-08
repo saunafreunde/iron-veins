@@ -1,12 +1,13 @@
-import { amountOf } from '../cargo/stack';
+import { amountOf, type CargoStack } from '../cargo/stack';
 import {
   CargoDisposition,
   dispositionOf,
   loadFromStation,
+  loadPassengerPair,
   transferToStation,
 } from '../cargo/routing';
 import { deliveryRevenueCt, tileDistance } from '../cargo/payment';
-import { Cargo } from '../cargo/types';
+import { Cargo, isPassengerClass, otherPassengerClass } from '../cargo/types';
 import {
   BRAKE_REACTION_SECONDS,
   CURVE_LOOKAHEAD_MAX_NODES,
@@ -92,6 +93,7 @@ import {
   OrderUnload,
   VehicleState,
   type Order,
+  type VehicleStore,
 } from './VehicleStore';
 
 /**
@@ -562,7 +564,12 @@ function conditionMeasure(world: World, id: number, kind: number): number {
     case OrderConditionKind.LoadPercent: {
       const capacity = vehicles.capacityUnits[id]!;
       if (capacity <= 0) return 0;
-      return (amountOf(vehicles.cargo[id]!, vehicles.refitCargo[id]! as Cargo) / capacity) * 100;
+      // How full the vehicle IS, which for a passenger vehicle means both
+      // classes: they share the seats (D-207), so counting one of them would
+      // hold a full coach at a platform waiting for the other half.
+      const cargo = vehicles.refitCargo[id]! as Cargo;
+      const taken = capacity - seatSpace(vehicles, id, vehicles.cargo[id]!, cargo);
+      return (taken / capacity) * 100;
     }
     case OrderConditionKind.Reliability:
       return vehicles.reliability[id]! / 100;
@@ -886,19 +893,32 @@ function serveStation(world: World, id: number, station: Station): number {
 
   if (order.load !== OrderLoad.None) {
     const cargo = vehicles.refitCargo[id]! as Cargo;
-    const room = vehicles.capacityUnits[id]! - amountOf(carried, cargo);
-    const space = room * platformShare(world, id, station);
-    if (space > 0) {
-      const moved = loadFromStation(world, id, station, cargo, space);
-      units += moved;
-      if (station.townId >= 0 && (cargo === Cargo.Passengers || cargo === Cargo.Mail)) {
-        const town = world.towns[station.townId];
-        if (town !== undefined) {
-          town.transportedThisMonth += moved;
-          // Growth asks what left the town; the council asks who took it.
-          const owner = vehicles.ownerId[id]!;
-          town.transportedByCompany[owner] = (town.transportedByCompany[owner] ?? 0) + moved;
-        }
+    const space = seatSpace(vehicles, id, carried, cargo) * platformShare(world, id, station);
+
+    // The shared-seat rule of SPEC2 M19 (D-207): the two passenger classes are
+    // one commodity at two fares, so a vehicle refitted to either of them
+    // fills the seats its own class leaves over with the other, out of ONE
+    // pool of seats and on ONE routing decision. The refit decides who boards
+    // FIRST and nothing else - which is what a premium express is, and what
+    // stops a class nobody serves silting a station up to its capacity and
+    // strangling the class that IS served.
+    const other = otherPassengerClass(cargo);
+    const moved =
+      other >= 0
+        ? loadPassengerPair(world, id, station, cargo, other as Cargo, space)
+        : space > 0
+          ? loadFromStation(world, id, station, cargo, space)
+          : 0;
+    units += moved;
+
+    // What left the TOWN this month - growth asks what left at all, the
+    // council asks who took it, and neither question knows about fare classes.
+    if (moved > 0 && station.townId >= 0 && (isPassengerClass(cargo) || cargo === Cargo.Mail)) {
+      const town = world.towns[station.townId];
+      if (town !== undefined) {
+        town.transportedThisMonth += moved;
+        const owner = vehicles.ownerId[id]!;
+        town.transportedByCompany[owner] = (town.transportedByCompany[owner] ?? 0) + moved;
       }
     }
   }
@@ -911,6 +931,28 @@ function serveStation(world: World, id: number, station: Station): number {
     (station.servedReliability * 3 + vehicles.reliability[id]!) / 4,
   );
   return units;
+}
+
+/**
+ * Room left aboard for one more unit of `cargo`. [units]
+ *
+ * The two passenger classes of SPEC2 M19 share the seats (D-207), so a coach
+ * half full of commuters has half a coach of room for business travellers and
+ * not a coach and a half. Every other cargo counts only its own units, exactly
+ * as it did before the split - `capacityUnits` is the capacity of the refit,
+ * and a catalogue coupling test holds the two classes to the same seat count
+ * so this subtraction is exact rather than approximately right.
+ */
+function seatSpace(
+  vehicles: VehicleStore,
+  id: number,
+  carried: readonly CargoStack[],
+  cargo: Cargo,
+): number {
+  let taken = amountOf(carried, cargo);
+  const other = otherPassengerClass(cargo);
+  if (other >= 0) taken += amountOf(carried, other as Cargo);
+  return vehicles.capacityUnits[id]! - taken;
 }
 
 /**

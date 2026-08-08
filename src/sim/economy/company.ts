@@ -12,7 +12,7 @@ import {
   START_CAPITAL_CT,
   type Difficulty,
 } from '../constants';
-import { Cargo, CARGO_COUNT } from '../cargo/types';
+import { Cargo, CARGO_COUNT, isPassengerClass } from '../cargo/types';
 import type { CompanyState } from '../types';
 import {
   Account,
@@ -104,12 +104,15 @@ export function bookRevenue(company: CompanyState, amountCt: number, cargo: Carg
   company.profitThisYearCt += amountCt;
   company.revenueThisMonthCt += amountCt;
 
-  const account =
-    cargo === Cargo.Passengers
-      ? Account.RevenuePassengers
-      : cargo === Cargo.Mail
-        ? Account.RevenueMail
-        : Account.RevenueFreight;
+  // Both passenger classes of SPEC2 M19 book to the one passenger account: a
+  // fare class is not a third line of the profit and loss account, and the
+  // per-cargo detail already exists in the station rings and the lifetime
+  // tally.
+  const account = isPassengerClass(cargo)
+    ? Account.RevenuePassengers
+    : cargo === Cargo.Mail
+      ? Account.RevenueMail
+      : Account.RevenueFreight;
   book(company, account, amountCt);
 }
 

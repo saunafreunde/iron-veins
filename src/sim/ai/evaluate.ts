@@ -1,4 +1,4 @@
-import { Cargo } from '../cargo/types';
+import { Cargo, isPassengerClass } from '../cargo/types';
 import { deliveryRevenueCt, timeFactor } from '../cargo/payment';
 import {
   AI_DRAIN_MARGIN,
@@ -142,7 +142,10 @@ export function stationMonthlyOutput(
   station: { readonly townId: number; readonly servedIndustries: readonly number[] },
   cargo: number,
 ): number {
-  if (cargo === Cargo.Passengers) {
+  // A passenger vehicle carries BOTH classes (D-207), so the offer of either
+  // one is the town's whole passenger output - which is what it was before
+  // SPEC2 M19 split the fares.
+  if (isPassengerClass(cargo)) {
     const town = world.towns[station.townId];
     return town === undefined ? 0 : townOutput(town);
   }
@@ -329,7 +332,7 @@ function collectTownPairs(world: World, into: Opportunity[], rail: boolean): voi
       const to = world.towns[b]!;
       const distance = tileDistance(from.x, from.y, to.x, to.y);
       if (distance < AI_MIN_DISTANCE || distance > AI_MAX_DISTANCE) continue;
-      if (!arrivesAlive(Cargo.Passengers, distance)) continue;
+      if (!arrivesAlive(Cargo.CommuterPax, distance)) continue;
       // A town's passengers are its own production, and it never runs dry.
       // The output is the LARGER end: a passenger line loads at both stops,
       // so the bigger town is what the fleet has to lift - gating on the
@@ -343,7 +346,7 @@ function collectTownPairs(world: World, into: Opportunity[], rail: boolean): voi
           from.y,
           to.x,
           to.y,
-          Cargo.Passengers,
+          Cargo.CommuterPax,
           distance,
           rail,
           true,

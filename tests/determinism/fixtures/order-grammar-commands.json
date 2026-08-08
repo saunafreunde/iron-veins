@@ -155,7 +155,7 @@
           "targetId": 0,
           "load": 0,
           "unload": 0,
-          "refitTo": 0,
+          "refitTo": 18,
           "condKind": 2,
           "condComparator": 4,
           "condValue": 100,

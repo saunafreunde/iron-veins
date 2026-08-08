@@ -147,6 +147,10 @@ export function encodeStations(stations: readonly Station[]): StationSave[] {
 export function buildStation(save: StationSave): Station {
   return {
     ...save,
+    // Derived from the map, exactly like `acceptedCargo` and
+    // `servedIndustries`: `World.fromData` runs `assignStationIndustries` over
+    // every station it has just built, which is where all three come from.
+    commercialShare: 0,
     modules: save.modules.map((module) => ({ ...module })),
     waiting: save.waiting.map((stack) => ({ ...stack })),
     visitTicks: [...save.visitTicks],

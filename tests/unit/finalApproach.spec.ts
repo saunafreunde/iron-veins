@@ -91,7 +91,7 @@ function breakDown(bench: Bench, id: number, ticks: number): void {
 /** Put paid cargo aboard so the arrival is measurable as revenue. */
 function loadParcel(bench: Bench, id: number, destinationStationId: number): void {
   bench.world.vehicles.cargo[id]!.push({
-    cargo: Cargo.Passengers,
+    cargo: Cargo.CommuterPax,
     amount: 10,
     createdTick: bench.world.tick,
     originStationId: 0,

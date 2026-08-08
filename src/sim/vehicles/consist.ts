@@ -1,4 +1,4 @@
-import { Cargo, CARGO_COUNT, CARGO_TONNES_PER_UNIT } from '../cargo/types';
+import { Cargo, CARGO_COUNT, CARGO_TONNES_PER_UNIT, isPassengerClass } from '../cargo/types';
 import type { CargoStack } from '../cargo/stack';
 import {
   BRAKE_FREIGHT,
@@ -119,10 +119,29 @@ export function consistCapacityFor(specIds: readonly number[], cargo: Cargo): nu
 /**
  * What the train carries unless the player says otherwise: whatever it has the
  * most room for. Ties go to the lower cargo id so the choice is deterministic.
+ *
+ * What it was BUILT to carry beats what it could be converted to, and that
+ * distinction is not cosmetic: a refit gives back the unit's own capacity, so
+ * a passenger coach has exactly as many "mail" units as it has seats, and
+ * until SPEC2 M19 that tie was settled by the accident that passengers were
+ * cargo id 0. With the classes at 18 and 19, mail became the lower id and
+ * every passenger train in the game would have left its shed as a mail train.
+ * A consist with no direct capacity at all - nothing but a locomotive - falls
+ * through to the refit answer it always gave.
  */
 export function consistDefaultCargo(specIds: readonly number[]): Cargo {
   let best = 0;
   let bestCapacity = 0;
+  for (let cargo = 0; cargo < CARGO_COUNT; cargo++) {
+    let direct = 0;
+    for (const id of specIds) direct += vehicleSpec(id).capacity[cargo as Cargo] ?? 0;
+    if (direct > bestCapacity) {
+      bestCapacity = direct;
+      best = cargo;
+    }
+  }
+  if (bestCapacity > 0) return best as Cargo;
+
   for (let cargo = 0; cargo < CARGO_COUNT; cargo++) {
     const capacity = consistCapacityFor(specIds, cargo as Cargo);
     if (capacity > bestCapacity) {
@@ -155,7 +174,7 @@ export function consistHasCooling(specIds: readonly number[], cargo: Cargo): boo
  * [m/s^2]
  */
 export function brakeForCargo(cargo: Cargo): number {
-  return cargo === Cargo.Passengers || cargo === Cargo.Mail ? BRAKE_PASSENGER : BRAKE_FREIGHT;
+  return isPassengerClass(cargo) || cargo === Cargo.Mail ? BRAKE_PASSENGER : BRAKE_FREIGHT;
 }
 
 /**
@@ -164,7 +183,7 @@ export function brakeForCargo(cargo: Cargo): number {
  * [m/s^2]
  */
 export function lateralForCargo(cargo: Cargo): number {
-  return cargo === Cargo.Passengers || cargo === Cargo.Mail
+  return isPassengerClass(cargo) || cargo === Cargo.Mail
     ? LATERAL_ACCEL_PASSENGER
     : LATERAL_ACCEL_FREIGHT;
 }

@@ -708,7 +708,7 @@ describe('the cargo expiry seam', () => {
     const station = world.stations[0]!;
     station.waiting.length = 0;
     station.waiting.push({
-      cargo: Cargo.Passengers,
+      cargo: Cargo.CommuterPax,
       amount: 100,
       // Older than CARGO_MAX_WAIT_DAYS, so the sweep considers it.
       createdTick: 0,

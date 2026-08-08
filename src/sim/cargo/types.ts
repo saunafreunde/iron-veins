@@ -1,5 +1,6 @@
 /**
- * The eighteen cargo types of section 7.1.
+ * The cargo types of section 7.1 - eighteen of them until SPEC2 M19 split the
+ * passenger trade into two classes and made it twenty.
  *
  * The numbers are starting values. The balancing tests of section 19.4 are the
  * authority on them - when a test leaves its tolerance band, this table gets
@@ -11,9 +12,30 @@
  * passengers at 950 a head while a lorry carried 14 tonnes of coal at 210, and
  * the passenger side is the one that is calibrated and in band. See
  * DECISIONS.md D-066.
+ *
+ * The two passenger classes of SPEC2 E-08 are OWN IDS and never per-parcel
+ * attributes (Fehlerkatalog 28): own ids leave the stack merge key, the M5
+ * routing, the rating, the tariff table, the refit validation and the D-118
+ * dead-end walk exactly as they were, and they cost the fixed-size cargo
+ * arrays exactly two entries.
  */
 
 export const Cargo = {
+  /**
+   * RETIRED in SPEC2 M19 and kept only so no other cargo has to change its
+   * number.
+   *
+   * Nothing produces it since the town split its passenger output into
+   * CommuterPax and BusinessPax, and the v29 -> v30 migration rewrites every
+   * parcel, refit, order, ring slot and lifetime tally that carried it to
+   * CommuterPax. The id stays because a cargo id is a NUMBER in every save
+   * ever written: renumbering the seventeen cargoes above it would rewrite
+   * every capacity map, every history ring index and every stack in one go,
+   * for the sake of a slot that costs two table rows.
+   *
+   * `tests/unit/deliveries.spec.ts` holds the retirement: no industry and no
+   * town may produce it, so it can never become a dead end.
+   */
   Passengers: 0,
   Mail: 1,
   Coal: 2,
@@ -32,10 +54,53 @@ export const Cargo = {
   Gravel: 15,
   Cement: 16,
   Containers: 17,
+  /**
+   * The commuter (SPEC2 M19, E-08). What a residential or industrial zone
+   * offers: the same traveller balancing scenario 1 was calibrated on, at the
+   * same rate and the same patience, under a new number.
+   */
+  CommuterPax: 18,
+  /**
+   * The business traveller (SPEC2 M19, E-08). What a COMMERCIAL zone offers:
+   * pays 1.6 times the commuter fare and loses that premium twice as fast, so
+   * a slow line carrying business passengers earns barely more than a fast one
+   * carrying commuters - which is how speed becomes money on the passenger
+   * side (SPEC.md section 1, pillar 2).
+   */
+  BusinessPax: 19,
 } as const;
 export type Cargo = (typeof Cargo)[keyof typeof Cargo];
 
-export const CARGO_COUNT = 18;
+export const CARGO_COUNT = 20;
+
+/**
+ * The passenger classes of SPEC2 M19, ascending.
+ *
+ * They share a vehicle's seats: a coach refitted to one of them loads that
+ * class first and fills the rest of its room with the other (see
+ * `vehicles/update.ts`). The list is what every "is this a passenger" test in
+ * the simulation reads, so a third class would be one entry rather than a
+ * grep - and it is fixed-size, because it is walked inside the tick.
+ */
+export const PASSENGER_CLASSES: readonly Cargo[] = [Cargo.CommuterPax, Cargo.BusinessPax];
+
+/** True for the passenger classes of SPEC2 M19 - and never for the retired id. */
+export function isPassengerClass(cargo: number): boolean {
+  return cargo === Cargo.CommuterPax || cargo === Cargo.BusinessPax;
+}
+
+/**
+ * The other passenger class, or -1 for anything that is not one.
+ *
+ * The shared-seat rule of D-207 asks exactly this question once per stop, and
+ * asking it through a function rather than through a conditional keeps the
+ * "who shares a seat with whom" decision in one place.
+ */
+export function otherPassengerClass(cargo: number): number {
+  if (cargo === Cargo.CommuterPax) return Cargo.BusinessPax;
+  if (cargo === Cargo.BusinessPax) return Cargo.CommuterPax;
+  return -1;
+}
 
 export interface CargoSpec {
   readonly id: Cargo;
@@ -226,6 +291,34 @@ export const CARGO_SPECS: readonly CargoSpec[] = [
     decayPerDay: 0.015,
     needsCooling: false,
   },
+  {
+    id: Cargo.CommuterPax,
+    nameKey: 'cargo.commuterPax',
+    unitKey: 'cargo.unit.person',
+    // Literally the retired passenger row above. Balancing scenario 1 is
+    // calibrated on these three numbers (D-039), the class split must not
+    // move them, and `tests/unit/deliveries.spec.ts` holds the two rows
+    // together so a future edit cannot separate them by accident.
+    baseRateCt: 950,
+    graceDays: 4,
+    decayPerDay: 0.05,
+    needsCooling: false,
+  },
+  {
+    id: Cargo.BusinessPax,
+    nameKey: 'cargo.businessPax',
+    unitKey: 'cargo.unit.person',
+    // 1.6x the commuter fare and twice the decay beyond the same grace
+    // period - SPEC2 M19's two split constants, and the only two numbers the
+    // class split invents. The grace period is deliberately the commuter's:
+    // doubling the decay is what makes a slow line lose the premium, and
+    // halving the grace as well would have taken it away before the line's
+    // speed could decide anything.
+    baseRateCt: 1_520,
+    graceDays: 4,
+    decayPerDay: 0.1,
+    needsCooling: false,
+  },
 ];
 
 /** Spec of a cargo type. */
@@ -265,4 +358,6 @@ export const CARGO_TONNES_PER_UNIT: readonly number[] = [
   1, // Gravel
   1, // Cement
   14, // Containers
+  0.08, // CommuterPax - a passenger with luggage, exactly as the retired row
+  0.08, // BusinessPax - the same person in a better seat
 ];

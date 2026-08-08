@@ -198,7 +198,10 @@ describe('the service gate', () => {
     expect(station.servedIndustries).toContain(mine.id);
     // A coal mine consumes nothing, so the bay accepts only what any station does.
     expect(stationAccepts(station, Cargo.Coal)).toBe(false);
-    expect(stationAccepts(station, Cargo.Passengers)).toBe(true);
+    expect(stationAccepts(station, Cargo.CommuterPax)).toBe(true);
+    expect(stationAccepts(station, Cargo.BusinessPax)).toBe(true);
+    // The retired id of SPEC2 M19 is accepted nowhere - nothing produces it.
+    expect(stationAccepts(station, Cargo.Passengers)).toBe(false);
   });
 
   it('accepts the input of the industry it serves', () => {

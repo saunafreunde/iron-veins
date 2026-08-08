@@ -62,21 +62,21 @@ describe('choosing a successor', () => {
   it('picks a vehicle of the same mode that is on sale and carries as much', () => {
     const bus = vehicleSpec(BUS);
     // Far enough into the century that a newer bus certainly exists.
-    const successor = successorOf(bus, Cargo.Passengers, 2000);
+    const successor = successorOf(bus, Cargo.CommuterPax, 2000);
     expect(successor).toBeGreaterThan(0);
 
     const chosen = vehicleSpec(successor);
     expect(chosen.kind).toBe(bus.kind);
     expect(chosen.introYear).toBeLessThanOrEqual(2000);
     expect(chosen.retireYear).toBeGreaterThanOrEqual(2000);
-    expect(chosen.capacity[Cargo.Passengers] ?? 0).toBeGreaterThanOrEqual(
-      bus.capacity[Cargo.Passengers] ?? 0,
+    expect(chosen.capacity[Cargo.CommuterPax] ?? 0).toBeGreaterThanOrEqual(
+      bus.capacity[Cargo.CommuterPax] ?? 0,
     );
   });
 
   it('offers nothing when the catalogue has nothing newer', () => {
     // In the first game year the 1950 bus is the newest bus there is.
-    const newest = successorOf(vehicleSpec(BUS), Cargo.Passengers, START_YEAR);
+    const newest = successorOf(vehicleSpec(BUS), Cargo.CommuterPax, START_YEAR);
     if (newest >= 0) {
       expect(vehicleSpec(newest).lifetimeYears).toBeGreaterThanOrEqual(
         vehicleSpec(BUS).lifetimeYears,
@@ -86,16 +86,16 @@ describe('choosing a successor', () => {
 
   it('never proposes a vehicle that needs wires to replace one that does not', () => {
     for (const spec of [vehicleSpec(BUS)]) {
-      const successor = successorOf(spec, Cargo.Passengers, 2040);
+      const successor = successorOf(spec, Cargo.CommuterPax, 2040);
       if (successor < 0) continue;
       expect(vehicleSpec(successor).needsCatenary).toBe(false);
     }
   });
 
   it('gives the same answer every time it is asked', () => {
-    const first = successorOf(vehicleSpec(BUS), Cargo.Passengers, 1990);
+    const first = successorOf(vehicleSpec(BUS), Cargo.CommuterPax, 1990);
     for (let i = 0; i < 5; i++) {
-      expect(successorOf(vehicleSpec(BUS), Cargo.Passengers, 1990)).toBe(first);
+      expect(successorOf(vehicleSpec(BUS), Cargo.CommuterPax, 1990)).toBe(first);
     }
   });
 });

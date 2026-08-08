@@ -103,9 +103,15 @@ describe('refitTargets, the CannotCarry mirror', () => {
     for (const target of targets) expect(target.capacity).toBe(28);
   });
 
-  it('offers a bus nothing but its passengers', () => {
+  it('offers a bus nothing but its two passenger classes', () => {
+    // Both classes of SPEC2 M19 and the same seat count for each: the shared
+    // seat pool subtracts one from the other, so a class that answered with a
+    // different capacity would make that subtraction a guess.
     const targets = refitTargets(vehicle({ specId: 200 }));
-    expect(targets).toEqual([{ cargo: Cargo.Passengers, capacity: 150 }]);
+    expect(targets).toEqual([
+      { cargo: Cargo.CommuterPax, capacity: 150 },
+      { cargo: Cargo.BusinessPax, capacity: 150 },
+    ]);
   });
 
   it('sums a train consist over its wagons', () => {

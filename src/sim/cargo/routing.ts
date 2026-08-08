@@ -13,7 +13,7 @@ import type { Station } from '../station/types';
 import { OrderTarget } from '../vehicles/VehicleStore';
 import type { World } from '../World';
 import { addCargo, compactStacks, transferCargo, type CargoStack } from './stack';
-import type { Cargo } from './types';
+import { Cargo } from './types';
 
 /**
  * Where a parcel is going, and who is allowed to carry it (section 7.4).
@@ -123,7 +123,47 @@ export function loadFromStation(
   if (space <= 0) return 0;
   const allowed = allowedDestinations(world, id, station.id);
   if (allowed === null) return 0;
+  return transferAllowed(world, id, station, cargo, space, allowed);
+}
 
+/**
+ * Take on BOTH passenger classes at one stop, out of one pool of seats and on
+ * ONE routing decision (SPEC2 M19, D-207). Returns the units loaded in total.
+ *
+ * `first` is the vehicle's own refit and boards first; `second` fills what is
+ * left. The single decision is not an optimisation that has to be argued: the
+ * allowed destinations depend on the vehicle's next stop and on the link graph
+ * and on NOTHING about the cargo, so calling `loadFromStation` twice would
+ * walk every station twice for an answer that cannot differ. Doing it once
+ * keeps the per-stop cost of a passenger vehicle exactly what it was before
+ * the classes existed - which the perf fixture, 1,350 buses of it, notices.
+ */
+export function loadPassengerPair(
+  world: World,
+  id: number,
+  station: Station,
+  first: Cargo,
+  second: Cargo,
+  space: number,
+): number {
+  if (space <= 0) return 0;
+  const allowed = allowedDestinations(world, id, station.id);
+  if (allowed === null) return 0;
+
+  const moved = transferAllowed(world, id, station, first, space, allowed);
+  const room = space - moved;
+  return room > 0 ? moved + transferAllowed(world, id, station, second, room, allowed) : moved;
+}
+
+/** The transfer half of a load, once the routing question has been answered. */
+function transferAllowed(
+  world: World,
+  id: number,
+  station: Station,
+  cargo: Cargo,
+  space: number,
+  allowed: Uint8Array,
+): number {
   const moved = transferCargo(station.waiting, world.vehicles.cargo[id]!, cargo, space, allowed);
   if (moved > 0) {
     compactStacks(station.waiting);
@@ -313,7 +353,50 @@ export function depositAtStation(
   amount: number,
 ): number {
   if (amount <= 0) return 0;
+  return placeDeposit(world, station, cargo, amount, chooseDestinations(world, station, cargo));
+}
 
+/**
+ * Deposit BOTH passenger classes on ONE destination search (SPEC2 M19, D-207).
+ *
+ * The single search is provable rather than convenient: `chooseDestinations`
+ * asks which stations ACCEPT the cargo and how far away they are, and both
+ * classes sit in `STATION_ALWAYS_ACCEPTED`, so every station on the map takes
+ * both and the candidate list cannot differ between them. Searching twice
+ * would walk every station twice a game day for an answer that is the same
+ * both times - and this runs in the daily hook, where the 1,500-vehicle
+ * fixture's spikes live.
+ *
+ * Commuters are placed first, so a town with no commercial zone at all makes
+ * exactly the call the pre-M19 code made.
+ */
+export function depositPassengers(
+  world: World,
+  station: Station,
+  commuters: number,
+  business: number,
+): number {
+  if (commuters <= 0 && business <= 0) return 0;
+  const found = chooseDestinations(world, station, Cargo.CommuterPax);
+
+  let taken = 0;
+  if (commuters > 0) {
+    taken += placeDeposit(world, station, Cargo.CommuterPax, commuters, found);
+  }
+  if (business > 0) {
+    taken += placeDeposit(world, station, Cargo.BusinessPax, business, found);
+  }
+  return taken;
+}
+
+/** Put `amount` into the station against an ALREADY chosen destination set. */
+function placeDeposit(
+  world: World,
+  station: Station,
+  cargo: Cargo,
+  amount: number,
+  found: number,
+): number {
   let waiting = 0;
   for (const stack of station.waiting) waiting += stack.amount;
 
@@ -329,7 +412,6 @@ export function depositAtStation(
   // the same event 10.1's overflow malus punishes, so the history counts it.
   recordStationCargo(station, StationHistoryField.Expired, cargo, amount - accepted);
 
-  const found = chooseDestinations(world, station, cargo);
   if (found === 0) {
     addCargo(station.waiting, {
       cargo,

@@ -115,7 +115,7 @@ describe('determinism - the 12.1 order grammar', () => {
     // waypoint, the mail van through its per-order refit.
     expect(world.vehicles.earnedCt[0]!).toBeGreaterThan(0);
     expect(world.vehicles.earnedCt[1]!).toBeGreaterThan(0);
-    expect(world.vehicles.refitCargo[1]).toBe(Cargo.Passengers);
+    expect(world.vehicles.refitCargo[1]).toBe(Cargo.CommuterPax);
   });
 
   it('survives a save, load and continue in the middle of the run', () => {

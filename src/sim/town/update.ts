@@ -13,7 +13,7 @@ import {
 } from '../constants';
 import { assignStationIndustries } from '../industry/catchment';
 import { inCatchment, stationRating, type Station } from '../station/types';
-import { depositAtStation } from '../cargo/routing';
+import { depositAtStation, depositPassengers } from '../cargo/routing';
 import type { World } from '../World';
 
 /**
@@ -23,6 +23,20 @@ import type { World } from '../World';
  * station produces nothing. Simulating passengers that no one can ever pick up
  * would cost memory and tell the player nothing.
  */
+
+/**
+ * Everything a town puts into a station, ascending - the enumeration
+ * `produceTownCargo` below deposits and nothing else.
+ *
+ * It exists because SPEC2 M19 gave a town a SECOND passenger class, and a
+ * class no station accepted would be the dead end of D-118 one production
+ * chain further out: produced every game day, never collectable, filling the
+ * station to its capacity and taking the classes that ARE served down with
+ * it. `tests/unit/deliveries.spec.ts` walks this list against the station's
+ * own acceptance table, and `tests/unit/passengerClasses.spec.ts` holds the
+ * list itself against what a played town actually deposits.
+ */
+export const TOWN_OUTPUTS: readonly Cargo[] = [Cargo.Mail, Cargo.CommuterPax, Cargo.BusinessPax];
 
 /** Passengers and mail a town produces per production slice. */
 function outputPerSlice(population: number, perInhabitantPerMonth: number): number {
@@ -94,8 +108,21 @@ export function produceTownCargo(world: World): void {
         (station.buildingsCovered * (stationRating(station, world.tick) / 100)) / totalWeight;
       // What a town produces is counted whether or not the station could take
       // it: the growth ratio has to divide by the offer, not by the acceptance.
-      town.producedThisMonth += passengers * share;
-      depositAtStation(world, station, Cargo.Passengers, passengers * share);
+      const offered = passengers * share;
+      town.producedThisMonth += offered;
+      // The class split of SPEC2 M19: a COMMERCIAL zone offers business
+      // travellers, every other zone offers commuters, and the TOTAL is
+      // exactly what the town offered before the split. The share is the
+      // station's own catchment rather than the town's, which is the whole
+      // point of the rule - a stop in the shopping streets sells different
+      // tickets from a stop in the suburbs.
+      //
+      // Commuters are deposited FIRST and business second, out of ONE
+      // destination search, so a town with no commercial zone at all - which
+      // is what every balancing world of section 19.4 is - costs exactly what
+      // the pre-M19 code cost and does exactly what it did (the D-201 device).
+      const business = offered * station.commercialShare;
+      depositPassengers(world, station, offered - business, business);
       depositAtStation(world, station, Cargo.Mail, mail * share);
     }
   }

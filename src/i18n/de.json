@@ -354,6 +354,8 @@
   "veh.wagon_silo": "Wagen Z-1 „Silo\"",
   "veh.wagon_heavy": "Wagen H-1 „Schwerlast\"",
   "cargo.passengers": "Passagiere",
+  "cargo.commuterPax": "Pendler",
+  "cargo.businessPax": "Geschäftsreisende",
   "cargo.mail": "Post",
   "cargo.coal": "Kohle",
   "cargo.ironOre": "Eisenerz",

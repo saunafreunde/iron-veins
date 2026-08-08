@@ -287,7 +287,7 @@ describe('the grammar at the stop', () => {
     step(scenario, 6_000);
 
     const stationB = scenario.world.stations[1]!;
-    const transferred = stationB.waiting.filter((stack) => stack.cargo === Cargo.Passengers);
+    const transferred = stationB.waiting.filter((stack) => stack.cargo === Cargo.CommuterPax);
     expect(transferred.length).toBeGreaterThan(0);
     // The leg was still paid: transfer is a hand-over, not a write-off.
     expect(scenario.world.vehicles.earnedCt[0]!).toBeGreaterThan(0);
@@ -335,7 +335,7 @@ describe('the grammar at the stop', () => {
     // there as a transfer, and nothing rode through.
     const stationB = scenario.world.stations[1]!;
     const forwarded = stationB.waiting.some(
-      (stack) => stack.cargo === Cargo.Passengers && stack.destinationStationId === 2,
+      (stack) => stack.cargo === Cargo.CommuterPax && stack.destinationStationId === 2,
     );
     expect(forwarded).toBe(true);
   });
@@ -343,16 +343,16 @@ describe('the grammar at the stop', () => {
   it('refits at the stop, for the same price the depot charges', () => {
     const scenario = twoTownScenario(1_200, 25);
     lineWith(scenario, MAIL_VAN, [
-      order({ targetId: 0, refitTo: Cargo.Passengers }),
+      order({ targetId: 0, refitTo: Cargo.CommuterPax }),
       order({ targetId: 1 }),
     ]);
 
     const before = scenario.world.company.cashCt;
     let guard = 0;
-    while (scenario.world.vehicles.refitCargo[0] !== Cargo.Passengers && guard++ < 3_000) {
+    while (scenario.world.vehicles.refitCargo[0] !== Cargo.CommuterPax && guard++ < 3_000) {
       step(scenario, 1);
     }
-    expect(scenario.world.vehicles.refitCargo[0]).toBe(Cargo.Passengers);
+    expect(scenario.world.vehicles.refitCargo[0]).toBe(Cargo.CommuterPax);
     // The mail van now measures its load in passengers - and it paid for it.
     expect(scenario.world.vehicles.capacityUnits[0]).toBe(44);
     expect(scenario.world.company.cashCt).toBeLessThan(before);

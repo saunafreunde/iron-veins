@@ -62,7 +62,7 @@ describe('the ring on the three-line transfer network', () => {
     const a = world.stations[network.stations.a]!;
     let collectedA = 0;
     for (let monthsAgo = 0; monthsAgo < STATION_HISTORY_MONTHS; monthsAgo++) {
-      collectedA += ringAt(a, monthsAgo, Cargo.Passengers, StationHistoryField.Collected);
+      collectedA += ringAt(a, monthsAgo, Cargo.CommuterPax, StationHistoryField.Collected);
     }
     expect(collectedA).toBeGreaterThan(0);
 
@@ -70,7 +70,7 @@ describe('the ring on the three-line transfer network', () => {
     let delivered = 0;
     for (const station of world.stations) {
       for (let monthsAgo = 0; monthsAgo < STATION_HISTORY_MONTHS; monthsAgo++) {
-        delivered += ringAt(station, monthsAgo, Cargo.Passengers, StationHistoryField.Delivered);
+        delivered += ringAt(station, monthsAgo, Cargo.CommuterPax, StationHistoryField.Delivered);
       }
     }
     expect(delivered).toBeGreaterThan(0);
@@ -85,7 +85,7 @@ describe('the ring on the three-line transfer network', () => {
     const station = world.stations[network.stations.a]!;
 
     addCargo(station.waiting, {
-      cargo: Cargo.Passengers,
+      cargo: Cargo.CommuterPax,
       amount: STATION_CARGO_CAPACITY,
       createdTick: 0,
       originStationId: station.id,
@@ -93,12 +93,12 @@ describe('the ring on the three-line transfer network', () => {
       paidFromX: station.x,
       paidFromY: station.y,
     });
-    const taken = depositAtStation(world, station, Cargo.Passengers, 50);
+    const taken = depositAtStation(world, station, Cargo.CommuterPax, 50);
 
     expect(taken).toBe(0);
     expect(
       station.monthCounters[
-        Cargo.Passengers * STATION_HISTORY_FIELD_COUNT + StationHistoryField.Expired
+        Cargo.CommuterPax * STATION_HISTORY_FIELD_COUNT + StationHistoryField.Expired
       ],
     ).toBe(50);
   });
@@ -110,13 +110,13 @@ describe('the ring mechanics', () => {
     const world = network.world;
     const station = world.stations[0]!;
 
-    recordStationCargo(station, StationHistoryField.Collected, Cargo.Passengers, 2.6);
+    recordStationCargo(station, StationHistoryField.Collected, Cargo.CommuterPax, 2.6);
     rollStationHistories(world);
 
-    expect(ringAt(station, 0, Cargo.Passengers, StationHistoryField.Collected)).toBe(3);
+    expect(ringAt(station, 0, Cargo.CommuterPax, StationHistoryField.Collected)).toBe(3);
     expect(
       station.monthCounters[
-        Cargo.Passengers * STATION_HISTORY_FIELD_COUNT + StationHistoryField.Collected
+        Cargo.CommuterPax * STATION_HISTORY_FIELD_COUNT + StationHistoryField.Collected
       ],
     ).toBe(0);
     expect(station.historyCursor).toBe(1);
