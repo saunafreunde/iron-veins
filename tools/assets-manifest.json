@@ -7,12 +7,29 @@
     "changes URL AND checksum together - re-pin both from the pack page when",
     "a fetch 404s.",
     "Mapping targets: `vehicle:<catalogId>` (8 facings),",
-    "`building:<zone>:<stage>[:<variant>]`, `industry:<TypeName>` and",
-    "`tree:<climate>:<n>` (1 facing each; climates temperate/arctic/tropical/",
-    "desert after MapClimate). `scale` is model units to metres - an art",
+    "`building:<zone>:<stage>[:<variant>]`, `industry:<TypeName>`,",
+    "`module:<ModuleKindName>` and `tree:<climate>:<n>` (1 facing each;",
+    "climates temperate/arctic/tropical/desert after MapClimate).",
+    "`scale` is model units to metres - an art",
     "choice per entry (vehicles ride ~1.7x over their catalogue lengthM so",
     "they read at 64 px/tile, the TTD convention).",
-    "PROPORTION RULE (D-206): a `building:`, `industry:` or `tree:` cell may",
+    "STATION MODULES (D-208): `module:<name>` is a station module of",
+    "src/sim/station/types.ts `ModuleKind`, read backwards by name exactly",
+    "the way `industry:` reads IndustryType - the thirteen things the PLAYER",
+    "builds, which until D-208 drew the pre-Kenney white box under a company",
+    "tint (a saturated box the size of a house, the loudest object on the",
+    "screen). A coupling test holds this file against ModuleKind in BOTH",
+    "directions, and `PROCEDURAL_ONLY_MODULES` in src/render/staticArt.ts is",
+    "the explicit list of kinds that deliberately keep the procedural cell -",
+    "it is EMPTY today, so an unmapped kind is a red build, never a silence.",
+    "Company colour on a module is an ACCENT ZONE and never the volume: a",
+    "canopy fabric, a row of roller doors, a fascia band, a crane collar.",
+    "Three modules (RailPlatform, Quay, ColdStore) are measured to carry no",
+    "separable patch and are NEUTRAL by decision - a platform, a timber",
+    "dock and a windowless cold store are infrastructure, and their owner is",
+    "read off the vehicle standing there and the station label (D-165).",
+    "PROPORTION RULE (D-206, extended to `module:` by D-208): a `building:`,",
+    "`industry:`, `module:` or `tree:` cell may",
     "lift at most 64 px at zoom 1 above its tile centre - 2.00 tile heights,",
     "4 height levels, 32 m - which is the drawable headroom of a procedural",
     "atlas cell (CELL_HEADROOM_STEPS * HEIGHT_PX + TILE_H / 2) and therefore",
@@ -827,7 +844,7 @@
       "facings": 8,
       "recolor": {
         "hueShift": 180,
-        "saturation": 2.0,
+        "saturation": 2,
         "value": 1.05
       },
       "note": "Reuse (D-175): mail2 is the container body recoloured postal yellow, one size up - the city-b EMU middle it used carried a pantograph, a wrong silhouette on an unpowered mail van."
@@ -2336,6 +2353,259 @@
         1,
         1.7
       ]
+    },
+    {
+      "target": "module:BusStop",
+      "pack": "city-kit-commercial",
+      "file": "Models/GLB format/detail-awning.glb",
+      "scale": 58,
+      "facings": 1,
+      "stretch": [
+        1,
+        0.19,
+        1
+      ],
+      "tint": {
+        "hues": [
+          {
+            "min": 140,
+            "max": 170,
+            "minSaturation": 0.4
+          }
+        ]
+      },
+      "note": "D-208. The kit's shop awning IS a bus shelter: a flat canopy on two thin posts. Its authored canopy is the ONE green patch on the model (measured hue 145-161 at HSL saturation 0.42-0.57, against posts at hue 229 saturation 0.11), so the band puts the COMPANY COLOUR on the canopy and leaves the posts kit grey - the accent rule on the smallest module in the game. Measured 0.36 tile widths, lift 0.44 tile heights: the shortest of the thirteen, which is what a stop should be beside a house at 0.62."
+    },
+    {
+      "target": "module:LorryBay",
+      "pack": "city-kit-industrial",
+      "file": "Models/GLB format/building-p.glb",
+      "scale": 20,
+      "facings": 1,
+      "facing": 4,
+      "stretch": [
+        1,
+        0.78,
+        1
+      ],
+      "tint": {
+        "hues": [
+          {
+            "min": 25,
+            "max": 45,
+            "minSaturation": 0.75
+          }
+        ]
+      },
+      "note": "D-208. A goods shed with a row of roller doors and rooftop plant - what a lorry backs into. `facing` 4 turns the doors towards the camera; at the kit's own facing they point away and the module is a blank box. The kit paints every roller door the same pure orange (hue 31-39 at saturation 1.00 exactly, against walls at hue 229/0.11 and shrubs at hue 145-161), so the band takes the DOORS and nothing else. Measured 0.56 tile widths, lift 0.91 tile heights; the company-coloured doors are 39 of the cell's 814 opaque pixels - 4.8 %."
+    },
+    {
+      "target": "module:RoadDepot",
+      "pack": "city-kit-industrial",
+      "file": "Models/GLB format/building-h.glb",
+      "scale": 21,
+      "facings": 1,
+      "facing": 4,
+      "stretch": [
+        1,
+        0.68,
+        1
+      ],
+      "tint": {
+        "hues": [
+          {
+            "min": 25,
+            "max": 45,
+            "minSaturation": 0.75
+          }
+        ]
+      },
+      "note": "Reuse (D-169, D-208): the body of `building:industrial:0`, a hall with one wide vehicle portal - which is what a bus garage is. `facing` 4 puts the portal and the kit's orange side door at the front; the company colour rides that door. Told apart from the town tile by its own stretch, by the coloured door and by standing on a station. Measured 0.58 tile widths, lift 0.88 tile heights, accent 24 px of 882 (2.7 %) - under the rail depot below, because a road depot holds a bus and an engine shed holds a train."
+    },
+    {
+      "target": "module:RailPlatform",
+      "pack": "city-kit-roads",
+      "file": "Models/GLB format/tile-high.glb",
+      "scale": 42,
+      "facings": 1,
+      "stretch": [
+        1,
+        0.14,
+        1
+      ],
+      "recolor": {
+        "value": 0.72
+      },
+      "note": "D-208. The Road Kit's raised paving slab: a platform IS a kerbed slab, and this one covers 0.88 tile widths so consecutive platform tiles read as ONE platform rather than as a row of blocks. The model is twelve white triangles and carries no patch a tint band could separate - `recolor` value 0.72 takes it to concrete #b8b8b8 (16.3's Beton is #b8b4ac) and the module stays NEUTRAL. That is the point: a platform is infrastructure, and the company colour is the train standing on it. Measured 0.88 tile widths, lift 0.56 tile heights, of which 1.5 m is height and the rest is the slab's own plan."
+    },
+    {
+      "target": "module:RailDepot",
+      "pack": "city-kit-industrial",
+      "file": "Models/GLB format/building-j.glb",
+      "scale": 23,
+      "facings": 1,
+      "facing": 6,
+      "stretch": [
+        1,
+        0.68,
+        1.4
+      ],
+      "note": "Reuse (D-169, D-208): the body of `building:industrial:0:2`, a barrel-vaulted shed with one tall portal - the engine-shed silhouette, and `stretch [1, 0.68, 1.4]` makes it deep enough to swallow a locomotive. The model's only saturated patches are a shrub and a plant pot, so there is nothing a band could take that would not be absurd: the depot is NEUTRAL, like the platform beside it, and its owner is the train that runs in. Measured 0.66 tile widths, lift 1.00 tile heights - the biggest shed of the four."
+    },
+    {
+      "target": "module:FreightTerminal",
+      "pack": "factory-kit",
+      "file": "Models/GLB format/crane.glb",
+      "scale": 6,
+      "facings": 1,
+      "recolor": {
+        "saturation": 0.45,
+        "value": 1.15
+      },
+      "tint": {
+        "hues": [
+          {
+            "min": 25,
+            "max": 45,
+            "minSaturation": 0.6
+          }
+        ]
+      },
+      "note": "D-208. SPEC.md 10 calls the freight terminal a crane and a ramp, and the Factory Kit crane is a jib on a splayed base - the one module whose silhouette is a LANDMARK rather than a shed, which is why it is the tallest of the thirteen at 1.47 tile heights and by far the narrowest at 0.30. The kit's navy is desaturated to steel; its orange collar band is the tint zone."
+    },
+    {
+      "target": "module:Canopy",
+      "pack": "city-kit-commercial",
+      "file": "Models/GLB format/detail-overhang-wide.glb",
+      "scale": 44,
+      "facings": 1,
+      "stretch": [
+        1,
+        0.32,
+        1
+      ],
+      "tint": {
+        "hues": [
+          {
+            "min": 222,
+            "max": 236,
+            "minSaturation": 0.05
+          }
+        ]
+      },
+      "note": "D-208. The wide shop overhang: a long canopy on two posts, which is section 10's Ueberdachung/Wartehalle, and deliberately the same FAMILY as the bus stop at twice the span. This kit paints its neutrals at exactly hue 240 and its dark trim at hue 228-232, so a 222-236 band separates fascia and posts from the white deck without a fragile exact-colour pin - the company colour lands on the trim, never on the roof plane. Measured 0.56 tile widths, lift 0.66 tile heights; the trim is 141 px of 268 (52.6 %), which is a lot as a SHARE and 141 px in absolute terms - a canopy is a roof plane, not a volume."
+    },
+    {
+      "target": "module:ColdStore",
+      "pack": "city-kit-industrial",
+      "file": "Models/GLB format/building-q.glb",
+      "scale": 17,
+      "facings": 1,
+      "facing": 6,
+      "stretch": [
+        1,
+        0.6,
+        1
+      ],
+      "recolor": {
+        "saturation": 0.5,
+        "value": 1.6
+      },
+      "note": "Reuse (D-169, D-208): the body of `industry:ElectronicsFactory`, a windowless hall carrying four large roof units - read as CONDENSERS they are exactly what a cold store is, and the recolour to insulated white is what tells the two apart at a glance (the industry keeps the kit's dark grey). No saturated patch outside the glazing, so the module is NEUTRAL; the glazing does carry the kit-wide window ramp, so the plant lights up at night. Measured 0.61 tile widths, lift 0.91 tile heights."
+    },
+    {
+      "target": "module:Quay",
+      "pack": "pirate-kit",
+      "file": "Models/GLB format/structure-platform-dock.glb",
+      "scale": 16,
+      "facings": 1,
+      "stretch": [
+        1,
+        0.17,
+        1
+      ],
+      "recolor": {
+        "saturation": 0.8,
+        "value": 0.92
+      },
+      "note": "D-208. A timber dock deck on posts - the one model in twelve kits that is literally a berth. Flattened to 3.6 m of freeboard so a ship beside it reads as a ship at a quay rather than as a ship behind a wall, and weathered a little off the kit's fresh cedar. NEUTRAL like the platform: timber, and the company colour is the vessel tied to it. Measured 0.84 tile widths, lift 0.63 tile heights."
+    },
+    {
+      "target": "module:ShipDepot",
+      "pack": "watercraft-kit",
+      "file": "Models/GLB format/boat-house-d.glb",
+      "scale": 8.9,
+      "facings": 1,
+      "stretch": [
+        1,
+        0.46,
+        1
+      ],
+      "recolor": {
+        "value": 1.25
+      },
+      "tint": {
+        "hues": [
+          {
+            "min": 25,
+            "max": 45,
+            "minSaturation": 0.75
+          }
+        ]
+      },
+      "note": "D-208. Kenney's `boat-house` is a covered vessel moored to a hull, not a building - and a ship depot STANDS ON WATER (`isWaterModule`), so a floating workshop is the honest reading and a shed on the waves would be the wrong one. Carries both the kit's orange trim (the tint zone) and its blue window ramp (the night twin). Measured 0.69 tile widths, lift 1.09 tile heights, accent 129 px of 919 (14.0 %)."
+    },
+    {
+      "target": "module:Airstrip",
+      "pack": "factory-kit",
+      "file": "Models/GLB format/machine.glb",
+      "scale": 20.5,
+      "facings": 1,
+      "stretch": [
+        1,
+        0.49,
+        1
+      ],
+      "recolor": {
+        "saturation": 0.35,
+        "value": 1.3
+      },
+      "tint": {
+        "hues": [
+          {
+            "min": 25,
+            "max": 45,
+            "minSaturation": 0.6
+          }
+        ]
+      },
+      "note": "D-208. A barrel-roofed shell with one wide arched opening: recoloured off the Factory Kit's navy to hangar concrete it IS a hangar, which is the only building an airstrip has. No Kenney 3D aircraft kit exists (E-14), so the AEROPLANE stays procedural and only the ground structure comes from the bake. Company colour on the kit's orange skirt, 80 px of 889 (9.0 %). Measured 0.56 tile widths, lift 1.00 tile heights."
+    },
+    {
+      "target": "module:Airport",
+      "pack": "city-kit-commercial",
+      "file": "Models/GLB format/low-detail-building-wide-a.glb",
+      "scale": 32,
+      "facings": 1,
+      "stretch": [
+        1,
+        0.3,
+        2.2
+      ],
+      "note": "D-208. A low block wrapped in one continuous glazed frontage under a roof light - a terminal. The kit body is authored 2:1 in plan, which drew a NARROW slab: `stretch [1, 0.3, 2.2]` squares the plan and flattens the height, so the terminal spreads over its tile instead of standing on it. The three airport sizes are three module KINDS (station/types.ts), so they are three cells and the ladder is in the proportions: 0.72 tile widths and 1.03 tile heights here against the international terminal's 0.75 and 1.19. NEUTRAL, and MEASURED so: the kit body has exactly two colour families, so the only band that separates anything takes the whole wrap-around glazing - 42.2 % of the cell's pixels, which is a coloured BUILDING and not an accent. The band was written, baked, measured and removed."
+    },
+    {
+      "target": "module:InternationalAirport",
+      "pack": "city-kit-commercial",
+      "file": "Models/GLB format/low-detail-building-wide-b.glb",
+      "scale": 34,
+      "facings": 1,
+      "stretch": [
+        1,
+        0.34,
+        2.2
+      ],
+      "note": "D-208. The stacked-deck terminal of the same kit family, one storey taller and one step wider than `module:Airport` - the size ladder a player pays for, visible without a label. Same plan correction, and NEUTRAL for the same measured reason (its glazing band came out at 32.3 % of the cell). Measured 0.75 tile widths, lift 1.19 tile heights - the widest module cell, and the tallest after the freight crane."
     }
   ]
 }

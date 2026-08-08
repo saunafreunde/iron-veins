@@ -450,6 +450,7 @@ import {
   forestTreeAt,
   industryTargetFor,
   isWoodedTile,
+  moduleTargetFor,
   staticVariantFor,
   tileVariantSeed,
   treeTargetFor,
@@ -3393,11 +3394,40 @@ export class MapView {
   }
 
   /**
+   * The baked cell a station module draws, or null for the `shapes.ts` box:
+   * a kind on `PROCEDURAL_ONLY_MODULES` (empty today, D-208), a kind the
+   * manifest never mapped, and every build with no bake at all (E-14).
+   *
+   * No variance seed. A module kind is its IDENTITY - a depot must not be one
+   * of four bodies the way a terrace house is - which is `bakedIndustryHandle`'s
+   * argument for the same reason.
+   */
+  private bakedModuleHandle(
+    index: StaticZoomIndex | null,
+    invScale: number,
+    kind: number,
+  ): BakedCellHandle | null {
+    const variant = staticVariantFor(index, moduleTargetFor(kind), 0);
+    return variant === null ? null : this.bakedCellHandle(variant, invScale);
+  }
+
+  /**
    * Station modules, keyed on their own tile at the station layer: above the
    * track a platform covers, below a vehicle standing on it.
    *
-   * Live sprites at every zoom that shows them, never baked: they carry the
-   * company tint, and a company recolour must not force a chunk rebake.
+   * Live sprites at every zoom that shows them, never baked into a chunk
+   * (D-161): they carry the company tint, and a company recolour must not
+   * force a chunk rebake. That is why ONE function serves both render paths -
+   * `rebuild` at 1x and up, `rebuildMarkers` at 0.5x - and why "the sprite
+   * path AND the chunk textures" means, for a module exactly as for an
+   * industry, live sprites over the chunks.
+   *
+   * Since D-208 the body is the Kenney cell of the module's kind: base pass,
+   * company-colour mask pass at the same zIndex (the two-pass tint of D-160,
+   * placed as D-170 places a vehicle), and the cell's own emissive twin at
+   * night. Before it, all thirteen kinds shared `moduleFrame`'s white box
+   * under a full-strength company tint - a saturated block the size of a
+   * house on the objects the player looks at most.
    */
   private placeStations(
     map: TileMap,
@@ -3406,6 +3436,9 @@ export class MapView {
   ): number {
     const page = this.activePage();
     const atlas = page.atlas;
+    // Resolved once per rebuild, never per module - the D-205 measurement.
+    const statics = this.bakedStaticIndexAt(this.zoom);
+    const staticInvScale = MapView.staticInvScale(statics);
     for (const station of this.stations) {
       for (const module of station.modules) {
         if (
@@ -3416,7 +3449,32 @@ export class MapView {
         ) {
           continue;
         }
-        const world = tileToWorld(module.x, module.y, map.baseHeight(module.x, module.y));
+        const height = map.baseHeight(module.x, module.y);
+        const world = tileToWorld(module.x, module.y, height);
+        const zIndex = drawOrder(module.x, module.y, height, DrawLayer.Station);
+        const baked = this.bakedModuleHandle(statics, staticInvScale, module.kind);
+        if (baked !== null) {
+          // The hull in its own kit colours, then the livery on top: the
+          // company colour is a canopy, a row of roller doors or a trim
+          // band, never the volume (measured per cell in the manifest).
+          this.placeBaked(
+            this.take(used++),
+            baked.base,
+            baked,
+            world.x,
+            world.y + TILE_H / 2,
+            zIndex,
+          );
+          const mask = this.take(used++);
+          this.placeBaked(mask, baked.mask, baked, world.x, world.y + TILE_H / 2, zIndex);
+          mask.tint = this.companyTint;
+          if (this.dayNight && baked.glow !== null) {
+            const glow = this.take(used++);
+            this.placeBaked(glow, baked.glow, baked, world.x, world.y + TILE_H / 2, zIndex);
+            this.markEmissive(glow, used - 1);
+          }
+          continue;
+        }
         const sprite = this.take(used++);
         const key = MODULE_SPRITE_KEYS[module.kind] ?? 'station';
         this.place(
@@ -3424,7 +3482,7 @@ export class MapView {
           this.frameTexture(page, key, moduleFrame(atlas, module.kind)),
           world.x,
           world.y,
-          drawOrder(module.x, module.y, map.baseHeight(module.x, module.y), DrawLayer.Station),
+          zIndex,
         );
         sprite.tint = this.companyTint;
       }

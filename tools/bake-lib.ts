@@ -58,8 +58,14 @@ export const BAKE_STATIC_MAX_LIFT_PX = 64;
  * Targets the proportion rule applies to: the things that stand on ONE tile.
  * Vehicles are exempt - a train is drawn along its own path and is bounded by
  * the catalogue, not by a tile's headroom.
+ *
+ * `module:` joined the list with D-208: a station module occupies exactly one
+ * tile (`StationModule` is {kind, tile, x, y}), so it is bounded by the same
+ * headroom as a town building and by the same chunk-texture reserve, and a
+ * terminal that broke the rule would be guillotined at a 0.5x chunk seam
+ * exactly like D-206's skyscraper was.
  */
-const STATIC_TARGET = /^(building|industry|tree):/;
+const STATIC_TARGET = /^(building|industry|module|tree):/;
 
 /**
  * Flat-shading solved against the renderer's three box-face factors
@@ -1244,6 +1250,19 @@ export interface BakeModelInput {
   readonly scale: number;
   /** 8 for things that drive, 1 for things that stand. */
   readonly facings: number;
+  /**
+   * Facing index the FIRST cell is rendered at, 0-7 (D-208). [index]
+   *
+   * A vehicle bakes all eight and leaves this at 0, so its cell `facing` and
+   * the direction it is drawn at are the same number - the whole of D-170's
+   * lookup rests on that. A STATIC bakes one cell, and which way its model
+   * happens to point is an art fact the kit decided: a depot whose vehicle
+   * door faces away from the camera is a cottage, which is a wrong silhouette
+   * in exactly the D-117 sense. The cell still records `facing` 0, because
+   * that is what identifies it as static art (`staticArt.STATIC_FACING`) -
+   * only the CAMERA moved.
+   */
+  readonly baseFacing?: number;
   /** Named model-space anchor points (chimneys, emitters), E-14 metadata. */
   readonly anchors?: Readonly<Record<string, readonly [number, number, number]>>;
   /** Per-axis model-space multipliers for reused-model variants (D-169). */
@@ -1329,7 +1348,10 @@ export function bakeAtlases(models: readonly BakeModelInput[], zooms = BAKE_ZOOM
       for (let facing = 0; facing < model.facings; facing++) {
         const render = renderSprite(model.triangles, {
           scale: model.scale,
-          facing,
+          // The camera index, which is the cell index turned by the entry's
+          // own `baseFacing` (D-208) - zero for every vehicle, so a driving
+          // sprite's cell facing IS its direction.
+          facing: (facing + (model.baseFacing ?? 0)) & 7,
           zoom,
           anchors: model.anchors,
           stretch: model.stretch,

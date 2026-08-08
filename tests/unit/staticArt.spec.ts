@@ -4,6 +4,7 @@ import { MapClimate } from '../../src/sim/constants';
 import { IndustryType } from '../../src/sim/industry/types';
 import { Terrain } from '../../src/sim/map/terrain';
 import type { TileMap } from '../../src/sim/map/TileMap';
+import { MODULE_KIND_COUNT, ModuleKind } from '../../src/sim/station/types';
 import { BuildingKind } from '../../src/sim/town/types';
 import type { BakedAtlasManifest, BakedCell, BakedPage } from '../../src/render/bakedAtlas';
 import {
@@ -23,7 +24,9 @@ import {
   forestTreeAt,
   industryTargetFor,
   isWoodedTile,
+  moduleTargetFor,
   PROCEDURAL_ONLY_INDUSTRIES,
+  PROCEDURAL_ONLY_MODULES,
   staticVariantFor,
   STATIC_FACING,
   tileVariantSeed,
@@ -33,7 +36,7 @@ import {
 } from '../../src/render/staticArt';
 import { CHUNK_ART_HEADROOM_PX, chunkAabb } from '../../src/render/chunks';
 import { CELL_HEADROOM_STEPS, emissiveBuildingFrame } from '../../src/render/TerrainAtlas';
-import { HEIGHT_PX, TILE_H } from '../../src/render/projection';
+import { HEIGHT_PX, TILE_H, TILE_W } from '../../src/render/projection';
 import { HEIGHT_STEP_M } from '../../src/sim/constants';
 
 /**
@@ -159,6 +162,14 @@ describe('the target grammar is the manifest`s own (D-169)', () => {
     expect(industryTargetFor(999)).toBeNull();
   });
 
+  it('keys a station module by its ModuleKind NAME, the industry device one enum along (D-208)', () => {
+    expect(moduleTargetFor(ModuleKind.BusStop)).toBe('module:BusStop');
+    expect(moduleTargetFor(ModuleKind.RailPlatform)).toBe('module:RailPlatform');
+    expect(moduleTargetFor(ModuleKind.InternationalAirport)).toBe('module:InternationalAirport');
+    expect(moduleTargetFor(MODULE_KIND_COUNT)).toBeNull();
+    expect(moduleTargetFor(-1)).toBeNull();
+  });
+
   it('keys a tree family by climate, and is total for an unknown one', () => {
     expect(treeTargetFor(MapClimate.Temperate)).toBe('tree:temperate');
     expect(treeTargetFor(MapClimate.Arctic)).toBe('tree:arctic');
@@ -204,6 +215,137 @@ describe('the three procedural-only industries (E-14, D-169)', () => {
       expect(mapped.has(name), `industry:${name} mapped`).toBe(!procedural);
       expect(industryTargetFor(type) === null, `industry:${name} refused`).toBe(procedural);
     }
+  });
+});
+
+describe('the station modules the player builds (D-208)', () => {
+  /** Module kind names as the manifest wrote them, from the enum itself. */
+  const moduleNames = new Map<number, string>(
+    Object.entries(ModuleKind).map(([name, value]) => [value, name]),
+  );
+
+  it('covers every ModuleKind - the enum is complete and the count agrees', () => {
+    expect(moduleNames.size).toBe(MODULE_KIND_COUNT);
+    for (let kind = 0; kind < MODULE_KIND_COUNT; kind++) {
+      expect(moduleNames.has(kind), `ModuleKind ${kind}`).toBe(true);
+    }
+  });
+
+  it('names no procedural-only kind today, and that is what makes an unmapped kind red', () => {
+    // The set is the extension point, not a hole: every kind is mapped, so
+    // it is EMPTY - and the both-directions audit below turns a kind that
+    // loses its model into a failing build rather than into the orange box
+    // that shipped from M12 to D-208.
+    expect([...PROCEDURAL_ONLY_MODULES]).toEqual([]);
+  });
+
+  it('agrees with the manifest in BOTH directions (the D-160/D-169 coupling device)', () => {
+    const mapped = new Set(
+      sourceManifest.models
+        .filter((model) => model.target.startsWith('module:'))
+        .map((model) => model.target.split(':')[1]!),
+    );
+    // Direction 1: every kind the simulation can build has art, or is on the
+    // documented procedural list.
+    for (const [kind, name] of moduleNames) {
+      const procedural = PROCEDURAL_ONLY_MODULES.has(kind);
+      expect(mapped.has(name), `module:${name} mapped`).toBe(!procedural);
+      expect(moduleTargetFor(kind) === null, `module:${name} refused`).toBe(procedural);
+    }
+    // Direction 2: the manifest names no module the simulation does not have.
+    for (const name of mapped) {
+      expect([...moduleNames.values()], `module:${name} unknown`).toContain(name);
+    }
+  });
+
+  it('resolves every kind to its own cell, and never to another kind`s', () => {
+    const planted = indexOf([...moduleNames.values()].map((name) => cell(`module:${name}`)));
+    const seen = new Set<string>();
+    for (const [kind, name] of moduleNames) {
+      const variant = staticVariantFor(planted, moduleTargetFor(kind), 0);
+      expect(variant, `module:${name}`).not.toBeNull();
+      expect(variant!.cell.target).toBe(`module:${name}`);
+      seen.add(variant!.cell.target);
+    }
+    expect(seen.size).toBe(MODULE_KIND_COUNT);
+  });
+
+  it('falls back per entry: no bake, no index, an unmapped kind - all the box', () => {
+    // The three floors of E-14, one level down (D-205's shape): no manifest
+    // at all, a manifest without this family, and a kind the manifest never
+    // named. Each answers null, which is MapView's instruction to draw
+    // `moduleFrame`'s procedural cell.
+    expect(staticVariantFor(null, moduleTargetFor(ModuleKind.Quay), 0)).toBeNull();
+    const withoutModules = indexOf([cell('building:residential:0'), cell('industry:Sawmill')]);
+    expect(staticVariantFor(withoutModules, moduleTargetFor(ModuleKind.Quay), 0)).toBeNull();
+    const partial = indexOf([cell('module:Quay')]);
+    expect(staticVariantFor(partial, moduleTargetFor(ModuleKind.Quay), 0)).not.toBeNull();
+    expect(staticVariantFor(partial, moduleTargetFor(ModuleKind.Airport), 0)).toBeNull();
+  });
+
+  it('keeps `module:` out of the other three grammars and them out of it', () => {
+    // `module:Airport` and `industry:PowerPlant` have the same SHAPE, so the
+    // index has to key them apart or a station would draw a works.
+    const mixed = indexOf([
+      cell('module:Airport', { x: 0 }),
+      cell('industry:PowerPlant', { x: 40 }),
+      cell('building:commercial:1', { x: 80 }),
+      cell('tree:temperate:0', { x: 120 }),
+    ]);
+    expect(staticVariantFor(mixed, 'module:Airport', 0)!.cell.x).toBe(0);
+    expect(staticVariantFor(mixed, 'industry:PowerPlant', 0)!.cell.x).toBe(40);
+    expect(staticVariantFor(mixed, 'module:PowerPlant', 0)).toBeNull();
+    expect(staticVariantFor(mixed, 'industry:Airport', 0)).toBeNull();
+  });
+
+  it('holds the proportion table of the real bake, when one is on disk', () => {
+    // Developer-machine check (the bake is a gitignored build artifact,
+    // E-14); the rule itself is enforced in tools/bake-lib.ts and proved on
+    // synthetic geometry in assetsBake.spec.ts. What this adds is the shape
+    // of the FAMILY: a station module stands on ONE tile, so it may be no
+    // taller than the headroom and no wider than its tile.
+    const baked = readBakedManifest();
+    if (baked === null) return;
+    const lifts = new Map<string, number>();
+    const widths = new Map<string, number>();
+    for (const bakedPage of baked.pages) {
+      if (bakedPage.kind === 'emissive') continue;
+      for (const bakedCell of bakedPage.cells) {
+        if (!bakedCell.target.startsWith('module:')) continue;
+        expect(bakedCell.facing, bakedCell.target).toBe(STATIC_FACING);
+        const lift = bakedCell.anchorY / bakedPage.zoom;
+        const width = bakedCell.width / bakedPage.zoom;
+        expect(lift, `${bakedCell.target} at zoom ${bakedPage.zoom}`).toBeLessThanOrEqual(
+          BAKED_STATIC_MAX_LIFT_PX,
+        );
+        lifts.set(bakedCell.target, Math.max(lifts.get(bakedCell.target) ?? 0, lift));
+        widths.set(bakedCell.target, Math.max(widths.get(bakedCell.target) ?? 0, width));
+      }
+    }
+    if (lifts.size === 0) return;
+    expect(lifts.size).toBe(MODULE_KIND_COUNT - PROCEDURAL_ONLY_MODULES.size);
+    for (const [target, width] of widths) {
+      // A module covers its tile at most: the contact shadow adds a margin,
+      // so the bound is the tile plus one margin rather than the tile.
+      expect(width / TILE_W, `${target} width`).toBeLessThanOrEqual(1);
+      // ... and is not a speck either. The smallest is the bus shelter.
+      expect(width / TILE_W, `${target} width`).toBeGreaterThan(0.25);
+    }
+    // The freight crane is the landmark of the family and the bus stop its
+    // smallest mark: the ladder is deliberate and is what tells thirteen
+    // modules apart in a still image (D-117 applied to what the PLAYER builds).
+    const tallest = [...lifts.entries()].sort((a, b) => b[1] - a[1])[0]!;
+    const shortest = [...lifts.entries()].sort((a, b) => a[1] - b[1])[0]!;
+    expect(tallest[0]).toBe('module:FreightTerminal');
+    expect(shortest[0]).toBe('module:BusStop');
+    expect(tallest[1] / shortest[1]).toBeGreaterThan(2);
+    // An international airport is bigger than an airport, which is bigger
+    // than an airstrip - the size ladder the player pays for, in pixels.
+    expect(lifts.get('module:InternationalAirport')!).toBeGreaterThan(lifts.get('module:Airport')!);
+    expect(widths.get('module:InternationalAirport')!).toBeGreaterThan(
+      widths.get('module:Airport')!,
+    );
+    expect(widths.get('module:Airport')!).toBeGreaterThan(widths.get('module:Airstrip')!);
   });
 });
 
@@ -696,7 +838,7 @@ describe('the static-art proportion rule (D-206)', () => {
     for (const bakedPage of baked.pages) {
       if (bakedPage.kind === 'emissive') continue;
       for (const bakedCell of bakedPage.cells) {
-        if (!/^(building|industry|tree):/.test(bakedCell.target)) continue;
+        if (!/^(building|industry|module|tree):/.test(bakedCell.target)) continue;
         const lift = bakedCell.anchorY / bakedPage.zoom;
         expect(lift, `${bakedCell.target} at zoom ${bakedPage.zoom}`).toBeLessThanOrEqual(
           BAKED_STATIC_MAX_LIFT_PX,

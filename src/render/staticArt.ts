@@ -2,14 +2,15 @@ import { MapClimate } from '../sim/constants';
 import { INDUSTRY_TYPE_COUNT, IndustryType } from '../sim/industry/types';
 import type { TileMap } from '../sim/map/TileMap';
 import { Terrain } from '../sim/map/terrain';
+import { MODULE_KIND_COUNT, ModuleKind } from '../sim/station/types';
 import { BuildingKind } from '../sim/town/types';
 import type { BakedAtlasManifest, BakedCell } from './bakedAtlas';
 import { variantIndex } from './vehicleArt';
 
 /**
  * Static world art from the Kenney bake (SPEC2 M13, E-14/D-140/D-160/D-169):
- * town buildings, industry blocks and trees, the half of the bake D-170 left
- * on the shelf when it wired the vehicles.
+ * town buildings, industry blocks, trees, and since D-208 the STATION MODULES
+ * - the half of the bake D-170 left on the shelf when it wired the vehicles.
  *
  * This is `vehicleArt.ts` for the things that stand still, and deliberately
  * the same architecture: the target grammar, the manifest index, the
@@ -18,9 +19,9 @@ import { variantIndex } from './vehicleArt';
  * Pixi and MapView only executes what these functions decided.
  *
  * Nothing here may reach the simulation. It READS the sim's own vocabulary -
- * `BuildingKind`, `IndustryType`, `MapClimate` - because those are what the
- * manifest targets were named after (D-169), and reading them is what keeps
- * the two from drifting.
+ * `BuildingKind`, `IndustryType`, `ModuleKind`, `MapClimate` - because those
+ * are what the manifest targets were named after (D-169), and reading them is
+ * what keeps the two from drifting.
  */
 
 /**
@@ -85,21 +86,24 @@ export interface StaticZoomIndex {
 }
 
 /**
- * Target grammars of the three static families (D-169, restated from
+ * Target grammars of the four static families (D-169/D-208, restated from
  * tools/assets-manifest.json's own comment block):
  *
  * - `building:<zone>:<stage>` plus `:<n>` for a declared extra variant,
  * - `industry:<TypeName>` (no variants declared today, the suffix is legal),
+ * - `module:<ModuleKindName>` - the things the PLAYER builds, same shape as
+ *   `industry:` because both read a sim enum backwards by name,
  * - `tree:<climate>:<n>` - here the index is MANDATORY, because a tree has no
  *   canonical body the way a zone stage has.
  *
  * The base target - what a caller asks for - is the part before the variant
- * index, which is why the three regexes are written out rather than reduced to
+ * index, which is why the four regexes are written out rather than reduced to
  * one "strip a trailing number": `tree:temperate:0` and `building:x:0` end in
  * the same shape and mean different things.
  */
 const BUILDING_TARGET = /^building:([a-z]+):(\d+)(?::(\d+))?$/;
 const INDUSTRY_TARGET = /^industry:([A-Za-z]+)(?::(\d+))?$/;
+const MODULE_TARGET = /^module:([A-Za-z]+)(?::(\d+))?$/;
 const TREE_TARGET = /^tree:([a-z]+):(\d+)$/;
 
 /**
@@ -204,6 +208,52 @@ export function industryTargetFor(type: number): string | null {
   return INDUSTRY_TARGETS[type] ?? null;
 }
 
+/**
+ * Station-module kinds that deliberately keep the `shapes.ts` box (E-14's
+ * floor, stated by NAME the way {@link PROCEDURAL_ONLY_INDUSTRIES} is).
+ *
+ * **It is EMPTY, and that is the point.** D-208 mapped all thirteen kinds,
+ * because until it did, every station, depot, platform, quay, canopy and
+ * terminal in the game drew `moduleFrame`'s white box under the company tint -
+ * a saturated box the size of a house on the objects the player looks at most.
+ * The set exists so the audit in tests/unit/assetsBake.spec.ts can hold the
+ * manifest against `ModuleKind` in BOTH directions: a kind with no model and
+ * no entry HERE is a red build, never a silent orange box, and a kind that
+ * belongs on the procedural side (a future kind no kit carries) is a
+ * documented line rather than an absence.
+ */
+export const PROCEDURAL_ONLY_MODULES: ReadonlySet<number> = new Set<number>();
+
+/**
+ * `ModuleKind` read backwards into targets, minus the procedural-only set -
+ * the `industryTargets` device, one enum along. Built once at module load,
+ * because `placeStations` looks a target up per module per rebuild and a
+ * template literal per station module is the renderer's own law #7 (D-205's
+ * 9.7 ms measurement).
+ */
+const MODULE_TARGETS: readonly (string | null)[] = moduleTargets();
+
+function moduleTargets(): readonly (string | null)[] {
+  const targets = new Array<string | null>(MODULE_KIND_COUNT).fill(null);
+  for (const [name, value] of Object.entries(ModuleKind)) {
+    if (PROCEDURAL_ONLY_MODULES.has(value)) continue;
+    targets[value] = `module:${name}`;
+  }
+  return targets;
+}
+
+/**
+ * Base target of a station module, or null when the kind keeps its procedural
+ * silhouette ({@link PROCEDURAL_ONLY_MODULES}) or is not a kind at all.
+ *
+ * There is no variant seed anywhere near this: a module kind is its IDENTITY,
+ * exactly like an industry type - a player must be able to tell a depot from a
+ * cold store at a glance, and two bodies for one kind would cost that.
+ */
+export function moduleTargetFor(kind: number): string | null {
+  return MODULE_TARGETS[kind] ?? null;
+}
+
 /** Tree-family targets of the manifest, indexed by {@link MapClimate}. */
 const CLIMATE_TREE_TARGETS: readonly string[] = climateTreeTargets();
 
@@ -238,6 +288,13 @@ function splitStaticTarget(target: string): { base: string; variant: number } | 
     return {
       base: `industry:${industry[1]}`,
       variant: industry[2] === undefined ? 0 : Number(industry[2]),
+    };
+  }
+  const module = MODULE_TARGET.exec(target);
+  if (module !== null) {
+    return {
+      base: `module:${module[1]}`,
+      variant: module[2] === undefined ? 0 : Number(module[2]),
     };
   }
   const tree = TREE_TARGET.exec(target);

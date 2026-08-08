@@ -33,6 +33,8 @@ interface ManifestModel {
   readonly file: string;
   readonly scale: number;
   readonly facings: number;
+  /** Camera turn for a one-facing static (D-208); vehicles never set it. */
+  readonly facing?: number;
   readonly tint?: {
     readonly materials?: readonly string[];
     readonly colors?: readonly string[];
@@ -102,6 +104,7 @@ function loadModel(entry: ManifestModel, emissive: Manifest['emissive']): BakeMo
     triangles,
     scale: entry.scale,
     facings: entry.facings,
+    ...(entry.facing === undefined ? {} : { baseFacing: entry.facing }),
     anchors: entry.anchors,
     stretch: entry.stretch,
   };

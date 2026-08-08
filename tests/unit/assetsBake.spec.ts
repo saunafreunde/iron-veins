@@ -33,12 +33,13 @@ import {
   syntheticWagonGlb,
 } from '../../tools/bake-lib.ts';
 import { BAKED_MANIFEST_VERSION } from '../../src/render/bakedAtlas';
-import { BAKED_STATIC_MAX_LIFT_PX } from '../../src/render/staticArt';
+import { BAKED_STATIC_MAX_LIFT_PX, PROCEDURAL_ONLY_MODULES } from '../../src/render/staticArt';
 import { EMISSIVE_WINDOW_HEX } from '../../src/render/emissive';
 import { HEIGHT_PX, TILE_H, TILE_W } from '../../src/render/projection';
 import { FACE_LEFT, FACE_RIGHT, FACE_TOP } from '../../src/render/shapes';
 import { HEIGHT_STEP_M, MapClimate, TILE_SIZE_M } from '../../src/sim/constants';
 import { IndustryType } from '../../src/sim/industry/types';
+import { MODULE_KIND_COUNT, ModuleKind } from '../../src/sim/station/types';
 import { VEHICLE_SPECS } from '../../src/sim/vehicles/catalog';
 import { VehicleKind } from '../../src/sim/vehicles/spec';
 
@@ -56,7 +57,7 @@ function sha256(bytes: Uint8Array): string {
   return createHash('sha256').update(bytes).digest('hex');
 }
 
-describe('the bake camera and light are the renderer\'s own', () => {
+describe("the bake camera and light are the renderer's own", () => {
   it('restates the exact projection constants of src/render/projection.ts', () => {
     // Node cannot resolve src imports at bake time (extensionless ESM), so
     // bake-lib restates them - THIS coupling test is what makes "exact the
@@ -447,11 +448,14 @@ describe('the static-art proportion rule is enforced by the baker (D-206)', () =
     facings: 1,
   });
 
-  it('refuses a building, an industry and a tree that stand too tall', () => {
-    for (const target of ['building:commercial:1', 'industry:SteelMill', 'tree:temperate:0']) {
-      expect(() => bakeAtlases([model(target, 30)], [1])).toThrow(
-        /over the 64 px static-art rule/,
-      );
+  it('refuses a building, an industry, a station module and a tree that stand too tall', () => {
+    for (const target of [
+      'building:commercial:1',
+      'industry:SteelMill',
+      'module:InternationalAirport',
+      'tree:temperate:0',
+    ]) {
+      expect(() => bakeAtlases([model(target, 30)], [1])).toThrow(/over the 64 px static-art rule/);
       // The message carries the numbers, so a failed bake says how far out
       // the model is rather than only that it is.
       expect(() => bakeAtlases([model(target, 30)], [1])).toThrow(/tile heights/);
@@ -474,6 +478,56 @@ describe('the static-art proportion rule is enforced by the baker (D-206)', () =
 
   it('exempts vehicles - a train is bounded by its catalogue, not by a tile', () => {
     expect(() => bakeAtlases([model('vehicle:1000', 30)], [1])).not.toThrow();
+  });
+});
+
+describe('a static may choose which way it faces (D-208)', () => {
+  // A vehicle bakes eight cells and its cell index IS its direction, so it
+  // never turns. A static bakes ONE cell, and which way the kit happened to
+  // point its model is an art fact: a depot whose vehicle door faces away
+  // from the camera is a cottage.
+  const asymmetric = extractTriangles(parseGlb(syntheticWagonGlb()));
+
+  it('turns the camera without changing the cell`s facing index', () => {
+    const straight = bakeAtlases(
+      [{ target: 'module:RoadDepot', triangles: asymmetric, scale: 4, facings: 1 }],
+      [1],
+    );
+    const turned = bakeAtlases(
+      [
+        {
+          target: 'module:RoadDepot',
+          triangles: asymmetric,
+          scale: 4,
+          facings: 1,
+          baseFacing: 4,
+        },
+      ],
+      [1],
+    );
+    const a = straight.manifest.pages[0]!.cells[0]!;
+    const b = turned.manifest.pages[0]!.cells[0]!;
+    // The cell still says facing 0 - that is what identifies it as static
+    // art to `staticArt.STATIC_FACING`; only the pixels moved.
+    expect(a.facing).toBe(0);
+    expect(b.facing).toBe(0);
+    const pageA = straight.files.get(straight.manifest.pages[0]!.file)!;
+    const pageB = turned.files.get(turned.manifest.pages[0]!.file)!;
+    expect(sha256(pageA)).not.toBe(sha256(pageB));
+  });
+
+  it('leaves a model with no turn byte-identical to one that never asked', () => {
+    const without = bakeAtlases(
+      [{ target: 'module:Quay', triangles: asymmetric, scale: 4, facings: 1 }],
+      [1],
+    );
+    const explicitZero = bakeAtlases(
+      [{ target: 'module:Quay', triangles: asymmetric, scale: 4, facings: 1, baseFacing: 0 }],
+      [1],
+    );
+    for (const [name, bytes] of without.files) {
+      expect(sha256(explicitZero.files.get(name)!), name).toBe(sha256(bytes));
+    }
   });
 });
 
@@ -605,8 +659,11 @@ describe('tools/assets-manifest.json', () => {
       file: string;
       scale: number;
       facings: number;
+      facing?: number;
       recolor?: { hueShift?: number; saturation?: number; value?: number };
       stretch?: [number, number, number];
+      tint?: { hues?: Array<{ min: number; max: number; minSaturation: number }> };
+      note?: string;
     }>;
   };
 
@@ -657,6 +714,14 @@ describe('tools/assets-manifest.json', () => {
         for (const key of Object.keys(model.recolor)) {
           expect(['hueShift', 'saturation', 'value'], model.target).toContain(key);
         }
+      }
+      if (model.facing !== undefined) {
+        // A static may turn its camera (D-208); a vehicle may not, because
+        // its cell facing IS the direction it is drawn at (D-170).
+        expect(model.target.startsWith('vehicle:'), model.target).toBe(false);
+        expect(Number.isInteger(model.facing), model.target).toBe(true);
+        expect(model.facing, model.target).toBeGreaterThanOrEqual(0);
+        expect(model.facing, model.target).toBeLessThan(FACING_DELTAS.length);
       }
     }
   });
@@ -712,6 +777,53 @@ describe('tools/assets-manifest.json', () => {
       }
       for (const name of mapped) {
         expect(Object.keys(IndustryType), `industry:${name} unknown`).toContain(name);
+      }
+    });
+
+    it('maps every station module the player can build, in both directions (D-208)', () => {
+      // The hole D-208 closed: the baked manifest's target prefixes were
+      // exactly vehicle, building, industry and tree, so stations, depots,
+      // platforms, quays, airports, terminals and canopies - everything the
+      // PLAYER builds - still drew the pre-Kenney white box under a company
+      // tint. Nothing was red, because nothing asked. This asks.
+      const mapped = new Set(
+        manifest.models
+          .filter((model) => model.target.startsWith('module:'))
+          .map((model) => model.target.split(':')[1]!),
+      );
+      const names = Object.keys(ModuleKind);
+      expect(names).toHaveLength(MODULE_KIND_COUNT);
+      for (const name of names) {
+        const kind = ModuleKind[name as keyof typeof ModuleKind];
+        const procedural = PROCEDURAL_ONLY_MODULES.has(kind);
+        expect(mapped.has(name), `module:${name} must be mapped or procedural by name`).toBe(
+          !procedural,
+        );
+      }
+      for (const name of mapped) {
+        expect(names, `module:${name} is not a ModuleKind`).toContain(name);
+      }
+    });
+
+    it('gives a module a company-colour zone only where the kit HAS a patch', () => {
+      // Section 3 of the art direction: the company colour is an accent on a
+      // canopy, a row of doors, a trim band - never the volume. Where the kit
+      // body carries no separable patch, the entry declares no `tint` at all
+      // and says so in its note, which is what keeps a neutral module honest
+      // rather than accidental.
+      for (const model of manifest.models) {
+        if (!model.target.startsWith('module:')) continue;
+        expect(model.note, `${model.target} needs a note`).toBeTruthy();
+        if (model.tint === undefined) {
+          expect(model.note, `${model.target} must say why it is neutral`).toMatch(/NEUTRAL/);
+          continue;
+        }
+        expect(model.tint.hues, model.target).toBeTruthy();
+        for (const band of model.tint.hues!) {
+          expect(band.minSaturation, model.target).toBeGreaterThan(0);
+          expect(band.min, model.target).toBeGreaterThanOrEqual(0);
+          expect(band.max, model.target).toBeLessThanOrEqual(360);
+        }
       }
     });
 
