@@ -634,6 +634,8 @@
   "ui.newGame.competitors": "Competitors",
   "ui.newGame.inflation": "Inflation (prices and fares rise over the century)",
   "ui.newGame.emissions": "Carbon levy and grants from the year 2000",
+  "ui.newGame.occupancyPenalty": "Occupancy penalty: trains route around claimed blocks (3 s per foreign reservation)",
+  "ui.newGame.signalPenalty": "Signal penalty: on equal running time, trains prefer the route with fewer signals",
   "ui.newGame.seed": "Seed",
   "ui.newGame.reroll": "Reroll",
   "ui.newGame.start": "Start game",

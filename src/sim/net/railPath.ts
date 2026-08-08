@@ -1,6 +1,12 @@
-import { MAX_RAIL_SEARCH_NODES, TILE_SIZE_M } from '../constants';
+import {
+  MAX_RAIL_SEARCH_NODES,
+  RAIL_OCCUPANCY_PENALTY_SECONDS,
+  RAIL_SIGNAL_PENALTY_SECONDS,
+  TILE_SIZE_M,
+} from '../constants';
 import type { TileMap } from '../map/TileMap';
-import { isOneWay, signalDirection, signalKind } from '../map/signals';
+import { isOneWay, signalDirection, signalKind, SignalKind } from '../map/signals';
+import type { ReservationTable } from './reservations';
 import {
   curveRadiusM,
   curveSpeedMs,
@@ -29,6 +35,27 @@ import {
  * states for each of a million tiles would be a hundred megabytes for a search
  * that touches a few thousand of them; the rail network is a thin graph laid
  * over the map and deserves to be stored as one.
+ *
+ * THE TWO WORLD RULES OF M15 (SPEC.md 8.4)
+ *
+ * `occupancyPenalty` prices a section another train has claimed, and
+ * `signalPenalty` prices passing a signal. Both are world rules (SPEC2 Z2,
+ * D-110): saved, hashed, chosen once at new-game time, off in every world that
+ * predates them - so the search below is BIT-IDENTICAL to the M3 one whenever
+ * both are false, which is the property the pre-M15 seeds live on.
+ *
+ * The occupancy term reads `ReservationTable` - the SAME tile-keyed derived
+ * table the claim logic writes (D-054), never a copy of it. A snapshot of the
+ * live claims IS the honest input here: it is what the claim logic will refuse
+ * the train at, and D-060's rule that the claim runs from where the train IS
+ * is exactly why a second, path-shaped occupancy model would drift from it.
+ *
+ * The charge falls ONCE PER RUN of foreign-claimed tiles, not once per tile:
+ * the entry step into a claimed run pays, every further step inside the same
+ * owner's run is free. A per-tile charge would scale with how much track the
+ * train ahead happens to hold - a long block would read as a catastrophe and a
+ * short one as nothing, for the same wait. What the player pays for is
+ * MEETING a train, and that is what the run entry is.
  */
 
 /** Cost of a step the search cannot take. */
@@ -146,9 +173,17 @@ export class RailPathfinder {
    * search therefore optimises a slightly optimistic model of its own route -
    * the speed the train actually drives is measured with the full context in
    * vehicles/update.ts.
+   *
+   * The two M15 penalties are added on top of the driving time. Both are
+   * additive and non-negative, so the straight-line heuristic below stays a
+   * lower bound on the true remaining cost and A* stays admissible; and both
+   * are functions of the two TILES and the two directions alone, so the cost
+   * still depends on nothing but the search state.
    */
   private stepSeconds(
     map: TileMap,
+    reservations: ReservationTable,
+    vehicleId: number,
     fromTile: number,
     toTile: number,
     incoming: TrackDir,
@@ -156,15 +191,20 @@ export class RailPathfinder {
     maxSpeedMs: number,
     lateralAccel: number,
     needsCatenary: boolean,
+    occupancyPenalty: boolean,
+    signalPenalty: boolean,
   ): number {
     if (!hasEdge(map.trackBits, map.size, fromTile, outgoing)) return IMPASSABLE;
 
     // A one-way signal is part of the topology, not of the traffic: routing a
     // train the wrong way through one would strand it at the tile edge with no
-    // way ever to pass. Occupancy stays out of the search deliberately (D-059),
-    // but this is not occupancy.
+    // way ever to pass. Occupancy is priced below rather than forbidden - a
+    // claimed block is a wait, never a wall (D-059 stands: the search must not
+    // refuse a section, or two trains meeting on single track would become a
+    // NoRoute instead of the stated deadlock).
     const packed = map.signal[toTile]!;
-    if (isOneWay(signalKind(packed)) && signalDirection(packed) !== outgoing) return IMPASSABLE;
+    const kind = signalKind(packed);
+    if (isOneWay(kind) && signalDirection(packed) !== outgoing) return IMPASSABLE;
 
     const railType = map.railType[toTile]!;
     if (needsCatenary && railType !== RailType.Electrified) return IMPASSABLE;
@@ -177,20 +217,43 @@ export class RailPathfinder {
     const curve = curveSpeedMs(radius, lateralAccel);
     if (curve < speed) speed = curve;
 
-    return stepLengthM(outgoing) / speed;
+    let seconds = stepLengthM(outgoing) / speed;
+
+    if (signalPenalty && kind !== SignalKind.None) seconds += RAIL_SIGNAL_PENALTY_SECONDS;
+
+    if (occupancyPenalty) {
+      const owner = reservations.ownerOf(toTile);
+      // Charged on ENTRY to a foreign run only: the same owner one step back
+      // means the train is already inside that claim and has paid for it.
+      if (owner !== -1 && owner !== vehicleId && reservations.ownerOf(fromTile) !== owner) {
+        seconds += RAIL_OCCUPANCY_PENALTY_SECONDS;
+      }
+    }
+
+    return seconds;
   }
 
   /**
    * Fastest route from `fromTile` to `toTile` over existing track. Writes the
    * tile sequence into `out` and returns its length, or 0 when there is none.
+   *
+   * `reservations` and `vehicleId` are REQUIRED rather than optional on
+   * purpose: there is exactly one reservation truth in the game (D-054) and a
+   * caller that could omit it would be a caller routing against a different
+   * world than the one the claim logic lives in. `vehicleId` is what keeps a
+   * train from paying the occupancy charge for its own claim.
    */
   find(
     map: TileMap,
+    reservations: ReservationTable,
+    vehicleId: number,
     fromTile: number,
     toTile: number,
     maxSpeedMs: number,
     lateralAccel: number,
     needsCatenary: boolean,
+    occupancyPenalty: boolean,
+    signalPenalty: boolean,
     out: Int32Array,
   ): number {
     this.reindex(map);
@@ -254,6 +317,8 @@ export class RailPathfinder {
 
         const seconds = this.stepSeconds(
           map,
+          reservations,
+          vehicleId,
           tile,
           neighbourTile,
           incoming,
@@ -261,6 +326,8 @@ export class RailPathfinder {
           maxSpeedMs,
           lateralAccel,
           needsCatenary,
+          occupancyPenalty,
+          signalPenalty,
         );
         if (seconds === IMPASSABLE) continue;
 

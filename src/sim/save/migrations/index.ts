@@ -910,6 +910,34 @@ const v24_to_v25: SaveMigration = (payload) => {
 };
 
 /**
+ * M15 made the two route-cost terms of SPEC.md 8.4 world rules (SPEC2 M15,
+ * the milestone's one Z5 bump): `occupancyPenalty`, which charges the train
+ * pathfinder for a section another train has claimed, and `signalPenalty`,
+ * which charges it for passing a signal.
+ *
+ * Both enter a version 25 world as OFF, and that is not a convenient default
+ * but the only true one: those worlds were driven by a pathfinder that had
+ * neither term, so every route in the file was chosen without them. Turning
+ * either on here would silently re-route a loaded save's whole fleet at the
+ * first departure and move the balance bands of M6 under a player who changed
+ * nothing (SPEC2 Fehlerkatalog 34).
+ *
+ * Fields already present are kept, so the corpus trick of wrapping a CURRENT
+ * state in an old container cannot flatten a real rule back to off.
+ */
+const v25_to_v26: SaveMigration = (payload) => {
+  const inner = state(payload);
+  return {
+    ...payload,
+    state: {
+      ...inner,
+      occupancyPenalty: inner['occupancyPenalty'] ?? false,
+      signalPenalty: inner['signalPenalty'] ?? false,
+    },
+  };
+};
+
+/**
  * Registry keyed by the version a migration reads (section 19.1).
  *
  * There is deliberately no entry for 1 -> 2: a version 1 world had no map at
@@ -940,6 +968,7 @@ export const SAVE_MIGRATIONS: ReadonlyMap<number, SaveMigration> = new Map<numbe
   [22, v22_to_v23],
   [23, v23_to_v24],
   [24, v24_to_v25],
+  [25, v25_to_v26],
 ]);
 
 /**

@@ -136,4 +136,25 @@ export interface NewGameParams {
    * and something a mid-game toggle would have to be a COMMAND to change.
    */
   readonly emissions?: boolean;
+  /**
+   * Whether the train pathfinder charges for a section another train has
+   * claimed (SPEC.md 8.4's occupancy term, SPEC2 M15).
+   *
+   * A world rule exactly as inflation is (D-110): it changes which way a train
+   * drives, so two worlds with the same seed and the same commands but
+   * different flags diverge. Saved, hashed, chosen once on the new-game
+   * screen.
+   *
+   * ABSENT MEANS OFF, and that is load-bearing. Every world recorded before
+   * M15 - every save, every balancing scenario, every determinism fixture -
+   * omits the field, and the M6 bands were measured without the term. A
+   * default of ON would silently re-band every scenario in the milestone that
+   * introduces the rule (SPEC2 Fehlerkatalog 34).
+   */
+  readonly occupancyPenalty?: boolean;
+  /**
+   * Whether the train pathfinder charges a small penalty for passing a signal
+   * (SPEC2 M15's `signalStrafe`). Off when absent, for the reason above.
+   */
+  readonly signalPenalty?: boolean;
 }

@@ -10,6 +10,7 @@ import {
   TICKS_PER_MONTH,
 } from '../../src/sim/constants';
 import { SAVE_VERSION } from '../../src/sim/save/format';
+import { SAVE_MIGRATIONS } from '../../src/sim/save/migrations';
 import { decodeSave, encodeSave } from '../../src/sim/save/serialize';
 import {
   historySlot,
@@ -33,6 +34,9 @@ import { buildTransferNetwork, runTicks } from '../helpers/transferNetwork';
  */
 
 const GAME_VERSION = 'test';
+
+/** The save format the ring was introduced in (M14's one Z5 bump). */
+const RING_SAVE_VERSION = 25;
 
 /** Ring value of station `station` for (monthsAgo, cargo, field). */
 function ringAt(
@@ -142,10 +146,13 @@ describe('the ring mechanics', () => {
   });
 });
 
-describe('the ring in the save (v25)', () => {
-  it('is the version this milestone pinned', () => {
-    // M14's one bump (SPEC2 Z5): the cargo-history ring owns v25.
-    expect(SAVE_VERSION).toBe(25);
+describe('the ring in the save (from v25 on)', () => {
+  it('travels in every format from the one that introduced it', () => {
+    // M14's one bump (SPEC2 Z5): the cargo-history ring owns v25. The current
+    // SAVE_VERSION is pinned once, in save.spec.ts - what belongs here is that
+    // the ring exists from its own version onwards and keeps its shape.
+    expect(SAVE_VERSION).toBeGreaterThanOrEqual(RING_SAVE_VERSION);
+    expect(SAVE_MIGRATIONS.has(RING_SAVE_VERSION - 1)).toBe(true);
     expect(STATION_HISTORY_SIZE).toBe(
       STATION_HISTORY_MONTHS * CARGO_COUNT * STATION_HISTORY_FIELD_COUNT,
     );

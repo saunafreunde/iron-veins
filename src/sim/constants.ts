@@ -1308,6 +1308,15 @@ export const LOAD_TICKS_PER_UNIT = 0.15;
 /** Minimum stop at a station, even with nothing to exchange. [ticks] */
 export const MIN_STATION_STOP_TICKS = 20;
 
+/**
+ * How often a vehicle that found no route tries again. [ticks]
+ *
+ * Five real seconds at 1x, staggered by vehicle id so a fleet stranded by one
+ * demolished bridge does not run its searches in the same tick. A stranded
+ * vehicle must not turn into a pathfinding load on the whole simulation.
+ */
+export const VEHICLE_REPATH_INTERVAL_TICKS = 100;
+
 // ------------------------------------------------------- orders (section 12.1)
 
 /**
@@ -1430,6 +1439,52 @@ export const TRACK_SEARCH_MARGIN_TILES = 24;
  * budget is eight times the tile figure for the same reach.
  */
 export const MAX_RAIL_SEARCH_NODES = 160_000;
+
+/**
+ * What the train pathfinder charges for a section another train has claimed,
+ * under the world rule `occupancyPenalty` (SPEC.md 8.4, SPEC2 M15). [s]
+ *
+ * SPEC2 M15 fixes the price at three seconds per reserved block, and three
+ * seconds is deliberately far BELOW what meeting an occupied block really
+ * costs: a train that runs up to one brakes to a stand and accelerates away
+ * again, which at the 0.6 m/s^2 freight brake and a 25 m/s line speed is the
+ * better part of a minute. Two reasons for the nudge rather than the true
+ * price. The reservation the search reads is a SNAPSHOT taken now, and the
+ * train arrives later - by then the block is usually free again. And priced at
+ * its true cost, one claimed tile anywhere ahead would send a train around
+ * half the map, which is the failure mode SPEC.md 22 calls a pathfinder that
+ * outsmarts the player.
+ */
+export const RAIL_OCCUPANCY_PENALTY_SECONDS = 3;
+
+/**
+ * What the train pathfinder charges for passing a signal, under the world rule
+ * `signalPenalty` (SPEC.md 8.4, SPEC2 M15). [s]
+ *
+ * A signal is a place a train MIGHT have to stop, so it is worth something,
+ * but nothing like a stop. Half a second is about a third of the 1.7 s an
+ * orthogonal tile costs at 30 m/s: enough to break a tie between two otherwise
+ * equal routes in favour of the one with fewer stopping places, far too little
+ * to push a train off a signalled main line onto an unsignalled siding - which
+ * would be the exact opposite of what the occupancy term is for.
+ */
+export const RAIL_SIGNAL_PENALTY_SECONDS = 0.5;
+
+/**
+ * How long a train must have stood at a red before it reconsiders its route,
+ * and how often it may do so afterwards. [ticks]
+ *
+ * The repath-storm guard of SPEC2 M15: the occupancy term above makes route
+ * cost depend on LIVE occupancy, so a train that repathed every tick would run
+ * an A* per tick per held train - and a busy junction holds a dozen. The wait
+ * threshold is two real seconds at 1x, so a train held for the moment it takes
+ * the train ahead to clear pays for no search at all; the interval is the five
+ * real seconds the routeless retry has used since M2. Twelve reconsiderations
+ * fit inside the 1,200-tick deadlock warning, so a train reroutes long before
+ * the game calls it stuck.
+ */
+export const RAIL_SIGNAL_REPATH_MIN_WAIT_TICKS = 40;
+export const RAIL_SIGNAL_REPATH_INTERVAL_TICKS = 100;
 
 /**
  * Longest train that may be assembled.

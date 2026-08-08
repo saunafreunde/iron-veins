@@ -366,6 +366,9 @@ export interface NewGameOptions {
   readonly companyColorIndex: number;
   readonly inflation: boolean;
   readonly emissions: boolean;
+  /** The two route-cost rules of SPEC.md 8.4 (M15): saved, hashed, off by default. */
+  readonly occupancyPenalty: boolean;
+  readonly signalPenalty: boolean;
   readonly aiCompanies: number;
 }
 

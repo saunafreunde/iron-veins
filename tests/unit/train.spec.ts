@@ -564,6 +564,13 @@ describe('bridges and tunnels', () => {
 // ------------------------------------------------------------ pathfinding
 
 describe('train pathfinding', () => {
+  /**
+   * Vehicle id for a search that belongs to no train. The occupancy rule is
+   * off in every case here, so nothing reads it - but -1 is the id no claim
+   * can carry, which keeps "this search is nobody's" explicit.
+   */
+  const NO_VEHICLE = -1;
+
   function trainOnLine(bench: Bench, units: readonly number[], railType: RailType): number {
     layTrack(bench, 10, 10, 30, 10, railType);
     run(bench, {
@@ -583,10 +590,14 @@ describe('train pathfinding', () => {
 
     const length = bench.world.railPathfinder.find(
       bench.world.map,
+      bench.world.reservations,
+      id,
       bench.world.map.tileIndex(10, 10),
       bench.world.map.tileIndex(30, 10),
       bench.world.vehicles.maxSpeedMs[id]!,
       LATERAL_ACCEL_PASSENGER,
+      false,
+      false,
       false,
       path,
     );
@@ -604,10 +615,14 @@ describe('train pathfinding', () => {
 
     const length = bench.world.railPathfinder.find(
       bench.world.map,
+      bench.world.reservations,
+      NO_VEHICLE,
       bench.world.map.tileIndex(10, 10),
       bench.world.map.tileIndex(30, 10),
       40,
       LATERAL_ACCEL_PASSENGER,
+      false,
+      false,
       false,
       path,
     );
@@ -621,11 +636,15 @@ describe('train pathfinding', () => {
 
     const plain = bench.world.railPathfinder.find(
       bench.world.map,
+      bench.world.reservations,
+      NO_VEHICLE,
       bench.world.map.tileIndex(10, 10),
       bench.world.map.tileIndex(30, 10),
       40,
       LATERAL_ACCEL_PASSENGER,
       true,
+      false,
+      false,
       path,
     );
     expect(plain).toBe(0);
@@ -634,11 +653,15 @@ describe('train pathfinding', () => {
     layTrack(bench, 10, 10, 30, 10, RailType.Electrified);
     const electrified = bench.world.railPathfinder.find(
       bench.world.map,
+      bench.world.reservations,
+      NO_VEHICLE,
       bench.world.map.tileIndex(10, 10),
       bench.world.map.tileIndex(30, 10),
       40,
       LATERAL_ACCEL_PASSENGER,
       true,
+      false,
+      false,
       path,
     );
     expect(electrified).toBe(21);
@@ -654,10 +677,14 @@ describe('train pathfinding', () => {
 
     const length = bench.world.railPathfinder.find(
       bench.world.map,
+      bench.world.reservations,
+      NO_VEHICLE,
       bench.world.map.tileIndex(10, 10),
       bench.world.map.tileIndex(30, 10),
       40,
       LATERAL_ACCEL_PASSENGER,
+      false,
+      false,
       false,
       path,
     );

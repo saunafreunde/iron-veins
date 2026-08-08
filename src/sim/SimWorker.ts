@@ -672,6 +672,8 @@ function restart(options: NewGameOptions): void {
       companyColorIndex: options.companyColorIndex,
       inflation: options.inflation,
       emissions: options.emissions,
+      occupancyPenalty: options.occupancyPenalty,
+      signalPenalty: options.signalPenalty,
       aiCompanies: options.aiCompanies,
     },
     (phase, seedAttempt) => {

@@ -12,7 +12,7 @@ no entry below. A number may appear under several topics.
 
 - **Determinism, RNG & hashing:** D-001, D-002, D-003, D-004, D-009, D-010,
   D-024, D-093, D-106, D-128, D-137, D-142, D-145, D-146, D-149, D-153, D-178,
-  D-181
+  D-181, D-184
 - **Commands, snapshot & worker boundary:** D-004, D-005, D-006, D-011, D-032,
   D-100, D-111, D-145, D-146, D-148, D-162, D-174, D-176, D-179
 - **Lines & timetables:** D-145, D-146, D-147, D-148, D-149, D-150, D-151,
@@ -23,11 +23,11 @@ no entry below. A number may appear under several topics.
   D-141
 - **Save format, migrations & replays:** D-007, D-025, D-026, D-027, D-048,
   D-111, D-130, D-131, D-134, D-142, D-144, D-145, D-146, D-147, D-153, D-178,
-  D-181
+  D-181, D-184
 - **Rail & track:** D-042, D-043, D-044, D-045, D-046, D-047, D-053, D-141,
-  D-153, D-157
+  D-153, D-157, D-184
 - **Signals & reservations:** D-054, D-055, D-056, D-057, D-058, D-059, D-060,
-  D-061, D-073, D-080, D-081, D-082, D-083, D-157, D-173
+  D-061, D-073, D-080, D-081, D-082, D-083, D-157, D-173, D-184
 - **Stations & catchment:** D-049, D-080, D-095, D-150, D-159, D-178, D-179
 - **Cargo, payment & routing:** D-036, D-037, D-065, D-067, D-075, D-077,
   D-078, D-118, D-142, D-151, D-176, D-178
@@ -47,9 +47,9 @@ no entry below. A number may appear under several topics.
   D-136, D-140, D-160, D-161, D-162, D-163, D-164, D-165, D-166, D-169, D-170,
   D-171, D-172, D-173, D-174, D-175, D-177, D-179
 - **UI & input:** D-011, D-013, D-015, D-035, D-110, D-113, D-114, D-119,
-  D-126, D-148, D-165, D-166, D-177, D-179, D-180, D-181, D-182, D-183
+  D-126, D-148, D-165, D-166, D-177, D-179, D-180, D-181, D-182, D-183, D-184
 - **Performance & measurement:** D-002, D-120, D-135, D-136, D-161, D-162,
-  D-163, D-164, D-167, D-170, D-171, D-172, D-173, D-174, D-176, D-177
+  D-163, D-164, D-167, D-170, D-171, D-172, D-173, D-174, D-176, D-177, D-184
 - **Platform, tooling & build:** D-012, D-014, D-015, D-016, D-017, D-029,
   D-030, D-031, D-160, D-168, D-169, D-170, D-172, D-175
 - **Crash safety:** D-132, D-139
@@ -5317,3 +5317,172 @@ construction. Beyond the tools: status cash/loan, the station rating
 (the 10.1 death-spiral sentence at the number itself), the five x-ray
 terms, industry level/stock/service, vehicle age/reliability/earnings
 and the value-graph heading got the same module, de+en.
+---
+
+## M15 - net value and road congestion, bundle 1: the 8.4 route costs (2026-08-08)
+
+### D-184 The two 8.4 route costs are world rules that read the ONE reservation table, and a held train reconsiders on a capped cadence
+
+SPEC.md 8.4 has always named two terms the train pathfinder did not charge:
+a section another train has claimed, and a signal. SPEC2 M15 turns both
+into world rules. The bundle is four decisions and one bookkeeping act.
+
+**They are world RULES, and they are off unless somebody chose them.**
+`occupancyPenalty` and `signalPenalty` are `NewGameParams` fields: saved,
+hashed, chosen once on the new-game screen, untouchable mid-game (Z2 and
+D-110 - the inflation precedent verbatim, because they change what a train
+DOES, so two worlds with the same seed and the same commands but different
+flags diverge). Absent means OFF - in the type default, in the migration
+and on the dialog - and that asymmetry with inflation and emissions is the
+decision rather than an oversight. Every band this game is measured
+against - the five M6 scenarios, the takt band of D-151, scenario 5 on the
+D-158 band - was measured by a pathfinder that had neither term. Shipping
+either ON by default would re-band all of them inside the milestone that
+introduces the rule, which is Fehlerkatalog 34 by name. A later milestone
+may argue the default across on measured evidence; this one may not.
+
+**The search reads the ONE reservation table, and charges once per train
+met.** `RailPathfinder.find` now takes the live `ReservationTable` and the
+searching vehicle's id, both REQUIRED rather than optional: there is
+exactly one reservation truth in this game (D-054, tile-keyed and derived,
+written by the claim logic that runs from where the train IS, D-060), and a
+caller that could omit it would be a caller routing against a different
+world than the one the claims live in. The vehicle id is what stops a train
+routing around its own claim.
+
+The charge falls on ENTRY to a run of foreign-claimed tiles - a step whose
+destination is claimed by somebody the tile behind it is not claimed by -
+and never per tile. Per tile would scale the penalty with how much track
+the train ahead happens to hold: the identical wait would read as a
+catastrophe behind a long block and as nothing behind a short one. What the
+player pays for is MEETING a train, so the run entry is what is charged, at
+`RAIL_OCCUPANCY_PENALTY_SECONDS` = 3 s (SPEC2 M15 fixes the figure). Three
+seconds is deliberately far below what running up to an occupied block
+really costs - brake to a stand and accelerate away is most of a minute -
+because the claims the search reads are a SNAPSHOT taken now for an arrival
+later, and a nudge that turns out wrong is cheap where a true price that
+turns out wrong sends a train around half the map.
+
+Occupancy is a PRICE and never a wall. The one-way signal check stays
+`IMPASSABLE` because it is topology, but a claimed section must not make
+the search return NoRoute: two trains meeting nose to nose on single track
+is a stated deadlock (D-059), and turning it into a routing failure would
+hide the one thing the player has to see.
+`RAIL_SIGNAL_PENALTY_SECONDS` = 0.5 s is the second term, sized to break a
+tie between two otherwise equal routes and far too small to push a train
+off a signalled main line onto an unsignalled siding - which the occupancy
+term would then have to undo.
+
+Both penalties are additive, non-negative, and functions of the two tiles
+and the two directions alone. The straight-line heuristic therefore stays a
+lower bound, A* stays admissible, and the cost still depends on nothing
+outside the search state.
+
+**A signal stop is "standing still mid-route", and that is where the
+reroute hangs.** The occupancy term makes route cost depend on LIVE
+occupancy, so a train may now legitimately want a different route after it
+has set off - and a train that repathed every tick would run one A* per
+tick per held train, which a junction holding a dozen turns into the repath
+storm SPEC2 M15 names. Three gates bound it (`mayRepathAtSignal`): the rule
+must be on at all - without the live term a second search from the same
+tile to the same target returns the same route by construction, so the
+mechanism is provably never invoked in a pre-M15 world rather than merely
+harmless; the train must have stood for
+`RAIL_SIGNAL_REPATH_MIN_WAIT_TICKS` (40, two real seconds), so a train held
+for the moment the one ahead needs to clear pays for no search at all; and
+then at most once per `RAIL_SIGNAL_REPATH_INTERVAL_TICKS` (100 - the five
+real seconds the routeless retry has used since M2), staggered by vehicle
+id so a dozen held trains never search on one tick. Twelve reconsiderations
+fit inside the 1,200-tick deadlock warning, so a train reroutes long before
+the game calls it stuck.
+
+WHERE the hook goes was worth measuring rather than assuming. The obvious
+place - `VehicleState.WaitingForPath` - is the rare case: the braking
+lookahead normally brings a train to a stand SHORT of the red, so its
+wheels never cross the tile boundary again and the boundary gate never
+runs. That is the same observation D-060 made about claiming and D-157 made
+about the deadlock clock, met a third time. So the reroute hangs off the
+definition this game already has for a train that is going nowhere -
+`stalled`, standing still mid-route, in the Driving/Braking branch - AND
+off the gate's own state. One predicate, both places.
+
+The cadence clock is `waitingSinceTick`, which is already saved state (Z4)
+and already the 9.3 deadlock clock, so the reroute needs no field of its
+own and survives a save/load round trip by construction. It is deliberately
+NOT reset by a reroute: a train that keeps rerouting without moving is
+still stuck, and a clock restarted by its own retry would never fire.
+
+**An identical route is not adopted.** Re-adopting the standing route would
+release the claim, reset `progressM` and shove the head back to the start
+of its own tile - every interval, for nothing - and identical is the COMMON
+case, because most reds sit on lines with no way round at all. The
+candidate is therefore found into a scratch buffer and compared against the
+tail of the standing path first (one preallocated buffer, the `blockScratch`
+argument of vehicles/reservations.ts; a plain copy loop, because `subarray`
+is an allocation and this runs inside the tick, law #7). When the route
+genuinely changes, `progressM` does go back to zero and the head re-enters
+its own tile from the start - the M3 convention of `tailIndex`/D-058, and
+precisely why a reroute only ever happens at a dead stop.
+
+**v26, and what moved with it.** SAVE_VERSION 25 -> 26 is M15's one bump
+(Z5); the milestone's later bundles extend `v25_to_v26` in place rather
+than adding numbers. The migration enters both rules as false and keeps a
+value already present, so the corpus trick of wrapping a CURRENT state in
+an old container cannot flatten a real rule. Both flags are hashed
+UNCONDITIONALLY, false included: a rule that entered the digest only when
+it was on would let two worlds that route differently fingerprint alike,
+which is the exact failure Z2 exists to prevent. The D-134 field audit
+holds both ends of that with no new allowlist entry - the parser refuses a
+save missing either flag, and flipping either moves the hash.
+
+Adding two hashed words moves every world hash once, which is the
+designed-for event with a written protocol. The canonical cross-OS pin was
+re-recorded under D-137 (v26, seed 424,242, tick 10,000:
+`54a6bef6e40c2a52`) and the corpus manifest under D-130, with a real
+`v26-played.ironsave` written by this build. The corpus is also the
+evidence that nothing but those two words moved: all five fixtures - v22,
+v23, v24 and v25 written by their own builds, v26 by this one - decode to
+the identical world hash `8235f454e3f1f538`. A migrated pre-M15 save is
+bit for bit the world it always was.
+
+Two behavioural inertness tests stand beside that, because a hash cannot
+show it: with the rules off the search returns tile-identical routes
+whether the track ahead is claimed or free and whether a signal stands on
+it or not, and a held train never calls the pathfinder at all.
+
+**The fixture is a diamond, and that is the decision.** The two-route test
+deliberately does not lay a main line with a passing loop beside it: a loop
+is longer than the line it bypasses, so whether three seconds flips the
+choice would depend on hand-tuned geometry and the curve table - and a test
+that passes because a constant was tuned to it proves nothing. The fixture
+is two mirror branches - one diagonal, eight orthogonal steps, one
+diagonal, the same four 45-degree turns - which cost the identical number
+of seconds BY CONSTRUCTION. Which of the two an unhindered train picks is
+the heap's total order, and every test MEASURES it rather than assuming it;
+the only thing that separates the branches is the penalty under test.
+`tests/unit/railRules.spec.ts` holds all of it, including the end-to-end
+case: a train that set off north because south was claimed is held at a
+signal short of the split when the claims swap, and reaches its platform
+over the south branch. The cap is tested by counting real
+`railPathfinder.find` calls over a thousand ticks with a train held and
+both ways round claimed: exactly 10 searches with the rule on and 0 with it off,
+against the 1,000 an uncapped reroute would have run.
+
+Measured on the reference machine (Ryzen 5 7520U, `npm run test:perf`
+2026-08-08): **tick p50 1.512 ms / p99 3.023 ms** on the 1,500-vehicle
+fixture (max 19.0 ms over 6,500 ticks), against the M10 baseline of
+1.45 / 3.26 - a p99 DELTA of -0.24 ms, inside the documented +-0.7 ms run
+noise of this box, where the M15 ledger row allows +0.50 ms for the whole
+milestone. That the bundle costs nothing measurable is what the gates buy:
+the reference fleet runs with the rules OFF, so the occupancy read and the
+reroute are both branches never taken, and even switched on the reroute is
+bounded by held-trains-over-a-hundred-ticks. Render tripwires unchanged and
+green (sprite pool median 1.84, draw prep 2.56, chunk bake 0.66, particles
+0.30, aspect 0.03, emissive 0.04, flow prep 0.29 ms); flow export median
+0.055 ms; the big save reads back in 635 ms.
+
+One tidy-up rode along, because the new cadence constant would otherwise
+have cited a magic number as its origin: `REPATH_INTERVAL_TICKS`, a local
+constant in `vehicles/update.ts` since M2, moved into `constants.ts` as
+`VEHICLE_REPATH_INTERVAL_TICKS` with its unit and origin. Same value, no
+behaviour change.

@@ -92,6 +92,9 @@ export interface WorldStateData {
   climate: MapClimate;
   inflation: boolean;
   emissions: boolean;
+  /** The two 8.4 route-cost rules of M15. Saved and hashed like inflation. */
+  occupancyPenalty: boolean;
+  signalPenalty: boolean;
   mapSize: number;
   rng: RngState;
   /** Every company, player first. */
@@ -163,6 +166,15 @@ export class World {
   readonly inflation: boolean;
   /** Whether the carbon levy and its grants of section 14.3 apply. */
   readonly emissions: boolean;
+  /**
+   * Whether `railPath` charges for a section another train has claimed - the
+   * occupancy term of SPEC.md 8.4 (SPEC2 M15). Off unless the world was
+   * started with it, which is what keeps every pre-M15 seed on the route it
+   * always drove.
+   */
+  readonly occupancyPenalty: boolean;
+  /** Whether `railPath` charges a small penalty for passing a signal. */
+  readonly signalPenalty: boolean;
   readonly rng: Rng;
   /**
    * Every company in the game, index = id. Zero is the player, 1..n are the
@@ -307,6 +319,10 @@ export class World {
     this.climate = params.climate;
     this.inflation = params.inflation ?? true;
     this.emissions = params.emissions ?? true;
+    // Absent means OFF for both 8.4 rules - see NewGameParams for why the
+    // asymmetry with inflation and emissions is deliberate.
+    this.occupancyPenalty = params.occupancyPenalty ?? false;
+    this.signalPenalty = params.signalPenalty ?? false;
     this.rng = Rng.fromSeed(gameplaySeed(this.seed));
     this.companies.push(
       createCompany(0, params.companyName, params.companyColorIndex, params.difficulty),
@@ -541,6 +557,8 @@ export class World {
       climate: this.climate,
       inflation: this.inflation,
       emissions: this.emissions,
+      occupancyPenalty: this.occupancyPenalty,
+      signalPenalty: this.signalPenalty,
       mapSize: this.map.size,
       rng: this.rng.getState(),
       companies: this.companies.map((company) => ({ ...company })),
@@ -611,6 +629,8 @@ export class World {
         climate: data.climate,
         inflation: data.inflation,
         emissions: data.emissions,
+        occupancyPenalty: data.occupancyPenalty,
+        signalPenalty: data.signalPenalty,
         mapSize: data.mapSize,
         companyName: data.companies[0]!.name,
         companyColorIndex: data.companies[0]!.colorIndex,
@@ -700,6 +720,13 @@ function hashDynamicState(h: Fnv1a64, world: World): void {
   h.u32(world.climate);
   h.u32(world.inflation ? 1 : 0);
   h.u32(world.emissions ? 1 : 0);
+  // The two 8.4 route-cost rules of M15. Hashed UNCONDITIONALLY, false
+  // included: a rule that only entered the digest when it was on would let
+  // two worlds that route differently fingerprint alike, which is the whole
+  // failure Z2 exists to prevent. The price is that adding them moved every
+  // world hash once - re-recorded under the D-137/D-130 protocols.
+  h.u32(world.occupancyPenalty ? 1 : 0);
+  h.u32(world.signalPenalty ? 1 : 0);
 
   const rng = world.rng.getState();
   h.u32(rng[0]).u32(rng[1]).u32(rng[2]).u32(rng[3]);

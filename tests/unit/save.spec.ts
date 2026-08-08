@@ -255,10 +255,10 @@ describe('save migrations', () => {
 
   it('pins the current save version', () => {
     // Bumping SAVE_VERSION has to be a conscious act, because from the first
-    // released build onwards it also requires a migration. 25 is M14's single
-    // bump (SPEC2 Z5): the per-station cargo-history ring of the station
-    // x-ray owns it; the milestone's other bundles must not add numbers.
-    expect(SAVE_VERSION).toBe(25);
+    // released build onwards it also requires a migration. 26 is M15's single
+    // bump (SPEC2 Z5): the two route-cost world rules of SPEC.md 8.4 own it;
+    // the milestone's later bundles extend that migration and add no numbers.
+    expect(SAVE_VERSION).toBe(26);
   });
 
   it('has a real migration for every step from version 2 on', () => {
@@ -311,6 +311,11 @@ describe('the registered migrations', () => {
     // company-wide renewal flag went with them (per-line since M11).
     expect(state['lines']).toEqual([]);
     expect('autoRenew' in companies[0]!).toBe(false);
+    // v26 made the two 8.4 route-cost terms world rules (M15). A world driven
+    // by a pathfinder that had neither is a world with both switched off -
+    // any other default would re-route its whole fleet on the first departure.
+    expect(state['occupancyPenalty']).toBe(false);
+    expect(state['signalPenalty']).toBe(false);
     expect(migrated['saveVersion']).toBe(SAVE_VERSION);
   });
 
@@ -468,6 +473,34 @@ describe('the registered migrations', () => {
     const project = ai[0]!['project'] as Record<string, unknown>;
     expect(project['lineId']).toBe(0);
     expect('lineIndex' in project).toBe(false);
+  });
+
+  it('enters a v25 world with both 8.4 rules off, and keeps a rule already set', () => {
+    // The M15 bump. A world driven by a pathfinder that had neither term is a
+    // world with both terms off - and a state that already carries them (the
+    // corpus wraps a CURRENT state in an old container) must not be flattened.
+    const fresh = migrateSavePayload(
+      { magic: SAVE_MAGIC, saveVersion: 25, state: { mapSize: 64 } },
+      25,
+      26,
+    );
+    const freshState = fresh['state'] as Record<string, unknown>;
+    expect(freshState['occupancyPenalty']).toBe(false);
+    expect(freshState['signalPenalty']).toBe(false);
+    expect(fresh['saveVersion']).toBe(26);
+
+    const carried = migrateSavePayload(
+      {
+        magic: SAVE_MAGIC,
+        saveVersion: 25,
+        state: { mapSize: 64, occupancyPenalty: true, signalPenalty: true },
+      },
+      25,
+      26,
+    );
+    const carriedState = carried['state'] as Record<string, unknown>;
+    expect(carriedState['occupancyPenalty']).toBe(true);
+    expect(carriedState['signalPenalty']).toBe(true);
   });
 
   it('migrates a v22 save to v23 without moving the world hash', () => {

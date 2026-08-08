@@ -634,6 +634,8 @@
   "ui.newGame.competitors": "Konkurrenten",
   "ui.newGame.inflation": "Inflation (Preise und Erlöse steigen über das Jahrhundert)",
   "ui.newGame.emissions": "CO₂-Abgabe und Förderung ab dem Jahr 2000",
+  "ui.newGame.occupancyPenalty": "Belegungsstrafe: Züge weichen belegten Blöcken aus (3 s Aufschlag je fremder Reservierung)",
+  "ui.newGame.signalPenalty": "Signalstrafe: Züge bevorzugen bei gleicher Fahrzeit die Route mit weniger Signalen",
   "ui.newGame.seed": "Startwert",
   "ui.newGame.reroll": "Neu würfeln",
   "ui.newGame.start": "Spiel starten",

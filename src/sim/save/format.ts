@@ -60,9 +60,14 @@ export const SAVE_MAGIC = 'IRVN';
  * per-station cargo-history ring of the station x-ray (twelve months of
  * collected/delivered/expired per cargo, plus the month in progress). A
  * pre-M14 world recorded no history, so the migration hands every station a
- * zeroed ring - which is exactly what that world knew.
+ * zeroed ring - which is exactly what that world knew. 26 is M15's one bump:
+ * the two route-cost world rules of SPEC.md 8.4 - `occupancyPenalty` and
+ * `signalPenalty` - which decide what `railPath` charges for an occupied
+ * section and for a signal. A world that predates them was driven without
+ * them, so the migration enters both as OFF, which is exactly what those
+ * worlds did.
  */
-export const SAVE_VERSION = 25;
+export const SAVE_VERSION = 26;
 
 /** File extension used for manual and automatic saves. */
 export const SAVE_EXTENSION = '.ironsave';
@@ -970,6 +975,10 @@ export function parseSaveFile(value: unknown): SaveFile {
     climate: parseClimate(stateRaw['climate'], 'save.state.climate'),
     inflation: asBoolean(stateRaw['inflation'], 'save.state.inflation'),
     emissions: asBoolean(stateRaw['emissions'], 'save.state.emissions'),
+    // The two 8.4 rules of M15. Required, like every other world rule: a save
+    // that has lost one is a save whose trains would drive somewhere else.
+    occupancyPenalty: asBoolean(stateRaw['occupancyPenalty'], 'save.state.occupancyPenalty'),
+    signalPenalty: asBoolean(stateRaw['signalPenalty'], 'save.state.signalPenalty'),
     mapSize,
     rng: parseRngState(stateRaw['rng'], 'save.state.rng'),
     companies: parseCompanies(stateRaw['companies'], 'save.state.companies'),

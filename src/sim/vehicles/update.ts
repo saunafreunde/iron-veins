@@ -24,6 +24,8 @@ import {
   MAX_ORDER_JUMPS_PER_STOP,
   MAX_VEHICLES,
   MIN_STATION_STOP_TICKS,
+  RAIL_SIGNAL_REPATH_INTERVAL_TICKS,
+  RAIL_SIGNAL_REPATH_MIN_WAIT_TICKS,
   ROLLING_RESISTANCE_RAIL,
   ROLLING_RESISTANCE_ROAD,
   PLATFORM_OVERHANG_PENALTY,
@@ -35,6 +37,7 @@ import {
   TICKS_PER_YEAR,
   TILE_DIAGONAL_M,
   TILE_SIZE_M,
+  VEHICLE_REPATH_INTERVAL_TICKS,
 } from '../constants';
 import {
   curveRadiusM,
@@ -77,6 +80,7 @@ import { holdBody, releaseAll, releaseBehind, tryClaim } from './reservations';
 import { pathDirection, pathStepM, routeLengthM } from './route';
 import { VehicleKind } from './spec';
 import {
+  MAX_PATH_TILES,
   OrderComparator,
   OrderConditionKind,
   OrderLoad,
@@ -100,9 +104,6 @@ import {
  * ahead, which is where the geometry of section 8.1 finally becomes something
  * the player can feel.
  */
-
-/** How often a vehicle without a route tries again. [ticks] */
-const REPATH_INTERVAL_TICKS = 100;
 
 /** True for module kinds that vehicles of this mode can call at. */
 function moduleServes(moduleKind: number, vehicleKind: number): boolean {
@@ -344,6 +345,56 @@ function brakingDistanceM(speed: number, brakeMs2: number): number {
   return (speed * speed) / (2 * brakeMs2) + speed * BRAKE_REACTION_SECONDS;
 }
 
+/**
+ * Find a route for one train, with the M15 world rules and the reservation
+ * table the claim logic itself writes (D-054).
+ *
+ * One place asks the rail pathfinder, so the search a departing train runs and
+ * the search a held train runs cannot answer to different truths.
+ */
+function findRailRoute(
+  world: World,
+  id: number,
+  fromTile: number,
+  targetTile: number,
+  out: Int32Array,
+): number {
+  const vehicles = world.vehicles;
+  return world.railPathfinder.find(
+    world.map,
+    world.reservations,
+    id,
+    fromTile,
+    targetTile,
+    vehicles.maxSpeedMs[id]!,
+    vehicles.lateralAccel[id]!,
+    vehicles.needsCatenary[id] === 1,
+    world.occupancyPenalty,
+    world.signalPenalty,
+    out,
+  );
+}
+
+/**
+ * Install a freshly found route on a vehicle.
+ *
+ * `progressM` goes back to zero, which puts the head at the START of the tile
+ * it stands on. That is the M3 convention (see `tailIndex`, D-058) and it is
+ * why a reroute only ever happens at a dead stop: a vehicle rerouted at speed
+ * would jump backwards along its own tile.
+ */
+function adoptRoute(world: World, id: number, source: Int32Array, length: number): void {
+  const vehicles = world.vehicles;
+  const path = vehicles.paths[id]!;
+  // Plain loop rather than `set`/`subarray`: a subarray is an allocation, and
+  // this runs inside the tick (law #7).
+  if (source !== path) for (let i = 0; i < length; i++) path[i] = source[i]!;
+  vehicles.pathLength[id] = length;
+  vehicles.pathIndex[id] = 0;
+  vehicles.progressM[id] = 0;
+  vehicles.routeRemainingM[id] = routeLengthM(path, length, world.map.size);
+}
+
 /** Hand the vehicle a route to `targetTile`; returns false when there is none. */
 function routeTo(world: World, id: number, targetTile: number): boolean {
   const vehicles = world.vehicles;
@@ -358,15 +409,7 @@ function routeTo(world: World, id: number, targetTile: number): boolean {
       : kind === VehicleKind.Ship
         ? world.waterPathfinder.find(world.map, vehicles.tileIndex[id]!, targetTile, path)
         : kind === VehicleKind.Train
-          ? world.railPathfinder.find(
-              world.map,
-              vehicles.tileIndex[id]!,
-              targetTile,
-              vehicles.maxSpeedMs[id]!,
-              vehicles.lateralAccel[id]!,
-              vehicles.needsCatenary[id] === 1,
-              path,
-            )
+          ? findRailRoute(world, id, vehicles.tileIndex[id]!, targetTile, path)
           : world.roadPathfinder.find(world.map, vehicles.tileIndex[id]!, targetTile, path);
 
   if (length === 0) {
@@ -374,10 +417,87 @@ function routeTo(world: World, id: number, targetTile: number): boolean {
     vehicles.routeRemainingM[id] = 0;
     return false;
   }
-  vehicles.pathLength[id] = length;
-  vehicles.pathIndex[id] = 0;
-  vehicles.progressM[id] = 0;
-  vehicles.routeRemainingM[id] = routeLengthM(path, length, world.map.size);
+  adoptRoute(world, id, path, length);
+  return true;
+}
+
+/**
+ * Working buffer for a repath candidate.
+ *
+ * One shared buffer: routing is never concurrent, the same argument the block
+ * scratch of vehicles/reservations.ts makes. It exists so a candidate route
+ * can be COMPARED against the standing one before the standing one is thrown
+ * away - see `repathHeldTrain`.
+ */
+const repathScratch = new Int32Array(MAX_PATH_TILES);
+
+/**
+ * May this train reconsider its route on this tick? The repath-storm guard of
+ * SPEC2 M15.
+ *
+ * Three gates, and each one closes a different flood:
+ *
+ *  - **No occupancy rule, no repath.** Without the live term a second search
+ *    from the same tile to the same target returns the same route by
+ *    construction, so the whole mechanism is inert in every world that
+ *    predates M15 - not merely harmless, but provably never invoked.
+ *  - **A minimum wait**, so a train held for the moment the train ahead needs
+ *    to clear pays for no search at all.
+ *  - **A fixed interval, staggered by vehicle id**, so a junction holding a
+ *    dozen trains runs at most one search per train per interval and never
+ *    all of them on one tick.
+ *
+ * The clock is `waitingSinceTick`, which is already saved state (Z4) and is
+ * already the 9.3 deadlock clock - so the cadence survives a save/load round
+ * trip without a field of its own, and a train that keeps rerouting without
+ * moving still trips the deadlock warning on schedule.
+ */
+function mayRepathAtSignal(world: World, id: number): boolean {
+  if (!world.occupancyPenalty) return false;
+  const since = world.vehicles.waitingSinceTick[id]!;
+  if (since < 0) return false;
+  if (world.tick - since < RAIL_SIGNAL_REPATH_MIN_WAIT_TICKS) return false;
+  return (world.tick + id) % RAIL_SIGNAL_REPATH_INTERVAL_TICKS === 0;
+}
+
+/**
+ * Look for a better way round while standing at a red, and take it if there is
+ * one. Returns true when the train actually changed route.
+ *
+ * An IDENTICAL route is not adopted. Re-adopting the standing route would
+ * release the claim, reset `progressM` and shove the head back to the start of
+ * its own tile every interval for nothing - and the identical route is the
+ * common case, because most reds are on lines with no way round at all.
+ *
+ * `waitingSinceTick` is deliberately NOT reset here. The train is still
+ * standing still, and a reroute that keeps failing must keep the 9.3 deadlock
+ * clock running - a clock restarted by its own retry would never fire.
+ */
+function repathHeldTrain(world: World, id: number): boolean {
+  const vehicles = world.vehicles;
+  const target = orderTargetTile(world, id);
+  if (target === -1) return false;
+
+  const here = vehicles.tileIndex[id]!;
+  const length = findRailRoute(world, id, here, target, repathScratch);
+  if (length === 0) return false;
+
+  const path = vehicles.paths[id]!;
+  const head = vehicles.pathIndex[id]!;
+  if (length === vehicles.pathLength[id]! - head) {
+    let same = true;
+    for (let i = 0; i < length; i++) {
+      if (repathScratch[i] !== path[head + i]) {
+        same = false;
+        break;
+      }
+    }
+    if (same) return false;
+  }
+
+  // The old claim is expressed in the indices of the route being replaced.
+  releaseAll(world, id);
+  adoptRoute(world, id, repathScratch, length);
   return true;
 }
 
@@ -1061,7 +1181,9 @@ function stepVehicle(world: World, id: number): void {
     case VehicleState.NoRoute: {
       // Retry occasionally rather than every tick: a stranded vehicle must
       // not turn into a pathfinding load on the whole simulation.
-      if (world.tick % REPATH_INTERVAL_TICKS !== id % REPATH_INTERVAL_TICKS) return;
+      if (world.tick % VEHICLE_REPATH_INTERVAL_TICKS !== id % VEHICLE_REPATH_INTERVAL_TICKS) {
+        return;
+      }
       const target = orderTargetTile(world, id);
       if (target !== -1 && routeTo(world, id, target)) {
         vehicles.state[id] = VehicleState.Driving;
@@ -1172,7 +1294,14 @@ function stepVehicle(world: World, id: number): void {
       if (mayEnter(world, id, vehicles.pathIndex[id]! + 1)) {
         vehicles.state[id] = VehicleState.Driving;
         vehicles.waitingSinceTick[id] = -1;
+        return;
       }
+      // Still red. The gate's own signal stop: reconsider the route on the
+      // capped cadence, never per tick (SPEC2 M15's repath-storm guard). A
+      // repath leaves the train at the start of its own tile holding nothing;
+      // the next tick's holdBody and mayEnter above take it from there,
+      // exactly as a fresh departure would.
+      if (mayRepathAtSignal(world, id)) repathHeldTrain(world, id);
       return;
     }
 
@@ -1257,6 +1386,16 @@ function stepVehicle(world: World, id: number): void {
         if (!stalled) vehicles.waitingSinceTick[id] = -1;
         else if (vehicles.waitingSinceTick[id]! < 0) vehicles.waitingSinceTick[id] = world.tick;
         releaseBehind(world, id);
+
+        // A SIGNAL STOP, in the one definition the game already has for it
+        // (D-157, D-083): a train standing still mid-route. The lookahead
+        // normally brakes a train to a stand SHORT of the red, so it never
+        // reaches the tile-boundary gate and never enters WaitingForPath -
+        // which is why the M15 reroute hangs off "standing still" here as
+        // well as off the gate's own state below, and off nothing else.
+        // `stalled` implies `!atEnd`, so a route adopted here is returned
+        // from by the guard immediately after.
+        if (stalled && mayRepathAtSignal(world, id)) repathHeldTrain(world, id);
       }
 
       if (!atEnd) return;
