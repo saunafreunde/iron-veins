@@ -2420,7 +2420,7 @@
           }
         ]
       },
-      "note": "Reuse (D-169, D-208): the body of `building:industrial:0`, a hall with one wide vehicle portal - which is what a bus garage is. `facing` 4 puts the portal and the kit's orange side door at the front; the company colour rides that door. Told apart from the town tile by its own stretch, by the coloured door and by standing on a station. Measured 0.58 tile widths, lift 0.88 tile heights, accent 24 px of 882 (2.7 %) - under the rail depot below, because a road depot holds a bus and an engine shed holds a train."
+      "note": "Reuse (D-169, D-208): the body of `building:industrial:0`, a hall with one wide vehicle portal - which is what a bus garage is. `facing` 4 puts the portal and the kit's orange side door at the front; the company colour rides that door. Told apart from the town tile by its own stretch, by the coloured door and by standing on a station. Measured 0.58 tile widths, lift 0.88 tile heights, accent 21 px of 769 (2.7 %) - under the rail depot below, because a road depot holds a bus and an engine shed holds a train."
     },
     {
       "target": "module:RailPlatform",

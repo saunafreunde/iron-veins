@@ -9401,7 +9401,7 @@ check against a screenshot:
 | Canopy | commercial `detail-overhang-wide` | 0.66 | 0.56 | trim, 141 px | - |
 | RailPlatform | roads `tile-high` | 0.56 | 0.88 | neutral | - |
 | Quay | pirate `structure-platform-dock` | 0.63 | 0.84 | neutral | - |
-| RoadDepot | industrial `building-h`\* | 0.88 | 0.58 | door, 24 px | yes |
+| RoadDepot | industrial `building-h`\* | 0.88 | 0.58 | door, 21 px | yes |
 | ColdStore | industrial `building-q`\* | 0.91 | 0.61 | neutral | yes |
 | LorryBay | industrial `building-p` | 0.91 | 0.56 | doors, 39 px | yes |
 | RailDepot | industrial `building-j`\* | 1.00 | 0.66 | neutral | - |
