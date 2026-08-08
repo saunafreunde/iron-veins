@@ -965,6 +965,35 @@ const v25_to_v26: SaveMigration = (payload) => {
 };
 
 /**
+ * M16 gave a recording a memory of its own past: the checkpoint ring, the tick
+ * the retained command log starts from, and the claim a `.ironreplay` makes
+ * about where it ends (SPEC2 M16, the milestone's one Z5 bump).
+ *
+ * All three live in the CONTAINER, never in the hashed state - they are
+ * HISTORY, the family the command log belongs to, and history is judged by
+ * replay verification rather than by the world digest (D-131). So this
+ * migration spreads the container and passes `state` through by reference,
+ * exactly as `v22_to_v23` did: the world a version 26 save means does not
+ * move by one byte, and the migration test proves it by hash identity.
+ *
+ * A version 26 world recorded no checkpoints, so it gets none. That is not a
+ * loss of anything: its command log is complete from tick 0 (`logBaseTick`
+ * zero - nothing was ever trimmed), so it stays replayable by re-simulating
+ * from the genesis its own parameters describe. What it does NOT get is a
+ * verifiable replay, and that is D-131 rather than this migration: a recording
+ * made under save version 26 is evidence about save version 26.
+ *
+ * Fields already present are kept, so the corpus trick of wrapping a CURRENT
+ * container in an old version cannot flatten a real ring back to empty.
+ */
+const v26_to_v27: SaveMigration = (payload) => ({
+  ...payload,
+  logBaseTick: payload['logBaseTick'] ?? 0,
+  checkpoints: payload['checkpoints'] ?? [],
+  replay: payload['replay'] ?? null,
+});
+
+/**
  * Registry keyed by the version a migration reads (section 19.1).
  *
  * There is deliberately no entry for 1 -> 2: a version 1 world had no map at
@@ -996,6 +1025,7 @@ export const SAVE_MIGRATIONS: ReadonlyMap<number, SaveMigration> = new Map<numbe
   [23, v23_to_v24],
   [24, v24_to_v25],
   [25, v25_to_v26],
+  [26, v26_to_v27],
 ]);
 
 /**

@@ -88,6 +88,19 @@ const UNHASHED: readonly { path: string; reason: string }[] = [
       'the replay cursor into that log - container bookkeeping of the same family; range-checked ' +
       'against the log length, but its exact value is not world state and cannot be in the digest',
   },
+  {
+    path: 'checkpoints[].payload',
+    reason:
+      'a recorded past, not the present state: the checkpoint carries its own digest and is ' +
+      'verified when it is RESTORED, because decompressing the whole ring to open one save would ' +
+      'charge every load for a jump nobody asked for (D-188)',
+  },
+  {
+    path: 'replay.finalTick',
+    reason:
+      'the claim a recording makes about where it ends; replay verification judges it, and a ' +
+      'claim that disagrees with the re-simulation is what a divergence report is made of (D-131)',
+  },
 ];
 
 type PathSegment = string | number;
@@ -349,6 +362,14 @@ beforeAll(() => {
       command: JSON.parse(JSON.stringify(envelope.command)) as unknown,
     })),
     commandsExecuted: scenario.queue.executedCount,
+    logBaseTick: 0,
+    // The M16 sections need representatives like every other section that the
+    // played fixture leaves empty. The audit walks the CONTAINER, and it never
+    // decodes a checkpoint payload, so a short blob under a real-looking
+    // digest exercises exactly the fields the parser reads. Tick 0 because the
+    // ring may not reach past the recording, and this world is two months old.
+    checkpoints: [{ tick: 0, worldDigest: hashWorld(world), payload: new Uint8Array([1, 2, 3]) }],
+    replay: { finalTick: world.tick, finalHash: hashWorld(world) },
   };
 
   leaves = [];

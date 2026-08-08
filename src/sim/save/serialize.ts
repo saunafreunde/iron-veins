@@ -2,12 +2,14 @@ import { decode, encode } from '@msgpack/msgpack';
 import { unzlibSync, zlibSync } from 'fflate';
 import { CommandQueue } from '../commands/queue';
 import { hashWorld, World } from '../World';
+import { CheckpointRing } from './checkpoints';
 import {
   parseSaveFile,
   readSaveHeader,
   SAVE_MAGIC,
   SAVE_VERSION,
   SaveCorruptionError,
+  type ReplayClaim,
   type SaveFile,
 } from './format';
 import { migrateSavePayload } from './migrations';
@@ -19,7 +21,17 @@ const COMPRESSION_LEVEL = 6;
 export interface LoadedGame {
   readonly world: World;
   readonly queue: CommandQueue;
+  /** The checkpoint ring the file carried; empty for a pre-M16 recording. */
+  readonly ring: CheckpointRing;
   readonly gameVersion: string;
+  /**
+   * The save format version as RECORDED in the file, before migration. This
+   * is one half of the pair a replay is evidence about (D-131); the other is
+   * `gameVersion`.
+   */
+  readonly saveVersion: number;
+  /** Where the recording claims to end - present in a replay, null in a save. */
+  readonly replay: ReplayClaim | null;
 }
 
 /**
@@ -29,8 +41,19 @@ export interface LoadedGame {
  * the CONTAINER on purpose (Fehlerkatalog 2): a digest inside the hashed state
  * would have to contribute to itself, and a container field can change shape in
  * a migration without moving a single world hash.
+ *
+ * The checkpoint ring of SPEC2 M16 travels the same way and for the same
+ * reason: it is HISTORY, like the command log, not state. Passing none writes
+ * an empty ring, which is what every caller that does not keep one - the
+ * balancing scenarios, the determinism fixtures - honestly has.
  */
-export function encodeSave(world: World, queue: CommandQueue, gameVersion: string): Uint8Array {
+export function encodeSave(
+  world: World,
+  queue: CommandQueue,
+  gameVersion: string,
+  ring: CheckpointRing | null = null,
+  replay: ReplayClaim | null = null,
+): Uint8Array {
   const file: SaveFile = {
     magic: SAVE_MAGIC,
     saveVersion: SAVE_VERSION,
@@ -41,6 +64,9 @@ export function encodeSave(world: World, queue: CommandQueue, gameVersion: strin
     state: world.toData(),
     commandLog: queue.log,
     commandsExecuted: queue.executedCount,
+    logBaseTick: queue.baseTick,
+    checkpoints: ring === null ? [] : ring.all,
+    replay,
   };
   return zlibSync(encode(file), { level: COMPRESSION_LEVEL });
 }
@@ -94,7 +120,17 @@ export function decodeSave(bytes: Uint8Array): LoadedGame {
   }
 
   const queue = new CommandQueue();
-  queue.loadLog(file.commandLog, file.commandsExecuted);
+  queue.loadLog(file.commandLog, file.commandsExecuted, file.logBaseTick);
 
-  return { world, queue, gameVersion: file.gameVersion };
+  const ring = new CheckpointRing();
+  ring.load(file.checkpoints);
+
+  return {
+    world,
+    queue,
+    ring,
+    gameVersion: file.gameVersion,
+    saveVersion: header.saveVersion,
+    replay: file.replay,
+  };
 }

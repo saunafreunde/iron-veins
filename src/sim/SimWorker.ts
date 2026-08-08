@@ -50,6 +50,7 @@ import { refusedTile } from './vehicles/reservations';
 import { writeVehicleBlock } from './vehicles/snapshot';
 import { VehicleKind } from './vehicles/spec';
 import { SaveCorruptionError, SaveFormatError } from './save/format';
+import { CheckpointRing } from './save/checkpoints';
 import { decodeSave, encodeSave } from './save/serialize';
 import { councilRating, exclusiveRightsCostCt, TOWN_MEASURE_COUNT } from './town/council';
 import { calendarFromTick, hashWorldLive, World } from './World';
@@ -86,6 +87,13 @@ const RATE_WINDOW_MS = 500;
 
 let world: World | null = null;
 let queue = new CommandQueue();
+/**
+ * The replay checkpoint ring of SPEC2 M16. It lives here beside the command
+ * log because it is the same kind of thing - the recording of a game rather
+ * than its state - and because encoding a world is a save-path job the
+ * simulation core must never do inside `tick()` (law #7).
+ */
+let checkpoints = new CheckpointRing();
 let writer: SnapshotWriter | null = null;
 let timer: ReturnType<typeof setInterval> | null = null;
 
@@ -531,6 +539,10 @@ function runFrame(): void {
   let ticks = 0;
   while (accumulatorMs >= TICK_MS && ticks < MAX_TICKS_PER_FRAME && current.tick < MAX_TICK) {
     current.step(queue, outcomeSink);
+    // Per STEP, not per frame: a frame runs up to 40 ticks and a year
+    // boundary inside one of them is still a year boundary. The call is a
+    // modulo on every tick and an encode once a game year (SPEC2 M16).
+    checkpoints.record(current);
     accumulatorMs -= TICK_MS;
     ticks++;
   }
@@ -563,6 +575,11 @@ function startGame(message: Extract<MainToWorkerMessage, { type: 'init' }>): voi
     },
   );
   queue = new CommandQueue();
+  checkpoints = new CheckpointRing();
+  // Tick 0 is a year boundary, so the genesis of a game is a checkpoint like
+  // any other - and it is the one that makes "replay this game from its first
+  // day" a decode rather than a reconstruction (SPEC2 M16).
+  checkpoints.record(world);
   writer = new SnapshotWriter(message.buffer);
 
   if (timer !== null) clearInterval(timer);
@@ -583,7 +600,7 @@ function writeSave(slot: SaveSlotKind, label: string): void {
   const current = world;
   if (current === null) return;
 
-  const bytes = encodeSave(current, queue, __APP_VERSION__);
+  const bytes = encodeSave(current, queue, __APP_VERSION__, checkpoints);
   const date = current.date;
   scope.postMessage({
     type: 'saveWritten',
@@ -625,6 +642,11 @@ function loadSave(bytes: Uint8Array): void {
   if (sink === null) return;
   world = loaded.world;
   queue = loaded.queue;
+  checkpoints = loaded.ring;
+  // A world loaded exactly on a year boundary is a checkpoint the ring may
+  // not have (a pre-M16 save has none at all); `record` is idempotent by
+  // tick, so this can only ever add the missing one.
+  checkpoints.record(world);
   adoptWorld(world, sink);
 }
 
@@ -653,6 +675,8 @@ function restart(options: NewGameOptions): void {
     },
   );
   queue = new CommandQueue();
+  checkpoints = new CheckpointRing();
+  checkpoints.record(world);
   adoptWorld(world, sink);
 }
 

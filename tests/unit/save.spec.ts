@@ -255,10 +255,11 @@ describe('save migrations', () => {
 
   it('pins the current save version', () => {
     // Bumping SAVE_VERSION has to be a conscious act, because from the first
-    // released build onwards it also requires a migration. 26 is M15's single
-    // bump (SPEC2 Z5): the two route-cost world rules of SPEC.md 8.4 own it;
-    // the milestone's later bundles extend that migration and add no numbers.
-    expect(SAVE_VERSION).toBe(26);
+    // released build onwards it also requires a migration. 27 is M16's single
+    // bump (SPEC2 Z5): the checkpoint ring, the log base tick and the replay
+    // claim own it; the milestone's later bundles extend that migration and
+    // add no numbers.
+    expect(SAVE_VERSION).toBe(27);
   });
 
   it('has a real migration for every step from version 2 on', () => {
@@ -533,6 +534,70 @@ describe('the registered migrations', () => {
     expect(carriedState['signalPenalty']).toBe(true);
     expect(carriedState['roadCongestion']).toBe(true);
     expect((carriedState['map'] as Record<string, unknown>)['congestion']).toBe(played);
+  });
+
+  it('gives a v26 save an empty ring and an untrimmed log, and keeps a real one', () => {
+    // M16's bump is CONTAINER-only, like v23: the ring, the log base and the
+    // replay claim are history, not state. A version 26 world recorded no
+    // checkpoints, so it gets none - and its log is complete from tick 0,
+    // which is what keeps it replayable by re-simulating from the genesis its
+    // own parameters describe.
+    const state = { mapSize: 64 };
+    const fresh = migrateSavePayload({ magic: SAVE_MAGIC, saveVersion: 26, state }, 26, 27);
+    expect(fresh['logBaseTick']).toBe(0);
+    expect(fresh['checkpoints']).toEqual([]);
+    expect(fresh['replay']).toBeNull();
+    expect(fresh['saveVersion']).toBe(27);
+    // Same object, not a copy: the migration has no business even looking at
+    // the state it must not change.
+    expect(fresh['state']).toBe(state);
+
+    // The corpus trick - a CURRENT container wrapped in an old version - must
+    // not flatten a real ring back to empty.
+    const ring = [{ tick: 0, worldDigest: '0123456789abcdef', payload: new Uint8Array([7]) }];
+    const carried = migrateSavePayload(
+      {
+        magic: SAVE_MAGIC,
+        saveVersion: 26,
+        state,
+        logBaseTick: 72_000,
+        checkpoints: ring,
+        replay: { finalTick: 80_000, finalHash: 'fedcba9876543210' },
+      },
+      26,
+      27,
+    );
+    expect(carried['logBaseTick']).toBe(72_000);
+    expect(carried['checkpoints']).toBe(ring);
+    expect(carried['replay']).toEqual({ finalTick: 80_000, finalHash: 'fedcba9876543210' });
+  });
+
+  it('migrates a v26 save to v27 without moving the world hash', () => {
+    // The same proof v23 needed: a container-only bump must not change what a
+    // world MEANS. A version 26 container around today's state is exactly what
+    // the v26 encoder wrote - same fields, same order, minus the three the
+    // checkpoint ring added.
+    const { world, queue } = playedWorld();
+    const before = hashWorld(world);
+
+    const v26 = {
+      magic: SAVE_MAGIC,
+      saveVersion: 26,
+      gameVersion: GAME_VERSION,
+      seed: world.seed,
+      tick: world.tick,
+      worldDigest: before,
+      state: world.toData(),
+      commandLog: queue.log,
+      commandsExecuted: queue.executedCount,
+    };
+    const loaded = decodeSave(zlibSync(encode(v26)));
+
+    expect(hashWorld(loaded.world)).toBe(before);
+    expect(loaded.ring.size).toBe(0);
+    expect(loaded.queue.baseTick).toBe(0);
+    expect(loaded.replay).toBeNull();
+    expect(loaded.saveVersion).toBe(26);
   });
 
   it('migrates a v22 save to v23 without moving the world hash', () => {

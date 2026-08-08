@@ -268,6 +268,33 @@ export const MAX_TICKS_PER_FRAME = 40;
  */
 export const STATE_HASH_INTERVAL_TICKS = TICKS_PER_DAY;
 
+/**
+ * Distance between two replay checkpoints: one game year (SPEC2 M16). [ticks]
+ *
+ * One year is the cadence SPEC2 names, and it is the one the three purposes of
+ * the ring agree on: a scrubber jumps by years, tail verification wants the
+ * newest one, and log compaction trims whole years off the command log. Tick 0
+ * satisfies it too, which is what makes the genesis of a game a checkpoint
+ * like any other rather than a special case.
+ */
+export const CHECKPOINT_INTERVAL_TICKS = TICKS_PER_YEAR; // 72_000
+
+/**
+ * How many checkpoints a ring keeps, the base one included. [checkpoints]
+ *
+ * A checkpoint is a whole world state, so the ring is priced in save files:
+ * measured on the 25-year AI game (256 map) one compressed payload is 25-40 kB,
+ * and on the 1024 reference world it is the size of that world's save, ~190 kB.
+ * Sixteen therefore costs ~0.6 MB there and ~3 MB on the biggest world the game
+ * ships - a bounded price for sixteen game years of instant scrubbing, against
+ * an unbounded one for keeping every year of a century.
+ *
+ * The oldest entry is never evicted (see `CheckpointRing`): it is the tick the
+ * retained command log starts from, and dropping it would orphan every command
+ * before the second checkpoint.
+ */
+export const CHECKPOINT_RING_CAPACITY = 16;
+
 // ------------------------------------------------------------------- money
 
 /** All monetary amounts are integer cents (law #5). */

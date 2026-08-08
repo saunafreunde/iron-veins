@@ -5,6 +5,7 @@ import type { CargoLinkSave } from '../cargo/linkGraph';
 import { ACCOUNT_COUNT } from '../economy/ledger';
 import { NEWS_CATEGORY_COUNT, type NewsEntry } from '../news/log';
 import {
+  CHECKPOINT_INTERVAL_TICKS,
   COMPANY_COLOR_COUNT,
   MAX_COMPANIES,
   Difficulty,
@@ -67,12 +68,64 @@ export const SAVE_MAGIC = 'IRVN';
  * (SPEC2 Z5) - the road half of 8.4: the world rule `roadCongestion` and the
  * saved Uint8 congestion layer it records into. A world that predates them was
  * driven without them, so the migration enters all three rules as OFF and the
- * layer as zeros, which is exactly what those worlds did and knew.
+ * layer as zeros, which is exactly what those worlds did and knew. 27 is M16's
+ * one bump and, like 23, a CONTAINER-only one: the checkpoint ring, the tick
+ * the retained command log starts from, and the claim a `.ironreplay` makes
+ * about where the recording ends. Not one byte of the hashed world state
+ * moves, which the migration test proves by hash identity.
  */
-export const SAVE_VERSION = 26;
+export const SAVE_VERSION = 27;
 
 /** File extension used for manual and automatic saves. */
 export const SAVE_EXTENSION = '.ironsave';
+
+/**
+ * File extension of a replay (SPEC2 M16).
+ *
+ * A replay is not a second format: it is this container holding the world at
+ * the tick its retained log starts from, `commandsExecuted = 0`, and a
+ * {@link ReplayClaim} naming where the recording ends. One container, one
+ * parser, one migration chain - a second format would be a second parser, and
+ * a second parser falls silently behind the command set (D-133).
+ */
+export const REPLAY_EXTENSION = '.ironreplay';
+
+/**
+ * One entry of the checkpoint ring: the whole world at a year boundary.
+ *
+ * The payload is the same codec the save itself uses - zlib over MessagePack
+ * of `World.toData()` - because a checkpoint IS a world state and a second
+ * encoding of the same thing is a second thing to keep in step. It is kept
+ * compressed rather than live: sixteen live states of a 1024 map are hundreds
+ * of megabytes, sixteen compressed ones are single-digit megabytes.
+ *
+ * `worldDigest` is `hashWorld` of that state, and it is checked when the
+ * checkpoint is RESTORED, not when the file is opened - decompressing the
+ * whole history to load one save would make every open pay for a jump nobody
+ * asked for.
+ */
+export interface Checkpoint {
+  /** A multiple of `CHECKPOINT_INTERVAL_TICKS`; the state BEFORE this tick ran. */
+  readonly tick: number;
+  /** `hashWorld` of the encoded state. */
+  readonly worldDigest: string;
+  /** zlib(MessagePack(WorldStateData)). */
+  readonly payload: Uint8Array;
+}
+
+/**
+ * What a recording claims about its own end (SPEC2 M16).
+ *
+ * A save is at its final tick and can be asked; a replay holds the world at
+ * its BASE tick, so where it ends and what it hashes to there is a statement
+ * the file has to carry. Verification is exactly the comparison of this claim
+ * against a re-simulation - and a claim that disagrees is what a divergence
+ * report is made of.
+ */
+export interface ReplayClaim {
+  readonly finalTick: number;
+  readonly finalHash: string;
+}
 
 /** Decoded, validated save payload. */
 export interface SaveFile {
@@ -90,10 +143,21 @@ export interface SaveFile {
    */
   readonly worldDigest: string;
   readonly state: WorldStateData;
-  /** Full command log since the start of the game; drives replays. */
+  /** Command log, complete from {@link logBaseTick} on; drives replays. */
   readonly commandLog: readonly CommandEnvelope[];
   /** How many entries of the log had already run when the save was taken. */
   readonly commandsExecuted: number;
+  /**
+   * The tick the retained log starts from. Zero - every log that was never
+   * compacted - means "since the start of the game". Anything else is a log
+   * trimmed at a checkpoint (SPEC2 M16), and the ring then has to carry that
+   * checkpoint, or the recording would begin at a world nobody holds.
+   */
+  readonly logBaseTick: number;
+  /** The checkpoint ring, oldest first. Empty in every pre-M16 recording. */
+  readonly checkpoints: readonly Checkpoint[];
+  /** Where the recording ends, for a `.ironreplay`; null for a plain save. */
+  readonly replay: ReplayClaim | null;
 }
 
 /**
@@ -893,7 +957,6 @@ export function readSaveHeader(value: unknown): { magic: string; saveVersion: nu
   return { magic, saveVersion: asInt(raw['saveVersion'], 'save.saveVersion') };
 }
 
-/** Strictly validate a payload that has already been migrated to SAVE_VERSION. */
 /** The measured connection table (section 7.4). */
 function parseCargoLinks(value: unknown, path: string): CargoLinkSave[] {
   return asArray(value, path).map((entry, i) => {
@@ -949,6 +1012,133 @@ function parseNews(value: unknown, path: string): NewsEntry[] {
   });
 }
 
+/**
+ * The checkpoint ring of a recording (SPEC2 M16).
+ *
+ * What is checked here is the ring's SHAPE - the ticks are year boundaries,
+ * they rise, they stay inside the recording - and never the payloads: a
+ * checkpoint verifies itself against its own digest when it is restored, and
+ * decompressing sixteen world states to open one save would charge every load
+ * for a jump nobody asked for.
+ */
+function parseCheckpoints(value: unknown, path: string, lastTick: number): Checkpoint[] {
+  const entries = asArray(value, path);
+  const ring: Checkpoint[] = [];
+  let previousTick = -1;
+  for (let i = 0; i < entries.length; i++) {
+    const raw = asRecord(entries[i], `${path}[${i}]`);
+    const tick = asInt(raw['tick'], `${path}[${i}].tick`);
+    if (tick < 0 || tick % CHECKPOINT_INTERVAL_TICKS !== 0) {
+      throw new SaveFormatError(
+        `${path}[${i}].tick: ${tick} is not a multiple of ${CHECKPOINT_INTERVAL_TICKS}`,
+        `${path}[${i}].tick`,
+      );
+    }
+    if (tick <= previousTick) {
+      throw new SaveFormatError(
+        `${path}[${i}].tick: ${tick} does not follow ${previousTick}; the ring is ordered`,
+        `${path}[${i}].tick`,
+      );
+    }
+    if (tick > lastTick) {
+      throw new SaveFormatError(
+        `${path}[${i}].tick: ${tick} is past the end of the recording (${lastTick})`,
+        `${path}[${i}].tick`,
+      );
+    }
+    previousTick = tick;
+
+    const digest = asDigest(raw['worldDigest'], `${path}[${i}].worldDigest`);
+    if (digest === '') {
+      throw new SaveFormatError(
+        `${path}[${i}].worldDigest: a checkpoint without a digest cannot be verified`,
+        `${path}[${i}].worldDigest`,
+      );
+    }
+    const payload = raw['payload'];
+    if (!(payload instanceof Uint8Array) || payload.length === 0) {
+      throw new SaveFormatError(
+        `${path}[${i}].payload: expected a non-empty byte array`,
+        `${path}[${i}].payload`,
+      );
+    }
+    ring.push({ tick, worldDigest: digest, payload });
+  }
+  return ring;
+}
+
+/** What a `.ironreplay` claims about its own end; null for a plain save. */
+function parseReplayClaim(value: unknown, path: string, baseTick: number): ReplayClaim | null {
+  if (value === null || value === undefined) return null;
+  const raw = asRecord(value, path);
+  const finalTick = asInt(raw['finalTick'], `${path}.finalTick`);
+  if (finalTick < baseTick) {
+    throw new SaveFormatError(
+      `${path}.finalTick: ${finalTick} is before the state it starts from (${baseTick})`,
+      `${path}.finalTick`,
+    );
+  }
+  const finalHash = asDigest(raw['finalHash'], `${path}.finalHash`);
+  if (finalHash === '') {
+    throw new SaveFormatError(
+      `${path}.finalHash: a recording that claims an end must name its hash`,
+      `${path}.finalHash`,
+    );
+  }
+  return { finalTick, finalHash };
+}
+
+/**
+ * Strictly validate one world state.
+ *
+ * Split out of {@link parseSaveFile} for the checkpoint ring: a checkpoint
+ * payload is a world state in the same codec, and validating it through a
+ * second hand-written reader is exactly the drift D-133 removed from the
+ * command parser.
+ */
+export function parseWorldState(value: unknown, path: string): WorldStateData {
+  const stateRaw = asRecord(value, path);
+  // The validator guards against corrupt data, not against menu choices: it
+  // accepts any square power-of-two map, which keeps small test worlds loadable
+  // while still rejecting a size that would make the layer lengths nonsense.
+  const mapSize = asInt(stateRaw['mapSize'], `${path}.mapSize`);
+  if (mapSize < 64 || mapSize > 2048 || (mapSize & (mapSize - 1)) !== 0) {
+    throw new SaveFormatError(
+      `${path}.mapSize: ${mapSize} is not a power of two between 64 and 2048`,
+      `${path}.mapSize`,
+    );
+  }
+
+  return {
+    tick: asInt(stateRaw['tick'], `${path}.tick`),
+    seed: asInt(stateRaw['seed'], `${path}.seed`),
+    difficulty: parseDifficulty(stateRaw['difficulty'], `${path}.difficulty`),
+    climate: parseClimate(stateRaw['climate'], `${path}.climate`),
+    inflation: asBoolean(stateRaw['inflation'], `${path}.inflation`),
+    emissions: asBoolean(stateRaw['emissions'], `${path}.emissions`),
+    // The two 8.4 rules of M15. Required, like every other world rule: a save
+    // that has lost one is a save whose trains would drive somewhere else.
+    occupancyPenalty: asBoolean(stateRaw['occupancyPenalty'], `${path}.occupancyPenalty`),
+    signalPenalty: asBoolean(stateRaw['signalPenalty'], `${path}.signalPenalty`),
+    roadCongestion: asBoolean(stateRaw['roadCongestion'], `${path}.roadCongestion`),
+    mapSize,
+    rng: parseRngState(stateRaw['rng'], `${path}.rng`),
+    companies: parseCompanies(stateRaw['companies'], `${path}.companies`),
+    map: parseTileMap(stateRaw['map'], `${path}.map`, mapSize),
+    towns: parseTowns(stateRaw['towns'], `${path}.towns`),
+    industries: parseIndustries(stateRaw['industries'], `${path}.industries`),
+    stations: decodeStations(stateRaw['stations'], `${path}.stations`),
+    vehicles: decodeVehicles(stateRaw['vehicles'], `${path}.vehicles`),
+    lines: decodeLines(stateRaw['lines'], `${path}.lines`),
+    cargoLinks: parseCargoLinks(stateRaw['cargoLinks'], `${path}.cargoLinks`),
+    news: parseNews(stateRaw['news'], `${path}.news`),
+    contracts: parseContracts(stateRaw['contracts'], `${path}.contracts`),
+    nextContractId: asInt(stateRaw['nextContractId'], `${path}.nextContractId`),
+    ai: parseAi(stateRaw['ai'], `${path}.ai`),
+  };
+}
+
+/** Strictly validate a payload that has already been migrated to SAVE_VERSION. */
 export function parseSaveFile(value: unknown): SaveFile {
   const raw = asRecord(value, 'save');
   const header = readSaveHeader(raw);
@@ -959,45 +1149,7 @@ export function parseSaveFile(value: unknown): SaveFile {
     );
   }
 
-  const stateRaw = asRecord(raw['state'], 'save.state');
-  // The validator guards against corrupt data, not against menu choices: it
-  // accepts any square power-of-two map, which keeps small test worlds loadable
-  // while still rejecting a size that would make the layer lengths nonsense.
-  const mapSize = asInt(stateRaw['mapSize'], 'save.state.mapSize');
-  if (mapSize < 64 || mapSize > 2048 || (mapSize & (mapSize - 1)) !== 0) {
-    throw new SaveFormatError(
-      `save.state.mapSize: ${mapSize} is not a power of two between 64 and 2048`,
-      'save.state.mapSize',
-    );
-  }
-
-  const state: WorldStateData = {
-    tick: asInt(stateRaw['tick'], 'save.state.tick'),
-    seed: asInt(stateRaw['seed'], 'save.state.seed'),
-    difficulty: parseDifficulty(stateRaw['difficulty'], 'save.state.difficulty'),
-    climate: parseClimate(stateRaw['climate'], 'save.state.climate'),
-    inflation: asBoolean(stateRaw['inflation'], 'save.state.inflation'),
-    emissions: asBoolean(stateRaw['emissions'], 'save.state.emissions'),
-    // The two 8.4 rules of M15. Required, like every other world rule: a save
-    // that has lost one is a save whose trains would drive somewhere else.
-    occupancyPenalty: asBoolean(stateRaw['occupancyPenalty'], 'save.state.occupancyPenalty'),
-    signalPenalty: asBoolean(stateRaw['signalPenalty'], 'save.state.signalPenalty'),
-    roadCongestion: asBoolean(stateRaw['roadCongestion'], 'save.state.roadCongestion'),
-    mapSize,
-    rng: parseRngState(stateRaw['rng'], 'save.state.rng'),
-    companies: parseCompanies(stateRaw['companies'], 'save.state.companies'),
-    map: parseTileMap(stateRaw['map'], 'save.state.map', mapSize),
-    towns: parseTowns(stateRaw['towns'], 'save.state.towns'),
-    industries: parseIndustries(stateRaw['industries'], 'save.state.industries'),
-    stations: decodeStations(stateRaw['stations'], 'save.state.stations'),
-    vehicles: decodeVehicles(stateRaw['vehicles'], 'save.state.vehicles'),
-    lines: decodeLines(stateRaw['lines'], 'save.state.lines'),
-    cargoLinks: parseCargoLinks(stateRaw['cargoLinks'], 'save.state.cargoLinks'),
-    news: parseNews(stateRaw['news'], 'save.state.news'),
-    contracts: parseContracts(stateRaw['contracts'], 'save.state.contracts'),
-    nextContractId: asInt(stateRaw['nextContractId'], 'save.state.nextContractId'),
-    ai: parseAi(stateRaw['ai'], 'save.state.ai'),
-  };
+  const state = parseWorldState(raw['state'], 'save.state');
 
   const tick = asInt(raw['tick'], 'save.tick');
   const seed = asInt(raw['seed'], 'save.seed');
@@ -1023,6 +1175,42 @@ export function parseSaveFile(value: unknown): SaveFile {
     );
   }
 
+  const replay = parseReplayClaim(raw['replay'], 'save.replay', tick);
+  // A replay holds the world at its BASE tick and the log that runs FORWARD
+  // from there, so the ring may reach past `state.tick` - up to the end the
+  // recording claims, and never past it.
+  const checkpoints = parseCheckpoints(
+    raw['checkpoints'],
+    'save.checkpoints',
+    replay === null ? tick : replay.finalTick,
+  );
+
+  const logBaseTick = asInt(raw['logBaseTick'], 'save.logBaseTick');
+  if (logBaseTick < 0 || logBaseTick > tick) {
+    throw new SaveFormatError(
+      `save.logBaseTick: ${logBaseTick} is outside 0..${tick}`,
+      'save.logBaseTick',
+    );
+  }
+  // A trimmed log begins at a world the file has to hold, or the recording
+  // starts from nothing (SPEC2 M16). Zero needs no checkpoint: the genesis of
+  // a game is reconstructible from the parameters the state carries.
+  if (logBaseTick > 0 && !checkpoints.some((entry) => entry.tick === logBaseTick)) {
+    throw new SaveFormatError(
+      `save.logBaseTick: the log starts at ${logBaseTick} but no checkpoint stands there`,
+      'save.logBaseTick',
+    );
+  }
+  for (let i = 0; i < commandLog.length; i++) {
+    if (commandLog[i]!.tick < logBaseTick) {
+      throw new SaveFormatError(
+        `save.commandLog[${i}].tick: ${commandLog[i]!.tick} is older than the log base ` +
+          `${logBaseTick}`,
+        `save.commandLog[${i}].tick`,
+      );
+    }
+  }
+
   return {
     magic: header.magic,
     saveVersion: header.saveVersion,
@@ -1033,5 +1221,8 @@ export function parseSaveFile(value: unknown): SaveFile {
     state,
     commandLog,
     commandsExecuted,
+    logBaseTick,
+    checkpoints,
+    replay,
   };
 }

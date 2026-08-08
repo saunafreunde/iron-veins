@@ -12,7 +12,7 @@ no entry below. A number may appear under several topics.
 
 - **Determinism, RNG & hashing:** D-001, D-002, D-003, D-004, D-009, D-010,
   D-024, D-093, D-106, D-128, D-137, D-142, D-145, D-146, D-149, D-153, D-178,
-  D-181, D-184, D-185
+  D-181, D-184, D-185, D-188
 - **Commands, snapshot & worker boundary:** D-004, D-005, D-006, D-011, D-032,
   D-100, D-111, D-145, D-146, D-148, D-162, D-174, D-176, D-179, D-187
 - **Lines & timetables:** D-145, D-146, D-147, D-148, D-149, D-150, D-151,
@@ -23,7 +23,7 @@ no entry below. A number may appear under several topics.
   D-141
 - **Save format, migrations & replays:** D-007, D-025, D-026, D-027, D-048,
   D-111, D-130, D-131, D-134, D-142, D-144, D-145, D-146, D-147, D-153, D-178,
-  D-181, D-184, D-185
+  D-181, D-184, D-185, D-188
 - **Rail & track:** D-042, D-043, D-044, D-045, D-046, D-047, D-053, D-141,
   D-153, D-157, D-184
 - **Signals & reservations:** D-054, D-055, D-056, D-057, D-058, D-059, D-060,
@@ -56,7 +56,7 @@ no entry below. A number may appear under several topics.
   D-030, D-031, D-160, D-168, D-169, D-170, D-172, D-175
 - **Crash safety:** D-132, D-139
 - **Testing method & fixtures:** D-010, D-038, D-072, D-074, D-084, D-133,
-  D-167, D-183, D-186
+  D-167, D-183, D-186, D-188
 - **Process & specification:** D-070, D-123, D-129, D-133, D-138, D-140,
   D-185
 
@@ -6019,3 +6019,145 @@ on the monthly books (`postMonthly`, one pass over the fleet), both outside
 chunk bake 0.48, particles 0.29, aspect 0.03, emissive 0.06, flow prep 0.29 ms);
 flow export median 0.055 ms; the big save is unchanged at 187,272 B and reads
 back in 604 ms.
+
+## M16 - the proof chain: the `.ironreplay` format and the checkpoint ring
+
+### D-188 The checkpoint ring is one mechanism for three jobs, its payload is a compressed world verified when it is restored, and the base entry is never evicted
+
+SPEC2 M16 asks for a replay format and a checkpoint ring "alle 72.000 Ticks",
+and it is explicit that ONE mechanism has to serve three jobs: scrubbing, tail
+verification and log compaction. That sentence is the whole design brief, and
+following it literally is what makes the milestone small.
+
+**Save format 27 is a CONTAINER-only bump, the third of its kind.** Three
+fields join the container beside the digest and the command log:
+`checkpoints`, the ring itself; `logBaseTick`, the tick from which the retained
+log is complete; and `replay`, the claim a `.ironreplay` makes about where the
+recording ends. Not one byte of the hashed world state moves - `v26_to_v27`
+spreads the container and passes `state` through BY REFERENCE, exactly as
+`v22_to_v23` did (D-130), and the evidence is unusually direct: the corpus
+manifest re-recorded with every world hash unchanged (`17f7f507023b91d8` for
+all six fixtures, v22 through v27), and the canonical cross-OS pin re-recorded
+under the D-137 protocol to the SAME hash `50c7d6a38f6da052`, with only its
+`saveVersion` field moving from 26 to 27. Two tests hold that line for good: a
+version 26 container around today's state decodes to an identical hash, and the
+migration hands back the very state object it was given.
+
+**The ring is history, not state, so it is not hashed - and that is Z2's
+question answered rather than dodged.** Z2 makes every world RULE a saved,
+hashed, migrated field, because a rule outside the digest is a rule two
+machines can disagree about silently. A checkpoint is not a rule and not a
+present fact: it is a recording of a past the world has already left, which is
+exactly the family the command log belongs to and exactly why the log has never
+been hashed either (D-131: the log is history, and replay verification rather
+than the world digest is what judges it). Nothing in `src/sim` reads a
+checkpoint to decide anything - restoring one REPLACES the world rather than
+informing it - so Z4 is not engaged either. The field audit
+(`saveFieldCoupling.spec.ts`) enforces exactly this and no more: the new leaves
+are parsed and refused when missing, the ticks and digests are validated by
+shape, and the only two entries added to the UNHASHED allowlist are
+`checkpoints[].payload` and `replay.finalTick`, each with the reason it is
+there. A stale allowlist entry fails the audit, so those two reasons cannot rot
+into fiction.
+
+**A checkpoint carries its own digest and is verified when it is RESTORED, not
+when the file is opened.** The alternative - decoding every payload at load
+time - would charge every load for a jump nobody asked for: sixteen world
+states decompressed and hashed to open one save. So the parser checks the
+ring's SHAPE (year boundaries, ascending, inside the recording, a digest that
+looks like one, a non-empty payload) and `restoreCheckpoint` checks the
+substance: the payload decodes, the world stands at the tick the entry claims,
+and it hashes to the digest the entry recorded - otherwise
+`SaveCorruptionError`, the same word D-130 gave a file that disagrees with
+itself.
+
+**The payload is compressed at record time, because that is what makes the ring
+affordable.** Sixteen LIVE world states of a 1024 map are hundreds of megabytes
+of Int16 and Uint8 layers; sixteen compressed ones are single-digit megabytes.
+Measured on the 25-year AI game (256 map, three competitors, `world.toData()`
+through the save's own codec): one payload is **25,471 to 39,081 B compressed
+against 1,206,267 B of raw MessagePack**, and encoding it costs **24.5 to 41.3
+ms**. All 26 checkpoints of that quarter century together are **916,498 B
+(0.87 MiB)**; under a capacity of 16 the ring actually keeps the genesis plus
+the newest fifteen years, **566,367 B (0.54 MiB)**. On the 1024 reference world
+a checkpoint costs what an autosave costs - 187 kB, ~0.6 s to encode on the
+reference machine - once a game year, which is an hour of real time at 1x and
+three minutes at 20x. That is the honest price, it is the price the autosave
+already pays, and it is on the SAVE path: the tick is untouched, measured p50
+**1.494 ms** / p99 **2.684 ms** on the 1,500-vehicle fixture against the M10
+baseline 1.45 / 3.26, which is the M16 ledger row's "+0,00 ms" met.
+
+**`CHECKPOINT_RING_CAPACITY` is 16 entries in total, and the OLDEST is never
+evicted.** The three jobs disagree about how many to keep - tail verification
+wants one, scrubbing wants all of them, compaction wants few - so the number is
+a budget rather than a preference: sixteen game years of instant scrubbing for
+~0.6 MB on the AI world and ~3 MB on the biggest one the game ships, against an
+unbounded cost for keeping every year of a century (101 of them under
+`MAX_TICK`). A year older than the ring is still reachable; it is re-simulated
+from the nearest checkpoint below it, which is what a scrubber does between
+checkpoints anyway. What eviction may never take is entry ZERO: it is the tick
+the retained log hangs from, and dropping it would orphan every command before
+the second checkpoint. So `record` splices out index 1, and the parser refuses
+any file whose `logBaseTick` has no checkpoint standing at it.
+
+**Tick 0 is a year boundary, so the genesis of a game is a checkpoint like any
+other.** That one arithmetic fact removes a whole special case: a replay's base
+state is the genesis checkpoint, so "replay this game from its first day" is a
+DECODE rather than a reconstruction, and the container digest `decodeSave`
+already verifies covers it. A recording that predates the ring has no genesis
+checkpoint and never will, so `replayGenesis` rebuilds one from the parameters
+the world carries - seed, map size, climate, difficulty and every world rule
+are saved state, and `World.create` over them reproduces the first tick
+exactly, the same reproduction the determinism suite has relied on since M0.
+Two parameters are NOT separately saved and are read off the world as it
+stands: the player company's name and its colour, either of which a command may
+have changed since. That is a real soft spot, and it is bounded by D-131: a
+recording that needs the reconstruction is a recording from another save
+version, and verifying one of those is refused before a single command is read.
+The reconstruction is a playback affordance, never evidence.
+
+**A replay is the save container with three things settled, not a second
+format.** `.ironreplay` carries the world at `logBaseTick`, `commandsExecuted =
+0`, and a `ReplayClaim` of `{finalTick, finalHash}`. The zero forces the state
+to be the BASE rather than the final one, and that is not a stylistic choice: a
+queue whose head is 0 while the world stands at the final tick would find every
+command in the log due at once and re-run the whole game inside one tick. One
+container also means one parser and one migration chain - a second format would
+be a second parser, and a second parser falls silently behind the command set,
+which is the exact defect D-133 removed from the determinism runner.
+
+**"Trim the log before the last checkpoint" is a legal save variant, one-way
+and never automatic.** `trimLogAtCheckpoint` drops the log entries and the ring
+entries before a checkpoint and records the new base on both sides, which is
+what finally bounds the log growth the M10 audit flagged as unbounded. It is
+offered, never applied behind the player's back, because the price of the bound
+is that the game can no longer be replayed from its first day - and a file that
+has forgotten where its log starts cannot be replayed honestly at all.
+`CommandQueue` therefore grew a `baseTick`, a `trimBefore` and a `seekToTick`;
+`trimBefore` deliberately does NOT reset the sequence counter, because a number
+a trimmed entry already used would make two commands of one recording
+indistinguishable. Measured on a two-year fixture: 44,304 B kept whole against
+23,494 B compacted to a single checkpoint, and the compacted save loads and
+runs on to a hash identical to the untrimmed one's.
+
+**Verification refuses before it reads, and locates a divergence to the year.**
+`verifyReplay` asks `replayRefusal` first: the pair `{gameVersion,
+SAVE_VERSION}` must match this build exactly, or a `ReplayVersionError` names
+BOTH versions and nothing is simulated (E-11, D-131, Fehlerkatalog 38). When it
+may judge, it re-simulates from the cheapest honest start and compares at every
+checkpoint on the way AND at the final tick - each checkpoint is a hash the
+recording committed to, so a manipulated log is reported as a first DIVERGENT
+TICK rather than as a verdict. The ring is the granularity; narrowing further
+inside a year is a bisection over the same mechanism, which is what the replay
+browser can build on. Both halves are tested with a deliberately manipulated
+log: a doubled loan at tick 0 is named at the year checkpoint, a tampered
+repayment after the last checkpoint is named at the final tick.
+
+**Where the ring is filled.** `SimWorker` owns it beside the command log and
+calls `record` after every STEP rather than once per frame - a frame runs up to
+40 ticks, and a year boundary inside one of them is still a year boundary -
+plus once when a world is created, restarted or adopted from a file. `record`
+is idempotent by tick, so adopting a world that stands exactly on a boundary
+can only ever ADD the checkpoint the file lacked. None of it lives inside
+`World.step`: encoding a world allocates, and law #7 does not bend for a
+recording.
