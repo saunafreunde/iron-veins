@@ -34,7 +34,8 @@ no entry below. A number may appear under several topics.
 - **Stations & catchment:** D-049, D-080, D-095, D-150, D-159, D-178, D-179,
   D-208, D-210
 - **Cargo, payment & routing:** D-036, D-037, D-065, D-067, D-075, D-077,
-  D-078, D-118, D-142, D-151, D-176, D-178, D-187, D-207, D-211, D-213
+  D-078, D-118, D-142, D-151, D-176, D-178, D-187, D-207, D-211, D-213,
+  D-215
 - **Industry & production:** D-022, D-062, D-063, D-064, D-069, D-071, D-079,
   D-085, D-086, D-174, D-201, D-202, D-205
 - **Towns, council & ownership:** D-101, D-102, D-103, D-104, D-205, D-207,
@@ -43,7 +44,8 @@ no entry below. A number may appear under several topics.
   D-180, D-193, D-196
 - **Balancing & scenarios:** D-038, D-039, D-040, D-041, D-066, D-087, D-088,
   D-116, D-151, D-152, D-156, D-158, D-159, D-187, D-190, D-194, D-195,
-  D-196, D-197, D-198, D-199, D-200, D-203, D-204, D-207, D-211, D-213
+  D-196, D-197, D-198, D-199, D-200, D-203, D-204, D-207, D-211, D-213,
+  D-215
 - **Vehicles & fleet:** D-043, D-044, D-045, D-068, D-076, D-089, D-093,
   D-096, D-142, D-143, D-145, D-146, D-155, D-157, D-171, D-174, D-181, D-185,
   D-201, D-207
@@ -68,9 +70,9 @@ no entry below. A number may appear under several topics.
 - **Testing method & fixtures:** D-010, D-038, D-072, D-074, D-084, D-133,
   D-167, D-183, D-186, D-188, D-189, D-190, D-191, D-192, D-193, D-194,
   D-195, D-196, D-197, D-198, D-199, D-200, D-201, D-202, D-203, D-204,
-  D-205, D-207, D-206, D-208, D-209, D-210, D-212, D-213
+  D-205, D-207, D-206, D-208, D-209, D-210, D-212, D-213, D-215
 - **Process & specification:** D-070, D-123, D-129, D-133, D-138, D-140,
-  D-185, D-191, D-197, D-198, D-199, D-203, D-204, D-205, D-206
+  D-185, D-191, D-197, D-198, D-199, D-203, D-204, D-205, D-206, D-215
 
 ---
 
@@ -10426,3 +10428,185 @@ browser rasterises. Two residuals are named rather than hidden: the grain is
 per (terrain, slope) and therefore REPEATS - at zoom 4 the same tufts stand on
 every grass tile, and only the tint tells two tiles apart - and water carries no
 value variance at all by the D-164 argument above.
+
+---
+
+## M19 - travellers with destinations, bundle 4: the close (2026-08-09)
+
+### D-215 Scenario 1 re-measured: the band held, and the one sentence the re-measurement broke
+
+SPEC2 M19's MUSS list ends with "Balance: Szenario 1 (Buslinie) neu vermessen -
+die Split-Konstanten gehoeren den Tests", and its Fertig-wenn ends with
+"Balance-Szenario 1 im Band bleibt". This bundle is that measurement and
+nothing else: **no constant moved, no band moved, and no file under `src/`
+changed except one comment that was not true.**
+
+**Scenario 1 is the ONLY 19.4 world M19 could reach.** The other four
+hand-built worlds haul coal, planks and furniture; `passengerClassIndex`
+answers -1 for every cargo on them, so the class split, the gravitation and the
+return ledger are all dead code there. That is not an argument, it is why
+scenarios 2, 3, 4 and 6 come back to the euro below.
+
+**The band holds, comfortably: payback in game year 3 of a 2-4 year band.**
+Investment 21,200 EUR against a start capital of 500,000; balances by year
+485,738 / 494,144 / **501,718** / 509,262 / 515,863 / 520,024 EUR. Payback is
+the first year end at or above 500,000 and year three clears it by 1,718 EUR.
+
+**But the run is NOT identical to the pre-M19 run, and the bisect says which
+bundle did it.** Measured in a git worktree at four commits, same box, same
+hour:
+
+| build | balances by year (EUR) | payback |
+| --- | --- | --- |
+| pre-M19 (`5b0758a`) | 485,738 / 494,144 / 501,492 / 509,855 / 518,409 / 522,655 | year 3 |
+| M19 B1, the classes (`158d877`) | identical to the row above | year 3 |
+| M19 B2, gravitation (`c1a5b93`) | identical to the row above | year 3 |
+| M19 B3, return journeys (`1fc78da`) | 485,738 / 494,144 / 501,718 / 509,262 / 515,863 / 520,024 | year 3 |
+
+So **D-207 and D-211 are inert on this scenario to the digit** - exactly what
+both entries claimed - and **D-213 is not**, which is exactly what it claimed to
+be.
+
+**Why the two inert bundles really are inert, checked rather than repeated.**
+`placeTown` writes `BuildingKind.Residential` and nothing else, so every stop
+here is 100 % residential: `commercialShare` is 0 at both stations, not one
+`BusinessPax` unit is ever produced, carried or delivered, and the retired
+`Cargo.Passengers` id is delivered zero times. The commuter row IS the retired
+row (D-207), so the fare M6 calibrated is unmoved. Gravitation normalises over
+a candidate set that has exactly one member here, so the mass cancels. All of
+that is now asserted in `tests/balance/busline.spec.ts` rather than reasoned
+about, together with a positive control - the commuter trade must be non-empty
+- so the three zeroes can never go vacuous by the line simply carrying nobody.
+
+**What D-213 costs this line, measured.** Six-year net profit 22,655 ->
+**20,024 EUR**, i.e. **-11.6 %**; vehicle revenue 9,473 -> **9,035 EUR/year**
+(**-4.6 %**) at an upkeep of 1,760 EUR/year in both builds. The year the band
+actually reads got SAFER, not tighter: year three clears the payback line by
+1,718 EUR against 1,492 before.
+
+**And the return traffic itself is far too small to have paid for that, which
+is the finding.** The ledger after six years:
+
+| station | mean (units/month) | credited arrivals | return journeys | share |
+| --- | --- | --- | --- | --- |
+| Westheim | -5.551 | 32,519.40 | 36.68 | **0.113 %** |
+| Ostheim | +7.326 | 32,683.96 | 45.30 | **0.139 %** |
+
+Business class: exactly zero in every slot of both. Eighty-two units of return
+traffic against 65,203 arrivals. At the line's own ~0.85 EUR per delivered unit
+those eighty-two units are worth about **70 EUR** of gross revenue over six
+years, against a swing of **2,631 EUR** - a factor of 37 - and their sign is
+wrong for a deficit anyway, because a return journey ADDS a fare rather than
+removing one. **The deficit is therefore not the return journeys' economics; it
+is two buses re-phased.** The visible half of that: Ostheim goes from 2 to 3
+visits per 20 days, its rating from 54 to 59 and its queue from 309 to 161
+units, while Westheim's rating stays 57 and its queue moves 309 -> 286. A
+two-bus line whose station rating gates the town's own offer over a 20-day
+window is a feedback loop, and D-203 measured the same chaos on one coal train.
+
+**No re-band, and that is the point.** The rule of this project is that a
+balancing test owns its constants; the corollary nobody writes down is that a
+test which is still IN ITS BAND owns nothing that needs changing. Scenario 1 is
+in band on the same payback year it has held since M2, with more margin in the
+year that decides it than before. `RETURN_TRIP_SHARE` stays 0.8, the commuter
+and business rows stay where D-207 put them, and the 2-4 year band stays what
+SPEC.md 19.4 wrote. **Nothing here rests on a re-band, so nothing here needs a
+bracketed SPEC2 note** (contrast D-158, D-204).
+
+**One shipped sentence WAS false and is corrected.** `src/sim/station/returns.ts`
+said, of the imbalance mean:
+
+> a station whose town already sends out as many travellers as arrive generates
+> NOTHING. Both stations of balancing scenario 1 are exactly that, so the bands
+> of section 19.4 are untouched by construction and not merely by measurement
+
+The second sentence is not true and the third does not follow. Both stations
+generate; the bands are untouched by MEASUREMENT, with margin. Two reasons, and
+D-213 already knew the second one without applying it here: the two towns are
+equal in POPULATION but the two stops are not equal in CATCHMENT (16 buildings
+against 22), and a mean taken over a MONTH cannot be zero on a line whose fleet
+clears a backlog in one month and falls behind in the next, whatever the two
+ends offer over a year. D-213's own test measured 0.009 % on a deliberately
+symmetric fixture and the conclusion was carried across to a world that is not
+symmetric; the measured share here is 13-15 times that.
+
+**The correction is a bound, not a better adjective.** `busline.spec.ts` now
+asserts the return share from both sides - strictly positive, so no future
+reader may re-derive "inert" from a green build, and under a 1 % tripwire, so a
+rule change that turns this line's return traffic into a real share of its
+business is a red build. The ceiling was read off this very run and the file
+says so in those words: measured 0.113 %/0.139 %, guarded at 1 %, on D-167's
+rule that a guard catches a regression of MULTIPLES rather than pinning a
+digit. The comment in `returns.ts` carries the measurement and the retraction.
+
+**Both new guards were falsified in the real source and the red build watched**
+(D-198's discipline). Dropping the ceiling to 0.1 % fails with "Westheim return
+share: expected 0.001127886687557964 to be less than 0.001" - the assertion
+reads the ledger this entry quotes, to the digit. Pointing the business-is-zero
+assertion at `CommuterPax` instead fails with 210.01 units waiting, so the three
+zeroes are a fact about the world and not a lookup that finds nothing. Both were
+reverted.
+
+**Everything else M19 could have moved, re-run rather than quoted.**
+
+- **The eight M17 scenarios hash-identically**: `tests/determinism/scenarios.spec.ts`
+  green, all eleven tests, including the save-and-load in the middle of one.
+- **Their briefing and place-name guards hold**: `tests/unit/shippedScenarios.spec.ts`
+  green, 53 tests - `SCENARIO_WORLD_CLAIMS` (D-197), `SCENARIO_BRIEFING_FIGURES`
+  (D-198) and `briefingTowns` (D-199) all still true of the worlds the seeds
+  make, and no shipped goal decides itself in a year of doing nothing.
+- **The M18 band holds to the digit**: hard winter **-4.36 %** (3,510,797 EUR
+  off against 3,357,840 harsh), per-seed 1.48-6.31 %, breakdowns +32.90 % in
+  Dec/Jan/Feb against +7.31 % in the other nine months, mean speed -4.94 %
+  against -2.97 % - D-204's numbers, re-measured, not copied.
+- **D-118 is green for both classes**: `deliveries.spec.ts` walks the chain
+  table, holds the commuter row against the retired row field for field, proves
+  business is 1.6x the fare at twice the decay beyond the same grace period,
+  and proves nothing carries the retired id.
+- **Draw-count invariance is untouched** (Z3): weather leaves the gameplay
+  stream in the identical state after a game month with the rule harsh and with
+  it off, and the instrumented count is unchanged - 512 reliable vehicles spend
+  exactly 512 words under all five skies, breakdowns clear 69 / rain 83 / storm
+  109 / frost 124 / heat 105, which is D-201's table to the unit. M19 added no
+  stochastic system at all: gravitation and return journeys use `+ - * /` only
+  and draw nothing.
+- **The rest of 19.4 and the shared worlds**: scenario 2 249,980 EUR and
+  payback year 6, scenario 3 159,516 EUR/yr, scenario 4 bankrupt in band,
+  scenario 6 month 25, Netzdesign 3.73 (alignment 2.01x, capacity 1.86x), takt
+  -8.3 % and 0.57, Punktzahl 5,889 with the 36/26/24/13 split and the dogleg
+  control at 7.8 % against 19.8 % (factor 2.55), scenario 5 road 978,528 / rail
+  90,230 / expansive 121,328 EUR, `aiGame` 538,469 / 101,636 / 20,792 EUR. All
+  twelve balance files green, every desync twin included.
+
+**Tick: no acceptance number, and this time the control prices the WHOLE
+milestone.** D-207, D-211 and D-213 each declined an acceptance figure because
+the perf gate was red on their baseline commit too. It still is, and the box
+still says why: eighteen `node` processes carrying 16,146 s of accumulated CPU
+while these runs were taken. Two interleaved pairs, the two sides being all of
+M19 against NONE of it (`5b0758a`, the commit before D-207):
+
+| | p50 | p99 |
+| --- | --- | --- |
+| M19 complete | 3.446 / 3.705 ms | 28.896 / 10.700 ms |
+| pre-M19 | 3.594 / 3.496 ms | 15.924 / 9.829 ms |
+
+Mean p50 3.576 against 3.545 - **+0.031 ms for the entire milestone** against
+the ledger's +0.10 ms budget line - and a p99 that scatters 9.8-28.9 ms with
+the sign flipping, which is the quantity D-167 describes as inflated by
+multiples under load. Both sides FAIL the 8 ms gate and both sit at 3.4-3.7 ms
+p50 against the 1.43-1.45 ms reference, so the gate's redness is the machine.
+**The M19 row in 6.1.1 therefore stands with these figures and says in its own
+words that they are not an acceptance measurement**; the clean-machine run is
+the one thing this milestone leaves owed, and it is named rather than
+manufactured.
+
+**Cost.** Zero sim behaviour, zero constants, zero save bump, zero migration
+edit, zero snapshot bytes, zero protocol fields, zero atlas cells, zero i18n
+strings, zero RNG draws. The only file under `src/` is a comment. Every pin is
+where D-213 left it - canonical `f04cebfeb26e8161`, corpus manifest
+`9800c136644b0199`, soak `856392bde0cd79bf` - because nothing hashed moved.
+Main chunk **951,284 B**, the digit D-214 measured an hour earlier, against its
+956,000 B budget: a comment does not survive minification and a spec file was
+never in the bundle, so **+0 B**, measured rather than assumed. `npm run
+typecheck`, `npm run lint` and `npm run build` clean; 127 test files and 1,533
+tests green. The perf suite is the documented exception above.

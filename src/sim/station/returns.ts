@@ -35,10 +35,20 @@ import type { Station } from './types';
  * journeys exist for - more travellers reach this place than set out from it,
  * so somebody has to go home - and it has three consequences worth having:
  *
- *  - a station whose town already sends out as many travellers as arrive
- *    generates NOTHING. Both stations of balancing scenario 1 are exactly
- *    that, so the bands of section 19.4 are untouched by construction and not
- *    merely by measurement (the D-201 device);
+ *  - a station whose town sends out as many travellers as arrive generates
+ *    NOTHING, so a route that is already balanced is very nearly a no-op.
+ *    **"Very nearly" is the honest word and this entry once said "exactly"**:
+ *    the first version of this comment claimed both stations of balancing
+ *    scenario 1 generate nothing and that the 19.4 bands were therefore
+ *    untouched BY CONSTRUCTION. They are not. Measured over that scenario's
+ *    six years (D-215): 36.68 and 45.30 units of return traffic against
+ *    32,519 and 32,684 arrivals - 0.113 % and 0.139 %. Its two towns are equal
+ *    in population but its two STOPS are not equal in catchment (16 buildings
+ *    against 22); and a mean over a MONTH cannot be zero on a line whose fleet
+ *    clears a backlog in one month and falls behind in the next, whatever the
+ *    two ends offer over a year. The band holds by MEASUREMENT with room to
+ *    spare - payback still in game year 3 of a 2-4 year band - and
+ *    `tests/balance/busline.spec.ts` bounds the share instead of denying it;
  *  - the rule cannot inflate a route that is already balanced, which averaging
  *    the arrivals alone would: every arrival would breed a return, every
  *    return would breed another, and the traffic on a shuttle would settle at

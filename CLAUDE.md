@@ -177,6 +177,12 @@ rewrites nothing - the cached-rm is what forces the re-checkout.
   scenario measures 159,516 EUR/yr and did so BEFORE that bundle too, verified
   by running it in a worktree at the previous commit. The band never moved.)
 
+  **Scenario 1 is the only row a passenger rule can reach**, and M19 did reach
+  it: the band is unmoved at year 3 but the RUN is not the pre-M19 run, and
+  D-215 has the bisect, the arithmetic and the sentence it falsified. The other
+  four rows haul freight, so a passenger rule is dead code on them - which is
+  why they come back to the euro after every M19 bundle.
+
   Scenario 5 (an AI company alone on a 512 map, 25 years) is in the suite
   since M11 as `tests/balance/aiCompany.spec.ts`, on the band the economy
   actually pays (D-158): road personality 0.8-3.2 M plus a
@@ -1710,12 +1716,19 @@ rather than smoothed away - and bundle 5's +76 B are the new pure function
 and the derived constant, which cost a little more than the deleted
 twelve-entry table saved.
 
-## M19 - travellers with destinations: the two passenger classes
+## M19 - travellers with destinations: classes, gravitation, return journeys
 
-Bundle 1 of the milestone, and its ONE save bump (v29 -> v30, Z5). The
-passenger trade is two cargo ids now, and which one a stop sells depends on
-what its catchment is zoned as - the first economic use of the 13.1 zones.
-Zero snapshot bytes, zero atlas cells, two i18n strings.
+The milestone is complete, in four bundles and ONE save bump (v29 -> v30, Z5,
+spent by bundle 1 and extended in place by bundle 3). Speed finally becomes
+money for passengers: the trade is two cargo ids, a destination is weighted by
+the mass of the place at the far end, and a traveller who arrives goes home
+again. Zero snapshot bytes, zero atlas cells across all four bundles.
+**Balance scenario 1 was re-measured at the end and is in band** - payback in
+game year 3 of a 2-4 year band, no constant moved, no re-band (D-215).
+
+Bundle 1 - the classes, and the milestone's save bump. The passenger trade is
+two cargo ids now, and which one a stop sells depends on what its catchment is
+zoned as - the first economic use of the 13.1 zones. Two i18n strings.
 
 - **The classes are OWN ids, and `Cargo.Passengers` is RETIRED at id 0**
   (D-207, E-08). `CARGO_COUNT` 18 -> 20; nothing produces the old id,
@@ -1849,7 +1862,50 @@ Zero snapshot bytes, zero atlas cells, two i18n strings.
   non-empty and then exclude exactly it, so the exclusion can never go vacuous.
   Canonical pin `40be7d25b1a6a90f` -> **`f04cebfeb26e8161`**; the corpus
   manifest did NOT move (its world is station-less).
-- Still open in M19: the AI's own use of the classes.
+- **Scenario 1 is the only 19.4 world M19 could reach, and re-measuring it
+  broke one shipped sentence** (D-215, bundle 4 - the close). The other four
+  hand-built worlds haul coal, planks and furniture, where
+  `passengerClassIndex` answers -1 and all three rules are dead code. **The
+  band holds and nothing was re-banded**: payback in game year 3 of a 2-4 year
+  band, and the year that decides it clears the line by 1,718 EUR against 1,492
+  before. Bisected at four commits, one worktree: **B1 (classes) and B2
+  (gravitation) are digit-identical to the pre-M19 build** - `placeTown` writes
+  only `BuildingKind.Residential`, so `commercialShare` is 0, no business
+  traveller is ever made, and a single reachable destination normalises the
+  mass away - **and B3 (return journeys) is not.** The six-year run moves:
+  net profit 22,655 -> 20,024 EUR (-11.6 %), vehicle revenue 9,473 ->
+  9,035 EUR/yr (-4.6 %) at identical upkeep. **What moved it is not the
+  returns' own economics**: 36.68 and 45.30 units against 32,519 and 32,684
+  arrivals (0.113 % / 0.139 %) are worth about 70 EUR of gross revenue at this
+  line's ~0.85 EUR per unit, against a 2,631 EUR swing - a factor of 37, with
+  the wrong sign besides, since a return ADDS a fare. It is two buses re-phased
+  (Ostheim 2 -> 3 visits per 20 days, rating 54 -> 59, queue 309 -> 161), the
+  same chaos D-203 measured on one coal train. **The corrected sentence** is
+  `station/returns.ts`'s claim that both stations of this scenario generate
+  NOTHING and that the 19.4 bands are therefore untouched BY CONSTRUCTION: they
+  are untouched by MEASUREMENT, with margin. The two towns are equal in
+  population but their two STOPS are not equal in catchment (16 buildings
+  against 22), and a mean over a MONTH cannot be zero on a line whose fleet
+  clears a backlog in one month and falls behind in the next. `busline.spec.ts`
+  now bounds the share from both sides - strictly positive so nobody re-derives
+  "inert" from a green build, under a 1 % tripwire read off this run and
+  labelled as such. Also verified by running: the eight M17 scenarios
+  hash-identically with their briefing, figure and place-name guards; the M18
+  band at **-4.36 %**; D-118 for both classes; the Z3 draw-count invariance
+  (512 vehicles, 512 words under all five skies, breakdowns 69/83/109/124/105).
+  Zero sim behaviour, zero constants, zero pins moved.
+- **M19's tick acceptance number is the one thing the milestone leaves owed**,
+  and it is named rather than manufactured. The perf gate is red on the
+  BASELINE commit too - the box carried eighteen `node` processes throughout -
+  so B4 priced the WHOLE milestone against `5b0758a` instead: mean p50 3.576
+  against 3.545 ms, **+0.031 ms for all of M19** against a +0.10 ms budget
+  line, with p99 scattering 9.8-28.9 ms inside one commit. Both sides sit at
+  3.4-3.7 ms p50 against the 1.43-1.45 ms reference. A clean-machine run is
+  what closes 6.1.1's M19 row.
+- Still open in M19: the AI's own use of the classes. Its buses do carry both
+  (a refit decides the ORDER of boarding, not the seat), and the shared AI
+  worlds moved because of it - scenario 5 road 978,528 EUR, in band - but
+  nothing in the AI yet CHOOSES a class for a fast line.
 
 ## Still outstanding
 
