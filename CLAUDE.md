@@ -876,6 +876,43 @@ perf and environment notes above.
   (8 m) at every tile boundary, and per-arm lift needs 65 new cells and a new
   atlas page. `tests/unit/roadCell.spec.ts` rasterises the shipped cell and
   fails five of nine assertions on the old geometry.
+- **The ground stops being a polygon** (D-214, bundle 13, 2026-08-09). The
+  surface everything else stands on, measured first: `drawTerrainCell` put down
+  three flat fills and 22 identical speckles, and a cell is keyed by (terrain,
+  slope) and nothing else, so **630,421 flat land tiles - 85.5 % of the land**
+  drew the same pixels (grass 25.7 % of the map, rock 18.6 %, forest 16.5 %,
+  water 29.7 %). Three defects, all measurable. **The seam**: neighbouring
+  diamonds abutted, so each covered half of every boundary pixel and the two
+  half-coverages composited to three quarters - up to **25 % of the background**
+  as a lattice at every tile edge, D-212's arithmetic one layer down. Every face
+  is offset outwards by **0.75 design px** now, MITRED per edge (a radial scale
+  under-covers two thirds of every edge), BEVELLED at the 14-degree sliver where
+  two triangles of a folded slope meet, and **clipped** to the box both pages
+  reserve - clamping the corner vertex instead drags its two edges inwards and
+  measured as half the seal. After: **0 px outside the box**, and 10,000+ edge
+  samples on all sixteen slopes covered to the full bleed. **The light**: the
+  top face's shading was INVERTED against the very skirt drawn under it, and
+  the two diagonal slopes shaded exactly like flat ground. `ground.ts` SOLVES
+  the light from the three shades the cell has drawn since M1 (0.62 / 0.76 /
+  1.00 are three equations in three unknowns; the y component comes out zero,
+  so the light the artwork implied is fixed north-west), and a slope is TWO
+  triangles folded along the higher diagonal - **14 distinct signatures for
+  sixteen slopes against five values**, range 0.8385-1.0650 against 0.86-1.14,
+  flat still exactly 1.00. **The flatness**: seven grains, one per terrain
+  (tufts, furrows, scree, mottle, ripples, paving), every mark riding the
+  bilinear tile surface, every ink the face colour times a VALUE - never a hue,
+  16.3 is untouched. Batched one path per ink, so a cell fell from **25 paint
+  operations to 4-10** and a page from 4,000 to 1,100 while the artwork grew.
+  Per-tile variance is a grey TINT (±4 %, measured mean 0.99995) and not a
+  variant cell, because the page has 256 px of the 4,096 left; it is a pure
+  function of (x, y), so no chunk checksum learned about it. Water takes the
+  geometry and NOT the tint (D-164 owns its two hexes). The bake's contact
+  shadows were **verified in the pixels** (buildings 14-19 px at alpha <= 88,
+  industries 13-46, modules 43-80, trees 23-42, vehicles 91-96) and needed
+  nothing; the PROCEDURAL floor had none and now has `contactShadow`, on the
+  town and industry cells and deliberately not on the company-tinted boxes.
+  Zero sim bytes, zero atlas booking; main chunk +4,859 B, budget raised to
+  956,000 with that measurement.
 
 ## M14 - instruments: flow atlas, station x-ray, statistics, tooltips
 

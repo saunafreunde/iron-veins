@@ -56,6 +56,7 @@ import {
   type StaticZoomIndex,
 } from '../../src/render/staticArt';
 import type { BakedCell } from '../../src/render/bakedAtlas';
+import { groundValueTint } from '../../src/render/ground';
 import { coastEdgeMask, FOAM_EDGE_COUNT, foamVariant, isDeepWater } from '../../src/render/water';
 import { lampOffsetForRoadTile } from '../../src/render/emissive';
 import { CATENARY_RAIL_TYPE, catenaryMastOffset } from '../../src/render/catenary';
@@ -563,6 +564,10 @@ function rebuildProxy(
         continue;
       }
       place(`t${terrain}:${slope}`, world.x, world.y, drawOrder(x, y, height, DrawLayer.Ground));
+      // The ground's per-tile value tint rides the same pass in both real
+      // paths, so it rides this proxy too - folded into the sink so nothing
+      // optimises the hash away.
+      deepFold += groundValueTint(x, y) & 1;
 
       if (map.structure[index] !== 0) continue;
 
@@ -907,6 +912,10 @@ function chunkBakeProxy(
         continue;
       }
       place(`t${terrain}:${slope}`, world.x, world.y, drawOrder(x, y, height, DrawLayer.Ground));
+      // The ground's per-tile value tint rides the same pass in both real
+      // paths, so it rides this proxy too - folded into the sink so nothing
+      // optimises the hash away.
+      deepFold += groundValueTint(x, y) & 1;
 
       if (map.structure[index] !== 0) continue;
 

@@ -25,12 +25,7 @@ export interface IsoView {
 }
 
 /** Project a tile-space offset, lifted by `up` pixels. */
-export function project(
-  view: IsoView,
-  u: number,
-  v: number,
-  up = 0,
-): readonly [number, number] {
+export function project(view: IsoView, u: number, v: number, up = 0): readonly [number, number] {
   return [view.cx + (u - v) * view.halfW, view.cy + (u + v) * view.halfH - up];
 }
 
@@ -207,7 +202,12 @@ export function sawtoothRoof(
     if (spec.glassOnly !== true) {
       fill(
         ctx,
-        [p(-hu, v0, spec.base), p(hu, v0, spec.base), p(hu, v1, spec.base + spec.rise), p(-hu, v1, spec.base + spec.rise)],
+        [
+          p(-hu, v0, spec.base),
+          p(hu, v0, spec.base),
+          p(hu, v1, spec.base + spec.rise),
+          p(-hu, v1, spec.base + spec.rise),
+        ],
         shade(spec.colour, FACE_TOP),
       );
     }
@@ -495,11 +495,85 @@ export function windows(
 
       // Right face, running along v.
       const a = project(view, ou + hu, ov + along * spec.v, up);
-      ctx.fillRect(a[0] - view.halfW * 0.05, a[1] - view.halfH * 0.18, view.halfW * 0.1, view.halfH * 0.26);
+      ctx.fillRect(
+        a[0] - view.halfW * 0.05,
+        a[1] - view.halfH * 0.18,
+        view.halfW * 0.1,
+        view.halfH * 0.26,
+      );
 
       // Left face, running along u.
       const b = project(view, ou + along * spec.u, ov + hv, up);
-      ctx.fillRect(b[0] - view.halfW * 0.05, b[1] - view.halfH * 0.18, view.halfW * 0.1, view.halfH * 0.26);
+      ctx.fillRect(
+        b[0] - view.halfW * 0.05,
+        b[1] - view.halfH * 0.18,
+        view.halfW * 0.1,
+        view.halfH * 0.26,
+      );
     }
   }
+}
+
+/**
+ * Peak opacity of a procedural contact shadow. [0-1 alpha]
+ *
+ * The bake stamps its own at `SHADOW_ALPHA_MAX` = 88 of 255 = 0.345
+ * (tools/bake-lib.ts, D-170), and the procedural twin has to sit at the same
+ * darkness or a world without a bake would light differently from one with
+ * it. 0.30 is that figure minus the collar the two-diamond falloff below adds
+ * back at the rim.
+ */
+export const CONTACT_SHADOW_ALPHA = 0.3;
+
+/** How far the soft outer collar reaches past the footprint. [tiles] */
+export const CONTACT_SHADOW_MARGIN = 0.14;
+
+/**
+ * The dark patch a solid casts on the ground it stands on.
+ *
+ * Without it a procedural building is a box floating a few pixels above its
+ * own tile - the isometric illusion has no ground contact and the eye reads
+ * the sprite as a sticker. The bake has carried one per cell since D-170; the
+ * procedural fallback E-14 guarantees never did, and three industries
+ * (`CoalMine`, `OilWell`, `Farm`) are procedural in EVERY game by name
+ * (D-205), so this is not only the no-bake case.
+ *
+ * Two diamonds rather than a radial gradient: the falloff has to run from the
+ * FOOTPRINT outwards, which is the same thing D-170 measured and the reason
+ * its first centre-based ellipse produced nothing - over the body the
+ * geometry covers it, so only the collar is ever seen.
+ */
+export function contactShadow(
+  ctx: CanvasRenderingContext2D,
+  view: IsoView,
+  spec: {
+    readonly u: number;
+    readonly v: number;
+    readonly offsetU?: number;
+    readonly offsetV?: number;
+    readonly alpha?: number;
+  },
+): void {
+  const ou = spec.offsetU ?? 0;
+  const ov = spec.offsetV ?? 0;
+  const peak = spec.alpha ?? CONTACT_SHADOW_ALPHA;
+  for (const [margin, share] of [
+    [CONTACT_SHADOW_MARGIN * 2, 0.42],
+    [CONTACT_SHADOW_MARGIN, 1],
+  ] as const) {
+    const hu = spec.u / 2 + margin;
+    const hv = spec.v / 2 + margin;
+    ctx.globalAlpha = peak * share;
+    fill(
+      ctx,
+      [
+        project(view, ou - hu, ov - hv),
+        project(view, ou + hu, ov - hv),
+        project(view, ou + hu, ov + hv),
+        project(view, ou - hu, ov + hv),
+      ],
+      '#000000',
+    );
+  }
+  ctx.globalAlpha = 1;
 }

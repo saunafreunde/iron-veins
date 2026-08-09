@@ -54,8 +54,20 @@ const DIST = join(REPO_ROOT, 'dist');
  * The file on disk is a few hundred bytes heavier than the number vite prints
  * (the source-map comment); this measures the FILE, because that is what a
  * browser downloads.
+ *
+ * **Raised again for the ground bundle**, with the measurement beside it and
+ * the same rule: 946,301 B was D-212's tree and D-213 landed between the two
+ * (the 124 B of the difference); the ground's four render files
+ * (`ground.ts`, `TerrainAtlas.ts`, `MapView.ts`, `shapes.ts`) weigh
+ * **+4,859 B**, measured by reverting exactly those four in place and
+ * rebuilding (946,425 B against 951,284 B on the same tree, so the figure is
+ * clean of whatever else was in flight). Every byte of it is the terrain
+ * artwork - the light solver, the polygon offset, seven grain tables and the
+ * contact shadow - and NONE of it is an import of a `src/sim` module that
+ * decodes, serialises or steps the world, which is what this budget exists to
+ * catch. 956,000 is that measurement plus ~0.5 %.
  */
-const MAIN_CHUNK_BUDGET_BYTES = 950_000;
+const MAIN_CHUNK_BUDGET_BYTES = 956_000;
 
 /** The verdict, separated from the measuring so a planted size can be judged. */
 interface BudgetVerdict {

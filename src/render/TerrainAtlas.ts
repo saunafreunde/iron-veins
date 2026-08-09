@@ -1,7 +1,18 @@
 import { INDUSTRY_TYPE_COUNT } from '../sim/industry/types';
 import { SIGNAL_KIND_COUNT, SignalKind } from '../sim/map/signals';
-import { SlopeBit, SLOPE_COUNT, Terrain, TERRAIN_COUNT } from '../sim/map/terrain';
+import { SLOPE_COUNT, TERRAIN_COUNT } from '../sim/map/terrain';
 import { EMISSIVE_WINDOW_HEX } from './emissive';
+import {
+  GroundTexture,
+  groundSkirts,
+  groundSurfacePoint,
+  groundTextureFor,
+  groundTopFaces,
+  groundTopOutline,
+  SKIRT_SE_SHADE,
+  SKIRT_SW_SHADE,
+  slopeFaces,
+} from './ground';
 import { drawIndustry, drawIndustryEmissive, INDUSTRY_EMISSIVE_TYPES } from './industryArt';
 import {
   roofSnowFor,
@@ -10,7 +21,16 @@ import {
   snowedRoof,
   terrainLook,
 } from './seasonArt';
-import { box, catenaryMast, gableRoof, sawtoothRoof, shade, windows, type IsoView } from './shapes';
+import {
+  box,
+  catenaryMast,
+  contactShadow,
+  gableRoof,
+  sawtoothRoof,
+  shade,
+  windows,
+  type IsoView,
+} from './shapes';
 import { SIGNAL_ASPECT_COUNT, SIGNAL_ASPECT_TINTS, SignalAspect } from './signalAspects';
 import { FOAM_VARIANT_COUNT, WATER_FRAME_COUNT } from './water';
 
@@ -234,8 +254,6 @@ const CORNERS: ReadonlyArray<readonly [number, number]> = [
   [0, CELL_TOP + TILE_H / 2],
 ];
 
-const CORNER_BITS = [SlopeBit.North, SlopeBit.East, SlopeBit.South, SlopeBit.West];
-
 /**
  * Simple deterministic hash, used for the speckle pattern so the texture is
  * identical on every machine and every run.
@@ -254,7 +272,7 @@ function speckleHash(x: number, y: number, salt: number): number {
  * the first build share. Summer answers with the base tables of section 16.3,
  * which is why the atlas the game starts with is unchanged artwork.
  */
-function drawTerrainCell(
+export function drawTerrainCell(
   ctx: CanvasRenderingContext2D,
   originX: number,
   originY: number,
@@ -264,57 +282,259 @@ function drawTerrainCell(
 ): void {
   const look = terrainLook(terrain, stage);
   const base = look.colour;
-  const speckle = look.speckle;
+  const cx = originX + TILE_W / 2;
+  const cy = originY + CELL_TOP + TILE_H / 2;
 
-  const points = CORNERS.map(([cx, cy], index) => {
-    const raised = (slope & CORNER_BITS[index]!) !== 0;
-    return [originX + cx, originY + cy - (raised ? STEP : 0)] as const;
-  });
+  // The two walls under the tile, bled so the vertical hairline where two
+  // neighbouring skirts meet at a shared corner is covered from both sides.
+  // One height level is always enough, because no two neighbouring tiles
+  // differ by more than one level (see terrain.ts).
+  const skirts = groundSkirts(slope);
+  fillGroundPolygon(ctx, cx, cy, skirts[0]!, shade(base, SKIRT_SE_SHADE));
+  fillGroundPolygon(ctx, cx, cy, skirts[1]!, shade(base, SKIRT_SW_SHADE));
 
-  // Lambert-ish shading from the tilt: light comes from the north-west.
-  const lift = (index: number): number => ((slope & CORNER_BITS[index]!) !== 0 ? 1 : 0);
-  const tilt = lift(3) + lift(0) - lift(1) - lift(2);
-  const topFactor = 1 + tilt * 0.07;
-
-  // Side skirt: one height level is always enough, because no two neighbouring
-  // tiles differ by more than one level (see terrain.ts).
-  ctx.fillStyle = shade(base, 0.62);
-  ctx.beginPath();
-  ctx.moveTo(points[1]![0], points[1]![1]);
-  ctx.lineTo(points[2]![0], points[2]![1]);
-  ctx.lineTo(points[2]![0], points[2]![1] + STEP);
-  ctx.lineTo(points[1]![0], points[1]![1] + STEP);
-  ctx.closePath();
-  ctx.fill();
-
-  ctx.fillStyle = shade(base, 0.76);
-  ctx.beginPath();
-  ctx.moveTo(points[2]![0], points[2]![1]);
-  ctx.lineTo(points[3]![0], points[3]![1]);
-  ctx.lineTo(points[3]![0], points[3]![1] + STEP);
-  ctx.lineTo(points[2]![0], points[2]![1] + STEP);
-  ctx.closePath();
-  ctx.fill();
-
-  ctx.fillStyle = shade(base, topFactor);
-  ctx.beginPath();
-  ctx.moveTo(points[0]![0], points[0]![1]);
-  for (let i = 1; i < 4; i++) ctx.lineTo(points[i]![0], points[i]![1]);
-  ctx.closePath();
-  ctx.fill();
-
-  // Speckles give the large flat areas some grain without a texture file.
-  ctx.fillStyle = speckle;
-  const count = terrain === Terrain.Water ? 6 : 22;
-  for (let i = 0; i < count; i++) {
-    const u = speckleHash(terrain * 31 + slope, i, 1);
-    const v = speckleHash(terrain * 31 + slope, i, 2);
-    // Barycentric-ish placement that keeps the dots inside the diamond.
-    const px = originX + TILE_W / 2 + (u - 0.5) * TILE_W * (1 - Math.abs(v - 0.5) * 2) * 0.9;
-    const py = originY + CELL_TOP + v * TILE_H;
-    ctx.fillRect(px, py, ATLAS_SCALE, ATLAS_SCALE);
+  // The top face: TWO triangles, each lit by its own normal under the one
+  // north-west light of ground.ts - except where the surface has no fold, in
+  // which case it is one polygon and no overlap is drawn at all.
+  const faces = slopeFaces(slope);
+  const texture = groundTextureFor(terrain);
+  if (faces.first === faces.second) {
+    pathGroundPolygon(ctx, cx, cy, groundTopOutline(slope));
+    ctx.save();
+    ctx.clip();
+    ctx.fillStyle = shade(base, faces.first);
+    ctx.fill();
+    drawGroundTexture(ctx, cx, cy, terrain, slope, texture, base, look.speckle, faces.first);
+    ctx.restore();
+    return;
+  }
+  const halves = groundTopFaces(slope);
+  for (let half = 0; half < 2; half++) {
+    const factor = half === 0 ? faces.first : faces.second;
+    pathGroundPolygon(ctx, cx, cy, halves[half]!);
+    ctx.save();
+    ctx.clip();
+    ctx.fillStyle = shade(base, factor);
+    ctx.fill();
+    drawGroundTexture(ctx, cx, cy, terrain, slope, texture, base, look.speckle, factor);
+    ctx.restore();
   }
 }
+
+/** Trace a ground polygon given in design px around the tile centre. */
+function pathGroundPolygon(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  points: readonly (readonly [number, number])[],
+): void {
+  ctx.beginPath();
+  ctx.moveTo(cx + points[0]![0] * ATLAS_SCALE, cy + points[0]![1] * ATLAS_SCALE);
+  for (let i = 1; i < points.length; i++) {
+    ctx.lineTo(cx + points[i]![0] * ATLAS_SCALE, cy + points[i]![1] * ATLAS_SCALE);
+  }
+  ctx.closePath();
+}
+
+function fillGroundPolygon(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  points: readonly (readonly [number, number])[],
+  colour: string,
+): void {
+  pathGroundPolygon(ctx, cx, cy, points);
+  ctx.fillStyle = colour;
+  ctx.fill();
+}
+
+/**
+ * Grain marks per texture kind, all in DESIGN px so the detail page's 2x
+ * context scale reproduces them rather than resampling them.
+ *
+ * Every mark rides the bilinear tile surface through `groundSurfacePoint`, so
+ * a furrow climbs a hillside instead of floating across it, and every ink is
+ * the FACE colour multiplied by a value factor - never a new hue, because
+ * SPEC.md 16.3 fixes the ten terrain tones and a grain that shifted the hue
+ * would be inventing an eleventh.
+ *
+ * The caller has already clipped to the face, so a mark that overshoots the
+ * diamond costs a clipped pixel and never a wrong one.
+ */
+function drawGroundTexture(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  terrain: number,
+  slope: number,
+  texture: GroundTexture,
+  base: string,
+  speckleHex: string,
+  face: number,
+): void {
+  const px = ATLAS_SCALE;
+  const salt = terrain * 31 + slope;
+  const at = (u: number, v: number): readonly [number, number] => {
+    const point = groundSurfacePoint(slope, u, v);
+    return [cx + point[0] * px, cy + point[1] * px];
+  };
+  const ink = (factor: number): string => shade(base, face * factor);
+
+  if (texture === GroundTexture.Furrow) {
+    // Ploughed farmland: parallel lines along the tile's +x axis, a dark
+    // furrow with its own lit ridge just above it. Four segments each, so the
+    // line follows the surface over a slope.
+    ctx.lineCap = 'butt';
+    for (const [offset, factor, width] of [
+      [0, 0.9, 0.9],
+      [-1.1, 1.07, 0.7],
+    ] as const) {
+      ctx.strokeStyle = ink(factor);
+      ctx.lineWidth = width * px;
+      ctx.beginPath();
+      for (let row = 0; row < FURROW_ROWS; row++) {
+        const v = (row + 0.5) / FURROW_ROWS;
+        for (let step = 0; step <= 4; step++) {
+          const [x, y] = at(step / 4, v);
+          if (step === 0) ctx.moveTo(x, y + offset * px);
+          else ctx.lineTo(x, y + offset * px);
+        }
+      }
+      ctx.stroke();
+    }
+    return;
+  }
+
+  if (texture === GroundTexture.Ripple) {
+    // Drifted sand and snow: long shallow dashes along +x, low contrast.
+    ctx.lineCap = 'round';
+    ctx.lineWidth = 0.8 * px;
+    for (const parity of [0, 1]) {
+      ctx.strokeStyle = ink(parity === 0 ? 0.94 : 1.05);
+      ctx.beginPath();
+      for (let i = parity; i < RIPPLE_COUNT; i += 2) {
+        const v = speckleHash(salt, i, 11);
+        const u = speckleHash(salt, i, 12) * 0.6;
+        const length = 0.18 + 0.16 * speckleHash(salt, i, 13);
+        const from = at(u, v);
+        const to = at(Math.min(1, u + length), Math.min(1, v + length * 0.15));
+        ctx.moveTo(from[0], from[1]);
+        ctx.lineTo(to[0], to[1]);
+      }
+      ctx.stroke();
+    }
+    return;
+  }
+
+  if (texture === GroundTexture.Paving) {
+    // Made ground: a faint rectilinear joint grid, both tile axes.
+    ctx.lineCap = 'butt';
+    ctx.lineWidth = 0.7 * px;
+    ctx.strokeStyle = ink(0.93);
+    ctx.beginPath();
+    for (let line = 1; line < PAVING_LINES; line++) {
+      const t = line / PAVING_LINES;
+      for (const along of [true, false]) {
+        const from = along ? at(0, t) : at(t, 0);
+        const to = along ? at(1, t) : at(t, 1);
+        ctx.moveTo(from[0], from[1]);
+        ctx.lineTo(to[0], to[1]);
+      }
+    }
+    ctx.stroke();
+    return;
+  }
+
+  if (texture === GroundTexture.Scree) {
+    // Broken rock and shingle: angular chips, each with a lit top edge, in
+    // two sizes so the surface has a grain size rather than a dot pitch.
+    for (const lit of [false, true]) {
+      ctx.fillStyle = ink(lit ? 1.09 : 0.88);
+      ctx.beginPath();
+      for (let i = 0; i < SCREE_COUNT; i++) {
+        const big = speckleHash(salt, i, 23) > 0.62;
+        const w = (big ? 2.6 : 1.5) * px;
+        const h = (big ? 1.3 : 0.8) * px;
+        const [x, y] = at(speckleHash(salt, i, 21), speckleHash(salt, i, 22));
+        if (lit) ctx.rect(x - w / 2, y - h, w * 0.7, h * 0.5);
+        else ctx.rect(x - w / 2, y - h / 2, w, h);
+      }
+      ctx.fill();
+    }
+    return;
+  }
+
+  if (texture === GroundTexture.Mottle) {
+    // Woodland floor under the canopy: broad low-contrast patches, coarser
+    // and fewer than a tuft, so a forest reads as a mass rather than a lawn.
+    for (const lit of [false, true]) {
+      ctx.fillStyle = ink(lit ? 1.08 : 0.9);
+      ctx.beginPath();
+      for (let i = 0; i < MOTTLE_COUNT; i++) {
+        if ((i % 3 === 0) !== lit) continue;
+        const w = (3.4 + 2.6 * speckleHash(salt, i, 33)) * px;
+        const [x, y] = at(speckleHash(salt, i, 31), speckleHash(salt, i, 32));
+        ctx.moveTo(x + w / 2, y);
+        ctx.ellipse(x, y, w / 2, w / 4.4, 0, 0, Math.PI * 2);
+      }
+      ctx.fill();
+    }
+    return;
+  }
+
+  if (texture === GroundTexture.Tuft) {
+    // Grass and marsh: short blades leaning against the light, each with a
+    // lit tip, plus the old speckle grain underneath them.
+    ctx.fillStyle = speckleHex;
+    ctx.beginPath();
+    for (let i = 0; i < TUFT_SPECKLES; i++) {
+      const [x, y] = at(speckleHash(salt, i, 41), speckleHash(salt, i, 42));
+      ctx.rect(x, y, px, px);
+    }
+    ctx.fill();
+    ctx.fillStyle = ink(0.88);
+    ctx.beginPath();
+    for (let i = 0; i < TUFT_COUNT; i++) {
+      const height = (1.6 + 1.3 * speckleHash(salt, i, 45)) * px;
+      const lean = (speckleHash(salt, i, 46) - 0.5) * 1.4 * px;
+      const [x, y] = at(speckleHash(salt, i, 43), speckleHash(salt, i, 44));
+      ctx.moveTo(x - 0.5 * px, y);
+      ctx.lineTo(x + 0.5 * px, y);
+      ctx.lineTo(x + lean, y - height);
+      ctx.closePath();
+    }
+    ctx.fill();
+    ctx.fillStyle = ink(1.1);
+    ctx.beginPath();
+    for (let i = 0; i < TUFT_COUNT; i += 3) {
+      const height = (1.6 + 1.3 * speckleHash(salt, i, 45)) * px;
+      const lean = (speckleHash(salt, i, 46) - 0.5) * 1.4 * px;
+      const [x, y] = at(speckleHash(salt, i, 43), speckleHash(salt, i, 44));
+      ctx.rect(x + lean - 0.4 * px, y - height, 0.8 * px, 0.7 * px);
+    }
+    ctx.fill();
+    return;
+  }
+
+  // Speckle: the pre-M13 grain, kept for the water row nothing draws from.
+  ctx.fillStyle = speckleHex;
+  ctx.beginPath();
+  for (let i = 0; i < SPECKLE_COUNT; i++) {
+    const [x, y] = at(speckleHash(salt, i, 1), speckleHash(salt, i, 2));
+    ctx.rect(x, y, px, px);
+  }
+  ctx.fill();
+}
+
+/** Grain densities, one per texture kind. [marks per cell] */
+const FURROW_ROWS = 7;
+const RIPPLE_COUNT = 9;
+const PAVING_LINES = 5;
+const SCREE_COUNT = 20;
+const MOTTLE_COUNT = 13;
+const TUFT_COUNT = 22;
+const TUFT_SPECKLES = 14;
+const SPECKLE_COUNT = 6;
 
 /**
  * Static grain luminance of a water cell, as greys over the white top face.
@@ -348,52 +568,44 @@ function drawWaterCell(
   frame: number,
 ): void {
   const base = '#ffffff';
+  const cx = originX + TILE_W / 2;
+  const cy = originY + CELL_TOP + TILE_H / 2;
 
-  const points = CORNERS.map(([cx, cy], index) => {
-    const raised = (slope & CORNER_BITS[index]!) !== 0;
-    return [originX + cx, originY + cy - (raised ? STEP : 0)] as const;
-  });
+  const skirts = groundSkirts(slope);
+  fillGroundPolygon(ctx, cx, cy, skirts[0]!, shade(base, SKIRT_SE_SHADE));
+  fillGroundPolygon(ctx, cx, cy, skirts[1]!, shade(base, SKIRT_SW_SHADE));
 
-  const lift = (index: number): number => ((slope & CORNER_BITS[index]!) !== 0 ? 1 : 0);
-  const tilt = lift(3) + lift(0) - lift(1) - lift(2);
-  const topFactor = 1 + tilt * 0.07;
+  // `shade` clamps at white, so a face turned towards the light stays exactly
+  // white and the tint reproduces the 16.3 hex; one turned away darkens as
+  // every terrain cell does. The same two-triangle split and the same seam
+  // bleed as the land, because water is 29.7 % of a default map and the
+  // hairline lattice was just as visible on it.
+  const faces = slopeFaces(slope);
+  if (faces.first === faces.second) {
+    fillGroundPolygon(ctx, cx, cy, groundTopOutline(slope), shade(base, faces.first));
+  } else {
+    const halves = groundTopFaces(slope);
+    fillGroundPolygon(ctx, cx, cy, halves[0]!, shade(base, faces.first));
+    fillGroundPolygon(ctx, cx, cy, halves[1]!, shade(base, faces.second));
+  }
 
-  ctx.fillStyle = shade(base, 0.62);
-  ctx.beginPath();
-  ctx.moveTo(points[1]![0], points[1]![1]);
-  ctx.lineTo(points[2]![0], points[2]![1]);
-  ctx.lineTo(points[2]![0], points[2]![1] + STEP);
-  ctx.lineTo(points[1]![0], points[1]![1] + STEP);
-  ctx.closePath();
-  ctx.fill();
+  const at = (u: number, v: number): readonly [number, number] => {
+    const point = groundSurfacePoint(slope, u, v);
+    return [cx + point[0] * ATLAS_SCALE, cy + point[1] * ATLAS_SCALE];
+  };
 
-  ctx.fillStyle = shade(base, 0.76);
-  ctx.beginPath();
-  ctx.moveTo(points[2]![0], points[2]![1]);
-  ctx.lineTo(points[3]![0], points[3]![1]);
-  ctx.lineTo(points[3]![0], points[3]![1] + STEP);
-  ctx.lineTo(points[2]![0], points[2]![1] + STEP);
-  ctx.closePath();
-  ctx.fill();
-
-  // `shade` clamps at white, so an up-tilted face stays exactly white and
-  // the tint reproduces the 16.3 hex; a down-tilted face darkens as every
-  // terrain cell does.
-  ctx.fillStyle = shade(base, topFactor);
-  ctx.beginPath();
-  ctx.moveTo(points[0]![0], points[0]![1]);
-  for (let i = 1; i < 4; i++) ctx.lineTo(points[i]![0], points[i]![1]);
-  ctx.closePath();
-  ctx.fill();
+  // The grain rides the tile surface now, so it is clipped to the diamond
+  // rather than kept inside it by a placement formula - a wide ripple near
+  // the east corner used to be the one thing that formula could not hold.
+  ctx.save();
+  pathGroundPolygon(ctx, cx, cy, groundTopOutline(slope));
+  ctx.clip();
 
   // The still grain: same count and placement scheme as the terrain cells,
   // identical across the three frames.
   ctx.fillStyle = WATER_SPECKLE_GREY;
   for (let i = 0; i < 6; i++) {
-    const u = speckleHash(slope, i, 1);
-    const v = speckleHash(slope, i, 2);
-    const px = originX + TILE_W / 2 + (u - 0.5) * TILE_W * (1 - Math.abs(v - 0.5) * 2) * 0.9;
-    const py = originY + CELL_TOP + v * TILE_H;
+    const [px, py] = at(speckleHash(slope, i, 1), speckleHash(slope, i, 2));
     ctx.fillRect(px, py, ATLAS_SCALE, ATLAS_SCALE);
   }
 
@@ -401,14 +613,13 @@ function drawWaterCell(
   // FRAME, so a row swap reads as light wandering over the surface.
   ctx.fillStyle = WATER_RIPPLE_GREY;
   for (let i = 0; i < WATER_RIPPLE_COUNT; i++) {
-    const u = speckleHash(slope * WATER_FRAME_COUNT + frame, i, 3);
+    const u = speckleHash(slope * WATER_FRAME_COUNT + frame, i, 3) * 0.8;
     const v = speckleHash(slope * WATER_FRAME_COUNT + frame, i, 4);
     const width = (4 + 4 * speckleHash(frame, i, 5)) * ATLAS_SCALE;
-    const px =
-      originX + TILE_W / 2 + (u - 0.5) * (TILE_W - width * 2) * (1 - Math.abs(v - 0.5) * 2) * 0.9;
-    const py = originY + CELL_TOP + v * TILE_H;
+    const [px, py] = at(u, v);
     ctx.fillRect(px - width / 2, py, width, ATLAS_SCALE);
   }
+  ctx.restore();
 }
 
 /**
@@ -681,6 +892,7 @@ function drawTownBuilding(
     // Residential: a house, taller and with more windows as the town grows.
     const height = (9 + grow * 7) * px;
     const w = 0.5 + grow * 0.06;
+    if (!emissiveOnly) contactShadow(ctx, view, { u: w, v: w * 0.78 });
     if (!emissiveOnly) box(ctx, view, { u: w, v: w * 0.78, height, colour: '#c9b79c' });
     windows(ctx, view, {
       u: w,
@@ -705,6 +917,7 @@ function drawTownBuilding(
     // Commercial: a flat block, all glass, and the tallest thing in a town.
     const height = (15 + grow * 12) * px;
     const w = 0.54 + grow * 0.05;
+    if (!emissiveOnly) contactShadow(ctx, view, { u: w, v: w * 0.86 });
     if (!emissiveOnly) box(ctx, view, { u: w, v: w * 0.86, height, colour: '#cfd4d8' });
     windows(ctx, view, {
       u: w,
@@ -728,6 +941,7 @@ function drawTownBuilding(
   // Industrial: a low shed with a north-light roof.
   const height = (8 + grow * 4) * px;
   const w = 0.62 + grow * 0.06;
+  if (!emissiveOnly) contactShadow(ctx, view, { u: w, v: w * 0.7 });
   if (!emissiveOnly) box(ctx, view, { u: w, v: w * 0.7, height, colour: '#9b968c' });
   sawtoothRoof(ctx, view, {
     u: w,
@@ -740,6 +954,19 @@ function drawTownBuilding(
     glassOnly: emissiveOnly,
   });
 }
+
+/**
+ * The hardstanding a procedural industry casts its contact shadow over.
+ * [tiles]
+ *
+ * Deliberately a YARD and not a per-type silhouette: every composition in
+ * `industryArt.ts` draws its mass inside 0.8 tiles and three of them already
+ * lay a 0.72 x 0.6 pad of their own, so one patch is honest for all
+ * seventeen. The per-model silhouette is the BAKE's job (D-170), and where a
+ * bake exists it is what draws (D-205) - this is the E-14 floor plus the
+ * three types that are procedural in every game by name.
+ */
+const INDUSTRY_YARD = { u: 0.62, v: 0.56 } as const;
 
 /** A simple isometric box, used for the tinted station and vehicle sprites. */
 function drawBox(
@@ -1250,17 +1477,14 @@ export function buildTerrainAtlas(): TerrainAtlas {
   // own colours, because a tint multiplies and would flatten a coal heap and a
   // chimney to the same shade.
   for (let type = 0; type < INDUSTRY_TYPE_COUNT; type++) {
-    drawIndustry(
-      ctx,
-      {
-        cx: type * CELL_W + TILE_W / 2,
-        cy: INDUSTRY_ROW * CELL_H + CELL_TOP + TILE_H / 2,
-        halfW: TILE_W / 2,
-        halfH: TILE_H / 2,
-      },
-      type,
-      { px: ATLAS_SCALE },
-    );
+    const view: IsoView = {
+      cx: type * CELL_W + TILE_W / 2,
+      cy: INDUSTRY_ROW * CELL_H + CELL_TOP + TILE_H / 2,
+      halfW: TILE_W / 2,
+      halfH: TILE_H / 2,
+    };
+    contactShadow(ctx, view, INDUSTRY_YARD);
+    drawIndustry(ctx, view, type, { px: ATLAS_SCALE });
   }
   for (const spec of BOX_SPRITES) {
     drawBox(
@@ -1532,18 +1756,16 @@ function detailCellSpecs(stage: SeasonStage = SeasonStage.Summer): readonly Deta
       key: `i${type}`,
       tall: true,
       seasonJob: SEASON_JOB_NONE,
-      draw: (ctx) =>
-        drawIndustry(
-          ctx,
-          {
-            cx: TILE_W / 2,
-            cy: CELL_TOP + TILE_H / 2,
-            halfW: TILE_W / 2,
-            halfH: TILE_H / 2,
-          },
-          type,
-          { px: ATLAS_SCALE },
-        ),
+      draw: (ctx) => {
+        const view: IsoView = {
+          cx: TILE_W / 2,
+          cy: CELL_TOP + TILE_H / 2,
+          halfW: TILE_W / 2,
+          halfH: TILE_H / 2,
+        };
+        contactShadow(ctx, view, INDUSTRY_YARD);
+        drawIndustry(ctx, view, type, { px: ATLAS_SCALE });
+      },
     });
   }
 

@@ -53,7 +53,7 @@ no entry below. A number may appear under several topics.
 - **Rendering & art:** D-013, D-014, D-033, D-035, D-112, D-117, D-125, D-127,
   D-136, D-140, D-160, D-161, D-162, D-163, D-164, D-165, D-166, D-169, D-170,
   D-171, D-172, D-173, D-174, D-175, D-177, D-179, D-186, D-202, D-205, D-206,
-  D-208, D-209, D-212
+  D-208, D-209, D-212, D-214
 - **UI & input:** D-011, D-013, D-015, D-035, D-110, D-113, D-114, D-119,
   D-126, D-148, D-165, D-166, D-177, D-179, D-180, D-181, D-182, D-183, D-184,
   D-186, D-187, D-189, D-191, D-192, D-193, D-194, D-195, D-196, D-200, D-202,
@@ -61,7 +61,7 @@ no entry below. A number may appear under several topics.
 - **Performance & measurement:** D-002, D-120, D-135, D-136, D-161, D-162,
   D-163, D-164, D-167, D-170, D-171, D-172, D-173, D-174, D-176, D-177, D-184,
   D-185, D-186, D-187, D-191, D-192, D-193, D-196, D-200, D-201, D-202, D-205,
-  D-206, D-209
+  D-206, D-209, D-214
 - **Platform, tooling & build:** D-012, D-014, D-015, D-016, D-017, D-029,
   D-030, D-031, D-160, D-168, D-169, D-170, D-172, D-175, D-192, D-206, D-208
 - **Crash safety:** D-132, D-139, D-190
@@ -10262,3 +10262,167 @@ anything else, so a traveller can be sent "home" to a third town that is bigger
 than the one he came from; that is the price of not tracking parcels, it is
 stated rather than hidden, and it is the same trade D-211 made when it weighted
 destinations without choosing them.
+
+### D-214 The ground stops being a polygon: one light, a fold per slope, a grain per terrain, and no seam
+
+The third item of the owner's verdict - "das sieht doch nicht gut aus" - is the
+surface everything else stands on. Measured on the default temperate 1024 map
+(seed 4,711, the world D-209 counted its forest on) before anything moved:
+
+- `drawTerrainCell` put down **three flat fills and 22 identical speckles**.
+  A cell is keyed by (terrain, slope) and by nothing else, so **630,421 flat
+  land tiles - 85.5 % of the land** - drew the same pixels. Grass is 25.66 % of
+  the map, rock 18.57 %, forest 16.50 %, field 3.88 %, water 29.68 %, town
+  ground 1.09 %, snow 3.48 %, coast 0.69 %, marsh 0.45 %, desert 0.00 %.
+- The visible surface of a flat tile carried **two** distinct values: the base
+  tone and a speckle at 0.89 of it over 2.1 % of the diamond.
+- **The top face's light was inverted against the very skirt drawn under it.**
+  `1 + tilt * 0.07` with `tilt = W + N - E - S` drew a ramp descending towards
+  the north-west - towards the light the skirt factors 0.62/0.76 place - at
+  **0.86, its darkest**, and the ramp turned away from it at 1.14, its
+  brightest. The two DIAGONAL slopes counted `tilt = 0` and were drawn in
+  exactly the colour of flat ground, so sixteen shapes shared five values.
+- **Neighbouring diamonds abutted with no overlap.** Each covers about half of
+  every boundary pixel, source-over composites the two half-coverages to three
+  quarters, and the last quarter is background: a lattice of hairlines at every
+  tile edge, over the whole map. It is `ROAD_SEAM_OVERLAP_PX`'s arithmetic
+  (D-212) one layer down, and nothing had ever asked the question here.
+
+**The palette was audited and NOT changed.** All eight terrain tones SPEC.md
+16.3 fixes are in `TERRAIN_COLORS` exactly (`#6f9b58` Wiese, `#b09a4e` Acker,
+`#3f6b3a` Wald, `#8a8578` Fels, `#e8eef2` Schnee, `#d6bc86` Wüste, `#4a86a8`
+Wasser flach, `#5a6b4a` Moor) plus `WATER_DEEP` `#2c5a78`. Two of the ten
+terrains are not in 16.3 at all and the test now says so rather than leaving it
+to be discovered: **Coast `#cbb682` is an invention** with no entry in the
+palette, and **town ground `#b8b4ac` is 16.3's INFRA tone "Beton"** - which is
+why a town's made ground and a road's kerb are the same grey by construction.
+Everything this bundle adds is a VALUE multiplied onto one of those hexes;
+nothing invents a hue.
+
+**The light is solved from the artwork, not proposed.** A wall facing screen-SE
+has the tile-space normal (1,0,0) and has been drawn at 0.62 since M1; one
+facing screen-SW is (0,1,0) at 0.76; flat ground is (0,0,1) at 1.00. Under
+`ambient + diffuse * (n . L)` those are three equations in three unknowns with
+exactly one solution, and its **y component comes out zero** - the light the
+shipped skirts always implied is fixed north-west and nothing else.
+`GROUND_LIGHT` is that vector, `(-0.5039, 0, 0.8638)`, computed from the three
+shades rather than written down beside them.
+
+**A slope is two triangles.** A quad with three corners at one level and one at
+another is not planar, so drawing it as one polygon was drawing a surface that
+does not exist. The fold runs along the HIGHER diagonal, which is what makes a
+saddle read as a ridge instead of a gully, and each half is lit by its own
+normal. The top response is re-anchored on the artwork it replaces - flat stays
+exactly 1.00, the steepest one-level ramp turned away stays exactly 0.86 - so
+the CONTRAST is unchanged and only the direction and the resolution move.
+Measured: **14 distinct (fold, shade, shade) signatures for the sixteen slopes
+against five values**, range **0.8385 .. 1.0650** against 0.86 .. 1.14. The two
+signatures that still coincide differ in SHAPE - which corner is low - and
+shape is the information (D-117). One height step is measured against the tile
+AS DRAWN (`HEIGHT_PX / hypot(TILE_W/2, TILE_H/2)` = 0.4472 tile edges), never
+against the simulation's 8 m over 50 m: the shading has to agree with the
+picture.
+
+**The seam is closed by geometry and proved by geometry.** Every face and every
+skirt is offset outwards by `GROUND_SEAM_BLEED_PX` = **0.75 design px** - which
+IS 0.75 screen px at the zoom each atlas page is drawn for, against the half a
+pixel a boundary pixel needs to be covered whole by one of its two neighbours.
+Two things about how were found the hard way. The offset is **mitred per edge,
+not scaled from the centroid** (a radial scale leaves two thirds of every edge
+under-covered), and a **sliver corner is bevelled rather than collapsed**: the
+two triangles of a folded slope meet at 14 degrees, where the miter would be
+twenty-five times the bleed, and the first draft's clamp collapsed it - measured
+as **half the asked-for seal along the north-east edge of every east-raised
+slope**. The bled polygon is then **clipped** to the box both pages reserve
+(one height step above the north corner, one below the south) with
+Sutherland-Hodgman, because clamping the corner VERTEX drags its two edges
+inwards with it. Measured after: **0 px painted outside the box on all sixteen
+slopes**, and over **10,000 samples** along the four edges of all sixteen
+slopes - every 2 % of each edge, eight steps out to the full bleed - every one
+covered. The box matters because the detail page clips each cell to its frame
+and the base page does not: a bleed that overran would draw one picture at zoom
+4 and another at zoom 1, which is the 6,240 px D-212 measured.
+
+**A grain per terrain, and it made the cell CHEAPER.** Seven kinds, one per
+terrain and none of them a new hue: tufts leaning against the light (grass,
+marsh), ploughed furrows along the tile's +x axis (farmland), angular scree
+chips with lit top edges (rock, coast), coarse canopy mottle (forest), shallow
+drift ripples (snow, desert), a faint joint grid (town ground), and the old
+speckle for the water row nothing draws from. Every mark rides the BILINEAR
+tile surface through `groundSurfacePoint`, so a furrow climbs a hillside
+instead of floating across it, and every ink is the FACE colour times a value
+factor, so the seasonal repaint inherits the grain for free. The cell is
+clipped to its own face, so a mark that overshoots costs a clipped pixel and
+never a wrong one. **Each grain is batched into one path per ink**, and that is
+the whole cost story: a terrain cell drew **25** paint operations before this
+bundle and draws **4 to 10** now, a whole page of terrain **4,000 -> 1,100**,
+while the artwork grew. `tests/unit/groundCell.spec.ts` holds a booked ceiling
+of 16 with a counting context, because the wall-clock atlas budget
+(`ATLAS_BUILD_BUDGET_MS` = 250, measured 20 ms base + 50 ms detail) can only be
+timed in a browser - the README's own procedure - and `MapView.attach` already
+warns on the console when it is crossed.
+
+**The per-tile variance is a TINT, and that is a decision.** The page has one
+cell per (terrain, slope) and **256 px of the 4,096 px guarantee left** (D-163
+leaves the detail page full), so a variant dimension would cost a new page and
+a SPEC2 6.2 booking; a grey tint is a batcher uniform the ground sprites were
+already paying for and it multiplies, so the 16.3 hue survives exactly.
+`groundValueFactor` draws from the SAME `tileVariantSeed` avalanche as the
+building body, the tree body and the tree jitter (D-205/D-209) under its own
+salt - no new hashing, no RNG stream, no `Math.random`. Bounded to **1 ± 0.04**
+by construction; measured over 40,000 tiles **0.9600 .. 1.0400, mean 0.99995**,
+so a plain does not drift off its tone as a whole. It is a pure function of
+(x, y) and therefore never changes, which is why **no chunk checksum had to
+learn about it** and both render paths - live sprites and the chunk bake - set
+it in the pass they already ran.
+
+**Water gets the geometry and NOT the tint.** It is 29.68 % of a default map
+and the hairline lattice was just as visible on it, so `drawWaterCell` takes the
+same two-triangle split and the same bleed. It keeps its own tint for the two
+16.3 tones (D-164), so a second tint would break "white multiplies to the exact
+hex"; its variance is the ripples it already has. Its grain rides the surface
+now and is clipped to the diamond rather than kept inside it by a placement
+formula - a wide ripple near the east corner was the one thing that formula
+could not hold.
+
+**The baked contact shadows were VERIFIED in the pixels, not believed.** Read
+out of `atlas-z1-p0.png` against the manifest: every family carries pure black
+at alpha <= `SHADOW_ALPHA_MAX` (88) exactly where D-170 says - buildings
+14-19 px (1.6-2.4 % of the cell), industries 13-46 px, modules 43-80 px, trees
+23-42 px, vehicles 91-96 px. So the bake needs nothing. What has NO shadow is
+the **procedural fallback**, which is the E-14 floor every game starts on and
+which draws `CoalMine`, `OilWell` and `Farm` in EVERY game by name (D-205).
+`contactShadow` in `shapes.ts` closes that: two diamonds rather than a radial
+gradient, because the falloff has to run from the FOOTPRINT outwards - the
+lesson D-170 paid for when its centre-based ellipse produced nothing. It is on
+the six town cells and the seventeen industry cells and deliberately **not** on
+the `BOX_SPRITES`, which take the company colour as a sprite tint and would
+multiply a black patch into a coloured one. The industry patch is a **YARD**
+(0.62 x 0.56 tiles) and says so: every composition in `industryArt.ts` draws its
+mass inside 0.8 tiles and three already lay a 0.72 x 0.6 pad, so one honest
+patch beats seventeen guessed silhouettes - the per-model silhouette is the
+bake's job.
+
+**Cost.** Zero sim bytes, zero save bump, zero snapshot bytes, zero protocol
+fields, zero i18n strings, **zero atlas booking** - not one new cell, both pages
+stand at 2,176x3,840 and 4,096x4,096 exactly as before. Main chunk **951,284 B**
+on the working tree; reverting exactly the four render files in place and
+rebuilding gives **946,425 B**, so this bundle weighs **+4,859 B** and the
+budget is raised to 956,000 with that measurement beside it (D-192's rule).
+Render tripwires, three interleaved runs: sprite-pool rebuild p50 **7.33-8.05
+ms** against D-209's 7.273 and a 15 ms median tripwire, chunk bake p50
+**2.08-2.15 ms** against D-209's 1.963 / D-212's 1.969 and a 5 ms tripwire -
+the delta is the per-tile tint, which the perf proxies now run so it cannot be
+measured out of existence. `npm run typecheck`, `npm run lint`,
+`vitest run tests/unit` and `tests/perf/render.perf.spec.ts` are green.
+
+**What only a human at the running game can confirm.** That a grass plain reads
+as ground rather than as one painted surface; that 4 % of value is variance and
+not a checkerboard; that the furrows read as farmland at zoom 1 and not as
+stripes at zoom 0.5; that the grain does not turn to noise when the base page
+is minified 2:1; that a hillside now reads as lit from the upper left; and that
+the atlas still builds inside its 250 ms - the operation count fell, but only a
+browser rasterises. Two residuals are named rather than hidden: the grain is
+per (terrain, slope) and therefore REPEATS - at zoom 4 the same tufts stand on
+every grass tile, and only the tint tells two tiles apart - and water carries no
+value variance at all by the D-164 argument above.

@@ -353,6 +353,7 @@ import {
   type TerrainAtlas,
 } from './TerrainAtlas';
 import { CATENARY_RAIL_TYPE, catenaryMastOffset } from './catenary';
+import { groundValueTint } from './ground';
 import { collectClaimedBlocks, SIGNAL_ASPECT_TINTS, signalAspect } from './signalAspects';
 import {
   EMISSIVE_MAX_ALPHA,
@@ -2919,13 +2920,19 @@ export class MapView {
           // the frame KEY carries the substitution, so the texture cache and
           // the chunk bake below cannot disagree about what was drawn.
           const drawn = this.drawnTerrain(terrain, height);
+          const ground = this.take(used++);
           this.place(
-            this.take(used++),
+            ground,
             this.frameTexture(page, `t${drawn}:${slope}`, atlas.terrainFrame(drawn, slope)),
             world.x,
             world.y,
             drawOrder(x, y, height, DrawLayer.Ground),
           );
+          // The per-tile value variance: one cell per (terrain, slope) serves
+          // every tile of that kind, so without this a 25 %-of-the-map grass
+          // plain is one repeated bitmap. A grey tint multiplies, so the 16.3
+          // hue survives exactly and only the value moves (ground.ts).
+          ground.tint = groundValueTint(x, y);
         }
 
         // A bridge deck is drawn at ITS height, not the ground's - that is the
@@ -3798,13 +3805,18 @@ export class MapView {
           water.tint = isDeepWater(map, x, y) ? WATER_DEEP_TINT : WATER_SHALLOW_TINT;
         } else {
           const drawn = this.drawnTerrain(terrain, height);
+          const ground = this.bakeTake(used++);
           this.place(
-            this.bakeTake(used++),
+            ground,
             this.frameTexture(page, `t${drawn}:${slope}`, atlas.terrainFrame(drawn, slope)),
             world.x,
             world.y,
             drawOrder(x, y, height, DrawLayer.Ground),
           );
+          // The same variance as the live path - a chunk is a picture of the
+          // same tiles, and the tint is a pure function of (x, y), so it never
+          // changes and no chunk checksum has to learn about it.
+          ground.tint = groundValueTint(x, y);
         }
 
         if (abstract) continue;
