@@ -32,7 +32,7 @@ no entry below. A number may appear under several topics.
 - **Signals & reservations:** D-054, D-055, D-056, D-057, D-058, D-059, D-060,
   D-061, D-073, D-080, D-081, D-082, D-083, D-157, D-173, D-184, D-185, D-186
 - **Stations & catchment:** D-049, D-080, D-095, D-150, D-159, D-178, D-179,
-  D-208
+  D-208, D-210
 - **Cargo, payment & routing:** D-036, D-037, D-065, D-067, D-075, D-077,
   D-078, D-118, D-142, D-151, D-176, D-178, D-187, D-207
 - **Industry & production:** D-022, D-062, D-063, D-064, D-069, D-071, D-079,
@@ -55,7 +55,8 @@ no entry below. A number may appear under several topics.
   D-208, D-209
 - **UI & input:** D-011, D-013, D-015, D-035, D-110, D-113, D-114, D-119,
   D-126, D-148, D-165, D-166, D-177, D-179, D-180, D-181, D-182, D-183, D-184,
-  D-186, D-187, D-189, D-191, D-192, D-193, D-194, D-195, D-196, D-200, D-202
+  D-186, D-187, D-189, D-191, D-192, D-193, D-194, D-195, D-196, D-200, D-202,
+  D-210
 - **Performance & measurement:** D-002, D-120, D-135, D-136, D-161, D-162,
   D-163, D-164, D-167, D-170, D-171, D-172, D-173, D-174, D-176, D-177, D-184,
   D-185, D-186, D-187, D-191, D-192, D-193, D-196, D-200, D-201, D-202, D-205,
@@ -66,7 +67,7 @@ no entry below. A number may appear under several topics.
 - **Testing method & fixtures:** D-010, D-038, D-072, D-074, D-084, D-133,
   D-167, D-183, D-186, D-188, D-189, D-190, D-191, D-192, D-193, D-194,
   D-195, D-196, D-197, D-198, D-199, D-200, D-201, D-202, D-203, D-204,
-  D-205, D-207, D-206, D-208, D-209
+  D-205, D-207, D-206, D-208, D-209, D-210
 - **Process & specification:** D-070, D-123, D-129, D-133, D-138, D-140,
   D-185, D-191, D-197, D-198, D-199, D-203, D-204, D-205, D-206
 
@@ -9540,3 +9541,180 @@ hangar, and no Kenney 3D aircraft kit exists - E-14); the freight crane does
 not animate; and a joined station's modules are still placed one per tile with
 no awareness of their neighbours, so a four-tile platform is four slabs that
 happen to abut rather than one modelled platform with ends.
+
+### D-210 A road stop may stand BESIDE the road: the bay, its one spur, the price that is road's own, and no save bump
+
+The owner's sentence was "die depots werden einfach gesetzt, sie sollen nur
+neben strassen gebaut werden koennen und sich automatisch an die strasse
+anbinden". The code said why: `buildRoadStop` REQUIRED `roadBits[tile] !== 0`
+and refused everything else with `NeedsRoad`, so every stop, lorry bay and road
+depot in the game stood ON the carriageway - and since D-208 gave each of them
+a kit body, that body then covered the road it stood on. A depot is a hall with
+doors; a hall in the running lane is the picture the owner was looking at.
+
+**A road stop is now one command with two shapes, decided by the tile the click
+lands on.**
+
+- `roadBits[tile] !== 0` - **drive-through stop**. Exactly the previous
+  behaviour, write for write: same tile, same price, same map writes. Every
+  recorded command log, every balance fixture and the AI replay identically.
+- `roadBits[tile] === 0` - **bay**. The tile must be able to carry road and at
+  least one orthogonally adjacent tile must carry road the acting company may
+  work on. The build lays ONE tile of road on the module tile, connected to
+  exactly one neighbour, and charges for it.
+
+**Both shapes stay legal, and the owner's "nur" is deliberately not taken
+literally.** Two reasons, and the second is the expensive one. (a) A bus
+halting at the kerb IS a bus stop - SPEC.md 10 calls the thing
+"Bushaltestelle" and calls the lorry module "Lkw-Ladebucht", a _bay_, which is
+the distinction this entry implements rather than invents. (b)
+`src/sim/ai/build.ts` plans its roads first and then places `LorryBay`,
+`LorryBay`, `RoadDepot` on three of its own road tiles (`plan.from`, `plan.to`,
+`plan.depot`). Making the carriageway illegal moves those three module tiles,
+and a module tile moves the station centre, and a station centre moves the
+catchment (D-095) - so it re-bands scenario 5, `aiGame`, the recorded soak
+(hash AND its 800-command recording) and `gameScore` inside the bundle that
+introduces a placement rule. **The AI is therefore untouched by this entry and
+still parks on the carriageway; that is a named residual with its bill
+attached, not an oversight.** What the PLAYER gets is the shape he asked for
+plus an interface that leads to it.
+
+**Which neighbour, as a total order and never an iteration order (law #3).**
+Candidates are the four orthogonal neighbours that are inside the map, carry
+road, and are `TILE_PUBLIC` or the acting company's. The winner is the minimum
+of the key
+
+```
+(-roadDegree, tileIndex)
+```
+
+- **road degree first** (how many of the four `RoadBit`s the neighbour carries)
+  so a through carriageway beats another dead-end stub: a bay hung off a stub
+  is reachable only by driving down the stub, which is a second bay, not a
+  connection.
+- **tile index second** - `y * size + x`, a genuine total order over tiles that
+  exists whatever order anything is walked in. It resolves North, then West,
+  then East, then South, and two tiles can never tie on it. The loop that
+  evaluates the key may run in any order; the comparison is the logic.
+
+**What the auto-connect builds is ROAD, not a flag.** `roadBits[bay] |= bit`,
+`roadBits[neighbour] |= opposite`, `terrain[bay] = TownGround`, through the
+very same `connect()` the road command uses. A connection FLAG was refused: it
+would be a second road graph that `net/roadPath.ts`, `net/congestion.ts`,
+`net/throughput.ts`, the demolition path and the renderer would each have to
+learn, and every one of them already knows what a road bit is. Because the spur
+is road, the bay is a road tile of degree one: `RoadPathfinder.find` reaches it
+as a TARGET (its guard is `roadBits[toTile] !== 0`) and no route can ever pass
+THROUGH it, because a dead end cannot be an interior node of a path.
+
+**The price is road's own price, and the player gets no free road.**
+`ROAD_STOP_COST_CT + ROAD_COST_PER_TILE_CT` = 2,000 + 200 = **2,200 EUR** for a
+bay stop, `ROAD_DEPOT_COST_CT + ROAD_COST_PER_TILE_CT` = **3,200 EUR** for a bay
+depot, the sum put through `world.costCt` ONCE so the century's inflation
+applies to the whole bill (D-092). Upkeep the same way: module upkeep +
+`ROAD_UPKEEP_PER_TILE_CT`, i.e. 200 + 10 and 300 + 10 EUR a year. A
+drive-through stop charges no road, because the road under it was already
+bought.
+
+**No save bump, and that is the decision that made this bundle small.** The
+obvious `StationModule.spurDirection` field was written down and refused: the
+bay's entire persistent footprint is one bit in `map.roadBits`, which is
+already serialised, already hashed and already migrated. A saved bay reloads as
+a bay by construction; a v30 save written before this bundle is a valid v30
+save after it; nothing in the simulation ever asks a module which way it faces,
+and the renderer can read the map. `SAVE_VERSION` stays **30**, no migration,
+no snapshot byte, no protocol field, no `AiState` field.
+
+**The preview is the command's own planner (D-119's rule, second
+application).** `planRoadStop(map, companyId, x, y)` in
+`src/sim/net/roadBuilder.ts` answers `{ reasonKey, spurTile, roadTiles }` from
+the map alone - the `planTrack` shape - and `buildRoadStop` RUNS it rather than
+re-deriving it. The hover handler in `MapCanvas` calls the same function on the
+same shared map, draws `[bayTile, spurTile]` through the existing
+preview-route overlay (so the player sees which way the driveway will go BEFORE
+the click) and prices it with `inflatedCostCt(...)`, exactly as the track
+preview does. Preview and bill cannot disagree because there is one planner.
+`roadBuildableAt(map, x, y)` moved into the same file for the same reason: it
+is the command's own ground test, and the preview has to fail where the build
+fails.
+
+**What happens when the road beside a bay is demolished is the state the game
+already had.** `demolishRoad` clears the opposite bit on all four neighbours, so
+the bay falls to `roadBits === 0` and becomes unreachable - the pathfinder
+refuses it as a target, the vehicle gets no route, and the stuck clock of D-186
+reports it. Nothing is destroyed and nothing is silently repaired: the bay's OWN
+tile still cannot be demolished (`demolishRoad` refuses a tile a module stands
+on), and **the repair is the ordinary road tool** - dragging road from the bay
+to any street counts the bay as a new tile (`roadBits === 0`) and charges
+exactly one road tile for it. An automatic re-attachment on demolition was
+refused: it writes on the map outside a command, for free, in a code path the
+player did not aim at. The spur's upkeep is not unbooked when the road beside it
+goes, for the same reason a module's upkeep is never unbooked - there is no
+command in the game that removes a station module.
+
+**A bay can later become a through stop, and that is the player's road.** A drag
+across it, or a funded town street laid beside it (`fundRoads` ->
+`connectToNeighbours`), can give the tile a second connection. Nothing in the
+simulation depends on a bay staying a dead end; the degree-one property is
+asserted at the build, which is where it is a rule.
+
+**One new refusal, one re-worded.** `RoadNotYours` (`cmd.reject.roadNotYours`,
+de+en) fires when the only road beside the tile belongs to another company -
+the concrete obstacle SPEC.md 17.3 asks for instead of the misleading
+`NotYours`, which names the tile the player clicked and not the one that
+refused him. `NeedsRoad` now says "on a road or beside one" in both catalogues,
+because its condition changed. Everything else a bay can fail on is already
+named by `roadBuildableAt`: `OutsideMap`, `OnWater`, `Occupied` (an industry or
+a house on the tile), `TooSteep`.
+
+**Coupling.** `tests/unit/roadStopBay.spec.ts` holds the planner against the
+command in both directions (the preview's price is asserted to be the cash the
+company actually loses), holds the choice against build ORDER (the same four
+roads laid in two different sequences pick the same neighbour), and walks
+`RejectReason` against both translation catalogues - all sixty keys, so a
+sixty-first reason with no German string is a red build rather than a screen
+that shows `cmd.reject.foo` to a German player.
+`tests/determinism/roadStopBay.spec.ts` plays the new command shape twice to
+one world hash and takes it through a save, a load and a continue.
+
+**Ledger.** `SAVE_VERSION` **30**, unchanged; `SNAPSHOT_LAYOUT_VERSION`
+unchanged; no migration edit; no protocol field; no atlas cell (a bay draws the
+D-208 module cell it already had, over the road stub its own spur paints); two
+new i18n strings, four re-worded.
+
+**Measured, and the AI evidence is the sharp one.** `npm run typecheck` and
+`npm run lint` green; `npx vitest run tests/unit` **104 files, 1,383 passing**;
+`npx vitest run tests/determinism` **7 files, 33 passing**, which is the
+canonical cross-OS pin and the corpus unmoved; the render tripwires re-run
+(`--no-file-parallelism tests/perf/render.perf.spec.ts`, 9 passing - chunk bake
+p50 2.079 / p99 7.997 against 5 / 30, particles p50 0.505, emissive walk 0.078,
+flow prep 0.515) although this bundle touches no render path; balance:
+`busline` payback in year 3 at 21,200 EUR investment, `woodChain`, `taktLine`,
+`bankruptcy` and `gameScore` all in band with their desync twins.
+
+**The AI's quarter century is bit-identical with and without this change.**
+`npm run test:soak` computes `071cbd7e8db44893` on this tree - and computes
+**the same `071cbd7e8db44893`** with the four files of this bundle reverted to
+HEAD and rebuilt. The recorded 25-year AI game is therefore provably untouched
+by D-210, which is the claim the "both shapes stay legal" decision rests on.
+That the pin itself (`65d8cb57cf5edec5`) is red on this tree is NOT this
+bundle's: the working copy carried three other workflows' uncommitted changes
+under `src/sim` (`cargo/routing.ts`, `constants.ts`, `station/types.ts`), the
+A/B above is what separates them, and the fixture the failing run rewrote was
+restored rather than committed.
+
+**Main chunk 946,048 B against the 950,000 B budget, headroom 3,952 B**, and
+the delta IS attributable this time: the same tree with this bundle's eight
+source files reverted builds **942,680 B**, so D-210 costs **+3,368 B** - the
+planner, the store slot, the panel block, the hover branch and six catalogue
+strings in two languages. `bundleBudget.spec.ts` green. The next bundle that
+adds a panel has under four kilobytes and should book a raise with its own
+measurement (D-192's rule) rather than assume the room is there.
+
+**What only a human at the running game can confirm.** That a depot beside the
+carriageway with a one-tile driveway under it reads better than a depot on the
+carriageway; that the green two-tile preview line is legible at zoom 1 against
+the road ribbon; and that the D-208 module body, which is baked at ONE facing,
+does not look wrong when its driveway comes from the other side. That last one
+is the named art residual: a per-instance facing for modules would need four
+baked variants per kind and a 6.2 booking, and this bundle did not take it.

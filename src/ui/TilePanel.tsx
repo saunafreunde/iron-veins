@@ -62,9 +62,17 @@ function priceHint(tool: Tool, year: number): string {
         amount: formatMoney(at(RAIL_TYPE_COST_CT[RailType.Plain]!)),
       });
     case 'stop':
-      return t('ui.tool.priceStop', { amount: formatMoney(at(ROAD_STOP_COST_CT)) });
+      // Both shapes, both prices (D-210): a stop on the carriageway, and the
+      // same stop beside it with the one tile of road that reaches it.
+      return t('ui.tool.priceStop', {
+        amount: formatMoney(at(ROAD_STOP_COST_CT)),
+        bay: formatMoney(at(ROAD_STOP_COST_CT + ROAD_COST_PER_TILE_CT)),
+      });
     case 'depot':
-      return t('ui.tool.priceDepot', { amount: formatMoney(at(ROAD_DEPOT_COST_CT)) });
+      return t('ui.tool.priceDepot', {
+        amount: formatMoney(at(ROAD_DEPOT_COST_CT)),
+        bay: formatMoney(at(ROAD_DEPOT_COST_CT + ROAD_COST_PER_TILE_CT)),
+      });
     case 'platform':
       return t('ui.tool.pricePlatform', { amount: formatMoney(at(RAIL_PLATFORM_COST_CT)) });
     case 'raildepot':
@@ -143,6 +151,7 @@ export function TilePanel({ client }: { readonly client: SimClient }): ReactElem
   const industries = useSimStore((s) => s.industries);
   const roadAnchor = useSimStore((s) => s.roadAnchor);
   const trackPreview = useSimStore((s) => s.trackPreview);
+  const roadStopPreview = useSimStore((s) => s.roadStopPreview);
 
   const tile = hovered ?? selected;
   const town = tile !== null && tile.townId >= 0 ? towns[tile.townId] : undefined;
@@ -211,6 +220,28 @@ export function TilePanel({ client }: { readonly client: SimClient }): ReactElem
             ? t('ui.tool.roadFirst')
             : t('ui.tool.roadSecond', { x: roadAnchor.x, y: roadAnchor.y })}
         </p>
+      )}
+
+      {(tool === 'stop' || tool === 'depot') && roadStopPreview !== null && (
+        <>
+          <span className="field__label field__label--spaced">{t('ui.preview.title')}</span>
+          {roadStopPreview.reasonKey !== null ? (
+            <p className="panel__hint value--danger">{t(roadStopPreview.reasonKey)}</p>
+          ) : (
+            <dl className="readout">
+              <div>
+                <dt>{t('ui.preview.cost')}</dt>
+                <dd className="value">{formatMoney(roadStopPreview.costCt)}</dd>
+              </div>
+              <div>
+                <dt>{t('ui.preview.roadStopShape')}</dt>
+                <dd className="value">
+                  {t(roadStopPreview.bay ? 'ui.preview.roadStopBay' : 'ui.preview.roadStopThrough')}
+                </dd>
+              </div>
+            </dl>
+          )}
+        </>
       )}
 
       {tool === 'track' && trackPreview !== null && (

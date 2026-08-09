@@ -26,15 +26,10 @@ import {
   SIGNAL_COST_CT,
   SIGNAL_UPKEEP_CT_PER_YEAR,
   ROAD_COST_PER_TILE_CT,
-  ROAD_DEPOT_COST_CT,
-  ROAD_DEPOT_UPKEEP_CT,
-  ROAD_STOP_COST_CT,
-  ROAD_STOP_UPKEEP_CT,
   ROAD_UPKEEP_PER_TILE_CT,
   BUILDING_DEMOLITION_COST_CT,
   TILE_PUBLIC,
   TICKS_PER_YEAR,
-  TOWN_ROAD_MAX_SLOPE,
 } from '../constants';
 import {
   isOneWay,
@@ -47,7 +42,7 @@ import {
 import type { TileMap } from '../map/TileMap';
 import { WaypointKind } from '../map/waypoints';
 import { Structure, structureUpkeepCt } from '../map/structures';
-import { slopeRise, Terrain } from '../map/terrain';
+import { Terrain } from '../map/terrain';
 import {
   directionFromDelta,
   oppositeDir,
@@ -60,6 +55,7 @@ import {
   RailType,
   type TrackDir,
 } from '../map/track';
+import { planRoadStop, roadBuildableAt, RoadStopShape } from '../net/roadBuilder';
 import { planTrack } from '../net/trackBuilder';
 import {
   airportSize,
@@ -97,7 +93,6 @@ function reject(reasonKey: string): CommandOutcome {
   return { ok: false, reasonKey };
 }
 
-/** Can a road tile exist here at all? */
 /**
  * May the acting company work on this tile?
  *
@@ -153,14 +148,13 @@ function buildPermission(world: World, tile: number): string | null {
   return councilRefusal(world, tile);
 }
 
+/**
+ * The ground test, one call on. It lives in `net/roadBuilder.ts` since D-210
+ * so the build preview refuses exactly what the build refuses - the same
+ * reason `planTrack` lives beside the track command rather than inside it.
+ */
 function roadBuildable(world: World, x: number, y: number): string | null {
-  if (!world.map.contains(x, y)) return RejectReason.OutsideMap;
-  const index = world.map.tileIndex(x, y);
-  if (world.map.terrain[index] === Terrain.Water) return RejectReason.OnWater;
-  if (world.map.industryId[index] !== -1) return RejectReason.Occupied;
-  if (world.map.buildingKind[index] !== 0) return RejectReason.Occupied;
-  if (slopeRise(world.map.slopeAt(x, y)) > TOWN_ROAD_MAX_SLOPE) return RejectReason.TooSteep;
-  return null;
+  return roadBuildableAt(world.map, x, y);
 }
 
 /**
@@ -695,7 +689,21 @@ function attachModule(world: World, module: StationModule): Station {
   return station;
 }
 
-/** Place a bus stop or lorry bay on an existing road tile. */
+/**
+ * Place a bus stop, a lorry bay or a road depot - on the carriageway or
+ * BESIDE it (D-210).
+ *
+ * The shape is decided by the tile the click lands on and both are legal:
+ * a tile that already carries road gets a drive-through stop exactly as it
+ * did before D-210, and a bare tile beside a road gets a BAY - the module on
+ * ground of its own, with one tile of road laid to reach it and charged for
+ * at road's own price. `planRoadStop` decides which, and the build preview
+ * calls the same function on the same map, so the picture before the click
+ * and the bill after it are one answer (D-119).
+ *
+ * The two things the planner may not know stay here: whether the council is
+ * willing (13.3) and whether the company can pay.
+ */
 export function buildRoadStop(
   world: World,
   x: number,
@@ -704,22 +712,35 @@ export function buildRoadStop(
 ): CommandOutcome {
   if (!world.map.contains(x, y)) return reject(RejectReason.OutsideMap);
   const tile = world.map.tileIndex(x, y);
-  if (world.map.roadBits[tile] === 0) return reject(RejectReason.NeedsRoad);
+  const plan = planRoadStop(world.map, world.company.id, x, y, kind);
+  if (plan.reasonKey !== null) return reject(plan.reasonKey);
   if (stationAt(world, tile) !== null) return reject(RejectReason.Occupied);
   if (world.map.waypoint[tile] !== WaypointKind.None) return reject(RejectReason.WaypointInWay);
   const permission = buildPermission(world, tile);
   if (permission !== null) return reject(permission);
 
-  const cost = kind === ModuleKind.RoadDepot ? ROAD_DEPOT_COST_CT : ROAD_STOP_COST_CT;
-  const upkeep = kind === ModuleKind.RoadDepot ? ROAD_DEPOT_UPKEEP_CT : ROAD_STOP_UPKEEP_CT;
-  const chargeCt = world.costCt(cost);
+  const chargeCt = world.costCt(plan.costCt);
   if (chargeCt > world.company.cashCt) return reject(RejectReason.InsufficientFunds);
+
+  if (plan.shape === RoadStopShape.Bay) {
+    // The spur is ROAD, laid by the road command's own two writes, so
+    // everything that already knows a road bit - the pathfinder, the
+    // congestion layer, the throughput meter, the demolition path and the
+    // renderer - knows the bay for free. One connection only: a dead end
+    // cannot be an interior node of a route, so no traffic cuts through the
+    // station tile.
+    claimIfBare(world, tile);
+    if (world.map.terrain[tile] !== Terrain.TownGround) {
+      world.map.terrain[tile] = Terrain.TownGround;
+    }
+    connect(world, tile, plan.spurTile);
+  }
 
   attachModule(world, { kind, tileIndex: tile, x, y });
 
   bookExpense(world.company, chargeCt);
-  world.company.infrastructureUpkeepPerYearCt += upkeep;
-  world.company.fixedAssetsCt += cost;
+  world.company.infrastructureUpkeepPerYearCt += plan.upkeepCtPerYear;
+  world.company.fixedAssetsCt += plan.costCt;
   world.map.revision++;
   return ACCEPTED;
 }
@@ -889,13 +910,7 @@ export function buyAircraft(
   const chargeCt = world.costCt(spec.priceCt);
   if (chargeCt > world.company.cashCt) return reject(RejectReason.InsufficientFunds);
 
-  const id = world.vehicles.create(
-    specId,
-    world.company.id,
-    tile,
-    world.tick,
-    defaultCargo(spec),
-  );
+  const id = world.vehicles.create(specId, world.company.id, tile, world.tick, defaultCargo(spec));
   if (id === -1) return reject(RejectReason.TooManyVehicles);
 
   bookExpense(world.company, chargeCt);
@@ -934,13 +949,7 @@ export function buyShip(
   const chargeCt = world.costCt(spec.priceCt);
   if (chargeCt > world.company.cashCt) return reject(RejectReason.InsufficientFunds);
 
-  const id = world.vehicles.create(
-    specId,
-    world.company.id,
-    tile,
-    world.tick,
-    defaultCargo(spec),
-  );
+  const id = world.vehicles.create(specId, world.company.id, tile, world.tick, defaultCargo(spec));
   if (id === -1) return reject(RejectReason.TooManyVehicles);
 
   bookExpense(world.company, chargeCt);
@@ -1080,13 +1089,7 @@ export function buyRoadVehicle(
   const chargeCt = world.costCt(spec.priceCt);
   if (chargeCt > world.company.cashCt) return reject(RejectReason.InsufficientFunds);
 
-  const id = world.vehicles.create(
-    specId,
-    world.company.id,
-    tile,
-    world.tick,
-    defaultCargo(spec),
-  );
+  const id = world.vehicles.create(specId, world.company.id, tile, world.tick, defaultCargo(spec));
   if (id === -1) return reject(RejectReason.TooManyVehicles);
 
   world.vehicles.reliability[id] = spec.reliability0;

@@ -528,6 +528,12 @@ export const RejectReason = {
   TooSteep: 'cmd.reject.tooSteep',
   NothingToDo: 'cmd.reject.nothingToDo',
   NeedsRoad: 'cmd.reject.needsRoad',
+  /**
+   * A bay found road beside it, but every candidate belongs to another
+   * company (D-210). Named separately from `NotYours`, which is about the
+   * tile the player clicked and would send him looking at the wrong tile.
+   */
+  RoadNotYours: 'cmd.reject.roadNotYours',
   NeedsTrack: 'cmd.reject.needsTrack',
   NeedsStation: 'cmd.reject.needsStation',
   NeedsWater: 'cmd.reject.needsWater',

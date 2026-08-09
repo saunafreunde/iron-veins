@@ -71,6 +71,21 @@ export type Tool =
  * Computed on the main thread with the very planner the command uses, so the
  * numbers on screen and the numbers charged cannot drift apart.
  */
+/**
+ * What the road-stop tools show before the click (D-210): the exact price the
+ * command will charge, and whether it will lay a driveway or stand on the
+ * carriageway. Both come from `planRoadStop`, which is what the command runs -
+ * preview and bill are one answer (D-119).
+ */
+export interface RoadStopPreview {
+  /** Already inflated: what will be CHARGED, not what the table says. */
+  readonly costCt: number;
+  /** True when a spur of road will be laid onto the module tile. */
+  readonly bay: boolean;
+  /** Set instead of the price when the ground refuses the build. */
+  readonly reasonKey: string | null;
+}
+
 export interface TrackPreview {
   readonly tiles: readonly number[];
   readonly lengthM: number;
@@ -236,6 +251,8 @@ export interface SimUiState extends SnapshotValues {
   /** First corner of a road drag; the second click completes it. */
   roadAnchor: { readonly x: number; readonly y: number } | null;
   trackPreview: TrackPreview | null;
+  /** Live preview of the road-stop tools, or null (D-210). */
+  roadStopPreview: RoadStopPreview | null;
   /** Station the connect tool started from, or null. */
   connectAnchor: number | null;
   /** The planned and priced railway, waiting for a yes. */
@@ -353,6 +370,7 @@ export interface SimUiState extends SnapshotValues {
   setSelectedLine: (id: number | null) => void;
   setRoadAnchor: (anchor: { readonly x: number; readonly y: number } | null) => void;
   setTrackPreview: (preview: TrackPreview | null) => void;
+  setRoadStopPreview: (preview: RoadStopPreview | null) => void;
   setConnectAnchor: (stationId: number | null) => void;
   setConnectPlan: (plan: ConnectPlan | null, reasonKey: string | null) => void;
   clearConnect: () => void;
@@ -450,6 +468,7 @@ export const useSimStore = create<SimUiState>((set) => ({
   selectedLineId: null,
   roadAnchor: null,
   trackPreview: null,
+  roadStopPreview: null,
   connectAnchor: null,
   connectPlan: null,
   connectError: null,
@@ -494,6 +513,7 @@ export const useSimStore = create<SimUiState>((set) => ({
       tool,
       roadAnchor: null,
       trackPreview: null,
+      roadStopPreview: null,
       connectAnchor: null,
       connectPlan: null,
       connectError: null,
@@ -532,6 +552,7 @@ export const useSimStore = create<SimUiState>((set) => ({
   centreOnTile: () => undefined,
   setCentreOnTile: (centreOnTile) => set({ centreOnTile }),
   setTrackPreview: (preview) => set({ trackPreview: preview }),
+  setRoadStopPreview: (preview) => set({ roadStopPreview: preview }),
   setConnectAnchor: (connectAnchor) =>
     set({ connectAnchor, connectPlan: null, connectError: null }),
   setConnectPlan: (connectPlan, connectError) => set({ connectPlan, connectError }),
@@ -579,6 +600,7 @@ export const useSimStore = create<SimUiState>((set) => ({
       selectedLineId: null,
       roadAnchor: null,
       trackPreview: null,
+      roadStopPreview: null,
       trainDraft: [],
       openList: null,
       mapBuffer: null,

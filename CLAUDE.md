@@ -826,6 +826,33 @@ perf and environment notes above.
   audit now covers modules in two files, so an unmapped kind is a red build
   instead of a silent box. Bake 145 -> 158 models, 2,430 -> 2,469 cells, ten
   pages, twice bit-identical; zero sim bytes, zero atlas booking.
+- **A road stop may stand BESIDE the road, and the spur it lays is road**
+  (D-210, bundle 11, 2026-08-09 - the first SIM change of the owner-verdict
+  thread). `buildRoadStop` required `roadBits[tile] !== 0`, so every stop,
+  lorry bay and road depot stood ON the carriageway and D-208's kit body then
+  covered it. One command, two shapes now, decided by the tile: road under the
+  click is a **drive-through stop** (write for write what it was), bare ground
+  beside a road is a **bay** - one tile of road laid onto the module tile,
+  connected to exactly ONE neighbour, charged at `ROAD_COST_PER_TILE_CT`
+  (2,200 EUR a bay stop, 3,200 a bay depot) with the upkeep to match. The
+  neighbour is the minimum of `(-roadDegree, tileIndex)`: a through carriageway
+  beats a dead-end stub, and the tile index is a total order no two candidates
+  tie on (law #3, proved against three different BUILD orders). **The spur is
+  ROAD and not a flag**, which is why the pathfinder, the congestion layer, the
+  demolition path and the renderer needed no edit - and why a bay is a
+  degree-one tile no route can pass THROUGH. **No save bump**: the bay's whole
+  persistent footprint is one bit in `map.roadBits`, already saved and hashed,
+  so `StationModule.spurDirection` was written down and refused; v30 stands.
+  Demolishing the road beside a bay orphans it exactly as the game already
+  orphaned a stop whose street went, and **the repair is the ordinary road
+  tool** - nothing writes on the map outside a command. The preview is
+  `planRoadStop`, the function the command runs (D-119's rule a second time):
+  the panel draws the driveway and quotes the inflated total before the click.
+  **The AI is untouched and still parks on the carriageway** - forbidding that
+  moves its three module tiles, hence its station centres, hence scenario 5,
+  `aiGame`, the soak recording and `gameScore`, and that bill belongs in its
+  own bundle.
+
 
 ## M14 - instruments: flow atlas, station x-ray, statistics, tooltips
 

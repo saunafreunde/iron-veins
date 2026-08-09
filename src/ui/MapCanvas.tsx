@@ -6,6 +6,7 @@ import { TileMap } from '../sim/map/TileMap';
 import { SignalKind, signalKind } from '../sim/map/signals';
 import { RailType } from '../sim/map/track';
 import { inflatedCostCt } from '../sim/cargo/payment';
+import { planRoadStop, RoadStopShape } from '../sim/net/roadBuilder';
 import { planTrack } from '../sim/net/trackBuilder';
 import { AUTO_SIGNAL_SPACING_TILES, DEADLOCK_WARN_TICKS } from '../sim/constants';
 import { catchmentAfterPlacing, joinTargetIdFor, ModuleKind } from '../sim/station/types';
@@ -204,6 +205,7 @@ export function MapCanvas({ client }: { readonly client: SimClient }): ReactElem
   const tool = useSimStore((s) => s.tool);
   const trackPreview = useSimStore((s) => s.trackPreview);
   const connectPlan = useSimStore((s) => s.connectPlan);
+  const roadStopPreview = useSimStore((s) => s.roadStopPreview);
   const dayNight = useSimStore((s) => s.settings.dayNight);
   const month = useSimStore((s) => s.month);
   const climate = useSimStore((s) => s.climate);
@@ -239,6 +241,31 @@ export function MapCanvas({ client }: { readonly client: SimClient }): ReactElem
       // the command uses, so the numbers shown and the numbers charged are the
       // same by construction.
       const map = mapRef.current;
+
+      /*
+       * The D-210 road-stop preview: WHAT will be built and WHAT it will cost,
+       * before the click. `planRoadStop` is the function `buildRoadStop`
+       * itself runs, on the same shared map, so the driveway drawn here is the
+       * driveway that gets laid and the figure shown is the figure charged
+       * (D-119). Company 0 is the player, as everywhere else on this thread.
+       */
+      if ((state.tool === 'stop' || state.tool === 'depot') && tile !== null && map !== null) {
+        const kind = state.tool === 'stop' ? ModuleKind.BusStop : ModuleKind.RoadDepot;
+        const plan = planRoadStop(map, 0, tile.x, tile.y, kind);
+        const bay = plan.shape === RoadStopShape.Bay;
+        state.setRoadStopPreview({
+          costCt: plan.reasonKey === null ? inflatedCostCt(plan.costCt, state.year, true) : 0,
+          bay,
+          reasonKey: plan.reasonKey,
+        });
+        // Two tiles: the module and the road it will attach to. The overlay
+        // draws the same green line the track preview uses, so the player sees
+        // which side the throat comes out of.
+        view.setPreviewRoute(bay ? [map.tileIndex(tile.x, tile.y), plan.spurTile] : null);
+      } else if (state.roadStopPreview !== null) {
+        state.setRoadStopPreview(null);
+      }
+
       const anchor = state.roadAnchor;
       if (state.tool !== 'track' || tile === null || anchor === null || map === null) {
         if (state.trackPreview !== null) {
@@ -493,7 +520,7 @@ export function MapCanvas({ client }: { readonly client: SimClient }): ReactElem
     // Esc, the cancel button and every tool change disarm through the store;
     // the preview line lives in the view and has to follow, or a cancelled
     // plan keeps its green route on the map for ever.
-    if (trackPreview === null && connectPlan === null) {
+    if (trackPreview === null && connectPlan === null && roadStopPreview === null) {
       viewRef.current?.setPreviewRoute(null);
     }
     // The catchment circle likewise: switching away from a module tool must
@@ -502,7 +529,7 @@ export function MapCanvas({ client }: { readonly client: SimClient }): ReactElem
     if (MODULE_TOOL_KINDS[tool] === undefined) {
       viewRef.current?.setCatchmentPreview(null);
     }
-  }, [tool, trackPreview, connectPlan]);
+  }, [tool, trackPreview, connectPlan, roadStopPreview]);
 
   useEffect(() => {
     viewRef.current?.setSelectedVehicle(selectedVehicleId);
