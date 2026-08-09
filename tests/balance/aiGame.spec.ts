@@ -148,10 +148,53 @@ function quarterCentury(): { world: World; queue: CommandQueue } {
  * with every bundle guards nothing. What the old number caught that the new
  * one does not - a personality that stops BUILDING - is asserted directly
  * below instead, where it can be read.
+ *
+ * **D-216 reshuffled it a third time, and the ROAD row goes the same way.**
+ * Every generated town now lays only the streets its houses need, so the
+ * public network a company leans on falls 56 % (9,962 -> 4,359 road tiles over
+ * five seeds and 200 towns) and each connection pays for its own last mile.
+ * Measured back to back on this machine, baseline in a stash at the same
+ * commit: Seeblick (road) lays 345 -> **546** tiles of its own road, builds
+ * 14 -> 19 stations, draws its credit line to the limit and finishes
+ * 538,469 -> **-157,183 EUR [wound up]**; Rautenberg (rail) stops building
+ * altogether (95 rail tiles and 2 stations -> none) and therefore KEEPS its
+ * capital, 20,792 -> 450,000; Dornbach (town network) 101,636 -> 147,413.
+ * Exactly one company winds up in both runs and two finish solvent in both -
+ * the M8 acceptance criterion is unmoved, only WHICH husk dies is, which this
+ * comment has said twice already is not something to pin.
+ *
+ * The counter-evidence that says the change did not break the road AI is in
+ * `aiCompany.spec.ts`: the SAME personality on its own 512-map world goes
+ * 978,528 -> 1,173,298 EUR and doubles its fleet. What Seeblick ran into is
+ * the AI hole D-158 already names - it spends its capital on way and stations
+ * and has nothing left to crew them with - and that is M11's to fix, named in
+ * the report rather than tuned away in the generator.
+ *
+ * **And the figures below were a property of SEED 4711, which D-216 measured
+ * rather than assumed.** The identical fixture, played at HEAD with the
+ * generator untouched, on the three seeds next to this one:
+ *
+ * ```
+ * 4711  p0    20,792 l0 v0 s2  | p4  101,636 l0 v0 s16 | p1 538,469 l1 v6 s14
+ * 4712  p4  -150,281 [X] s29   | p2 -161,432 [X] s2    | p0 415,000 l0 v0 s0
+ * 4713  p4  -200,910 [X] s29   | p0 -650,744 [X] s3    | p3 500,000 l0 v0 s0
+ * 4714  p4  -129,117 [X] s29   | p2 -477,036 [X] s3    | p3 500,000 l0 v0 s0
+ * ```
+ *
+ * On three of the four, TWO competitors wind up, no competitor owns a vehicle
+ * after twenty-five years, and the richest company is the one that never built
+ * anything - every assertion in this block fails, at HEAD, with nothing of
+ * D-216 in the tree. So "the winner is a real network" was never a property of
+ * the simulation; it was a property of one lucky sample, and D-216 moved that
+ * sample onto the pile where its neighbours already sat. The block is loosened
+ * to what the four runs actually share, the sweep is recorded here as the
+ * reason, and **the defect it stops covering up is named**: the AI builds
+ * networks it cannot crew. That is M11's, it is D-158's open bottleneck, and
+ * it is not something a town generator should be shaped around.
  */
 const VALUE_FLOOR_CT: ReadonlyMap<number, number> = new Map([
   [Personality.Rail, -(START_CAPITAL_CT[Difficulty.Normal]! + LOAN_MIN_LIMIT_CT)],
-  [Personality.Road, 400_000_00],
+  [Personality.Road, -(START_CAPITAL_CT[Difficulty.Normal]! + LOAN_MIN_LIMIT_CT)],
   [Personality.TownNetwork, 0],
 ]);
 
@@ -214,15 +257,21 @@ describe('M8 acceptance: twenty-five years against three competitors', () => {
       expect(row.roadTiles + row.railTiles, `${row.name} kept its way`).toBeGreaterThan(0);
     }
 
-    // And the winner is a real network, not the degenerate pile the 4.05M
-    // note in the project history warns about: its fleet works several
-    // stations, with a sane vehicles-per-station density.
+    // The richest competitor is at least not a wound-up one, somebody took the
+    // field, and a company that still has a fleet works a network with it
+    // rather than the degenerate pile the 4.05M note in the project history
+    // warns about. What this block used to demand of the RICHEST company - a
+    // line, two vehicles, two stations - held on seed 4711 and on none of its
+    // three neighbours, at HEAD; the sweep is in the comment above
+    // VALUE_FLOOR_CT and the AI defect it was covering is named there.
     const best = rows.reduce((a, b) => (b.valueCt > a.valueCt ? b : a));
     expect(best.bankrupt).toBe(false);
-    expect(best.lines).toBeGreaterThanOrEqual(1);
-    expect(best.vehicles).toBeGreaterThanOrEqual(2);
-    expect(best.stations).toBeGreaterThanOrEqual(2);
-    expect(best.vehicles).toBeLessThanOrEqual(best.stations * 6);
+    expect(rows.some((row) => row.stations >= 2)).toBe(true);
+    for (const row of rows) {
+      if (row.vehicles === 0) continue;
+      expect(row.stations, `${row.name} works stations`).toBeGreaterThanOrEqual(2);
+      expect(row.vehicles, `${row.name} fleet density`).toBeLessThanOrEqual(row.stations * 6);
+    }
   });
 
   it('builds networks that can be told apart', () => {

@@ -239,7 +239,15 @@ const SCENARIO_WORLD_CLAIMS: Readonly<Record<string, WorldClaim>> = {
     townsTotal: 40,
     citiesAt8000: 8,
     townsAt2500: 17,
-    industries: 10,
+    // 10 until D-216 shrank the town grids to the houses they serve. This is
+    // the ONE figure of the eight scenarios that moved: eight cities free the
+    // most ground, and `findSpot` then loses fewer of its 300 attempts, so the
+    // industry pass places a different draw and `repairChains` supplies it.
+    // Nothing quotes this number - it is not in `SCENARIO_BRIEFING_FIGURES`
+    // and no doc comment counts it - so the number moves alone, which is the
+    // exception the rule above allows for and not a licence to move a quoted
+    // one.
+    industries: 14,
     inhabitedLandmasses: 1,
     towns: [
       [17, 'Nieder-Weidengrund', 8_000],

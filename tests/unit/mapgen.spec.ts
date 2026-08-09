@@ -10,6 +10,7 @@ import { industrySpec } from '../../src/sim/industry/types';
 import type { TileMap } from '../../src/sim/map/TileMap';
 import { Terrain } from '../../src/sim/map/terrain';
 import { findStartingPair, generateMap, type GeneratedWorld } from '../../src/sim/mapgen';
+import { BuildingKind } from '../../src/sim/town/types';
 
 /** Small map plus few erosion passes: the same code paths at test speed. */
 const TEST_SIZE = 256;
@@ -188,7 +189,138 @@ describe('towns', () => {
       if (map.roadBits[i] !== 0) expect(map.terrain[i]).not.toBe(Terrain.Water);
     }
   });
+
+  /**
+   * The owner's verdict on a generated town, made into assertions (D-216).
+   *
+   * Before this bundle a town was a grid of streets laid over the whole size
+   * class radius while only the inner half of it ever received a house: 67.6 %
+   * of all town road tiles touched no building at all, and 1,013 of the 1,095
+   * one-connection tiles - the visible stubs running into the wilderness -
+   * served nothing whatever. Measured over five seeds and 200 towns; the same
+   * five measure 0 unserved stubs and 4,354 road tiles against 9,962 now.
+   */
+  describe('a street exists for something (D-216)', () => {
+    const seeds = [4_711, 20_260_727, 360];
+    const built = seeds.map((seed) => build(seed));
+
+    it('leaves no street with one connection and nothing beside it', () => {
+      for (const generated of built) {
+        const map = generated.map;
+        for (let y = 1; y < map.size - 1; y++) {
+          for (let x = 1; x < map.size - 1; x++) {
+            const index = map.tileIndex(x, y);
+            const bits = map.roadBits[index]!;
+            if (bits === 0 || (bits & (bits - 1)) !== 0) continue; // 0 or 2+ bits
+            const serves =
+              map.buildingKind[index - 1] !== BuildingKind.None ||
+              map.buildingKind[index + 1] !== BuildingKind.None ||
+              map.buildingKind[index - map.size] !== BuildingKind.None ||
+              map.buildingKind[index + map.size] !== BuildingKind.None ||
+              map.industryId[index] !== -1;
+            expect(serves, `dead end at ${x},${y}`).toBe(true);
+          }
+        }
+      }
+    });
+
+    it('gives every house a street to stand on', () => {
+      for (const generated of built) {
+        const map = generated.map;
+        for (let y = 1; y < map.size - 1; y++) {
+          for (let x = 1; x < map.size - 1; x++) {
+            const index = map.tileIndex(x, y);
+            if (map.buildingKind[index] === BuildingKind.None) continue;
+            const onStreet =
+              map.roadBits[index - 1] !== 0 ||
+              map.roadBits[index + 1] !== 0 ||
+              map.roadBits[index - map.size] !== 0 ||
+              map.roadBits[index + map.size] !== 0;
+            expect(onStreet, `house at ${x},${y}`).toBe(true);
+          }
+        }
+      }
+    });
+
+    it('builds only on the ground the town claims (D-101)', () => {
+      for (const generated of built) {
+        const map = generated.map;
+        for (const town of generated.towns) {
+          const r = town.radius;
+          for (let dy = -r - 1; dy <= r + 1; dy++) {
+            for (let dx = -r - 1; dx <= r + 1; dx++) {
+              const x = town.x + dx;
+              const y = town.y + dy;
+              if (!map.contains(x, y)) continue;
+              const index = map.tileIndex(x, y);
+              if (map.townId[index] === town.id) continue;
+              if (map.townId[index] !== -1) continue; // another town's ground
+              if (map.industryId[index] !== -1) continue; // industries pave their own
+              expect(map.buildingKind[index], `building at ${x},${y}`).toBe(BuildingKind.None);
+              expect(map.terrain[index], `pavement at ${x},${y}`).not.toBe(Terrain.TownGround);
+            }
+          }
+        }
+      }
+    });
+
+    it('leaves the settled ground as one patch, not a lattice', () => {
+      // What "coherent" is worth measuring as: a town's paved ground walked as
+      // a 4-connected region. The mean share held by the largest patch measured
+      // 0.989-1.000 over five seeds and 200 towns BEFORE this bundle and the
+      // same after - the checkerboard the defect report suspected was never
+      // there (3 isolated tiles in 13,507), and what actually made a town read
+      // as a waffle was its extent, not a hole in its ground. Pinned as a MEAN
+      // because a single town cut in half by a river honestly has two patches.
+      for (const generated of built) {
+        const map = generated.map;
+        const seen = new Uint8Array(map.tileCount);
+        const stack: number[] = [];
+        let shareSum = 0;
+        let counted = 0;
+        for (const town of generated.towns) {
+          let biggest = 0;
+          let total = 0;
+          const r = town.radius;
+          for (let dy = -r; dy <= r; dy++) {
+            for (let dx = -r; dx <= r; dx++) {
+              const x = town.x + dx;
+              const y = town.y + dy;
+              if (!map.contains(x, y)) continue;
+              const start = map.tileIndex(x, y);
+              if (map.terrain[start] !== Terrain.TownGround || seen[start] === 1) continue;
+              seen[start] = 1;
+              stack.push(start);
+              let size = 0;
+              while (stack.length > 0) {
+                const at = stack.pop()!;
+                size++;
+                total++;
+                const ax = at % map.size;
+                const ay = (at / map.size) | 0;
+                if (ax > 0) pushTownGround(map, seen, stack, at - 1);
+                if (ax < map.size - 1) pushTownGround(map, seen, stack, at + 1);
+                if (ay > 0) pushTownGround(map, seen, stack, at - map.size);
+                if (ay < map.size - 1) pushTownGround(map, seen, stack, at + map.size);
+              }
+              if (size > biggest) biggest = size;
+            }
+          }
+          if (total === 0) continue;
+          shareSum += biggest / total;
+          counted++;
+        }
+        expect(shareSum / counted, 'mean largest-patch share').toBeGreaterThan(0.95);
+      }
+    });
+  });
 });
+
+function pushTownGround(map: TileMap, seen: Uint8Array, stack: number[], index: number): void {
+  if (seen[index] === 1 || map.terrain[index] !== Terrain.TownGround) return;
+  seen[index] = 1;
+  stack.push(index);
+}
 
 describe('industries', () => {
   const world = build(20_260_727);

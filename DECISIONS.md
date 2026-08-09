@@ -20,7 +20,7 @@ no entry below. A number may appear under several topics.
 - **Lines & timetables:** D-145, D-146, D-147, D-148, D-149, D-150, D-151,
   D-152, D-155, D-159
 - **Map generation & terrain:** D-018, D-019, D-020, D-021, D-022, D-023,
-  D-025, D-027, D-197, D-198, D-199
+  D-025, D-027, D-197, D-198, D-199, D-216
 - **Terraforming & structures:** D-028, D-034, D-050, D-051, D-052, D-124,
   D-141
 - **Save format, migrations & replays:** D-007, D-025, D-026, D-027, D-048,
@@ -39,19 +39,19 @@ no entry below. A number may appear under several topics.
 - **Industry & production:** D-022, D-062, D-063, D-064, D-069, D-071, D-079,
   D-085, D-086, D-174, D-201, D-202, D-205
 - **Towns, council & ownership:** D-101, D-102, D-103, D-104, D-205, D-207,
-  D-206, D-213
+  D-206, D-213, D-216
 - **Economy, finance & emissions:** D-008, D-090, D-091, D-092, D-105, D-154,
   D-180, D-193, D-196
 - **Balancing & scenarios:** D-038, D-039, D-040, D-041, D-066, D-087, D-088,
   D-116, D-151, D-152, D-156, D-158, D-159, D-187, D-190, D-194, D-195,
   D-196, D-197, D-198, D-199, D-200, D-203, D-204, D-207, D-211, D-213,
-  D-215
+  D-215, D-216
 - **Vehicles & fleet:** D-043, D-044, D-045, D-068, D-076, D-089, D-093,
   D-096, D-142, D-143, D-145, D-146, D-155, D-157, D-171, D-174, D-181, D-185,
   D-201, D-207
 - **Water & air:** D-094, D-095, D-096, D-097, D-098, D-099
 - **Competitors, AI & tenders:** D-107, D-108, D-109, D-115, D-116, D-121,
-  D-122, D-147, D-152, D-153, D-154, D-155, D-156, D-158
+  D-122, D-147, D-152, D-153, D-154, D-155, D-156, D-158, D-216
 - **Rendering & art:** D-013, D-014, D-033, D-035, D-112, D-117, D-125, D-127,
   D-136, D-140, D-160, D-161, D-162, D-163, D-164, D-165, D-166, D-169, D-170,
   D-171, D-172, D-173, D-174, D-175, D-177, D-179, D-186, D-202, D-205, D-206,
@@ -70,7 +70,7 @@ no entry below. A number may appear under several topics.
 - **Testing method & fixtures:** D-010, D-038, D-072, D-074, D-084, D-133,
   D-167, D-183, D-186, D-188, D-189, D-190, D-191, D-192, D-193, D-194,
   D-195, D-196, D-197, D-198, D-199, D-200, D-201, D-202, D-203, D-204,
-  D-205, D-207, D-206, D-208, D-209, D-210, D-212, D-213, D-215
+  D-205, D-207, D-206, D-208, D-209, D-210, D-212, D-213, D-215, D-216
 - **Process & specification:** D-070, D-123, D-129, D-133, D-138, D-140,
   D-185, D-191, D-197, D-198, D-199, D-203, D-204, D-205, D-206, D-215
 
@@ -10610,3 +10610,188 @@ Main chunk **951,284 B**, the digit D-214 measured an hour earlier, against its
 never in the bundle, so **+0 B**, measured rather than assumed. `npm run
 typecheck`, `npm run lint` and `npm run build` clean; 127 test files and 1,533
 tests green. The perf suite is the documented exception above.
+
+---
+
+## Towns: a street exists for something (2026-08-09)
+
+### D-216 A town is laid out for the houses it has, not for the radius of its size class
+
+The owner looked at a generated town and said "es haengt immer noch alles
+zusammen, strassen durch haeuser usw, das sieht doch nicht echt aus". The
+report that came with it named a checkerboard of isolated concrete diamonds.
+**That diagnosis was measured first and it is wrong**; what is wrong with a
+town is something else, and it is much larger.
+
+**Measured before anything was touched** - five seeds, 200 towns, 256 tiles,
+temperate, the same erosion the unit fixtures use:
+
+| | before | after |
+| --- | --- | --- |
+| town road tiles | 9,962 | **4,359** (-56.2 %) |
+| road tiles with one connection | 1,095 (11.0 %) | 866 (19.9 %) |
+| **of those, serving nothing** | **1,013** | **0** |
+| road tiles touching no building | 6,726 (67.5 %) | 1,164 (26.7 %) |
+| paved (TownGround) tiles | 13,507 | 8,024 (-40.6 %) |
+| buildings | 3,281 | 3,265 (-0.5 %) |
+| buildings per paved tile | 0.243 | **0.407** |
+| mean largest paved patch per town | 0.9975 | 0.9974 |
+
+**Two thirds of every town's streets served nothing at all.**
+`TOWN_START_RADIUS` is 10 / 6 / 3 and it was used for two different jobs: the
+area a town CLAIMS (the "Stadtgebiet" of 13.3, which the council rates a
+company on) and the area it BUILDS. A city of 8,000 wants 80 houses at one per
+hundred inhabitants and its radius-10 grid offers some 200 plots, so
+`layRoadGrid` laid every main axis and every side street across the full
+diameter - `length = r * 2 + 1`, whether or not anything would ever stand there
+- and `placeBuildings` filled the middle and stopped at 80. The outer half of
+every town was streets through empty land. On top of that the runs did not stop
+at the town's OWN GROUND: `claimArea` claims a disc and the grid was laid over
+the square, so every town also wrote roads and pavement onto four corners of
+open country it did not own (D-101).
+
+**And the checkerboard was never there.** Two independent measures say so: 3
+isolated paved tiles in 13,507, and a 4-connected walk of each town's paved
+ground that finds the largest patch holding **0.9975** of it - before the
+change as well as after. The defect report's cure (fill the enclosed gaps) was
+therefore refused with the measurement, and the cure that was taken is the one
+the same instruction offers second: **a smaller extent with denser building.**
+
+**The layout is five passes now and the ORDER is the whole change.** Streets
+are laid over ground the town owns; everything the centre cannot be driven to
+is dropped; the houses go up along what is left; every street that ended up
+serving nothing is taken away; and only THEN is the ground under the survivors
+paved. Laying the pavement first - which is what the file did - paves a street
+that is about to be removed and cannot take it back, because the terrain that
+was there is gone by the time anybody knows.
+
+- **The extent is derived from where a house can actually stand.**
+  `builtRadiusFor` walks the rings outward counting tiles that are the town's
+  own ground, buildable, off the street lines and beside one, and stops at the
+  ring that has counted enough plots for the population's houses;
+  `TOWN_BUILT_RADIUS_MARGIN` (1 tile) adds the one ring that a plot's own
+  street can lie in. It never exceeds the claimed radius, so a town that cannot
+  fill itself behaves exactly as before. Reference city: radius 10 -> **built
+  radius 7**, 244 -> 114 road tiles, the same 80 houses.
+- **Pruning is iterative and its fixed point is unique** (law #8, law #3). A
+  street with one connection and nothing beside it is removed; that can turn
+  its neighbour into the same thing, so a row-major sweep repeats until nothing
+  moves. Removing a leaf can only create leaves and never un-make one, and a
+  protected tile is never taken, so the sweep ORDER decides how many passes it
+  takes and nothing about the result. Nothing but a building can stand beside a
+  street while a map is generated, but the guard asks about track, bridges and
+  industries too, because M20 grows towns with the same rule over a played map.
+- **A street may be shortened, never dissolved.** The first version of the
+  pruner was wrong and its own test caught it: clearing a leaf clears the bit
+  the neighbour carried back, and where that was the neighbour's ONLY bit the
+  neighbour became a road layer with no connection - not a street - and the
+  house beside it was left without one. Eight houses of Nieder-Weidengrund on
+  seed 360 stood like that. The pair is refused instead of repaired.
+- **A street the centre cannot be driven to is not a street.** The same eight
+  houses stood across a river: a run reaches the far bank, lays a fragment
+  there, and the town has no bridge. A flood fill from the centre (explicit
+  queue, law #8) drops every fragment, which also makes the pruner well posed -
+  after it, a town's streets are ONE network.
+- **The zoning is deliberately NOT scaled to the new extent.** `zoneFor` reads
+  the CLAIMED radius, as it always did. The zones are the town's economy - a
+  station's `commercialShare` reads them and with it the M19 fare classes - so
+  scaling them to the streets would turn a street change into an economic one:
+  measured on the reference city, at the built radius the works start 5.6 tiles
+  out instead of 8 and the outer third of every town becomes industrial.
+  Measured both ways: the AI runs come out identical to the euro, so this is
+  discipline rather than a fix.
+
+**The ripple, in full.** Town centres, names, size classes, populations and
+radii are all unmoved - the generator draws exactly one number per town for the
+street spacing and it is still drawn first, so no later draw shifted (law #3).
+What moved:
+
+- **The canonical cross-OS pin** (D-137): `f04cebfeb26e8161` ->
+  **`ddaacd4b970d31db`**, re-recorded by the documented protocol.
+- **The soak fixture** (D-190): `856392bde0cd79bf` -> **`051d20db6ca47f1b`**,
+  and its recorded command count 698 -> **3,818** - the competitors issue five
+  and a half times as many orders on a map whose public streets are 56 %
+  shorter, which is the same fact as everything below.
+- **The save corpus did not move.** Its fixtures are real saved files decoded
+  by their own codecs; nothing in the format or the entity shape changed, so
+  the manifest stands at `9800c136644b0199`.
+- **SAVE_VERSION stays 30.** A generation change writes different VALUES into
+  layers that already existed; not one field, layer or entity changed shape, so
+  Z5 has nothing to spend and `saveFieldCoupling`, the round trip and every
+  migration test pass untouched.
+- **One shipped-scenario claim**: `passagiernetz.industries` 10 -> **14**. It
+  is the only figure of the eight worlds that moved, and no sentence rests on
+  it - it is not in `SCENARIO_BRIEFING_FIGURES` and no doc comment counts it -
+  so the number moves alone. Every town count, city count, corridor, land mass,
+  place name, briefing numeral and passive-growth curve is exactly where D-197,
+  D-198 and D-199 left it, including Frachtrausch's four industry positions and
+  its mine-to-plant distances. **Why so little moved is worth knowing**: a tile
+  inside a town's claimed disc is refused to industry by `townId` alone, so
+  everything this change does INSIDE a town is invisible to the industry pass.
+  Only the ground outside the disc - the four corners the grid used to cross -
+  changed hands, and eight cities are what makes passagiernetz the world where
+  that was enough to move a draw.
+- **Five of the six balancing scenarios of 19.4, Netzdesign, Takt, Punktzahl
+  and Harter Winter are untouched**: their worlds are hand built.
+- **Scenario 5's road company is BETTER**: 978,528 -> **1,173,298 EUR**, 6 ->
+  12 vehicles, one line -> two, deep inside its 0.8-3.2 M band and still
+  compounding through the year-twenty-one renewal. That is the measurement that
+  says a tighter map is not a broken one.
+
+**Two AI bands were re-banded, with the trace, and the second one is the entry
+worth reading.**
+
+`aiCompany`'s expansive personality (seed 2) goes 121,328 [alive, 3 stations, 1
+vehicle] -> **-241,309 [wound up, 5 stations, 1 line, 0 vehicles]**. It builds
+MORE than it did and it crews nothing in either run; its value declines
+monotonically from year one in both, and 362,637 EUR is twenty-five years of
+upkeep on a company whose revenue is zero at both measurements. D-158 named
+that stagnation an OPEN BOTTLENECK and refused it a growth band; blessing its
+SIGN was the half of the sentence that could not survive a world change. The
+assertion now holds what D-156 actually caught - that it still BUILDS - plus
+D-211's exposure bound.
+
+`aiGame`'s M8 acceptance loses the road company (538,469 -> **-157,183, wound
+up**, after laying 345 -> 546 tiles of its own road and drawing its credit line
+to the limit), and the richest competitor becomes the one that never built.
+Before re-banding anything, the fixture was played at HEAD - the generator
+untouched - on the three seeds beside its own:
+
+```
+4711  p0    20,792 l0 v0 s2  | p4  101,636 l0 v0 s16 | p1 538,469 l1 v6 s14
+4712  p4  -150,281 [X] s29   | p2 -161,432 [X] s2    | p0 415,000 l0 v0 s0
+4713  p4  -200,910 [X] s29   | p0 -650,744 [X] s3    | p3 500,000 l0 v0 s0
+4714  p4  -129,117 [X] s29   | p2 -477,036 [X] s3    | p3 500,000 l0 v0 s0
+```
+
+**On three of the four, at HEAD, two competitors wind up, no competitor owns a
+vehicle after twenty-five years, and the richest company is the one that never
+built anything.** Every assertion in that block fails on 4712, 4713 and 4714
+with nothing of this change in the tree. So "the winner is a real network" was
+never a property of the simulation - it was a property of seed 4711, and this
+change moved that sample onto the pile where three of its four neighbours
+already sat. The block is loosened to what the four runs share, the sweep is
+recorded beside it, and **the defect it was covering up is named rather than
+tuned away: the AI builds networks it cannot crew.** It spends its capital on
+way and stations and has nothing left for vehicles; that is D-158's open
+bottleneck, it belongs to M11, and shaping a town generator around it would be
+the wrong repair.
+
+**What the game still does not do, named rather than hidden.** The road cell's
+kerb is drawn in `ROAD_INK.verge` = `#b8b4ac` and `TERRAIN_COLORS[TownGround]`
+is `#b8b4ac` - **the same hex**. A town street therefore paints its kerb in the
+colour of the ground it stands on, so the 11-design-px verge D-212 designed as
+the road's edge is invisible on the only terrain town roads ever run over, and
+what the eye gets is an 8.4 px carriageway floating on an unbounded pale field
+shared with the houses. That is the literal mechanism behind "strassen durch
+haeuser" and it is a RENDER fact in D-212's own table, not a generator one, so
+it is not touched here. It wants its own bundle and a decision about which of
+the two - street or plot - stops being Beton.
+
+**Cost.** Zero save bump, zero migration edit, zero snapshot bytes, zero
+protocol fields, zero atlas cells, zero i18n strings, zero new RNG draws, zero
+change to the draw ORDER. Two constants, both in `constants.ts` with unit and
+origin. `npm run typecheck`, `npm run lint` and `npx prettier --check` clean;
+`tests/unit` 107 files and 1,436 tests green, `tests/determinism` and
+`tests/corpus` 38 green, `tests/balance` 63 green, `tests/soak` 4 green on the
+re-recorded fixture.

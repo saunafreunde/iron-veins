@@ -155,8 +155,27 @@ export const TOWN_MAX_SLOPE = 1;
 export const TOWN_SIZE_SHARES = [0.08, 0.25, 0.67] as const;
 export const TOWN_START_POPULATION = [8_000, 2_500, 400] as const;
 
-/** Half width of the initial built-up area per town size. [tiles] */
+/**
+ * Half width of the area a town CLAIMS per size class. [tiles]
+ *
+ * This is the "Stadtgebiet" of section 13.3 - what the council rates a company
+ * on and what exclusive building rights cover - and it is deliberately larger
+ * than the ground the town has actually built on. How far the STREETS reach is
+ * derived from the buildings the town has to house (D-216), not from this
+ * table.
+ */
 export const TOWN_START_RADIUS = [10, 6, 3] as const;
+
+/**
+ * Rings of slack added to the outermost ring that can still take a plot, when
+ * the built-up half width is derived. [tiles]
+ *
+ * Origin: a plot's street lies at most one Chebyshev ring further out than the
+ * plot itself, so exactly one ring closes the gap between "the last house" and
+ * "the street it stands on". Anything larger puts back the empty outer blocks
+ * D-216 exists to remove.
+ */
+export const TOWN_BUILT_RADIUS_MARGIN = 1;
 
 /** Spacing of the main roads inside a town. [tiles] */
 export const TOWN_MAIN_ROAD_SPACING_MIN = 6;

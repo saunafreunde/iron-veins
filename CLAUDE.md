@@ -1907,6 +1907,59 @@ zoned as - the first economic use of the 13.1 zones. Two i18n strings.
   worlds moved because of it - scenario 5 road 978,528 EUR, in band - but
   nothing in the AI yet CHOOSES a class for a fast line.
 
+## Towns - a street exists for something (D-216)
+
+The owner's third verdict item: "es haengt immer noch alles zusammen, strassen
+durch haeuser usw". Measured over five seeds and 200 towns before anything was
+touched, and the diagnosis that came with the report - a checkerboard of
+isolated concrete diamonds - is **refuted by two measures**: 3 isolated paved
+tiles in 13,507, and a largest-paved-patch share of **0.9975** per town, before
+the change as well as after. What was actually wrong is bigger: **67.5 % of
+every town's road tiles touched no building at all**, and 1,013 of the 1,095
+one-connection tiles - the stubs running into the wilderness - served nothing
+whatever.
+
+- **`TOWN_START_RADIUS` did two jobs and only ever deserved one.** It is what a
+  town CLAIMS (13.3's Stadtgebiet, what the council rates a company on); how
+  far the STREETS reach is derived now from the houses the population asks for
+  (`builtRadiusFor`, plus `TOWN_BUILT_RADIUS_MARGIN` = one ring so a plot's own
+  street is inside the town). Reference city: radius 10 -> built radius 7, 244
+  -> 114 road tiles, the same 80 houses.
+- **Five passes and the ORDER is the change**: lay the streets on ground the
+  town OWNS (the grid used to cross four corners of the claim disc it does not
+  own, D-101), drop what the centre cannot be driven to, put the houses up,
+  take away every street that serves nothing, and pave LAST - paving first
+  cannot be taken back, because the terrain that was there is gone.
+- **A street may be shortened, never dissolved**, and the pruner's own test
+  caught the version that could: clearing a leaf clears the bit the neighbour
+  carried back, and eight houses of Nieder-Weidengrund lost their street that
+  way. The zoning stays on the CLAIMED radius on purpose - scaling it to the
+  streets would turn a street change into an economic one (`commercialShare`,
+  the M19 classes), and measuring both ways says the AI runs are identical.
+- After: **road tiles 9,962 -> 4,359, unserved dead ends 1,013 -> 0, paved
+  13,507 -> 8,024, buildings 3,281 -> 3,265, houses per paved tile 0.243 ->
+  0.407.**
+- **Ripple**: canonical pin `f04cebfeb26e8161` -> **`ddaacd4b970d31db`**, soak
+  `856392bde0cd79bf` -> **`051d20db6ca47f1b`** (698 -> 3,818 recorded
+  commands), ONE shipped-scenario claim (`passagiernetz.industries` 10 -> 14,
+  quoted by nothing). Corpus manifest unmoved, **SAVE_VERSION stays 30** -
+  values changed, no shape did. Scenario 5's road company is BETTER (978,528 ->
+  1,173,298 EUR, 6 -> 12 vehicles).
+- **Two AI bands re-banded with a trace, and the trace is the point.** Before
+  touching `aiGame`'s M8 block it was played at HEAD on the three seeds beside
+  4711: on 4712, 4713 and 4714 two competitors wind up, nobody owns a vehicle
+  after twenty-five years, and the richest company is the one that never built.
+  "The winner is a real network" was a property of seed 4711, not of the
+  simulation. The block now holds what all four runs share and **names the
+  defect it was covering: the AI builds networks it cannot crew** (D-158's open
+  bottleneck, M11's to fix).
+- **Named residual, and it is the owner's own sentence**: `ROAD_INK.verge` and
+  `TERRAIN_COLORS[TownGround]` are the SAME hex `#b8b4ac`, so a town street
+  paints its kerb in the colour of the ground under it and D-212's 11 px verge
+  is invisible on the only terrain town roads run over. That is why a house
+  still looks like it stands in the road. Render-side, D-212's table, its own
+  bundle.
+
 ## Still outstanding
 
 - **The two named walls of D-158.** A passenger pile a fleet merely
