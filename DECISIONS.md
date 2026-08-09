@@ -34,7 +34,7 @@ no entry below. A number may appear under several topics.
 - **Stations & catchment:** D-049, D-080, D-095, D-150, D-159, D-178, D-179,
   D-208, D-210
 - **Cargo, payment & routing:** D-036, D-037, D-065, D-067, D-075, D-077,
-  D-078, D-118, D-142, D-151, D-176, D-178, D-187, D-207
+  D-078, D-118, D-142, D-151, D-176, D-178, D-187, D-207, D-211
 - **Industry & production:** D-022, D-062, D-063, D-064, D-069, D-071, D-079,
   D-085, D-086, D-174, D-201, D-202, D-205
 - **Towns, council & ownership:** D-101, D-102, D-103, D-104, D-205, D-207, D-206
@@ -42,7 +42,7 @@ no entry below. A number may appear under several topics.
   D-180, D-193, D-196
 - **Balancing & scenarios:** D-038, D-039, D-040, D-041, D-066, D-087, D-088,
   D-116, D-151, D-152, D-156, D-158, D-159, D-187, D-190, D-194, D-195,
-  D-196, D-197, D-198, D-199, D-200, D-203, D-204, D-207
+  D-196, D-197, D-198, D-199, D-200, D-203, D-204, D-207, D-211
 - **Vehicles & fleet:** D-043, D-044, D-045, D-068, D-076, D-089, D-093,
   D-096, D-142, D-143, D-145, D-146, D-155, D-157, D-171, D-174, D-181, D-185,
   D-201, D-207
@@ -9718,6 +9718,151 @@ the road ribbon; and that the D-208 module body, which is baked at ONE facing,
 does not look wrong when its driveway comes from the other side. That last one
 is the named art residual: a per-instance facing for modules would need four
 baked variants per kind and a 6.2 booking, and this bundle did not take it.
+
+### D-211 Gravitation weights the destination, it does not choose it: population times airport size, multiplied onto the network-time split
+
+SPEC2 M19's second bundle. `chooseDestinations` has always split a batch of
+cargo between the nearest few reachable stations, weighted by the reciprocal
+of the expected journey. For the two passenger classes that weight is now
+MULTIPLIED by the mass of the place at the far end - the destination town's
+population, times the size of its airport - which is the classic gravity model
+of transport planning and the thing that makes a city worth building towards.
+No save field, no snapshot byte, no `SAVE_VERSION` bump: the rule is a pure
+function of state the world already carries, so the v30 migration of D-207 was
+not touched.
+
+**The mass is `GRAVITY_BASE_POPULATION + population`, times `AIRPORT_RUNWAYS`.**
+Both halves were chosen so that this rule invents as close to nothing as a
+rule can:
+
+- The population is the destination TOWN's, not the share of it a station's
+  catchment covers. SPEC2 says "Zielstadt-Population" and it is also the
+  honest measure - what makes a city worth travelling to is the city. The
+  consequence is stated rather than left to be discovered: two stations
+  serving one town each carry that town's whole pull, which is right in the
+  same sense that two stops in one city are two ways of reaching that city.
+- The floor is a quarter of the smallest town the generator places (the
+  village row of `TOWN_START_POPULATION`, so 100 inhabitants). It exists
+  because a destination with no town would otherwise weigh nothing, and a
+  candidate set that weighs nothing in total has no normalisable split at all.
+  Being ADDED rather than substituted, it is also what stops two shrunken
+  villages of five and ten inhabitants dividing a town's entire output 1:2.
+- The airport multiplier IS `AIRPORT_RUNWAYS` - 1, 2, 4 - because that is the
+  game's OWN measure of an airport's size, and an airport is a reason to
+  travel that has nothing to do with the town: it is the way off the map. An
+  airstrip, at one runway, is therefore worth exactly its town and no more.
+  Inventing a second size table beside the one the runway allocator already
+  reads would have meant two numbers to keep in step for one idea.
+
+Only `+` and `*` (law #4), no exponent and no logarithm, so the split stays
+bit-exact and the distance term keeps the plain 1/(t+1) shape it had. Zero
+draws from any RNG stream (Z3): gravity is arithmetic on saved state.
+
+**It weights the candidates; it does not choose them.** The shortlist is still
+the nearest `CARGO_DESTINATION_FANOUT` by network time, so a city just outside
+the fanout is not pulled into it. That is a stated floor and not an oversight:
+SPEC2 words the rule as a weighting ("multiplikativ zur Netzzeit-Gewichtung"),
+selection by mass would move every existing passenger flow in the game rather
+than re-proportion it, and the fanout exists in the first place to keep the
+split legible in the station panel.
+
+**Freight is untouched, and the rescue path proves it rather than promising
+it.** `isPassengerClass` gates the multiplication, so an ore batch is weighted
+exactly as it was. The one other consumer of the candidate scratch -
+`refreshCargoRouting`, which gives a homeless parcel ONE destination - used to
+take `candidateIds[0]`, the nearest. It takes the heaviest weight now, which
+for freight is provably the same index: without gravity the weights fall as
+the costs rise, so the maximum sits at index 0 by construction and a tie keeps
+it there. For passengers it is what stops the rescue contradicting the
+distribution.
+
+**The cadence is daily, and it is measured rather than assumed.** All three
+callers - `refreshCargoRouting`, `produceTownCargo` and `collectIndustryOutput`
+- sit inside the `tick % TICKS_PER_DAY` block of `World.step`, and nothing was
+added to the per-tick path. `tests/unit/gravity.spec.ts` steps a world one
+tick at a time for four game days with the fleet parked and counts the ticks
+on which a station's pile moves: exactly four, every one of them on a day
+boundary. A second, structural half asserts the two town-side hooks are called
+once each and from inside that block.
+
+**What the test controls for.** A destination that is bigger AND nearer is not
+evidence of gravity, so the fixture is symmetric: a hub town with a branch
+twelve tiles west and twelve tiles east, the buses bought and given orders but
+never started, so the two legs keep the identical straight-line seed of D-077
+for the whole test instead of drifting apart as trips are measured. Every
+gravity claim asserts `expectedTicks(hub, west) === expectedTicks(hub, east)`
+before it reads a split. Measured: a town of 2,400 against one of 1,200 at the
+same network time takes **1.923** times the passenger flow, which is exactly
+the mass ratio 2,500 : 1,300. Two controls on the same geometry say the number
+is the population and not the road - with the two towns equal the split is
+1.000, and MAIL, a town cargo that is always accepted and is deposited by the
+same function in the same daily pass over the same legs, stays 1.000 with the
+populations unequal. Negative control run: with the multiplication switched
+off, the two gravity claims fail and all seven other assertions stay green.
+
+**The balancing bands of section 19.4 did not move, by construction and then
+by measurement.** Those worlds are hand-built with two or three stations, so a
+station has exactly ONE reachable destination, the normalisation makes its
+weight 1 whatever the mass is, and the rule is a no-op - the D-201 device
+again. Measured in a clean worktree at bc88982 plus the three files of this
+rule (identical at eed256e, the commit before it): scenario 1 payback year 3, scenario 2 249,980 EUR and payback year 6,
+scenario 3 159,516 EUR/yr, scenario 6 month 25, Netzdesign 3.73, takt -8.3 %
+and 0.57, Punktzahl 5,889, hard winter in band, scenario 5 road 1,122,965 /
+rail 90,230 / expansive 121,328 EUR - every figure identical to the M19
+bundle-1 run. Scenario 5 is unmoved for the same reason: its lone AI runs one
+line, so its served stations have one candidate each and its nine unserved
+stations are unreachable and never candidates. The canonical cross-OS pin
+(`40be7d25b1a6a90f`) and the save corpus manifest are unmoved too - the first
+because the recorded road fixture is a two-station world, the second because
+it decodes files and never steps a simulation.
+
+**Two pins DID move, and both were re-recorded from a tree containing only
+this change.** The soak fixture - the recorded twenty-five year AI game - went
+`65d8cb57cf5edec5` -> **`071cbd7e8db44893`** at 800 -> **704** commands; its
+own replay-twice determinism half stayed green, so what moved is the game and
+not the machine. And `aiGame`'s rail value floor failed. Both figures below
+were taken back to back in two clean git worktrees at the same commit,
+differing only in the three files of this rule - and re-measured unchanged
+after D-210 landed, so the table below holds at eed256e and at bc88982 alike:
+
+| company | baseline (bc88982) | with gravity |
+| --- | --- | --- |
+| Rail | 0 lines, 95 rail, 2 stations, 0 vehicles, **-159,142 EUR** | 1 line, 167 rail, 4 stations, 0 vehicles, **-509,219 EUR**, wound up |
+| Road | 1 line, 355 road, 14 stations, 6 vehicles, **550,942 EUR** | 1 line, 345 road, 14 stations, 6 vehicles, **536,615 EUR** |
+| TownNetwork | 309 road, 16 stations, **95,788 EUR**, wound up | 309 road, 16 stations, **100,763 EUR**, alive |
+
+The mechanism is the one thing this world has that the balancing worlds do
+not: three competitors sharing ONE link graph, so a station is reachable from
+another company's stops and multi-candidate splits actually exist. The road
+company's bus line therefore carries different traffic, the towns on it grow
+at different rates, and the rail company picks a different project out of the
+world that results. **The rail company has ZERO vehicles in BOTH runs**, so
+this rule cannot have reached one cent of its revenue: the entire difference
+is a bigger railway - seventy-two more tiles of track, two more stations, a
+line where it had none - bought out of the same capital and the same 300,000
+credit line. It is the stagnant husk D-158 names as an open bottleneck in both
+runs, and it builds MORE, not less.
+
+**The re-band, and the fact that it is a loosening.** The floor moves from
+-250,000 EUR to `-(START_CAPITAL_CT[Normal] + LOAN_MIN_LIMIT_CT)` = -800,000
+EUR, which is the company's total exposure: its starting capital plus the
+credit line every company can draw whatever its balance sheet says. Below that
+line, money came from nowhere. That is the thing every version of the comment
+above `VALUE_FLOOR_CT` has claimed the floor was for, and it is the floor now
+instead of a number set one and a half times under a chaotic quarter century -
+a number that has needed re-banding twice inside one milestone (D-207 moved it
+from -150,000 to -250,000) because the shared world keeps reshuffling which
+husk dies. A band that moves with every bundle guards nothing. Said plainly:
+this is weaker than what it replaces. What the old number caught that an
+exposure bound cannot - a personality that stops BUILDING, the D-156
+regression - is asserted directly in the same test now, where it can be read:
+every competitor that took the field still owns at least two stations and some
+way at the end. WHICH competitor is wound up is deliberately not asserted; the
+M8 criterion is that at most one is, and that still holds.
+
+Not taken here, and named so nobody has to rediscover them: a station's share
+of its own town, a destination just outside the fanout, and the return trips
+and the AI's own use of the classes, which are the remaining bundles of M19.
 
 ### D-212 The road was drawn along the wrong tile axis and a whole tile long: the ribbon, the round join, and a marking that runs through a boundary
 

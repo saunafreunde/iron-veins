@@ -1,7 +1,9 @@
 import {
+  AIRPORT_RUNWAYS,
   CARGO_DESTINATION_FANOUT,
   CARGO_MAX_WAIT_DAYS,
   CARGO_ROUTE_EPSILON_TICKS,
+  GRAVITY_BASE_POPULATION,
   STATION_CARGO_CAPACITY,
   TICKS_PER_DAY,
 } from '../constants';
@@ -9,11 +11,11 @@ import { stationAccepts } from '../industry/catchment';
 import { industrySpec } from '../industry/types';
 import { scheduleOf } from '../lines/LineStore';
 import { recordStationCargo, StationHistoryField } from '../station/history';
-import type { Station } from '../station/types';
+import { stationAirportSize, type Station } from '../station/types';
 import { OrderTarget } from '../vehicles/VehicleStore';
 import type { World } from '../World';
 import { addCargo, compactStacks, transferCargo, type CargoStack } from './stack';
-import { Cargo } from './types';
+import { Cargo, isPassengerClass } from './types';
 
 /**
  * Where a parcel is going, and who is allowed to carry it (section 7.4).
@@ -284,6 +286,42 @@ export function transferToStation(station: Station, stack: CargoStack): number {
 // ------------------------------------------------------------- destinations
 
 /**
+ * How much of a reason to travel there a destination is (SPEC2 M19, gravity).
+ *
+ * The classic gravity model of transport planning: a trip is likelier the
+ * bigger the place at the far end and the shorter the journey. This function
+ * is the FIRST half - the mass - and it is deliberately a pure function of
+ * saved world state (the town's population, the station's modules), so it
+ * costs no save field, draws no randomness and is bit-exact under law #4:
+ * `+` and `*` only, no exponent and no logarithm.
+ *
+ *  - **Population** is the destination TOWN's, not the station's catchment.
+ *    SPEC2 says "Zielstadt-Population" and it is the honest measure: what
+ *    makes a city worth travelling to is the city, not how many of its houses
+ *    happen to be inside one stop's circle. Two stations serving one town
+ *    therefore both carry the town's full pull - which is right in the same
+ *    sense that two stations in one city are two ways of reaching that city.
+ *  - **Airport size** multiplies it, because an airport is a reason to travel
+ *    that has nothing to do with the town: it is the way OFF the map. The
+ *    game's own measure of an airport's size is how many aircraft it turns
+ *    round at once, so the multiplier IS `AIRPORT_RUNWAYS` (1 / 2 / 4) and
+ *    this rule invents no number of its own. An airstrip, at one runway, is
+ *    worth exactly its town and nothing more.
+ *
+ * Exported because `tests/unit/gravity.spec.ts` measures it directly: the
+ * split it produces is asserted at equal network time, and the mass is the
+ * only thing that may then differ.
+ */
+export function gravityMassOf(world: World, station: Station): number {
+  const town = station.townId >= 0 ? world.towns[station.townId] : undefined;
+  const mass = GRAVITY_BASE_POPULATION + (town === undefined ? 0 : town.population);
+
+  const size = stationAirportSize(station);
+  if (size < 0) return mass;
+  return mass * (AIRPORT_RUNWAYS[size] ?? 1);
+}
+
+/**
  * Choose where a batch of newly produced cargo is going.
  *
  * Candidates are the stations that take this cargo and that the network can
@@ -291,6 +329,27 @@ export function transferToStation(station: Station, stack: CargoStack): number {
  * the reciprocal of the expected journey - so a nearby works gets most of a
  * mine's output and a distant one still gets some, and a town's passengers fan
  * out over the stops around it instead of all queueing for the nearest.
+ *
+ * Since SPEC2 M19 a PASSENGER batch is weighted by gravity as well: the
+ * network-time weight is MULTIPLIED by the mass of the place at the far end
+ * (`gravityMassOf`), which is what makes a city draw more travellers than a
+ * village at the same distance. Freight is untouched - a works takes what it
+ * takes, and iron ore has no opinion about how big the town around the
+ * furnace is.
+ *
+ * Two things about the shape of that, stated rather than left to be
+ * discovered:
+ *
+ *  - Gravity weights the candidates; it does not CHOOSE them. The shortlist is
+ *    still the nearest few by network time, so a city just outside the fanout
+ *    is not pulled into it. Selection by mass would move every existing
+ *    passenger flow in the game for a rule SPEC2 words as a weighting
+ *    ("multiplikativ zur Netzzeit-Gewichtung"), and the fanout exists to keep
+ *    the split legible in the station panel.
+ *  - It runs at the cadence its callers run at, which is once a game DAY
+ *    (`refreshCargoRouting`, `produceTownCargo`, `collectIndustryOutput` are
+ *    the whole of them, and all three sit in the daily block of `World.step`).
+ *    Nothing here may ever be reached per tick.
  *
  * Returns how many candidates were found; ids and weights are left in the
  * module scratch, normalised.
@@ -326,15 +385,39 @@ function chooseDestinations(world: World, station: Station, cargo: Cargo): numbe
   if (found === 0) return 0;
 
   // Weights: the reciprocal of the journey, normalised. The +1 keeps a station
-  // one tick away from taking the entire output of the region.
+  // one tick away from taking the entire output of the region. For passengers
+  // the gravity of the destination is multiplied onto exactly that number -
+  // one weight, two factors, so a doubled population and a halved journey are
+  // worth the same thing and the split stays a split.
+  const gravity = isPassengerClass(cargo);
   let total = 0;
   for (let i = 0; i < found; i++) {
-    const weight = 1 / (candidateCosts[i]! + 1);
+    let weight = 1 / (candidateCosts[i]! + 1);
+    if (gravity) weight *= gravityMassOf(world, world.stations[candidateIds[i]!]!);
     candidateCosts[i] = weight;
     total += weight;
   }
   for (let i = 0; i < found; i++) candidateCosts[i] = candidateCosts[i]! / total;
   return found;
+}
+
+/**
+ * The candidate the last `chooseDestinations` liked best - the heaviest
+ * weight, ties to the nearer one.
+ *
+ * A homeless parcel gets ONE destination rather than a split, and before
+ * SPEC2 M19 that was `candidateIds[0]`, the nearest. It still is for freight:
+ * without gravity the weights fall as the costs rise, so the maximum is at
+ * index 0 by construction and this function returns exactly what the old code
+ * returned. For passengers it is what makes the rescue agree with the
+ * distribution instead of contradicting it.
+ */
+function bestCandidate(found: number): number {
+  let best = 0;
+  for (let i = 1; i < found; i++) {
+    if (candidateCosts[i]! > candidateCosts[best]!) best = i;
+  }
+  return candidateIds[best]!;
 }
 
 /**
@@ -366,6 +449,11 @@ export function depositAtStation(
  * would walk every station twice a game day for an answer that is the same
  * both times - and this runs in the daily hook, where the 1,500-vehicle
  * fixture's spikes live.
+ *
+ * The gravity of SPEC2 M19 does not weaken that argument, it strengthens it:
+ * `gravityMassOf` reads the DESTINATION's town and modules and nothing about
+ * the cargo, so the two classes weigh the same candidates identically and the
+ * second search would still be the first one repeated.
  *
  * Commuters are placed first, so a town with no commercial zone at all makes
  * exactly the call the pre-M19 code made.
@@ -465,7 +553,7 @@ export function refreshCargoRouting(world: World): void {
 
       const found = chooseDestinations(world, station, stack.cargo);
       if (found > 0) {
-        stack.destinationStationId = candidateIds[0]!;
+        stack.destinationStationId = bestCandidate(found);
         continue;
       }
       // Nowhere to go, and out of patience (section 7.4). The station wears the

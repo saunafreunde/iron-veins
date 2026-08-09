@@ -77,11 +77,19 @@ export function airportSize(kind: number): number {
   return -1;
 }
 
-/** The biggest airport at this station, or -1 when it has none. */
+/**
+ * The biggest airport at this station, or -1 when it has none.
+ *
+ * Indexed rather than `for...of`, for the reason `hasModule` below is: the
+ * runway allocator calls this from inside the tick, and since SPEC2 M19 the
+ * daily gravity pass calls it once per destination candidate. The array
+ * iterator is an allocation V8 does not always elide (law #7).
+ */
 export function stationAirportSize(station: Station): number {
   let best = -1;
-  for (const module of station.modules) {
-    const size = airportSize(module.kind);
+  const modules = station.modules;
+  for (let i = 0; i < modules.length; i++) {
+    const size = airportSize(modules[i]!.kind);
     if (size > best) best = size;
   }
   return best;

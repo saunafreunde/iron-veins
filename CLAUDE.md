@@ -877,7 +877,6 @@ perf and environment notes above.
   atlas page. `tests/unit/roadCell.spec.ts` rasterises the shipped cell and
   fails five of nine assertions on the old geometry.
 
-
 ## M14 - instruments: flow atlas, station x-ray, statistics, tooltips
 
 Instruments BEFORE dynamics: the diagnosis tools M18-M21 will be
@@ -1745,8 +1744,36 @@ Zero snapshot bytes, zero atlas cells, two i18n strings.
   on twelve tiles of bus road, **0.664** on thirty - past twice the grace
   period a business traveller is worth LESS per seat than the commuter beside
   him, which is the whole mechanism.
-- Still open in M19: gravity in `chooseDestinations`, return trips, and the
-  AI's own use of the classes.
+- **Gravitation weights a destination; it never chooses one** (D-211, bundle
+  2). A passenger batch's network-time weight is MULTIPLIED by the mass of the
+  place at the far end - `GRAVITY_BASE_POPULATION + population`, times
+  `AIRPORT_RUNWAYS` (1/2/4, the game's own size measure, so no second table).
+  Zero save fields, zero snapshot bytes, zero RNG draws, `+` and `*` only. The
+  shortlist stays the nearest few by time: a city outside the fanout is not
+  pulled in, which is a stated floor, not an oversight. Freight is gated out by
+  `isPassengerClass`, and the homeless-parcel rescue now takes the heaviest
+  weight - provably `candidateIds[0]` for freight, so that path is unchanged
+  for everything but passengers. Cadence is DAILY and is measured tick by tick
+  (four days, four deposits, all on day boundaries), not assumed.
+- **A bigger town at the SAME network time takes 1.923x the flow** (D-211),
+  which is exactly the mass ratio 2,500 : 1,300. The fixture is symmetric and
+  its buses are ordered but never started, so the two legs keep the identical
+  D-077 seed and the equality is ASSERTED before any split is read. Two
+  controls on the same geometry: equal towns split 1.000, and mail - same
+  legs, same daily pass, same function - stays 1.000 with the towns unequal.
+- **Every 19.4 band is untouched, and so are scenario 5 and the canonical
+  pin** (D-211): those worlds give a station exactly ONE reachable
+  destination, so the normalisation makes the mass irrelevant (the D-201
+  device). What moved is the three-competitor world, where companies share one
+  link graph and multi-candidate splits exist: soak `65d8cb57cf5edec5` ->
+  **`071cbd7e8db44893`** at 800 -> 704 commands, and `aiGame`'s rail floor,
+  **re-banded a second time with an A/B trace from two clean worktrees at one
+  commit** - rail -159,142 -> -509,219 EUR with ZERO vehicles in both runs, so
+  the rule never touched its revenue. The floor is the company's total
+  exposure now (start capital + credit line) rather than 1.5x under a chaotic
+  run; that is a LOOSENING, it says so, and the "still builds" half is
+  asserted directly instead.
+- Still open in M19: return trips and the AI's own use of the classes.
 
 ## Still outstanding
 

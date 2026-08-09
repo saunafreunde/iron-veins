@@ -949,6 +949,22 @@ export const LINK_SAMPLE_MAX_TICKS = TICKS_PER_YEAR / 4;
 export const CARGO_DESTINATION_FANOUT = 3;
 
 /**
+ * What a destination with no town of its own is worth to the gravity of
+ * SPEC2 M19, in place of a population. [inhabitants]
+ *
+ * A quarter of the smallest town the generator places (the village row of
+ * TOWN_START_POPULATION): a halt in open country pulls like a hamlet - not
+ * like a city, and not like nothing. Nothing is what it would otherwise weigh,
+ * and a candidate set in which every destination weighs nothing has no total
+ * to normalise the split against at all.
+ *
+ * It is added to the population rather than replacing it, so it is also the
+ * floor under a village that has shrunk: two candidates whose populations are
+ * 5 and 10 are not a 1:2 split of a town's whole passenger output.
+ */
+export const GRAVITY_BASE_POPULATION = TOWN_START_POPULATION[2] / 4;
+
+/**
  * Slack when deciding whether a vehicle carries a parcel closer to its
  * destination. [ticks]
  *

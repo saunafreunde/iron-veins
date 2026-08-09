@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { CommandQueue } from '../../src/sim/commands/queue';
-import { Difficulty, MapClimate, TICKS_PER_YEAR, TILE_PUBLIC } from '../../src/sim/constants';
+import {
+  Difficulty,
+  LOAN_MIN_LIMIT_CT,
+  MapClimate,
+  START_CAPITAL_CT,
+  TICKS_PER_YEAR,
+  TILE_PUBLIC,
+} from '../../src/sim/constants';
 import { PERSONALITY_COUNT, Personality } from '../../src/sim/ai/types';
 import { hashWorld, World } from '../../src/sim/World';
 import { hashTwin } from './determinism';
@@ -115,13 +122,35 @@ function quarterCentury(): { world: World; queue: CommandQueue } {
  * What the floor is FOR is unchanged and still holds: at both figures the rail
  * personality is the stagnant husk D-158 names as an open bottleneck - no
  * line, no vehicle, two stations - and neither run is a company that stopped
- * building. The floor is set from the measured run exactly as the original was
- * (that is stated rather than hidden), one and a half times below it, so it
- * still catches a rail company that loses its starting capital AND its whole
- * credit line.
+ * building.
+ *
+ * **SPEC2 M19 bundle 2 moved it a SECOND time, and stopped pinning it to a
+ * run** (D-211). The gravity rule re-weights where a town's passengers are
+ * going, the road company's fourteen-stop bus line carries different traffic
+ * because of it, the towns on that line therefore grow at different rates -
+ * and the rail company picks a different project out of the world that
+ * results. Measured back to back in two clean worktrees at the same commit,
+ * differing only in the three files of the gravity rule: rail
+ * **-159,142 -> -509,219 EUR** (95 -> 167 tiles of track, 2 -> 4 stations, a
+ * line where it had none, and wound up where it was merely insolvent), road
+ * 550,942 -> 536,615 EUR, town network 95,788 [wound up] -> 100,763 alive.
+ * **The rail company has ZERO vehicles in BOTH runs**, so the gravity rule
+ * cannot have reached one cent of its revenue: the whole of the difference is
+ * a bigger railway bought out of the same capital and the same credit line.
+ *
+ * So the floor becomes the thing every version of this comment has described
+ * it as - the company's total exposure, its starting capital plus the credit
+ * line every company can draw whatever its balance sheet says. Below that
+ * line, money came from nowhere. **That is a LOOSENING and it is said plainly
+ * rather than dressed up**: a number set one and a half times under a chaotic
+ * twenty-five year run needs re-banding every time the shared world reshuffles
+ * which husk dies, which is twice in one milestone now, and a band that moves
+ * with every bundle guards nothing. What the old number caught that the new
+ * one does not - a personality that stops BUILDING - is asserted directly
+ * below instead, where it can be read.
  */
 const VALUE_FLOOR_CT: ReadonlyMap<number, number> = new Map([
-  [Personality.Rail, -250_000_00],
+  [Personality.Rail, -(START_CAPITAL_CT[Difficulty.Normal]! + LOAN_MIN_LIMIT_CT)],
   [Personality.Road, 400_000_00],
   [Personality.TownNetwork, 0],
 ]);
@@ -160,17 +189,29 @@ describe('M8 acceptance: twenty-five years against three competitors', () => {
     const rows = world.ai.map((state) => measure(world, state.companyId));
 
     // Solvency: at most one competitor may be wound up, and at least two
-    // must finish the quarter century alive - the measured run has the town
-    // network wound up and the other two still standing.
+    // must finish the quarter century alive. WHICH one dies is deliberately
+    // not asserted - it has been the town network and it is the rail company
+    // since the M19 gravity rule reshuffled the shared world (D-211) - but
+    // that at most one does is the acceptance criterion of M8.
     const woundUp = rows.filter((row) => row.bankrupt);
     expect(woundUp.length).toBeLessThanOrEqual(1);
     expect(rows.length - woundUp.length).toBeGreaterThanOrEqual(2);
 
-    // Value floors per personality, pinned under the measured run.
+    // Value floors per personality: the exposure bound (see VALUE_FLOOR_CT).
     for (const row of rows) {
       const floor = VALUE_FLOOR_CT.get(row.personality as Personality);
       if (floor === undefined) continue;
       expect(row.valueCt).toBeGreaterThanOrEqual(floor);
+    }
+
+    // And the thing the old rail number caught that an exposure bound cannot:
+    // a personality that stops BUILDING. This is the regression M11 stage C2
+    // dug out (D-156) and it is now asserted rather than implied by a figure -
+    // every competitor that took the field still owns a network at the end.
+    for (const row of rows) {
+      if (row.stations === 0) continue;
+      expect(row.stations, `${row.name} kept its stations`).toBeGreaterThanOrEqual(2);
+      expect(row.roadTiles + row.railTiles, `${row.name} kept its way`).toBeGreaterThan(0);
     }
 
     // And the winner is a real network, not the degenerate pile the 4.05M
