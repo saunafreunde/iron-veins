@@ -1953,12 +1953,57 @@ whatever.
   simulation. The block now holds what all four runs share and **names the
   defect it was covering: the AI builds networks it cannot crew** (D-158's open
   bottleneck, M11's to fix).
-- **Named residual, and it is the owner's own sentence**: `ROAD_INK.verge` and
-  `TERRAIN_COLORS[TownGround]` are the SAME hex `#b8b4ac`, so a town street
-  paints its kerb in the colour of the ground under it and D-212's 11 px verge
-  is invisible on the only terrain town roads run over. That is why a house
-  still looks like it stands in the road. Render-side, D-212's table, its own
-  bundle.
+- **Named residual, and it is the owner's own sentence** - **closed by D-217
+  below**: `ROAD_INK.verge` and `TERRAIN_COLORS[TownGround]` were the SAME hex
+  `#b8b4ac`, so a town street painted its kerb in the colour of the ground
+  under it and D-212's verge was invisible on the only terrain town roads run
+  over. That is why a house looked like it stood in the road.
+
+## Towns - the street stops being the plot (D-217)
+
+D-216's residual, fixed. **`ROAD_INK.verge` and `TERRAIN_COLORS[TownGround]`
+were the same hex**, so the boundary between street and plot did not exist in
+the pixels - the literal mechanism behind "strassen durch haeuser".
+
+- **16.3 decides which of the two moves, and it is not a toss-up.** `#b8b4ac`
+  is on the **Infra** line as "Beton", beside Gleis, Schotter and Strasse, so
+  the road's verge is entitled to it. 16.3's TERRAIN line names nine tones and
+  the game has ten terrains: coast and town ground are in neither, coast
+  already carried an invented tone, and town ground had reached across to the
+  infra line instead. **The terrain is the party with no claim.**
+- **Measured, before and after, on the rasterised cell** (D-212's device): a
+  straight town street paints **428 px of kerb** and **1,352 px of
+  carriageway** over **2,522 px of bare plot** - identical numbers on both
+  sides of the change, because not one pixel moved. What moved is the step
+  across the street/plot boundary: **dL\* 0.00 and contrast 1.000 -> dL\*
+  22.27 and contrast 2.082**. The street reads as a three-value sandwich now
+  (dark asphalt, BRIGHT kerb, mid plot) instead of a stripe on a sheet.
+- **`#8a775e` was chosen by search, not by eye**: L\* 51.2, C\* 16.8, hue 78 -
+  trodden earth. dE 20.9 from the verge and **20.5 or better under simulated
+  protanopia, deuteranopia and tritanopia, 18.8 in flat greyscale**, because
+  17.4's colour-blind mode does NOT repaint terrain - it swaps company and
+  cargo palettes, so a terrain distinction survives deficiency on its own or
+  not at all. Grass 23.0, field 16.9, forest 24.0, desert 22.9; closest are
+  rock 8.5 and, under the worst dichromacy for each, 7.3-7.5. The shipped
+  palette already lives with coast/desert at **2.4**, so this is the widest
+  separated of the ten.
+- **The whole collision class was walked**: ten terrains plus `WATER_DEEP`
+  against seven infrastructure inks, and **exactly one exact collision
+  existed**. Reported, not fixed: rock/bridge-deck 3.85 (a fallback marker
+  drawn above the ground it spans) and **rock/ballast 5.71, which is 16.3's
+  own Fels against its own Schotter** and therefore the specification's
+  choice. `RAIL_INK` is a new export purely so the audit can see the three
+  track hexes that used to be literals inside `drawTrackCell`.
+- **The minimap improves where it mattered**: the old pale grey was **8.8**
+  from SNOW; town ground is now 29.8 from snow, 20.4 from desert, 18.4 from
+  coast, 14.0 from field, and 6.6 from rock (the accepted trade). The
+  cross-height floor rises too, 3.4 -> 4.7.
+- Render-only in the strict sense: `TERRAIN_COLORS` is read by `Minimap.ts`,
+  `seasonArt.ts` and `water.ts` and nowhere else; `src/sim` knows the terrain
+  as an ENUM and has never seen its colour. Zero sim bytes, zero save bump,
+  zero snapshot bytes, zero atlas cells, no chunk checksum affected (a
+  checksum folds terrain ids, not tones). **Both pins go red on the old
+  colour - four assertions.**
 
 ## Still outstanding
 

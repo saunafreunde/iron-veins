@@ -757,6 +757,24 @@ export const ROAD_INK = {
 } as const;
 
 /**
+ * The three inks of a track cell, in pass order. [CSS hex]
+ *
+ * Named for the same reason `ROAD_INK` is, and exported for the second: the
+ * palette regression of D-217 walks every terrain colour against every
+ * infrastructure ink, and an ink that lives as a string literal inside a
+ * drawing function is one the audit cannot see. Two of the three are 16.3's
+ * own; the sleeper is creosoted timber, which the palette does not fix.
+ */
+export const RAIL_INK = {
+  /** 16.3 "Schotter". */
+  ballast: '#9a938a',
+  /** Creosoted sleeper - no 16.3 entry. */
+  sleeper: '#5a4b3a',
+  /** 16.3 "Gleis". */
+  rail: '#6b6560',
+} as const;
+
+/**
  * Marking periods per arm. 2 puts one period on a quarter tile - 12.5 m of
  * ground, against the 12-16 m a German Leitlinie repeats on. [count]
  */
@@ -1065,7 +1083,7 @@ function drawTrackCell(
   const ey = cy + ((dx + dy) * TILE_H) / 4;
 
   ctx.lineCap = 'butt';
-  ctx.strokeStyle = '#9a938a'; // ballast
+  ctx.strokeStyle = RAIL_INK.ballast;
   ctx.lineWidth = 9 * ATLAS_SCALE;
   ctx.beginPath();
   ctx.moveTo(cx, cy);
@@ -1073,7 +1091,7 @@ function drawTrackCell(
   ctx.stroke();
 
   // Sleepers across the ballast.
-  ctx.strokeStyle = '#5a4b3a';
+  ctx.strokeStyle = RAIL_INK.sleeper;
   ctx.lineWidth = 1.5 * ATLAS_SCALE;
   const normalX = -(ey - cy);
   const normalY = ex - cx;
@@ -1090,7 +1108,7 @@ function drawTrackCell(
   }
 
   // The two rails.
-  ctx.strokeStyle = '#6b6560';
+  ctx.strokeStyle = RAIL_INK.rail;
   ctx.lineWidth = 1.5 * ATLAS_SCALE;
   for (const offset of [-2.6 * ATLAS_SCALE, 2.6 * ATLAS_SCALE]) {
     const ox = (normalX / normalLength) * offset;

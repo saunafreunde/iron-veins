@@ -179,7 +179,11 @@ const TERRAIN_SPECKLE: readonly string[] = [
   '#d7dde1',
   '#c7ad79',
   '#4e5d40',
-  '#a9a59d',
+  // Town ground: the base tone at the same 0.916 the pale entry it replaces
+  // carried (D-217). Nothing consumes it today - made ground draws the
+  // Paving grain, whose ink is the FACE colour times a value - but a stale
+  // pale grey here would be the next hand's trap.
+  '#7e6d56',
 ];
 
 /** An entry that leaves the base palette alone. */

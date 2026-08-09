@@ -21,7 +21,7 @@ import {
   TOP_FLAT_SHADE,
   TOP_RAMP_AWAY_SHADE,
 } from '../../src/render/ground';
-import { ATLAS_SCALE, drawTerrainCell } from '../../src/render/TerrainAtlas';
+import { ATLAS_SCALE, drawTerrainCell, RAIL_INK, ROAD_INK } from '../../src/render/TerrainAtlas';
 
 /**
  * The ground, measured.
@@ -55,13 +55,86 @@ describe('the terrain palette against SPEC.md 16.3', () => {
   });
 
   it('names the two terrains 16.3 does NOT fix, so neither is mistaken for spec', () => {
-    // The simulation has ten terrains and the palette lists eight. Coast is an
-    // invention of the map generator with no entry in 16.3 at all; town ground
-    // borrows the INFRA tone "Beton", which is why a town's made ground and a
-    // road's kerb are the same grey by construction rather than by accident.
+    // The simulation has ten terrains and the palette lists eight. Coast and
+    // town ground have no entry in 16.3's terrain row at all, so both are the
+    // palette's own - which is precisely why town ground was free to move in
+    // D-217 and the road's "Beton" verge was not.
     expect(TERRAIN_COLORS[Terrain.Coast]).toBe('#cbb682');
-    expect(TERRAIN_COLORS[Terrain.TownGround]).toBe('#b8b4ac');
+    expect(TERRAIN_COLORS[Terrain.TownGround]).toBe('#8a775e');
     expect(TERRAIN_COLORS).toHaveLength(TERRAIN_COUNT);
+  });
+});
+
+// ------------------------------------------ terrain against infrastructure
+
+/**
+ * Every ink the game paints a built thing with, by the name it carries in
+ * the source. A terrain colour that EQUALS one of these makes that piece of
+ * infrastructure invisible on that terrain, which is not a matter of taste:
+ * it is the object and the ground it stands on painted with one brush.
+ *
+ * That is exactly what happened to the road (D-217). `ROAD_INK.verge` is
+ * 16.3's "Beton" and town ground had borrowed the same hex, so a street's
+ * kerb and graded verge were painted in the colour of the plot beside them
+ * and the only terrain town roads ever run over was the one terrain the
+ * road's edge could not be seen on.
+ */
+const INFRASTRUCTURE_INKS: ReadonlyArray<readonly [string, string]> = [
+  ['ROAD_INK.verge', ROAD_INK.verge],
+  ['ROAD_INK.asphalt', ROAD_INK.asphalt],
+  ['ROAD_INK.crown', ROAD_INK.crown],
+  ['ROAD_INK.mark', ROAD_INK.mark],
+  ['RAIL_INK.ballast', RAIL_INK.ballast],
+  ['RAIL_INK.sleeper', RAIL_INK.sleeper],
+  ['RAIL_INK.rail', RAIL_INK.rail],
+];
+
+/** Relative luminance of a CSS hex, WCAG 2.1 definition. */
+function relativeLuminance(hex: string): number {
+  const value = Number.parseInt(hex.slice(1), 16);
+  const channel = (shift: number): number => {
+    const s = ((value >> shift) & 0xff) / 255;
+    return s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * channel(16) + 0.7152 * channel(8) + 0.0722 * channel(0);
+}
+
+/** WCAG contrast ratio, 1 for two identical colours. */
+function contrastRatio(a: string, b: string): number {
+  const la = relativeLuminance(a);
+  const lb = relativeLuminance(b);
+  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+}
+
+describe('no terrain is painted in an infrastructure ink', () => {
+  it('has no exact collision anywhere in the two tables', () => {
+    // The pin. One equality here and one piece of the built world disappears
+    // on one terrain, silently, in every zoom and every save thumbnail.
+    const collisions: string[] = [];
+    for (const [terrainName, terrain] of Object.entries(Terrain)) {
+      for (const [inkName, ink] of INFRASTRUCTURE_INKS) {
+        if (TERRAIN_COLORS[terrain] === ink) {
+          collisions.push(`${terrainName} == ${inkName} (${ink})`);
+        }
+      }
+    }
+    expect(collisions, 'a terrain colour equals an infrastructure ink').toEqual([]);
+    // The deep-water tone is a terrain colour in everything but the array.
+    for (const [name, ink] of INFRASTRUCTURE_INKS) expect(WATER_DEEP, name).not.toBe(ink);
+  });
+
+  it('separates the street from the plot it runs through by VALUE', () => {
+    // Hue alone would fail the colour-blind mode of 17.4, which does not
+    // repaint terrain at all: the only channel every deficiency keeps is
+    // lightness, so the boundary a town street draws has to be a value step.
+    // Measured 2.082 against the 1.000 of the collision this floor replaces.
+    const town = TERRAIN_COLORS[Terrain.TownGround]!;
+    expect(contrastRatio(town, ROAD_INK.verge)).toBeGreaterThan(1.6);
+    expect(contrastRatio(town, ROAD_INK.asphalt)).toBeGreaterThan(1.6);
+    // And the kerb is the BRIGHT term of the sandwich, between the dark
+    // carriageway and the mid-value plot - which is how a kerb reads.
+    expect(relativeLuminance(ROAD_INK.verge)).toBeGreaterThan(relativeLuminance(town));
+    expect(relativeLuminance(town)).toBeGreaterThan(relativeLuminance(ROAD_INK.asphalt));
   });
 });
 

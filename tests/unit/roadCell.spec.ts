@@ -6,6 +6,8 @@ import {
   drawRoadCell,
   ROAD_INK,
 } from '../../src/render/TerrainAtlas';
+import { TERRAIN_COLORS } from '../../src/shared/palette';
+import { Terrain } from '../../src/sim/map/terrain';
 import { RoadBit } from '../../src/sim/town/types';
 
 /**
@@ -446,5 +448,60 @@ describe('a junction is a junction', () => {
     const [cx, cy] = centreOf(margin);
     expect(CARRIAGEWAY.has(raster.at(Math.round(cx), Math.round(cy)))).toBe(true);
     expect(raster.at(Math.round(cx + TILE_W / 4), Math.round(cy + TILE_H / 4))).toBe('');
+  });
+});
+
+describe('the street is bounded against the plot beside it', () => {
+  const margin = 48;
+
+  /** Pixels of each of the four inks in one cell. */
+  function inkCounts(roadBits: number): { verge: number; carriageway: number } {
+    const raster = cell(roadBits, margin);
+    let verge = 0;
+    let carriageway = 0;
+    for (let y = 0; y < raster.height; y++) {
+      for (let x = 0; x < raster.width; x++) {
+        const ink = raster.at(x, y);
+        if (ink === ROAD_INK.verge) verge++;
+        else if (CARRIAGEWAY.has(ink)) carriageway++;
+      }
+    }
+    return { verge, carriageway };
+  }
+
+  it('leaves a kerb band showing on every shape a town street takes', () => {
+    // The verge goes down widest and the carriageway is painted over most of
+    // it, so what survives is the kerb: 1.3 design px each side. This is the
+    // band D-217 is about - it exists in the pixels and always did, and until
+    // D-217 it was painted in the town ground's own colour.
+    for (const roadBits of [0b0011, 0b1010, 0b1111, 0b0010]) {
+      const { verge, carriageway } = inkCounts(roadBits);
+      expect(verge, `bits ${roadBits}: kerb`).toBeGreaterThan(250);
+      expect(carriageway, `bits ${roadBits}: carriageway`).toBeGreaterThan(700);
+      // A kerb is an edge, not a surface: it is a fraction of the road.
+      expect(verge, `bits ${roadBits}: kerb share`).toBeLessThan(carriageway / 2);
+    }
+  });
+
+  it('paints that kerb in something the town ground is not', () => {
+    // The regression guard for the defect itself. A road only ever runs over
+    // town ground inside a town, so this is the one pair whose collision is
+    // invisible everywhere the player looks at streets and houses together.
+    expect(ROAD_INK.verge).not.toBe(TERRAIN_COLORS[Terrain.TownGround]);
+    // And it is not any of the OTHER terrains a road crosses either.
+    for (const terrain of [
+      Terrain.Grass,
+      Terrain.Field,
+      Terrain.Rock,
+      Terrain.Snow,
+      Terrain.Desert,
+      Terrain.Marsh,
+      Terrain.Coast,
+      Terrain.Forest,
+    ]) {
+      const ground = TERRAIN_COLORS[terrain]!;
+      expect(ROAD_INK.verge, `verge on terrain ${terrain}`).not.toBe(ground);
+      expect(ROAD_INK.asphalt, `asphalt on terrain ${terrain}`).not.toBe(ground);
+    }
   });
 });

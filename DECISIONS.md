@@ -39,7 +39,7 @@ no entry below. A number may appear under several topics.
 - **Industry & production:** D-022, D-062, D-063, D-064, D-069, D-071, D-079,
   D-085, D-086, D-174, D-201, D-202, D-205
 - **Towns, council & ownership:** D-101, D-102, D-103, D-104, D-205, D-207,
-  D-206, D-213, D-216
+  D-206, D-213, D-216, D-217
 - **Economy, finance & emissions:** D-008, D-090, D-091, D-092, D-105, D-154,
   D-180, D-193, D-196
 - **Balancing & scenarios:** D-038, D-039, D-040, D-041, D-066, D-087, D-088,
@@ -55,7 +55,7 @@ no entry below. A number may appear under several topics.
 - **Rendering & art:** D-013, D-014, D-033, D-035, D-112, D-117, D-125, D-127,
   D-136, D-140, D-160, D-161, D-162, D-163, D-164, D-165, D-166, D-169, D-170,
   D-171, D-172, D-173, D-174, D-175, D-177, D-179, D-186, D-202, D-205, D-206,
-  D-208, D-209, D-212, D-214
+  D-208, D-209, D-212, D-214, D-217
 - **UI & input:** D-011, D-013, D-015, D-035, D-110, D-113, D-114, D-119,
   D-126, D-148, D-165, D-166, D-177, D-179, D-180, D-181, D-182, D-183, D-184,
   D-186, D-187, D-189, D-191, D-192, D-193, D-194, D-195, D-196, D-200, D-202,
@@ -70,7 +70,8 @@ no entry below. A number may appear under several topics.
 - **Testing method & fixtures:** D-010, D-038, D-072, D-074, D-084, D-133,
   D-167, D-183, D-186, D-188, D-189, D-190, D-191, D-192, D-193, D-194,
   D-195, D-196, D-197, D-198, D-199, D-200, D-201, D-202, D-203, D-204,
-  D-205, D-207, D-206, D-208, D-209, D-210, D-212, D-213, D-215, D-216
+  D-205, D-207, D-206, D-208, D-209, D-210, D-212, D-213, D-215, D-216,
+  D-217
 - **Process & specification:** D-070, D-123, D-129, D-133, D-138, D-140,
   D-185, D-191, D-197, D-198, D-199, D-203, D-204, D-205, D-206, D-215
 
@@ -10777,16 +10778,19 @@ way and stations and has nothing left for vehicles; that is D-158's open
 bottleneck, it belongs to M11, and shaping a town generator around it would be
 the wrong repair.
 
-**What the game still does not do, named rather than hidden.** The road cell's
-kerb is drawn in `ROAD_INK.verge` = `#b8b4ac` and `TERRAIN_COLORS[TownGround]`
-is `#b8b4ac` - **the same hex**. A town street therefore paints its kerb in the
-colour of the ground it stands on, so the 11-design-px verge D-212 designed as
-the road's edge is invisible on the only terrain town roads ever run over, and
-what the eye gets is an 8.4 px carriageway floating on an unbounded pale field
-shared with the houses. That is the literal mechanism behind "strassen durch
-haeuser" and it is a RENDER fact in D-212's own table, not a generator one, so
-it is not touched here. It wants its own bundle and a decision about which of
-the two - street or plot - stops being Beton.
+**What the game still does not do, named rather than hidden.**
+**[SUPERSEDED by D-217, 2026-08-09 - the collision below is fixed; the terrain
+is what moved and `TERRAIN_COLORS[TownGround]` is `#8a775e` now.]** The road
+cell's kerb is drawn in `ROAD_INK.verge` = `#b8b4ac` and
+`TERRAIN_COLORS[TownGround]` is `#b8b4ac` - **the same hex**. A town street
+therefore paints its kerb in the colour of the ground it stands on, so the
+11-design-px verge D-212 designed as the road's edge is invisible on the only
+terrain town roads ever run over, and what the eye gets is an 8.4 px
+carriageway floating on an unbounded pale field shared with the houses. That
+is the literal mechanism behind "strassen durch haeuser" and it is a RENDER
+fact in D-212's own table, not a generator one, so it is not touched here. It
+wants its own bundle and a decision about which of the two - street or plot -
+stops being Beton.
 
 **Cost.** Zero save bump, zero migration edit, zero snapshot bytes, zero
 protocol fields, zero atlas cells, zero i18n strings, zero new RNG draws, zero
@@ -10795,3 +10799,157 @@ origin. `npm run typecheck`, `npm run lint` and `npx prettier --check` clean;
 `tests/unit` 107 files and 1,436 tests green, `tests/determinism` and
 `tests/corpus` 38 green, `tests/balance` 63 green, `tests/soak` 4 green on the
 re-recorded fixture.
+
+---
+
+## Towns: the street stops being the plot (2026-08-09)
+
+### D-217 Town ground is a terrain and stops borrowing the road's concrete: the collision D-216 named, measured and priced
+
+D-216 closed with a residual it could not fix from the generator, and this
+entry is that residual - **it supersedes D-216's "What the game still does not
+do" paragraph**. `ROAD_INK.verge` is `#b8b4ac` and
+`TERRAIN_COLORS[Terrain.TownGround]` was `#b8b4ac`: **the same hex**. A town
+street therefore painted its kerb and graded verge in exactly the colour of
+the plot beside it, and the boundary between street and plot did not exist in
+the pixels at all. **That is the literal mechanism behind the owner's
+"strassen durch haeuser" - there was nothing between the two to see.**
+
+**Which of the two had to move, and why it is not a toss-up.** SPEC.md 16.3
+lists `#b8b4ac` on the **Infra** line as "Beton", beside Gleis, Schotter and
+Strasse. It is an infrastructure colour, the road's verge is infrastructure,
+and D-212 took it deliberately and correctly. 16.3's **Terrain** line names
+nine tones and the simulation has TEN terrains: coast and town ground are in
+neither. Coast already carried an invented tone (`#cbb682`) and nobody ever
+mistook it for spec; town ground had quietly reached across to the infra line
+instead. The terrain is the party with no claim, so the terrain is what moved.
+`palette.ts` now says so in a comment that names the hex it is NOT.
+
+**The pixels, before and after.** The road cell is rasterised by
+`tests/unit/roadCell.spec.ts`'s own exact rasteriser - D-212's device, one
+level up - one atlas cell at the 2x page scale:
+
+| straight town street (bits W+E) | before | after |
+| --- | --- | --- |
+| kerb pixels (`ROAD_INK.verge`) | 428 | 428 |
+| carriageway (asphalt + crown + marking) | 1,352 | 1,352 |
+| bare plot inside the tile diamond | 2,522 | 2,522 |
+| **value step across the street/plot boundary** | **dL* 0.00, contrast 1.000** | **dL* 22.27, contrast 2.082** |
+
+**Not one pixel moved and the picture changed completely**, which is the whole
+point: the kerb was always drawn - 428 px of it on a through street, 298 on a
+stub, 592 on a crossroads, 426 on a bend - and it was drawn in the ground's
+own colour, so it was 428 px of nothing. The carriageway's own contrast
+against the plot falls from 4.274 to 2.053, and that is not a loss: a street
+reads as a three-value sandwich now - dark asphalt, BRIGHT kerb, mid-value
+plot - instead of one dark stripe on a pale sheet. The kerb is the brightest
+of the three, which is how a kerb reads, and the test pins that ordering
+rather than trusting it.
+
+**The tone was chosen by measurement, not by eye.** `#8a775e` - L* 51.2,
+C* 16.8, hue 78 deg: trodden earth. Every figure below is CIEDE2000, and every
+one was taken again through simulated protanopia, deuteranopia and tritanopia,
+because **the colour-blind mode of 17.4 does not repaint terrain at all**. It
+swaps the company and cargo palettes (`COMPANY_COLORS_CVD`), so a TERRAIN
+distinction has to survive deficiency on its own or not at all.
+
+- against the verge: **dE 20.9, dL* 22.3, WCAG contrast 2.08**, and dE 20.9 /
+  20.5 / 20.7 under protan / deutan / tritan, **18.8 in flat greyscale**. The
+  street boundary is a VALUE step, so it survives every colour vision there
+  is - which is the property the old pair had exactly none of.
+- against the terrains a town abuts: grass 23.0, field 16.9, forest 24.0,
+  desert 22.9, coast 21.2, marsh 18.7, and asphalt itself 22.5.
+- its closest are rock at 8.5, and under the dichromacy that flatters each
+  least rock 7.3, grass 7.4 and marsh 7.5. **The shipped palette already lives
+  with coast/desert at 2.4 in normal vision, forest/marsh at 3.8 under deutan
+  and grass/field at 4.4 under protan**, so the new terrain is the widest
+  separated of the ten rather than a new risk - and grass and town ground
+  carry different GRAINS besides (D-214: tufts against paving).
+
+The search was a grid over Lab inside an argued window - hue 50-88 deg, so it
+is warmer than every pale terrain, which all sit at 87-94; C* 12-23, so it is
+a colour and not a neutral; L* 48-58 - maximising the minimum dE over twelve
+neighbours times four vision models, with the verge floored at 18 in every
+model. The optimum is flat around L* 51 and the shape of the curve is the
+argument: pushing lighter lets the verge collapse (at L* 64 the best
+achievable verge separation is already 7.9 and the verge itself becomes the
+binding constraint), pushing darker buys nothing and turns a town into a hole.
+
+**The same collision class, walked everywhere else.** Ten terrain colours plus
+`WATER_DEEP` against every infrastructure ink - four road inks, three rail
+inks. **Exactly one exact collision existed and it is the one above.** The
+near misses, reported rather than fixed:
+
+| pair | dE2000 | dL* | contrast | verdict |
+| --- | --- | --- | --- | --- |
+| rock `#8a8578` / bridge deck `#8e8a84` | 3.85 | 2.03 | 1.07 | the closest pair left in the tree. The deck is a procedural FALLBACK marker (`BOX_SPRITES`), it is drawn at `railHeight` ABOVE the ground it spans rather than on it, and what a player with a filled asset cache sees is D-208's baked art. Named, not touched. |
+| rock `#8a8578` / ballast `#9a938a` | 5.71 | 5.66 | 1.21 | **both are 16.3's own** - "Fels" and "Schotter" - so this is the specification's choice, not a defect, and moving either would be the departure. A track cell also lays sleepers `#5a4b3a` and rails `#6b6560` over the ballast, and that is what carries the read on rock. Untouched. |
+| snow `#e8eef2` / signal post `#d8d4cc` | 8.75 | 8.74 | 1.26 | a 0.12-tile-wide post against a whole tile: a silhouette against a field, not two fields. Left. |
+| town ground / marking `#d5d0c4` | 7.32 -> **27.0** | | | fixed as a side effect of the above |
+| town ground / ballast `#9a938a` | 9.83 -> **12.0** | | | improved as a side effect |
+| desert `#d6bc86` / marking `#d5d0c4` | 13.97 | 6.30 | 1.20 | a 0.9 px dashed line; well clear. |
+
+`RAIL_INK` is a new export and it is why this audit can exist at all: the
+ballast, sleeper and rail hexes lived as string literals inside
+`drawTrackCell`, and an ink inside a drawing function is an ink no test can
+see. Three constants moved out with their 16.3 origins written down; the
+drawing is byte-identical.
+
+**The minimap** - D-112's one pure painter, which the save thumbnail shares -
+paints terrain straight from the same table under a height shade of
+`0.72 + h/15 * 0.5`. Measured through that shade at the SAME height, which is
+what a town and the field beside it actually are:
+
+| town ground against | before | after |
+| --- | --- | --- |
+| field `#b09a4e` | 17.6 | **14.0** |
+| desert `#d6bc86` | 12.9 | **20.4** |
+| coast `#cbb682` | 11.9 | **18.4** |
+| snow `#e8eef2` | 8.8 | **29.8** |
+| grass `#6f9b58` | 21.5 | 20.4 |
+| rock `#8a8578` | 13.6 | **6.6** |
+
+A town is still plainly not a field, and now plainly not a desert, a beach or
+a snowfield: **the old pale grey was 8.8 from SNOW, which is the confusion the
+minimap actually had.** It loses ground against rock, and that is the trade
+the tone was chosen with open eyes - a town stands on flat buildable land and
+rock is what is above it. Under the shading a town at one height can meet a
+terrain at another; the worst such crossing is 4.7 (town h15 against desert
+h2) where before it was **3.4** (town h0 against rock h8), so the cross-height
+floor rises rather than falls. In the colour-blind minimap, terrain
+unrepainted, town against field measures 13.7 / 13.3 / 9.4 and town against
+desert 20.1 / 20.6 / 19.5.
+
+**The regression is pinned twice and both pins go red on the old colour.**
+`groundCell.spec.ts` walks the two tables for an exact equality - the pin the
+next hand needs - and asserts the verge/plot and asphalt/plot contrast floors
+plus the brightness ORDER of the sandwich. `roadCell.spec.ts` counts the kerb
+and the carriageway pixels of every shape a town street takes and asserts the
+verge is none of the eight terrains a road crosses. Reverted to `#b8b4ac`,
+**four assertions fail** - which is the argument for writing them: this defect
+survived D-212 and D-216 and nothing in the suite said a word.
+
+**Render-only, and checked rather than assumed.** `TERRAIN_COLORS` is imported
+by `Minimap.ts`, `seasonArt.ts` and `water.ts` and by nothing else; `src/sim`
+knows `Terrain.TownGround` as an enum value and has never seen its colour. So:
+zero sim bytes, zero save bump, zero migration, zero snapshot bytes, zero
+protocol fields, zero i18n strings, zero atlas cells, zero new RNG draws, zero
+change to the draw order - and no chunk checksum learned anything, because a
+checksum folds terrain IDS and not tones. `TERRAIN_SPECKLE`'s town entry moved
+with the base at the same 0.916 the old pair carried: nothing consumes it
+today, since made ground draws the Paving grain whose ink is the FACE colour
+times a value, but a stale pale grey there would be the next hand's trap.
+
+**Cost.** `npm run typecheck`, `npm run lint` and `prettier --check` on the
+touched files clean; `tests/unit` 107 files and **1,440 tests** green (D-216's
+1,436 plus the four new assertions), `tests/determinism` and `tests/corpus` 38
+green. Render perf unmoved, as a colour change must be: chunk bake p50
+**1.882 ms** against D-214's 2.08-2.15 and the 5 ms median tripwire, sprite
+rebuild and draw prep inside theirs, main-chunk budget green.
+
+**What only a human at the running game can confirm.** That a street now reads
+as a street THROUGH a town rather than as a stripe on a sheet; that the new
+ground reads as ground rather than as mud; and that a town on the minimap
+still looks like a town. D-212's own named residual is untouched and still
+open: a road on sloping ground is a flat patch, and on a ramp the ribbon still
+steps one height level at every tile boundary.
