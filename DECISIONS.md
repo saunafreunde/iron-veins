@@ -52,7 +52,7 @@ no entry below. A number may appear under several topics.
 - **Rendering & art:** D-013, D-014, D-033, D-035, D-112, D-117, D-125, D-127,
   D-136, D-140, D-160, D-161, D-162, D-163, D-164, D-165, D-166, D-169, D-170,
   D-171, D-172, D-173, D-174, D-175, D-177, D-179, D-186, D-202, D-205, D-206,
-  D-208, D-209
+  D-208, D-209, D-212
 - **UI & input:** D-011, D-013, D-015, D-035, D-110, D-113, D-114, D-119,
   D-126, D-148, D-165, D-166, D-177, D-179, D-180, D-181, D-182, D-183, D-184,
   D-186, D-187, D-189, D-191, D-192, D-193, D-194, D-195, D-196, D-200, D-202,
@@ -67,7 +67,7 @@ no entry below. A number may appear under several topics.
 - **Testing method & fixtures:** D-010, D-038, D-072, D-074, D-084, D-133,
   D-167, D-183, D-186, D-188, D-189, D-190, D-191, D-192, D-193, D-194,
   D-195, D-196, D-197, D-198, D-199, D-200, D-201, D-202, D-203, D-204,
-  D-205, D-207, D-206, D-208, D-209, D-210
+  D-205, D-207, D-206, D-208, D-209, D-210, D-212
 - **Process & specification:** D-070, D-123, D-129, D-133, D-138, D-140,
   D-185, D-191, D-197, D-198, D-199, D-203, D-204, D-205, D-206
 
@@ -9718,3 +9718,166 @@ the road ribbon; and that the D-208 module body, which is baked at ONE facing,
 does not look wrong when its driveway comes from the other side. That last one
 is the named art residual: a per-instance facing for modules would need four
 baked variants per kind and a 6.2 booking, and this bundle did not take it.
+
+### D-212 The road was drawn along the wrong tile axis and a whole tile long: the ribbon, the round join, and a marking that runs through a boundary
+
+Second item of the owner's verdict on the M13 build: "strassen sind nicht
+zusammenhaengend und gleich". Read literally and measured, both halves were
+true, and neither was a matter of taste.
+
+**How it was measured, since this is a case where measuring was possible.**
+`drawRoadCell` paints into a canvas, so nothing in the suite had ever looked at
+what it produces - the atlas is tested as LAYOUT (where a frame sits, how big
+the page is) and the drawing was assumed. A probe extracts the function's
+source from `TerrainAtlas.ts` at run time (never retyped), transpiles it with
+the repo's own esbuild and calls it against a small exact rasteriser: the M13
+device for making art testable, one level down. Every number below is pixels
+of the shipped cell.
+
+**Defect 1: the four arm vectors were the tile axes TRANSPOSED.** The table
+was indexed by `RoadBit` bit position - west, east, north, south - but held
+`[-half, +TILE_H/2]` for west, which is the screen direction of y + 1. A bit
+towards x - 1 was drawn towards y + 1 and a bit towards y - 1 towards x - 1:
+the two ground axes swapped. Measured: a cell with ONLY the west bit set paints
+nothing at all at its own west edge midpoint, and the asphalt found at the west
+edge midpoint of a west+north cell belongs to the NORTH arm. Five tiles of
+straight east-west road, sampled at 201 points along the line between the first
+and the last tile centre, are painted at **77 points and bare ground at 124**,
+in four runs of 31 consecutive bare samples. That is the "nicht
+zusammenhaengend" exactly: a straight road came out as one slab per tile, each
+slab running ACROSS the road it belongs to, none of them touching the next.
+
+**Defect 2: every arm was a WHOLE tile step long, not half a step.** Half a
+step is the shared edge, which is where this tile's carriageway has to end so
+the neighbour's can begin. A whole step reaches the neighbour's CENTRE. The
+farthest painted pixel of a one-armed cell sits **82.5 atlas px** from the tile
+centre against an arm of 35.8 (the round cap added the rest). Two consequences,
+both of them defects on their own: a tile painted a full tile of road surface
+into each of its neighbours, so the later tile of a diagonal drew its pale
+verge over the earlier tile's asphalt; and the cell painted **6,240 px outside
+its own atlas cell across the sixteen columns** (390 px per two-armed cell,
+bounding box x -11..138 in a cell 0..127 wide). The base page draws the sixteen
+road cells side by side WITHOUT a clip, so those pixels landed in the next
+`roadBits` column and travelled to the screen as somebody else's road. The
+detail page clips, so the two pages disagreed - the same tile drew differently
+at zoom 4.
+
+**Defect 3: the centre line was not a marking.** Because it ran along the
+transposed axis it only crossed the true carriageway in passing: over four
+tiles the sample line finds **5 dashes of 1.0-2.5 px spaced 70-72 px apart**.
+The dash pattern was `[3, 4]` design px restarted at every tile centre, so even
+drawn correctly it would have restarted its rhythm at each boundary.
+
+**The cure, three properties of NEIGHBOURING cells rather than of one cell.**
+
+- `ROAD_ARM_OFFSETS` is derived from the 16.1 projection instead of eyeballed:
+  a step of (dx, dy) tiles is ((dx - dy) * TILE_W / 2, (dx + dy) * TILE_H / 2)
+  on screen, and the table is HALF of that, per `RoadBit` bit position. The
+  arm therefore ends on the shared edge and the two halves tile the line
+  between two tile centres exactly once.
+- Butt caps plus a **disc at the tile centre** in every pass. The disc is the
+  round JOIN the arms would otherwise lack: it holds the width constant through
+  a bend instead of notching the outside of the corner, it makes three or four
+  arms a junction instead of overlapping rectangles, and it is the whole
+  surface of an isolated tile - which is what a road stop on a bare tile stands
+  on (D-210).
+- The marking's dash phase is anchored on a HALF GAP
+  (`lineDashOffset = dash + gap / 2`), so the middle of a gap falls on the tile
+  centre AND on the shared edge. The rhythm continues through a boundary
+  instead of restarting at it, and the kink a bend makes at the tile centre
+  sits inside a gap and is invisible. Period = half an arm = a quarter tile =
+  12.5 m of ground, painted 4 m of it: the German Leitlinie's ratio.
+
+**`ROAD_SEAM_OVERLAP_PX` is the one place the geometry is deliberately not
+exact.** Two butt-capped strokes that meet precisely leave an anti-aliasing
+seam - each covers about half the boundary pixel, the two half-coverages
+composite to three quarters, and the remaining quarter is ground showing
+through as a pale hairline at every tile boundary, which is the fine-grained
+version of the very defect this cell was rewritten for. The arms therefore run
+2 design px past the edge, one SCREEN pixel at 0.5x (the lowest zoom that still
+draws road cells; below it the map is the abstract overview). The overlap is
+harmless because both halves are the same colours in the same pass order, so an
+overlap repaints exactly what it covers.
+
+**Measured before and after, same probe, same cells:**
+
+| | before | after |
+| --- | --- | --- |
+| cells reaching the shared edge of every connected direction | 0 of 16 | **16 of 16** |
+| painted outside the atlas cell, all 16 cells | 6,240 px | **0 px** |
+| samples of the line between two tile centres that are carriageway | 77 of 201 | **201 of 201** |
+| carriageway width at the shared edge (designed 16.8) | 0.00 | **16.75-17.50** |
+| dashes between two tile centres, start-to-start (designed 17.89) | 5 over four tiles at 70-72 | **4 at 17.5-18.0** |
+
+**The palette moved to 16.3's own hexes** while the file was open: asphalt
+`#4c4a48` -> **`#4a4a4d`** ("Straße"), verge `#b7b1a4` -> **`#b8b4ac`**
+("Beton"), marking `#d8d2c4` -> `#d5d0c4`. That is also the colour the 0.25x
+overview has always stroked (`NET_ROAD_COLOR` = `0x4a4a4d`): the two
+representations of the same road agreed on nothing before. A fourth pass adds a
+6.6 px camber crown at `#505053` - the asphalt at 1.08, computed once - so the
+carriageway is not one flat grey slab under the NW light this project fixes
+everything else to.
+
+**Nothing else was transposed, and that is why this survived eleven
+milestones.** `extractNetworkSegments` and `rebuildNet` project tile deltas
+correctly, so the 0.25x overview drew the road network right while the art drew
+it wrong, and the overview is what a screenshot of a whole map shows.
+`lampOffsetForRoadTile` is in tile space too - which means the street lamp that
+its own comment places "on the verge beside the carriageway" was standing in
+the middle of the mis-drawn road, and now stands where the comment says.
+
+**What this does NOT fix: roads on slopes.** `roadFrame` has sixteen cells
+keyed by `roadBits` and no slope dimension, and `MapView` places the cell at
+`tileToWorld(x, y, map.baseHeight(x, y))` - the tile's LOWEST corner. The cell
+is drawn flat. So on a tile with one raised corner the carriageway lies
+**8 atlas px (4 world px, 2 m) below the ground surface at the tile centre**
+and 16 atlas px (8 world px, 4 m) below it at the raised edge; on a ramp the
+two half-arms that meet at a shared edge are a full height step apart -
+**16 world px, 8 m** - so the ribbon that is now continuous on the flat still
+steps at every boundary where the ground climbs. The road is drawn after the
+ground (`DrawLayer.Road` above `DrawLayer.Ground`), so it hides the hillside
+rather than sinking into it, which is why this reads as a flat patch pasted on
+a slope rather than as a hole. The honest cure is per-arm lift, and it is
+COSTED rather than guessed: an arm needs the lift of the edge it crosses (three
+values) and of the tile centre (five), which is 4 x 3 x 5 = 60 arm cells plus 5
+centre discs, about 8,300 px of atlas width = five more rows. The base page
+stands at 3,840 of 4,096 and has 256 px left, and the detail page is full
+(D-163), so it needs a new page and therefore a SPEC2 6.2 booking of its own
+(Fehlerkatalog 40). Drawing the cell at the tile's MEAN corner height instead
+was measured on paper and rejected: on a uniform ramp it halves the error at
+the centre and leaves the step at the boundary at a full height step, because
+both tiles are wrong by half a level in opposite directions.
+
+**The test is a pixel assertion, and it fails on the old geometry.**
+`tests/unit/roadCell.spec.ts` carries its own exact rasteriser (~130 lines, no
+anti-aliasing, pixel centres only) and holds nine properties: the `RoadBit`
+order the arm table is indexed by, carriageway at the shared edge of every
+connected direction AND at none of the unconnected ones, containment inside the
+atlas cell, an unbroken carriageway between two neighbouring tile centres, the
+width across the boundary, the dash rhythm across the boundary, a filled
+junction centre for every three- and four-armed cell, no marking where the road
+does not run through, and the surface patch an isolated tile keeps. Patched
+back to the pre-fix vectors, **five of the nine fail** - which is the argument
+for the file: this defect was one edit away from returning and nothing would
+have said so. `ROAD_INK` and `drawRoadCell` are exported for it; classifying
+by luminance instead would have passed on a road drawn in the wrong direction.
+
+**Cost.** Zero sim bytes, zero save bump, zero snapshot bytes, zero protocol
+fields, zero i18n strings, zero atlas booking - the fix REMOVED spill rather
+than adding cells, and the base page stands at 2,176x3,840 and the detail page
+at 4,096x4,096 exactly as before. Main chunk **946,301 B** against the 950,000
+budget (headroom 3,699 B); the same tree with `TerrainAtlas.ts` reverted builds
+946,048 B, so this costs **+253 B**. `npm run typecheck`, `npm run lint`,
+`vitest run tests/unit` (105 files, 1,392 tests) and the render perf spec are
+green; chunk bake p50 **1.969 ms** against D-209's 1.963 and its 5 ms median
+tripwire - a road cell is drawn once into the atlas, so a chunk only blits a
+different frame.
+
+**What only a human at the running game can confirm.** That the ribbon reads
+as one road at zoom 1 and 2 rather than as a chain of tiles - the numbers say
+the pixels are continuous, not that the eye reads them as a road; that the
+camber crown is a texture rather than a second faint marking; that the marking
+period of 12.5 m is a rhythm rather than a stipple at zoom 0.5; and that a
+crossroads reads as a crossroads with the round join rather than as an X. And
+the named residual above: every road on sloping ground is still a flat patch,
+and on a ramp the ribbon still steps by one height level at each tile boundary.

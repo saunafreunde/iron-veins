@@ -467,15 +467,122 @@ function drawFoamCell(
 }
 
 /**
+ * Screen offset from a tile centre to the MIDPOINT of the edge it shares with
+ * the neighbour in one road direction. [atlas px]
+ *
+ * Indexed by the BIT POSITION of `RoadBit` (`sim/town/types.ts`): 0 west
+ * (x - 1), 1 east (x + 1), 2 north (y - 1), 3 south (y + 1). Derived from the
+ * 16.1 projection rather than eyeballed - a step of (dx, dy) tiles is
+ * ((dx - dy) * TILE_W / 2, (dx + dy) * TILE_H / 2) on screen - and HALVED,
+ * because half a step is exactly the shared edge.
+ *
+ * Both halves of that statement were wrong before this table existed and each
+ * on its own was enough to break the ribbon. The four vectors were the tile
+ * axes TRANSPOSED (a bit towards x - 1 was drawn towards y + 1), so a straight
+ * east-west road came out as one slab per tile, each running across the road
+ * and none of them touching the next; and they were a WHOLE step long, so
+ * every cell painted a full tile into each neighbour and 390 px past its own
+ * atlas cell into the next roadBits column of the page.
+ */
+const ROAD_ARM_OFFSETS: ReadonlyArray<readonly [number, number]> = [
+  [-TILE_W / 4, -TILE_H / 4],
+  [TILE_W / 4, TILE_H / 4],
+  [TILE_W / 4, -TILE_H / 4],
+  [-TILE_W / 4, TILE_H / 4],
+];
+
+/** Length of one arm - tile centre to shared edge, 25 m of ground. [atlas px] */
+const ROAD_ARM_LENGTH = Math.hypot(TILE_W / 4, TILE_H / 4);
+
+/**
+ * How far past the shared edge an arm runs, so the two halves OVERLAP instead
+ * of abutting. [design px]
+ *
+ * Two butt-capped strokes that meet exactly leave an anti-aliasing seam: each
+ * covers about half of the boundary pixel, the two half-coverages composite to
+ * three quarters, and the remaining quarter is ground showing through - a pale
+ * hairline at every tile boundary, which is the fine-grained version of the
+ * defect this whole cell was rewritten for. The overlap is one SCREEN pixel at
+ * 0.5x, the lowest zoom that still draws road cells at all (below it the map is
+ * the abstract overview), and the two halves are the same colours in the same
+ * pass order, so an overlap repaints exactly what it covers.
+ */
+const ROAD_SEAM_OVERLAP_PX = 2;
+
+/** Graded verge either side of the carriageway. [design px] */
+const ROAD_VERGE_WIDTH_PX = 11;
+/**
+ * The carriageway, kerb to kerb. [design px]
+ *
+ * A ground width of one whole tile measures TILE_W * TILE_H / hypot(TILE_W,
+ * TILE_H) = 28.6 design px across the road in this projection, so 8.4 px is
+ * 0.29 of a tile - about 15 m of the 50 m tile, a two-lane road with hard
+ * shoulders. Unchanged from the first draft: the width was never the defect.
+ */
+const ROAD_ASPHALT_WIDTH_PX = 8.4;
+/** The crown of the camber, the part a NW light would catch. [design px] */
+const ROAD_CROWN_WIDTH_PX = 6.6;
+/** The centre line. [design px] */
+const ROAD_MARK_WIDTH_PX = 0.9;
+
+/**
+ * The four inks of a road cell, in pass order. [CSS hex]
+ *
+ * Exported so the pixel regression test can classify a pixel by what PAINTED
+ * it rather than by how bright it is: a test that read luminance would pass on
+ * a carriageway drawn in the wrong direction, which is the one defect it
+ * exists to catch.
+ */
+export const ROAD_INK = {
+  /** 16.3 "Beton": kerb and graded verge. */
+  verge: '#b8b4ac',
+  /** 16.3 "Straße". */
+  asphalt: '#4a4a4d',
+  /** `asphalt` at 1.08 - the camber crown, computed once. */
+  crown: '#505053',
+  /** 16.3 "Beton" lightened - a marking is white, but not the loudest thing
+   * on the map. */
+  mark: '#d5d0c4',
+} as const;
+
+/**
+ * Marking periods per arm. 2 puts one period on a quarter tile - 12.5 m of
+ * ground, against the 12-16 m a German Leitlinie repeats on. [count]
+ */
+const ROAD_MARK_PERIODS_PER_ARM = 2;
+/** Painted share of one period: 4 m of stroke in 12.5 m, the Leitlinie ratio. */
+const ROAD_MARK_DUTY = 4 / 12.5;
+
+/**
  * A road: a kerbed carriageway with a centre line, not a grey stripe.
  *
- * Three passes, and the order is the whole trick. The pale verge goes down
- * widest, the asphalt narrower on top of it, and the markings narrowest of
- * all - so every junction shape comes out with a continuous kerb and no gap,
- * whatever combination of the four directions is set, without one sprite per
- * combination.
+ * Four passes, and the order is the whole trick. The pale verge goes down
+ * widest, the asphalt narrower on top of it, the camber crown narrower again
+ * and the marking narrowest of all - so every junction shape comes out with a
+ * continuous kerb and no gap, whatever combination of the four directions is
+ * set, without one sprite per combination.
+ *
+ * Three things make the result read as ONE ribbon rather than as a slab per
+ * tile, and all three are properties of neighbouring cells rather than of this
+ * one:
+ *
+ * - every arm runs from the tile centre to the SHARED EDGE (plus the seam
+ *   overlap), so this tile's carriageway ends where its neighbour's begins and
+ *   the two halves tile the line between the two tile centres exactly;
+ * - every pass closes with a disc at the tile centre, which is the round JOIN
+ *   the arms would otherwise lack: it keeps the width constant through a bend
+ *   instead of notching the outside of the corner, it turns three or four arms
+ *   into a junction instead of overlapping rectangles, and it is the whole
+ *   surface of an isolated tile (a stop must not stand on grass);
+ * - the marking's dash phase is anchored so that the middle of a GAP falls on
+ *   the tile centre AND on the shared edge. The rhythm therefore continues
+ *   through a tile boundary instead of restarting at it, and the kink a bend
+ *   makes at the tile centre is inside a gap and invisible.
+ *
+ * Exported for the pixel regression test; the two atlas builds below are its
+ * only production callers.
  */
-function drawRoadCell(
+export function drawRoadCell(
   ctx: CanvasRenderingContext2D,
   originX: number,
   originY: number,
@@ -483,51 +590,48 @@ function drawRoadCell(
 ): void {
   const cx = originX + TILE_W / 2;
   const cy = originY + CELL_TOP + TILE_H / 2;
-  const half = TILE_W / 2;
-
-  // Bit order matches RoadBit: west, east, north, south in tile space, which
-  // in screen space are the four diagonal directions of the diamond.
-  const directions: ReadonlyArray<readonly [number, number]> = [
-    [-half, TILE_H / 2],
-    [half, -TILE_H / 2],
-    [-half, -TILE_H / 2],
-    [half, TILE_H / 2],
-  ];
+  const reach = (ROAD_ARM_LENGTH + ROAD_SEAM_OVERLAP_PX * ATLAS_SCALE) / ROAD_ARM_LENGTH;
 
   const arms: Array<readonly [number, number]> = [];
   for (let bit = 0; bit < 4; bit++) {
-    if ((roadBits & (1 << bit)) !== 0) arms.push(directions[bit]!);
+    if ((roadBits & (1 << bit)) === 0) continue;
+    const [dx, dy] = ROAD_ARM_OFFSETS[bit]!;
+    arms.push([dx * reach, dy * reach]);
   }
 
-  const stroke = (width: number, colour: string, dash: readonly number[] | null): void => {
+  const period = ROAD_ARM_LENGTH / ROAD_MARK_PERIODS_PER_ARM;
+  const dashLength = period * ROAD_MARK_DUTY;
+
+  const pass = (width: number, colour: string, dash: readonly number[] | null): void => {
     ctx.strokeStyle = colour;
+    ctx.fillStyle = colour;
     ctx.lineWidth = width;
-    ctx.lineCap = 'round';
+    ctx.lineCap = 'butt';
     ctx.setLineDash(dash === null ? [] : [...dash]);
-    if (arms.length === 0) {
-      // An isolated tile still gets a patch of surface, or a one-tile stop
-      // would stand on grass.
-      ctx.beginPath();
-      ctx.arc(cx, cy, width / 2, 0, Math.PI * 2);
-      ctx.fillStyle = colour;
-      ctx.fill();
-      return;
-    }
     for (const [dx, dy] of arms) {
       ctx.beginPath();
       ctx.moveTo(cx, cy);
       ctx.lineTo(cx + dx, cy + dy);
       ctx.stroke();
     }
+    if (dash !== null) return;
+    ctx.beginPath();
+    ctx.arc(cx, cy, width / 2, 0, Math.PI * 2);
+    ctx.fill();
   };
 
-  stroke(11 * ATLAS_SCALE, '#b7b1a4', null); // kerb and verge
-  stroke(8.4 * ATLAS_SCALE, '#4c4a48', null); // asphalt
+  pass(ROAD_VERGE_WIDTH_PX * ATLAS_SCALE, ROAD_INK.verge, null);
+  pass(ROAD_ASPHALT_WIDTH_PX * ATLAS_SCALE, ROAD_INK.asphalt, null);
+  pass(ROAD_CROWN_WIDTH_PX * ATLAS_SCALE, ROAD_INK.crown, null);
   // A centre line only where the road runs through rather than ending, so a
   // junction does not get a white blot in the middle of it.
   if (arms.length === 2) {
-    ctx.lineCap = 'butt';
-    stroke(0.9 * ATLAS_SCALE, '#d8d2c4', [3 * ATLAS_SCALE, 4 * ATLAS_SCALE]);
+    // Half a gap at the tile centre and half at the shared edge: the two arms
+    // of this tile add up to one whole gap over the centre, and so do the two
+    // halves that meet at the edge.
+    ctx.lineDashOffset = dashLength + (period - dashLength) / 2;
+    pass(ROAD_MARK_WIDTH_PX * ATLAS_SCALE, ROAD_INK.mark, [dashLength, period - dashLength]);
+    ctx.lineDashOffset = 0;
   }
   ctx.setLineDash([]);
 }

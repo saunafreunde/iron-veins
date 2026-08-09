@@ -852,6 +852,30 @@ perf and environment notes above.
   moves its three module tiles, hence its station centres, hence scenario 5,
   `aiGame`, the soak recording and `gameScore`, and that bill belongs in its
   own bundle.
+- **The road stops being a slab per tile** (D-212, bundle 12, 2026-08-09). The
+  owner's second verdict item - "strassen sind nicht zusammenhaengend" - was
+  literally true and measurable: `drawRoadCell`'s four arm vectors were the
+  tile axes TRANSPOSED (a bit towards `x - 1` drawn towards `y + 1`) and each
+  was a WHOLE tile step instead of the half step that reaches the shared edge.
+  Measured on the rasterised cell: a straight five-tile road was painted at
+  **77 of 201 samples** along its own centre line, one-armed cells reached
+  **82.5 atlas px** from the centre against an arm of 35.8, and the sixteen
+  cells painted **6,240 px outside their own atlas cells** - into the next
+  `roadBits` column of the unclipped base page, while the detail page clipped,
+  so the same tile drew differently at zoom 4. The cure is the projection
+  written down (`ROAD_ARM_OFFSETS` = half a step, per `RoadBit` bit position),
+  butt caps plus a **disc at the tile centre** as the round join that makes a
+  bend keep its width and a junction a junction, and a dash phase anchored on a
+  HALF GAP so the marking's rhythm runs THROUGH a boundary and the bend's kink
+  hides inside a gap. After: **16/16** cells reach every connected edge,
+  **0 px** outside the cell, **201/201** samples carriageway, width 16.75-17.50
+  against the designed 16.8, dash spacing 17.5-18.0 against 17.89. Colours are
+  16.3's own now (`#4a4a4d` Straße, `#b8b4ac` Beton), which is what the 0.25x
+  overview already stroked. **Slopes are NOT fixed and are costed in D-212**:
+  the cell has no slope dimension, so a ramp still steps one height level
+  (8 m) at every tile boundary, and per-arm lift needs 65 new cells and a new
+  atlas page. `tests/unit/roadCell.spec.ts` rasterises the shipped cell and
+  fails five of nine assertions on the old geometry.
 
 
 ## M14 - instruments: flow atlas, station x-ray, statistics, tooltips
