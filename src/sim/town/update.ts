@@ -14,6 +14,7 @@ import {
 import { assignStationIndustries } from '../industry/catchment';
 import { inCatchment, stationRating, type Station } from '../station/types';
 import { depositAtStation, depositPassengers } from '../cargo/routing';
+import { notePassengerOffer } from '../station/returns';
 import type { World } from '../World';
 
 /**
@@ -122,7 +123,15 @@ export function produceTownCargo(world: World): void {
       // is what every balancing world of section 19.4 is - costs exactly what
       // the pre-M19 code cost and does exactly what it did (the D-201 device).
       const business = offered * station.commercialShare;
-      depositPassengers(world, station, offered - business, business);
+      const commuters = offered - business;
+      depositPassengers(world, station, commuters, business);
+      // The other half of the SPEC2 M19 return-journey measure: what this town
+      // sends out of its own accord, which is what the arrivals are weighed
+      // against. A station that already despatches as many travellers as reach
+      // it owes nobody a way home - which is what makes every hand-built
+      // balancing world of section 19.4 a no-op for that rule.
+      notePassengerOffer(station, Cargo.CommuterPax, commuters);
+      notePassengerOffer(station, Cargo.BusinessPax, business);
       depositAtStation(world, station, Cargo.Mail, mail * share);
     }
   }

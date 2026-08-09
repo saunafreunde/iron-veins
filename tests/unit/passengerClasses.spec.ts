@@ -373,6 +373,10 @@ function toV29State(state: Record<string, unknown>): Record<string, unknown> {
       station['monthCounters'] as number[],
       STATION_HISTORY_FIELD_COUNT,
     );
+    // A v29 build had no return-journey ledger to write (SPEC2 M19 bundle 3),
+    // so the reconstruction writes none. See `clearReturnLedger` below.
+    Reflect.deleteProperty(station, 'returnState');
+    Reflect.deleteProperty(station, 'returnMonths');
   }
   for (const vehicle of (clone['vehicles'] ?? []) as Record<string, unknown>[]) {
     for (const stack of vehicle['cargo'] as Record<string, unknown>[]) {
@@ -392,6 +396,38 @@ function toV29State(state: Record<string, unknown>): Record<string, unknown> {
     company['cargoDeliveredUnits'] = shrinkRow(company['cargoDeliveredUnits'] as number[], 1);
   }
   return clone;
+}
+
+/**
+ * Clear the one thing a version 29 container cannot carry.
+ *
+ * SPEC2 M19's third bundle gave every station a return-journey ledger, which
+ * is v30 state with no v29 counterpart at all - not a renamed field and not a
+ * grown row, but a measurement that did not exist while those worlds were
+ * being played. The migration therefore enters it EMPTY, which is what a v29
+ * world knew about itself (it generated no return journeys and banked no
+ * credit for any), and the two claims below are stated against that: the
+ * inverse is total for everything a v29 encoder wrote, and the ledger is
+ * excluded explicitly rather than quietly. The caller asserts the ledger is
+ * NON-empty first, so the exclusion can never become vacuous.
+ */
+function clearReturnLedger(state: Record<string, unknown>): Record<string, unknown> {
+  const clone = structuredClone(state);
+  for (const station of (clone['stations'] ?? []) as Record<string, unknown>[]) {
+    station['returnState'] = (station['returnState'] as number[]).map(() => 0);
+    station['returnMonths'] = 0;
+  }
+  return clone;
+}
+
+/** Units of return-journey ledger a played world is carrying, over all of it. */
+function ledgerTotal(state: Record<string, unknown>): number {
+  let total = 0;
+  for (const station of (state['stations'] ?? []) as Record<string, unknown>[]) {
+    for (const figure of station['returnState'] as number[]) total += Math.abs(figure);
+    total += station['returnMonths'] as number;
+  }
+  return total;
 }
 
 /** A played world with real parcels, refits, rings and a lifetime tally. */
@@ -447,12 +483,28 @@ describe('the v29 -> v30 remap', () => {
       30,
     );
 
-    expect(migrated['state']).toEqual(current);
+    // Everything a v29 encoder could write comes back field for field. The one
+    // exclusion is the M19 return-journey ledger, and it is a real exclusion
+    // rather than an empty one: this world HAS been sending travellers home.
+    expect(ledgerTotal(current)).toBeGreaterThan(0);
+    expect(migrated['state']).toEqual(clearReturnLedger(current));
     expect(migrated['saveVersion']).toBe(30);
   });
 
   it('loads a v29 container into the identical world the v30 encoder writes', () => {
     const scenario = playedPassengerWorld();
+    // Identical but for the one thing v29 could not carry: the reference is
+    // taken with the M19 ledger emptied, which is the value the migration
+    // enters and the value that world's stations genuinely held. It is emptied
+    // on the LIVE world after the assertion that it was full, so the rest of
+    // the state - parcels, refits, rings, tallies - is untouched.
+    expect(
+      ledgerTotal(scenario.world.toData() as unknown as Record<string, unknown>),
+    ).toBeGreaterThan(0);
+    for (const station of scenario.world.stations) {
+      station.returnState.fill(0);
+      station.returnMonths = 0;
+    }
     const reference = hashWorld(scenario.world);
 
     const v29 = {

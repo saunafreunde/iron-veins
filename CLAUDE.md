@@ -1773,7 +1773,46 @@ Zero snapshot bytes, zero atlas cells, two i18n strings.
   exposure now (start capital + credit line) rather than 1.5x under a chaotic
   run; that is a LOOSENING, it says so, and the "still builds" half is
   asserted directly instead.
-- Still open in M19: return trips and the AI's own use of the classes.
+- **A traveller who arrives goes home again, and the ledger is what stops that
+  being demand from nothing** (D-213, bundle 3). Return journeys are generated
+  at the DESTINATION from a twelve-month running mean kept D-079's way - one
+  number per class, a TRUE mean while the window fills - and never by following
+  a parcel. What is averaged is the IMBALANCE (arrived here minus what this
+  town offered), not the arrivals: averaging arrivals makes every return breed
+  another and multiplies a shuttle's traffic by `1/(1 - share²)`, and the
+  imbalance is a NO-OP on a balanced route, which is why the 19.4 bands are
+  safe by construction (0.009 % of traffic on two equal towns over three
+  years). A return is deliberately not counted as a departure - that would make
+  the rule a controller for its own output and pin the steady state at half the
+  flow whatever the share.
+- **Conservation is two lifetime counters, and the clamp is worth 37 %**
+  (D-213). `Credited` (every passenger delivered here) minus `Generated`
+  (every return created here) is the budget an emission is clamped to, so
+  `Generated <= Credited` holds at every tick by construction. Measured with
+  the clamp REMOVED on the starvation case - a year of traffic, then every bus
+  stopped: **2,196 generated against 1,598 arrived**, because the mean of a
+  dead flow decays over twelve months and that sum is twelve times the mean.
+  The long-run test stays green without the clamp; only the starvation case
+  carries it. The ledger is triangulated against the M14 ring at a town-less
+  terminus (generated 1,072.9 = collected 1,039.1 + expired 0 + waiting 32.9,
+  residue 1.00 unit against a ring that rounds monthly).
+- **Flow asymmetry 21.2 % against SPEC2's 30 %** (D-213), on a town of 400 and
+  a stop fourteen tiles out with no town at all: 1,799 out, 1,417 back over the
+  ring's last twelve months. `RETURN_TRIP_SHARE` = 0.8 was set from the CLOSED
+  FORM (asymmetry settles at `1 - share`) before the run, not fitted to it, and
+  the test asserts the queues stay small - a capacity-bound line evens out in
+  both directions for reasons that have nothing to do with return journeys.
+  Zero RNG draws, `+ - * /` only, daily emission and monthly roll, both
+  allocation-free (0.86 B a month against a 233 B control).
+- **No save bump: `v29_to_v30` was EXTENDED in place** (D-213, Z5). Eight
+  Float64s and a month count per station, saved and hashed in the live digest
+  as well as the full one. A v29 world arrives with an EMPTY ledger, which is
+  what it knew about itself. Two D-207 claims were qualified rather than left
+  to fail: the round trip and the v29-container load now assert the ledger is
+  non-empty and then exclude exactly it, so the exclusion can never go vacuous.
+  Canonical pin `40be7d25b1a6a90f` -> **`f04cebfeb26e8161`**; the corpus
+  manifest did NOT move (its world is station-less).
+- Still open in M19: the AI's own use of the classes.
 
 ## Still outstanding
 

@@ -1,7 +1,8 @@
 import type { CargoStack } from '../cargo/stack';
 import { CARGO_COUNT } from '../cargo/types';
-import { STATION_HISTORY_MONTHS } from '../constants';
+import { RETURN_MEAN_MONTHS, STATION_HISTORY_MONTHS } from '../constants';
 import { STATION_HISTORY_SIZE, STATION_MONTH_COUNTER_SIZE } from '../station/history';
+import { RETURN_STATE_SIZE } from '../station/returns';
 import {
   MODULE_KIND_COUNT,
   type ModuleKind,
@@ -65,6 +66,13 @@ export interface StationSave {
   historyCursor: number;
   /** The month in progress, per cargo and counter - same treatment. */
   monthCounters: number[];
+  /**
+   * The M19 return-journey ledger as a PLAIN list (station/returns.ts layout),
+   * for the reason the ring above is one: a typed array would travel as raw
+   * bytes in platform endianness.
+   */
+  returnState: number[];
+  returnMonths: number;
 }
 
 export interface VehicleSave {
@@ -140,6 +148,8 @@ export function encodeStations(stations: readonly Station[]): StationSave[] {
     history: [...station.history],
     historyCursor: station.historyCursor,
     monthCounters: [...station.monthCounters],
+    returnState: [...station.returnState],
+    returnMonths: station.returnMonths,
   }));
 }
 
@@ -158,6 +168,7 @@ export function buildStation(save: StationSave): Station {
     servedIndustries: [...save.servedIndustries],
     history: Int32Array.from(save.history),
     monthCounters: Float64Array.from(save.monthCounters),
+    returnState: Float64Array.from(save.returnState),
   };
 }
 
@@ -308,6 +319,8 @@ export function decodeStations(value: unknown, path: string): StationSave[] {
       history: decodeHistory(raw['history'], `${path}[${i}].history`),
       historyCursor: decodeHistoryCursor(raw['historyCursor'], `${path}[${i}].historyCursor`),
       monthCounters: decodeMonthCounters(raw['monthCounters'], `${path}[${i}].monthCounters`),
+      returnState: decodeReturnState(raw['returnState'], `${path}[${i}].returnState`),
+      returnMonths: decodeReturnMonths(raw['returnMonths'], `${path}[${i}].returnMonths`),
     };
   });
 }
@@ -339,6 +352,31 @@ function decodeMonthCounters(value: unknown, path: string): number[] {
     );
   }
   return entries.map((counter, c) => num(counter, `${path}[${c}]`));
+}
+
+/** The M19 ledger: exactly RETURN_STATE_SIZE figures (station/returns.ts). */
+function decodeReturnState(value: unknown, path: string): number[] {
+  const entries = list(value, path);
+  if (entries.length !== RETURN_STATE_SIZE) {
+    throw new SaveFormatError(
+      `${path}: expected ${RETURN_STATE_SIZE} ledger figures, got ${entries.length}`,
+    );
+  }
+  return entries.map((figure, f) => num(figure, `${path}[${f}]`));
+}
+
+/**
+ * Completed months the running mean has seen. Range-checked, because the
+ * divisor of D-079's true-mean correction is this number: a zero would divide
+ * by zero and a value past the window would make the mean roll slower than the
+ * window it claims to be.
+ */
+function decodeReturnMonths(value: unknown, path: string): number {
+  const months = int(value, path);
+  if (months < 0 || months > RETURN_MEAN_MONTHS) {
+    throw new SaveFormatError(`${path}: ${months} is outside 0..${RETURN_MEAN_MONTHS}`);
+  }
+  return months;
 }
 
 /** Validate the vehicle section of a save. */

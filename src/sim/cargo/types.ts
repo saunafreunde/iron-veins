@@ -90,6 +90,23 @@ export function isPassengerClass(cargo: number): boolean {
 }
 
 /**
+ * Position of a passenger class in {@link PASSENGER_CLASSES}, or -1.
+ *
+ * The index a fixed-size per-class block is addressed by - the return-journey
+ * ledger of SPEC2 M19 keeps four figures per class in one preallocated block,
+ * and this is how an event that names a CARGO finds the right pair of slots
+ * without a map lookup or an `indexOf` (law #7).
+ */
+export function passengerClassIndex(cargo: number): number {
+  if (cargo === Cargo.CommuterPax) return 0;
+  if (cargo === Cargo.BusinessPax) return 1;
+  return -1;
+}
+
+/** How many passenger classes there are; the stride of a per-class block. */
+export const PASSENGER_CLASS_COUNT = 2;
+
+/**
  * The other passenger class, or -1 for anything that is not one.
  *
  * The shared-seat rule of D-207 asks exactly this question once per stop, and

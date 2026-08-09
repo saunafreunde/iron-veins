@@ -1175,6 +1175,16 @@ const STATION_HISTORY_SIZE_V29 =
 const STATION_MONTH_COUNTER_SIZE_V29 = CARGO_COUNT_V29 * STATION_HISTORY_FIELDS_V29;
 
 /**
+ * The return-journey ledger a version THIRTY station carries, pinned for
+ * exactly the reason the numbers above are (station/returns.ts: four figures
+ * per passenger class, two classes). `tests/unit/returnJourneys.spec.ts`
+ * migrates a v29 station and holds the result against the LIVE constant, so a
+ * milestone that adds a class or a figure fails there and is told to write its
+ * own v30 -> v31 growth rather than silently moving this migration's target.
+ */
+const RETURN_STATE_SIZE_V30 = 8;
+
+/**
  * The cargo id a version 29 save meant by 0.
  *
  * `Cargo.Passengers` is retired: the town splits its output into
@@ -1251,6 +1261,31 @@ function growMonthCounters(value: unknown): unknown {
   return grown;
 }
 
+/**
+ * Give a station the empty return-journey ledger of SPEC2 M19's third bundle.
+ *
+ * Zero is not a convenience: it is what a version 29 world knew about itself.
+ * That world never generated a return journey, so its `Generated` is nought;
+ * and it banked no credit for one either, because the ledger did not exist
+ * while its travellers were arriving. A migrated world therefore starts owing
+ * nobody a way home and earns the right to send people back as fresh
+ * passengers arrive - which is the same posture every other defaulting
+ * migration in this file takes.
+ *
+ * A ledger that is ALREADY the current shape is left exactly as it is, for the
+ * reason `growCargoRow` leaves a grown row alone: the corpus trick of wrapping
+ * a current state in an old version header must not wipe a real ledger.
+ */
+function fillReturnLedger(station: Record<string, unknown>): Record<string, unknown> {
+  const existing = station['returnState'];
+  const state =
+    Array.isArray(existing) && existing.length === RETURN_STATE_SIZE_V30
+      ? existing
+      : new Array<number>(RETURN_STATE_SIZE_V30).fill(0);
+  const months = station['returnMonths'];
+  return { returnState: state, returnMonths: typeof months === 'number' ? months : 0 };
+}
+
 /** Rewrite the `refitTo` of one order list, leaving everything else alone. */
 function remapOrders(value: unknown): unknown {
   if (!Array.isArray(value)) return value;
@@ -1308,6 +1343,11 @@ function withFields(entry: unknown, fields: Record<string, unknown>): unknown {
  *    and the business slots entered as zero. Zero is not a convenience here
  *    either: that world earned no business fares, because it had none.
  *
+ * The milestone's THIRD bundle extends this same migration in place rather
+ * than opening a v31 (Z5 gives one bump per milestone, and it is spent): every
+ * station also gets the empty return-journey ledger of `station/returns.ts`.
+ * See `fillReturnLedger` for why empty is the honest value and not a shortcut.
+ *
  * The COMMAND LOG is deliberately not remapped. A log is history rather than
  * state (D-131) and it is judged only by a build of its own version, because
  * cross-version replay verification is refused rather than guessed (E-11,
@@ -1331,6 +1371,9 @@ const v29_to_v30: SaveMigration = (payload) => {
           waiting: remapStacks((station as Record<string, unknown>)['waiting']),
           history: growHistoryRing((station as Record<string, unknown>)['history']),
           monthCounters: growMonthCounters((station as Record<string, unknown>)['monthCounters']),
+          // The third bundle of the same milestone extends this migration IN
+          // PLACE rather than adding a v31 (Z5: one bump per milestone).
+          ...fillReturnLedger(station as Record<string, unknown>),
         }),
       ),
       ...mapSection(inner, 'vehicles', (vehicle) =>

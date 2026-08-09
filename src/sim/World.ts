@@ -58,6 +58,7 @@ import { assignStationIndustries } from './industry/catchment';
 import { openNewIndustries } from './industry/lifecycle';
 import { SaveFormatError } from './save/format';
 import { rollStationHistories } from './station/history';
+import { generateReturnJourneys, rollStationReturns } from './station/returns';
 import type { Station } from './station/types';
 import {
   collectIndustryOutput,
@@ -541,6 +542,13 @@ export class World {
       // and that answer comes out of the connections the fleet is running now.
       refreshCargoRouting(this);
       produceTownCargo(this);
+      // The other half of a town's passenger business (SPEC2 M19): travellers
+      // who arrived somewhere going home again. Immediately after the town's
+      // own production and at the same daily cadence, because the two are the
+      // outbound and the inbound leg of the same trade - and it reads the
+      // running mean of the months that ENDED, so the order within the day
+      // cannot influence what it emits.
+      generateReturnJourneys(this);
       // Collection is daily, production is monthly (section 7.3). A month's
       // output appearing on the platform in one tick would sit there ageing
       // for four weeks; the yard hands it over a day at a time instead.
@@ -584,6 +592,10 @@ export class World {
       // Close the month on every station's cargo-history ring (SPEC2 M14):
       // the day's collections above already landed in the month being closed.
       rollStationHistories(this);
+      // And the return-journey mean of SPEC2 M19, on the same boundary and for
+      // the same reason: the day's arrivals and offers above landed in the
+      // month being closed. D-079's correction lives in the roll.
+      rollStationReturns(this);
       // And empty the throughput meter for the month that starts now - the
       // D-091 posture, one instrument further: a meter is cleared by the
       // calendar, and the walk is the list of tiles that carry something,
@@ -1092,6 +1104,16 @@ function hashDynamicState(h: Fnv1a64, world: World): void {
     // Runway occupancy is dynamic state like any reservation the save keeps.
     h.u32(station.runwayFreeTick.length);
     for (const tick of station.runwayFreeTick) h.int(tick);
+    // The return-journey ledger of SPEC2 M19. In the LIVE digest as well as
+    // the full one, unlike the M14 ring beside it: eight numbers rather than
+    // seven hundred, and two of them move on every passenger delivery - the
+    // same cadence as the waiting stacks the live digest already covers. It
+    // steers what a station produces tomorrow, so a bent ledger is a different
+    // future and the determinism suite has to be able to see it (Z4, D-134).
+    h.u32(station.returnMonths);
+    for (let slot = 0; slot < station.returnState.length; slot++) {
+      h.f64(station.returnState[slot]!);
+    }
   }
 
   // The log is state the player reads and it is saved, so it is hashed like

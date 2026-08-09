@@ -975,6 +975,39 @@ export const GRAVITY_BASE_POPULATION = TOWN_START_POPULATION[2] / 4;
  */
 export const CARGO_ROUTE_EPSILON_TICKS = 1;
 
+// -------------------------------------------------------- return journeys
+
+/**
+ * Months a station averages its passenger imbalance over (SPEC2 M19). [months]
+ *
+ * The same twelve-month window section 7.3 judges an industry on, and kept the
+ * same way: ONE running number rather than a ring of twelve (D-079), a true
+ * mean while the window is still filling and a rolling one afterwards. A
+ * shorter window would make return traffic follow a single busy week; a longer
+ * one would keep sending travellers home from a line that closed last winter.
+ */
+export const RETURN_MEAN_MONTHS = 12;
+
+/**
+ * Share of a station's unmatched arrivals that travel home again. [1]
+ *
+ * The remainder are the journeys that are genuinely one way: people who moved,
+ * who arrived to stay, or who travelled on by some means the game does not
+ * carry. The number is set from the CLOSED FORM and not from a measurement:
+ * with a pure destination at one end of a shuttle, the steady state carries
+ * `share` of the outbound flow back, so the flow asymmetry settles at
+ * `1 - share`. SPEC2 M19 asks for an asymmetry under 30 %, which needs a share
+ * over 0.7; 0.8 puts the ideal figure at 20 % and leaves the other ten points
+ * for what the ideal leaves out - the twelve-month lag, decay at the platform,
+ * and a line without the capacity to carry everybody home.
+ *
+ * It must stay strictly below 1. At 1 a closed loop of two stations sustains
+ * itself for ever once its source dries up, which is not demand from nothing -
+ * the conservation ledger still holds - but it is traffic with no origin. Below
+ * 1 every loop decays geometrically without a source.
+ */
+export const RETURN_TRIP_SHARE = 0.8;
+
 // ---------------------------------------------------------------- industry
 
 /**

@@ -26,7 +26,7 @@ no entry below. A number may appear under several topics.
 - **Save format, migrations & replays:** D-007, D-025, D-026, D-027, D-048,
   D-111, D-130, D-131, D-134, D-142, D-144, D-145, D-146, D-147, D-153, D-178,
   D-181, D-184, D-185, D-188, D-189, D-190, D-191, D-192, D-193, D-194,
-  D-197, D-198, D-200, D-207
+  D-197, D-198, D-200, D-207, D-213
 - **Rail & track:** D-042, D-043, D-044, D-045, D-046, D-047, D-053, D-141,
   D-153, D-157, D-184
 - **Signals & reservations:** D-054, D-055, D-056, D-057, D-058, D-059, D-060,
@@ -34,15 +34,16 @@ no entry below. A number may appear under several topics.
 - **Stations & catchment:** D-049, D-080, D-095, D-150, D-159, D-178, D-179,
   D-208, D-210
 - **Cargo, payment & routing:** D-036, D-037, D-065, D-067, D-075, D-077,
-  D-078, D-118, D-142, D-151, D-176, D-178, D-187, D-207, D-211
+  D-078, D-118, D-142, D-151, D-176, D-178, D-187, D-207, D-211, D-213
 - **Industry & production:** D-022, D-062, D-063, D-064, D-069, D-071, D-079,
   D-085, D-086, D-174, D-201, D-202, D-205
-- **Towns, council & ownership:** D-101, D-102, D-103, D-104, D-205, D-207, D-206
+- **Towns, council & ownership:** D-101, D-102, D-103, D-104, D-205, D-207,
+  D-206, D-213
 - **Economy, finance & emissions:** D-008, D-090, D-091, D-092, D-105, D-154,
   D-180, D-193, D-196
 - **Balancing & scenarios:** D-038, D-039, D-040, D-041, D-066, D-087, D-088,
   D-116, D-151, D-152, D-156, D-158, D-159, D-187, D-190, D-194, D-195,
-  D-196, D-197, D-198, D-199, D-200, D-203, D-204, D-207, D-211
+  D-196, D-197, D-198, D-199, D-200, D-203, D-204, D-207, D-211, D-213
 - **Vehicles & fleet:** D-043, D-044, D-045, D-068, D-076, D-089, D-093,
   D-096, D-142, D-143, D-145, D-146, D-155, D-157, D-171, D-174, D-181, D-185,
   D-201, D-207
@@ -67,7 +68,7 @@ no entry below. A number may appear under several topics.
 - **Testing method & fixtures:** D-010, D-038, D-072, D-074, D-084, D-133,
   D-167, D-183, D-186, D-188, D-189, D-190, D-191, D-192, D-193, D-194,
   D-195, D-196, D-197, D-198, D-199, D-200, D-201, D-202, D-203, D-204,
-  D-205, D-207, D-206, D-208, D-209, D-210, D-212
+  D-205, D-207, D-206, D-208, D-209, D-210, D-212, D-213
 - **Process & specification:** D-070, D-123, D-129, D-133, D-138, D-140,
   D-185, D-191, D-197, D-198, D-199, D-203, D-204, D-205, D-206
 
@@ -10026,3 +10027,238 @@ period of 12.5 m is a rhythm rather than a stipple at zoom 0.5; and that a
 crossroads reads as a crossroads with the round join rather than as an X. And
 the named residual above: every road on sloping ground is still a flat patch,
 and on a ramp the ribbon still steps by one height level at each tile boundary.
+
+## M19 - travellers with destinations, bundle 3: return journeys (2026-08-09)
+
+### D-213 A return journey is generated at the destination from a running mean, and a two-counter ledger is what stops demand appearing from nothing
+
+SPEC2 M19's third bundle. Until it landed nobody in Iron Veins ever went home:
+a town produced passengers, a vehicle carried them somewhere, and there they
+ceased to exist. A line into a works, a quarry or a village that produces
+nothing of its own ran back EMPTY every day of its life - which is both a
+missing half of the passenger trade and the thing the milestone's own
+acceptance sentence measures ("Fluss-Asymmetrie < 30 % auf einer
+Pendelstrecke").
+
+**It is generated at the destination out of a twelve-month running mean, kept
+D-079's way.** SPEC2 names both halves ("Rueckreise-Erzeugung am Ziel",
+"12-Monats-Laufmittel nach D-079-Muster, kein Parcel-Tracking"), and D-079's
+reason carries over exactly: what the rule needs is the SIZE of a flow, and a
+size is one number. So the ledger keeps one running mean per class rather than
+a ring of twelve, a TRUE mean while the window fills and a rolling one
+afterwards - and that correction is not decoration here either. Rolled from
+zero, a station carrying a full flow from its first day reads 0.65 of it after
+a game year and sends home two thirds of the travellers it owes.
+`tests/unit/returnJourneys.spec.ts` drives the roll by hand and pins all three
+regimes: the first month exact, twelve perfect months at exactly the flow, and
+a twelfth of the window per month after that.
+
+**What is averaged is the IMBALANCE, and that is this entry's one real design
+decision.** A station's monthly figure is what ARRIVED here minus what the town
+here OFFERED of its own accord, per class - not the arrivals alone. Three
+things follow, and the first two are why the obvious alternative was refused
+rather than merely not chosen:
+
+- **Averaging the arrivals inflates the whole game.** Every arrival would breed
+  a return, every return would arrive somewhere and breed another, and the
+  closed form of that loop is `1 / (1 - share^2)` times what the towns actually
+  produce - 2.3x at a share of 0.75. Balancing scenario 1 is a bus line whose
+  payback year is a shipped band; multiplying its traffic by two and then
+  re-banding it would have been this bundle rewriting M6's calibration to pay
+  for its own mechanism.
+- **The imbalance is a no-op on a route that is already balanced.** Two towns
+  of the same size each offer about as many travellers as reach them, so the
+  mean sits at zero and the emission with it. That is the D-201 device again,
+  and it is why the section 19.4 bands are safe by CONSTRUCTION rather than by
+  luck. Measured over three game years on exactly that shape: **0.009 % and
+  0.003 %** of the traffic at the two ends. Not zero, and the test says why
+  instead of rounding it away - a month in which the fleet clears a backlog
+  delivers more than the town offered that month, and the mean carries a trace
+  of it for the next twelve.
+- **A return journey is deliberately NOT counted as a departure.** Counting it
+  would turn this into a controller for its own output: the emission would
+  cancel the imbalance that produced it and the steady state would settle at
+  `share / (1 + share)` of the flow - half of it at a share of 1, whatever the
+  constant were set to. It would also make the mechanism regulate the very
+  quantity the acceptance criterion measures, which is a worse thing to be
+  right about.
+
+**Conservation is a LEDGER, and it is the deliverable of the bundle.** The mean
+sets the RATE; two lifetime counters per class set the TOTAL. `Credited` counts
+every passenger of that class ever delivered here, `Generated` every return
+journey ever created here, and an emission is clamped to their difference. So
+`Generated <= Credited` holds at every tick of every world by construction.
+
+The clamp is not belt-and-braces, and this is stated with the number rather
+than asserted: **a running mean alone fails conservation by 37 %.** The
+starvation test runs a year of real traffic into a stop with no town, stops
+every bus, and plays two more years. With the clamp: 1,598 passengers arrived,
+1,598 return journeys generated in total, 521 of them after the line was cut -
+the pool draining, which is exactly what it is for. With the clamp REMOVED (run
+in the tree, not reasoned about): **2,196 generated against 1,598 arrived**,
+because the mean of a dead flow decays over twelve months and the sum of that
+decay is twelve times the mean. The same negative-control run leaves the
+LONG-RUN conservation test green, which is the useful half of the measurement:
+on a healthy line the inequality is slack and only the starvation case carries
+it.
+
+**The ledger is triangulated against instruments this bundle does not own.**
+Asserting `Generated <= Credited` from two counters the same module maintains
+would be reading one number twice. So the identity is also checked at a
+terminus with no town, where nothing but this rule can put a passenger into the
+pile: `Generated` must equal what the M14 history ring saw leave aboard a
+vehicle, plus what the ring saw lost there, plus what is still on the platform
+- three counters written by `station/history.ts` from the loading, the delivery
+and the decay paths. Measured over eleven months (inside the ring's own memory,
+so its record is complete): generated 1,072.9 against collected 1,039.1 +
+expired 0.0 + waiting 32.9, residue **1.00 unit** against a ring that rounds
+each month into an Int32 and can therefore lose half a unit per month and
+counter.
+
+**The measured asymmetry is 21.2 % against an ideal of 20 %.** The fixture is a
+town of 400 and a stop fourteen tiles away in open country with no town at all,
+four buses, three game years, measured over the ring's last twelve months:
+1,799 passengers out, 1,417 back. The baseline needs no measurement - the far
+stop has no town, so `produceTownCargo` never offers it a traveller and every
+journey back was zero before this bundle. Two things the test guards so the
+number means what it says: it asserts the queues at both ends stay small,
+because a capacity-bound line evens out in both directions for reasons that
+have nothing to do with return journeys; and the 30 % is SPEC2's own figure,
+not one derived from this run.
+
+**`RETURN_TRIP_SHARE` = 0.8 is set from the closed form, not from the run.**
+With a pure destination at one end the steady state carries `share` of the
+outbound flow back, so the asymmetry settles at `1 - share`; SPEC2 asks for
+under 30 %, which needs a share above 0.7, and 0.8 puts the ideal at 20 % with
+ten points left for what the closed form leaves out - the twelve-month lag,
+decay at the platform, and a line without the capacity to carry everybody home.
+The measured 21.2 % is what those ten points cost in practice, and it was
+measured AFTER the constant was chosen and not the other way round. The
+remaining fifth are the journeys that are genuinely one way: people who moved,
+who arrived to stay, or who travelled on by some means the game does not carry.
+It must stay strictly below 1 - at 1 a two-station loop sustains itself for
+ever once its source dries up, which conservation permits (nothing is invented)
+but which is traffic with no origin.
+
+**No parcel is followed, and a return goes wherever a traveller would go.** The
+emission is deposited through the same `chooseDestinations` split as everything
+else - nearest few by network time, weighted by D-211's gravity - so on a
+shuttle it goes back the way it came because that is the only destination, and
+on a network it fans out. The one thing `depositReturns` does differently from
+the town's own deposit is REFUSE when the network offers no destination at all:
+a town's passengers with nowhere to go are a real grievance and wait until they
+are written off, but a return journey with nowhere to go is a journey nobody
+sets out on, and inventing one would rot at the platform and pull down the
+rating of a station whose only fault is that its line was cut. The credit stays
+in the ledger for the day the line comes back. What is DEBITED is what was
+offered rather than what the platform had room for - a traveller turned away
+still set out, and the refusal is booked as this station's overflow by the same
+`placeDeposit` that books the town's own.
+
+**Save: the migration is EXTENDED IN PLACE, not bumped (Z5).** M19's one bump
+is v30 and D-207 spent it. Every station gains eight Float64 figures plus a
+month count, all saved and all hashed - a twelve-month mean is a historical
+input to a simulation decision, so it is save state and not derived (Z4,
+Fehlerkatalog 23). They join the LIVE digest as well as the full one, unlike
+the M14 ring beside them: eight numbers rather than seven hundred, and two of
+them move on every passenger delivery, which is the cadence the live digest
+already pays for in the waiting stacks. `v29_to_v30` enters the ledger EMPTY,
+which is what a v29 world knew about itself - it generated no return journeys
+and banked no credit for any, because the measurement did not exist while its
+travellers were arriving. A ledger that is already the current shape is left
+alone (the `growCargoRow` rule), so the corpus trick of wrapping a current
+state in an old header cannot wipe a real one. `RETURN_STATE_SIZE_V30` is
+pinned in the migration file for D-207's own reason - a migration writes the
+shape of ITS target version - and the other end of that rule is a test that
+migrates a v29 station and holds the result against the LIVE constant, so the
+milestone that adds a third class is told to write a v30 -> v31 growth instead
+of silently moving this migration's target. (D-207's comment claims
+`tests/unit/save.spec.ts` does that for the v29 sizes. It does not; the claim
+was never true. This bundle wrote the test it needed rather than repeating it.)
+
+**Two of D-207's claims were qualified rather than left to fail quietly**, and
+this is the honest part of the save story. Its round-trip test reconstructs the
+v29 encoder and asserts losslessness; its sibling asserts that a v29 container
+loads into the identical world. Neither can be true of a field v29 had no way
+to carry - not a renamed field and not a grown row, but a measurement that did
+not exist. Both now assert FIRST that the played world's ledger is non-empty,
+and then exclude exactly it and compare everything else field for field and
+hash for hash. The exclusion can therefore never become vacuous, which is what
+makes it a qualification rather than a weakening.
+
+**Pins: one moved, one provably did not.** The canonical cross-OS hash
+`40be7d25b1a6a90f` -> **`f04cebfeb26e8161`** (D-137 protocol, re-recorded in a
+clean worktree carrying only this change), because the recorded road fixture is
+a two-station world and eight new hashed figures per station reach the digest
+whatever their value. The save corpus manifest `9800c136644b0199` is
+UNCHANGED, and not by luck: the corpus game is station-less by construction, so
+the station loop of `hashWorld` contributes nothing to it - all nine fixtures
+still decode into one world (D-130), verified by running. The soak fixture -
+the recorded twenty-five year AI game - went `071cbd7e8db44893` ->
+**`856392bde0cd79bf`** at 704 -> **698** commands, re-recorded from the same
+worktree; its own self-consistency half (the recording decoded from its own
+bytes and re-simulated to every hash it committed to, sixteen checkpoints)
+stayed green, so what moved is the game and not the machine.
+
+**The 19.4 bands, measured in the same worktree.** Every hand-built world is
+unmoved to the digit: scenario 1 payback **year 3**, scenario 2 249,980 EUR and
+payback **year 6**, scenario 3 **159,516 EUR/yr**, scenario 6 month **25**,
+Netzdesign **3.73** (alignment 2.01x, capacity 1.86x), takt **-8.3 %** and
+delivery-rating ratio **0.57**, hard winter **-4.36 %**, Punktzahl **5,889**
+with the identical 36/26/24/13 split. That is the D-201 device paying off:
+those worlds are two or three stations of matched towns, so the imbalance the
+mean averages never turns positive.
+
+What moved is what always moves - the worlds where three companies share one
+link graph and a station can be reached from a competitor's stop. `aiGame`
+stays green with the same shape (one line, 345 road, 14 stations, six vehicles
+for the road personality, 538,469 EUR against D-211's 536,615; the rail husk
+20,792 EUR against -509,219, i.e. it survives this time instead of being wound
+up - which is the reshuffling D-211 re-banded the floor FOR, and the floor
+holds). Scenario 5's road personality measures **978,528 EUR** against D-211's
+1,122,965 (-12.9 %), deep inside D-158's 0.8-3.2 M band; rail 90,230 and
+expansive 121,328 are unchanged to the euro, because those two companies own
+zero and one vehicle and carry almost no passengers.
+
+**Bundle.** Measured in a clean git worktree at c1a5b93 carrying only this
+change, built twice: baseline **946,301 B**, with this bundle **946,425 B** -
+**+124 B** against the 950,000 B budget, leaving 3,575 B. The shared working
+tree measures 950,612 B and is over budget, and that is NOT this bundle: it
+carries a concurrent session's uncommitted render files, which is precisely why
+the number above was taken in isolation.
+
+**Tick: no acceptance number is claimed, and the reason is measured rather
+than asserted.** D-207's and D-211's finding still holds - the perf gate is red
+on the BASELINE commit on this machine, because other agents are building and
+baking on it throughout. Two alternating A/B pairs in the same worktree, the
+only difference being this change: mine **3.192 / 10.375** and **3.551 /
+11.256** ms p50/p99, baseline **3.313 / 10.703** and **3.615 / 10.141**. Mean
+p50 3.372 against 3.464 - this build measures **0.09 ms FASTER**, i.e. the
+change has no measurable p50 cost - and mean p99 +0.39 ms with the sign
+flipping across the pairs (pair one measures this build 0.33 ms faster). Both
+sides sit at 3.2-3.6 ms p50 against the 1.43-1.45 ms reference, so the box is
+loaded by a factor of about 2.3 and p99 is exactly the quantity D-167
+describes as inflated by multiples under load. **The clean acceptance
+measurement of the M19 row is still outstanding** and belongs to whoever takes
+it.
+
+What the bundle actually adds per tick is stated instead of estimated: NOTHING
+per tick. One extra O(stations) walk per game DAY that reads eight Float64s per
+station and returns early - a station owing no journey never reaches
+`chooseDestinations`, which is what keeps a freight-heavy map at the cost of
+the walk alone - plus one destination search per EMITTING station, the same
+search `produceTownCargo` has always made for a station with a town. Per game
+MONTH, one more walk of four multiply-adds per station. Both measured
+allocation-free with the M17 `GCProfiler` instrument: **0.864 B per game month**
+for the roll against a 233 B allocating control that proves the instrument can
+see one, and **0.152 B per game day** for the emission where nothing is owed.
+
+**What this bundle did NOT do**, so the next one knows: the AI still rates a
+town pair by the commuter class alone and knows nothing about return traffic
+when it sizes a fleet, which is M19's remaining bundle. No panel shows the
+ledger - a station's return traffic is visible only as cargo in the pile and in
+the M14 flow atlas. And a station's return journeys are split by gravity like
+anything else, so a traveller can be sent "home" to a third town that is bigger
+than the one he came from; that is the price of not tracking parcels, it is
+stated rather than hidden, and it is the same trade D-211 made when it weighted
+destinations without choosing them.

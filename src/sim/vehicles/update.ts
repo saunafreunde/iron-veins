@@ -55,6 +55,7 @@ import { bookExpense, bookRevenue } from '../economy/company';
 import { refitCapacity, refitPriceCt } from './refit';
 import { serviceVehicle } from './lifecycle';
 import { recordStationCargo, StationHistoryField } from '../station/history';
+import { creditPassengerArrival } from '../station/returns';
 import { deliverToIndustry } from '../industry/production';
 import { isOneWay, signalDirection, signalKind, SignalKind } from '../map/signals';
 import { flightPath } from '../net/airPath';
@@ -967,6 +968,10 @@ function seatSpace(
 function deliverCargo(world: World, station: Station, cargo: Cargo, amount: number): void {
   // The M14 history ring: cargo that arrived here as its destination.
   recordStationCargo(station, StationHistoryField.Delivered, cargo, amount);
+  // And, for a passenger, the return-journey ledger of SPEC2 M19: this is the
+  // one event that says somebody is now HERE who was not before, which is
+  // what a way home is owed against. Freight returns on its first line.
+  creditPassengerArrival(station, cargo, amount);
   let left = amount;
 
   for (const industryId of station.servedIndustries) {

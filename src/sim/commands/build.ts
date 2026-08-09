@@ -68,6 +68,7 @@ import {
   type StationModule,
 } from '../station/types';
 import { createMonthCounters, createStationHistory } from '../station/history';
+import { createReturnState } from '../station/returns';
 import { assignStationCatchment } from '../town/update';
 import { RoadBit } from '../town/types';
 import type { Cargo } from '../cargo/types';
@@ -678,6 +679,11 @@ function attachModule(world: World, module: StationModule): Station {
       history: createStationHistory(),
       historyCursor: 0,
       monthCounters: createMonthCounters(),
+      // The return-journey ledger of SPEC2 M19: a station that has never been
+      // reached owes nobody a way home, so an empty ledger is the truth about
+      // a stop that was built one tick ago.
+      returnState: createReturnState(),
+      returnMonths: 0,
     };
     world.stations.push(station);
   } else {

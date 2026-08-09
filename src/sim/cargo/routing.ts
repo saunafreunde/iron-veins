@@ -477,6 +477,43 @@ export function depositPassengers(
   return taken;
 }
 
+/**
+ * Deposit the return journeys of SPEC2 M19 (station/returns.ts owns how many).
+ *
+ * Two things separate it from the town's own deposit above, and both are the
+ * point rather than an optimisation:
+ *
+ *  - it REFUSES when the network offers no destination at all, and says so by
+ *    returning false. A town's passengers with nowhere to go are a real
+ *    grievance and wait at the platform until they are written off; a return
+ *    journey with nowhere to go is a journey nobody sets out on, and inventing
+ *    one would rot at the platform and pull down the rating of a station whose
+ *    only fault is that its line was cut. The credit stays in the ledger.
+ *  - the search runs ONCE for both classes, for the reason `depositPassengers`
+ *    gives: both sit in `STATION_ALWAYS_ACCEPTED`, and gravity reads the
+ *    destination and nothing about the cargo, so a second search would be the
+ *    first one repeated.
+ *
+ * Where a return goes is decided by exactly the same split as every other
+ * deposit - nearest few by network time, weighted by gravity. That is what
+ * "no parcel tracking" means in practice: a traveller goes home the way any
+ * other traveller would travel, not back along the leg some parcel arrived on.
+ */
+export function depositReturns(
+  world: World,
+  station: Station,
+  commuters: number,
+  business: number,
+): boolean {
+  if (commuters <= 0 && business <= 0) return false;
+  const found = chooseDestinations(world, station, Cargo.CommuterPax);
+  if (found === 0) return false;
+
+  if (commuters > 0) placeDeposit(world, station, Cargo.CommuterPax, commuters, found);
+  if (business > 0) placeDeposit(world, station, Cargo.BusinessPax, business, found);
+  return true;
+}
+
 /** Put `amount` into the station against an ALREADY chosen destination set. */
 function placeDeposit(
   world: World,

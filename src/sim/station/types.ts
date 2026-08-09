@@ -209,6 +209,19 @@ export interface Station {
    * mid-month must not silently drop half a month of history.
    */
   monthCounters: Float64Array;
+
+  /**
+   * The return-journey ledger of SPEC2 M19 (v30 save state, station/returns.ts).
+   *
+   * RETURN_FIELD_COUNT figures per passenger class: the running mean of the
+   * monthly arrival imbalance, the month in progress, and the two lifetime
+   * counters whose difference is the conservation budget. Preallocated at
+   * creation (law #7), saved and hashed - it is a historical input to a
+   * simulation decision, so it is save state and not derived (Z4).
+   */
+  returnState: Float64Array;
+  /** Completed months the running mean has seen, capped at RETURN_MEAN_MONTHS. */
+  returnMonths: number;
 }
 
 /** Does the station have at least one module of this kind? */
