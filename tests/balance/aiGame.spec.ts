@@ -191,6 +191,33 @@ function quarterCentury(): { world: World; queue: CommandQueue } {
  * reason, and **the defect it stops covering up is named**: the AI builds
  * networks it cannot crew. That is M11's, it is D-158's open bottleneck, and
  * it is not something a town generator should be shaped around.
+ *
+ * **The sweep above no longer reproduces, and D-218 re-recorded it.** That
+ * block was measured at the commit BEFORE D-216 landed, which D-216 says of
+ * itself; quoting it as the current state of the four seeds is what the next
+ * re-banding must not do. Played at D-218's HEAD, the same fixture on the same
+ * four seeds - and this is a MEASUREMENT, not a band; not one number below is
+ * asserted:
+ *
+ * ```
+ * 4711  p0  247,067     l0 v0 s0  | p4  147,155     l0 v0 s11 | p1  576,736     l1 v6 s19
+ * 4712  p4 -168,859 [X] l0 v0 s29 | p2  123,894     l1 v1 s2  | p0 -138,039 [X] l0 v0 s2
+ * 4713  p4 -290,949 [X] l0 v0 s31 | p0 -256,082 [X] l0 v0 s2  | p3  500,000     l0 v0 s0
+ * 4714  p4 -145,573 [X] l0 v0 s29 | p2 -166,757 [X] l1 v0 s2  | p3  500,000     l0 v0 s0
+ * ```
+ *
+ * D-218 fixed a `buildRoad` defect - a run that laid no new tile was refused
+ * before it wrote the junction it named, so a quarter of the AI's own roads
+ * never joined and its buses lived in `NoRoute`. Seed 4711's road company goes
+ * -157,183 [wound up] -> **576,736 with six vehicles**, which is why this file
+ * is comfortably green again; living vehicles across the twelve competitors go
+ * 1 -> 7. What it does NOT fix, and what the assertions below therefore still
+ * have to tolerate: ten of twelve competitors own no vehicle after twenty-five
+ * years, and **on seed 4713 `woundUp.length <= 1` fails, before this change and
+ * after it**. This fixture plays 4711 alone, and that is the whole reason it is
+ * green. The two causes left are named in D-218 - a closed line strands its
+ * stations and its road, and nothing asks whether a line will PAY - and each
+ * wants its own bundle with its own trace.
  */
 const VALUE_FLOOR_CT: ReadonlyMap<number, number> = new Map([
   [Personality.Rail, -(START_CAPITAL_CT[Difficulty.Normal]! + LOAN_MIN_LIMIT_CT)],

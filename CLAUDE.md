@@ -2005,6 +2005,48 @@ the pixels - the literal mechanism behind "strassen durch haeuser".
   checksum folds terrain ids, not tones). **Both pins go red on the old
   colour - four assertions.**
 
+## The AI's road - a road that meets a road (D-218)
+
+**A `BuildRoad` that lays no new tile still writes the joins it names.** The
+guard `if (newTiles === 0) return reject(NothingToDo)` stood in front of the
+command's own `connect()` loop, so a drag over road that was already there was
+refused BEFORE the junction it named was written. `roadBits[tile] !== 0` says
+"has road"; a vehicle asks "is joined by bits". **This is a player's defect
+too** - drag from your road onto the town's street and nothing happens - and it
+is the D-076 shape a third time: a validator refusing what the command exists
+to do. Work is now a new tile OR a missing join; `joinBit` is one table read by
+the write and by the question. **The price stays per TILE** - a join has never
+been charged for.
+
+- **It was the AI's whole road network.** `planRoadRuns` (D-154) tests "has
+  road" and returns maximal straight runs, so the run that turns onto an
+  existing street is a single hop between two tiles that both already carry
+  road - because the run before it laid one of them. 25 of 99 `BuildRoad`
+  commands of one 25-year company were refused this way, and **26 of 98
+  measured lines had their two stops unreachable by connected road, 82 of 354
+  crewed vehicles in `NoRoute`**, the drivable island usually exactly five
+  tiles. Asymmetric road-bit pairs: **0**. The damage is tiny in extent and
+  exactly on the junctions.
+- **Measured, four seeds, the `aiGame` fixture's own world**: seed 4711's road
+  company **-157,183 EUR [wound up], 0 vehicles -> +576,736 alive, 6 vehicles,
+  1 line**; living vehicles across twelve competitors **1 -> 7**. **Ten of
+  twelve still own no vehicle**, and the four-seed total falls 1,085,782 ->
+  928,593 with 6/12 wound up, because the husks can now build and then lose
+  money on bus economics nothing checks. That is honest, not a regression - the
+  full table is in D-218.
+- **No save bump, verified**: the only persistent state is `map.roadBits`,
+  saved and hashed since M2, and no field, layer or entity changed shape - v30
+  stands. The **soak fixture is re-recorded** (`051d20db6ca47f1b` ->
+  `15e0eca37ca9b897`, commands 3,818 -> 5,442) and the **canonical cross-OS pin
+  did NOT move** (`ddaacd4b970d31db`, checked rather than presumed - its world
+  is the recorded ROAD fixture and none of its commands was a join-only run).
+- **The three causes left, named and not touched here**: a closed line strands
+  its stations and its road (`closeDeadLine`'s `owed` counts only vehicle
+  upkeep, and nothing in `src/sim/ai` ever demolishes anything); `startProject`
+  asks only whether a project is AFFORDABLE, never whether it will pay; and
+  `aiGame` is green because it plays seed 4711 alone - `woundUp.length <= 1`
+  fails on 4713 before this change and after it.
+
 ## Still outstanding
 
 - **The two named walls of D-158.** A passenger pile a fleet merely

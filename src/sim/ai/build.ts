@@ -219,8 +219,13 @@ export interface RoadRun {
  * order, FIFO, so the result is a pure function of the map (laws #3 and #8)
  * - bounded to the corridor box inflated by AI_ROAD_DETOUR_MARGIN. The path
  * comes back as maximal straight RUNS, each of which one BuildRoad command
- * lays exactly. A run that lies entirely on existing streets is enqueued
- * like the rest; the command refuses it as NothingToDo, which costs nothing.
+ * lays exactly. A run that lies entirely on existing streets is enqueued like
+ * the rest, and it is NOT a no-op: this search's passability test is "has
+ * road", a vehicle's is "is joined by bits", and the run that closes the gap
+ * between the two is exactly the last hop onto an existing street. `buildRoad`
+ * writes the joins it names whether or not it lays a tile (see the guard
+ * there); before it did, the AI's own preceding road made its own junction a
+ * refused command and the line's buses sat in NoRoute for their whole life.
  * No path inside the box means the candidate is skipped rather than
  * half-built.
  */

@@ -182,26 +182,41 @@ function routeTiles(world: World, x1: number, y1: number, x2: number, y2: number
   return tiles;
 }
 
+/**
+ * The bit a road tile carries towards an orthogonally adjacent neighbour, or 0
+ * when the two are not neighbours. One table for the write and for the question
+ * "is this pair already joined?" - two copies of this arithmetic is how the two
+ * drift apart.
+ */
+function joinBit(size: number, fromTile: number, toTile: number): number {
+  const dx = (toTile % size) - (fromTile % size);
+  const dy = ((toTile / size) | 0) - ((fromTile / size) | 0);
+  if (dx === 1 && dy === 0) return RoadBit.East;
+  if (dx === -1 && dy === 0) return RoadBit.West;
+  if (dy === 1 && dx === 0) return RoadBit.South;
+  if (dy === -1 && dx === 0) return RoadBit.North;
+  return 0;
+}
+
+/** Is this pair of adjacent tiles already joined, in both directions? */
+function joined(world: World, fromTile: number, toTile: number): boolean {
+  const size = world.map.size;
+  const forward = joinBit(size, fromTile, toTile);
+  if (forward === 0) return true;
+  const bits = world.map.roadBits;
+  return (
+    (bits[fromTile]! & forward) !== 0 && (bits[toTile]! & joinBit(size, toTile, fromTile)) !== 0
+  );
+}
+
 /** Connect two orthogonally adjacent tiles in both directions. */
 function connect(world: World, fromTile: number, toTile: number): void {
   const size = world.map.size;
-  const dx = (toTile % size) - (fromTile % size);
-  const dy = ((toTile / size) | 0) - ((fromTile / size) | 0);
+  const forward = joinBit(size, fromTile, toTile);
+  if (forward === 0) return;
   const bits = world.map.roadBits;
-
-  if (dx === 1) {
-    bits[fromTile] = bits[fromTile]! | RoadBit.East;
-    bits[toTile] = bits[toTile]! | RoadBit.West;
-  } else if (dx === -1) {
-    bits[fromTile] = bits[fromTile]! | RoadBit.West;
-    bits[toTile] = bits[toTile]! | RoadBit.East;
-  } else if (dy === 1) {
-    bits[fromTile] = bits[fromTile]! | RoadBit.South;
-    bits[toTile] = bits[toTile]! | RoadBit.North;
-  } else if (dy === -1) {
-    bits[fromTile] = bits[fromTile]! | RoadBit.North;
-    bits[toTile] = bits[toTile]! | RoadBit.South;
-  }
+  bits[fromTile] = bits[fromTile]! | forward;
+  bits[toTile] = bits[toTile]! | joinBit(size, toTile, fromTile);
 }
 
 export function buildRoad(
@@ -218,19 +233,30 @@ export function buildRoad(
   const tiles = routeTiles(world, x1, y1, x2, y2);
   const size = world.map.size;
   let newTiles = 0;
+  let missingJoins = 0;
 
-  for (const tile of tiles) {
+  for (let i = 0; i < tiles.length; i++) {
+    const tile = tiles[i]!;
     const blocker = roadBuildable(world, tile % size, (tile / size) | 0);
     if (blocker !== null) return reject(blocker);
     const permission = buildPermission(world, tile);
     if (permission !== null) return reject(permission);
     if (world.map.roadBits[tile] === 0) newTiles++;
+    if (i > 0 && !joined(world, tiles[i - 1]!, tile)) missingJoins++;
   }
 
   const cost = newTiles * ROAD_COST_PER_TILE_CT;
   const chargeCt = world.costCt(cost);
   if (chargeCt > world.company.cashCt) return reject(RejectReason.InsufficientFunds);
-  if (newTiles === 0) return reject(RejectReason.NothingToDo);
+  // A run that lays no NEW tile may still be work: two roads that meet without
+  // being joined are two roads, and joining them is what the drag NAMES. The
+  // guard used to ask only about tiles and stood in front of the connect loop
+  // below, so the last hop of a corridor - the one that reaches an existing
+  // street - was refused before the junction it was there to write (a D-076
+  // validator mismatch: the command refused what its own body was for). The
+  // price stays per TILE: a join has never been charged for, here or in a run
+  // that also lays tiles.
+  if (newTiles === 0 && missingJoins === 0) return reject(RejectReason.NothingToDo);
 
   for (let i = 0; i < tiles.length; i++) {
     const tile = tiles[i]!;

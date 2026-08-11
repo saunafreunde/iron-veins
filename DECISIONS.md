@@ -16,7 +16,7 @@ no entry below. A number may appear under several topics.
   D-196, D-200, D-201, D-202, D-204
 - **Commands, snapshot & worker boundary:** D-004, D-005, D-006, D-011, D-032,
   D-100, D-111, D-145, D-146, D-148, D-162, D-174, D-176, D-179, D-187, D-189,
-  D-192, D-193, D-196, D-200, D-202
+  D-192, D-193, D-196, D-200, D-202, D-218
 - **Lines & timetables:** D-145, D-146, D-147, D-148, D-149, D-150, D-151,
   D-152, D-155, D-159
 - **Map generation & terrain:** D-018, D-019, D-020, D-021, D-022, D-023,
@@ -51,7 +51,7 @@ no entry below. A number may appear under several topics.
   D-201, D-207
 - **Water & air:** D-094, D-095, D-096, D-097, D-098, D-099
 - **Competitors, AI & tenders:** D-107, D-108, D-109, D-115, D-116, D-121,
-  D-122, D-147, D-152, D-153, D-154, D-155, D-156, D-158, D-216
+  D-122, D-147, D-152, D-153, D-154, D-155, D-156, D-158, D-216, D-218
 - **Rendering & art:** D-013, D-014, D-033, D-035, D-112, D-117, D-125, D-127,
   D-136, D-140, D-160, D-161, D-162, D-163, D-164, D-165, D-166, D-169, D-170,
   D-171, D-172, D-173, D-174, D-175, D-177, D-179, D-186, D-202, D-205, D-206,
@@ -10953,3 +10953,136 @@ ground reads as ground rather than as mud; and that a town on the minimap
 still looks like a town. D-212's own named residual is untouched and still
 open: a road on sloping ground is a flat patch, and on a ramp the ribbon still
 steps one height level at every tile boundary.
+
+---
+
+## The AI's road, bundle 1: a road that meets a road (2026-08-11)
+
+### D-218 A road run that lays no new tile still writes the joins it names - the guard stood in front of its own connect loop
+
+The diagnosis of "the richest competitor is the one that never built" measured
+five causes over four seeds; this bundle fixes the top-ranked one and only it,
+and it is not in `src/sim/ai` at all. **It is a `buildRoad` defect a player
+hits too**, and it is the D-076 shape: a command whose validator refuses
+exactly what the command's own body exists to do.
+
+`buildRoad` counted TILES. `if (newTiles === 0) return reject(NothingToDo)`
+stood immediately in front of the loop that calls `connect()` on every adjacent
+pair of the run, so a drag whose tiles all already carried road was refused
+BEFORE any of the joins it named were written. Two adjacent road tiles that are
+not joined by bits are two roads: `roadBits[tile] !== 0` says "has road", a
+vehicle asks "is joined". Drag from your own road onto the town's street and
+nothing happens, with the refusal naming nothing to do.
+
+**The measurement, on the shipped command log** (seed 4712, company 1, the
+25-year `aiGame` world):
+
+```
+BuildRoad x1=24 y1=99 x2=24 y2=76  => ok
+BuildRoad x1=24 y1=76 x2=25 y2=76  => REJECT cmd.reject.nothingToDo
+BuildRoadStop x=25 y=76            => ok
+```
+
+At month 12 the stop S15 (25,76) carries `roadBits=2` (East only) and its
+neighbour (24,76) carries `roadBits=8` (South only): `[missing West]`. Flood
+fill: `bfsReachable=true driveable=false hasRoadComponent=44
+connectedComponent=5`. All six buses of that line lived in `NoRoute` with
+`earn=0`. Census over four seeds x months {6,12,18,24}: **26 of 98 line
+observations (26.5 %) had their two stops unreachable by connected road, and 82
+of 354 crewed vehicles (23.2 %) were in `NoRoute`**; in 22 of the 26 the
+drivable island was exactly five tiles. Whole-map context: **0 asymmetric
+road-bit pairs** on every world measured and only 1-12 adjacent-but-unconnected
+pairs per map - the damage is tiny in extent and catastrophic in placement,
+because every one of those breaks sits at a junction the AI itself ordered.
+
+**The AI's own road made its own junction a no-op.** `planRoadRuns` (D-154)
+walks a BFS whose passability test is "has road" and hands back maximal
+straight RUNS; the run that turns onto an existing street is a single hop
+between two tiles that both already carry road by the time it executes -
+because the run before it laid the first of them. 25 of 99 `BuildRoad` commands
+of that company over twenty-five years were refused this way. The producing
+side is not what is wrong: teaching `planRoadRuns` about bits would paper over
+a command that is refusing work it was asked to do, and would leave the player
+holding the same defect.
+
+**The cure is the guard asking the question it meant.** Work is a new tile OR a
+missing join: the validation loop counts both, and the refusal is
+`newTiles === 0 && missingJoins === 0`. `joinBit` is one table read by the
+write and by the question, so the two cannot drift. **The price stays per
+TILE** - a join has never been charged for, and a run that also lays tiles has
+always written its joins free; a join-only run is that run with the tiles taken
+away. `tests/unit/roadJoin.spec.ts` reproduces the gap, the join, the AI
+corridor verbatim from the log, and asserts that a drag over road that is
+already one road is still `NothingToDo` and that ground and ownership are still
+asked first.
+
+**Measured after, the same four seeds, same fixture parameters** (256 map,
+Temperate, Normal, 3 competitors, 25 years; `l` lines, `v` vehicles,
+`s` stations):
+
+```
+       before (HEAD)                     after
+4711   p0  450,000     l0 v0 s0          p0  247,067     l0 v0 s0
+       p4  147,413     l0 v0 s11         p4  147,155     l0 v0 s11
+       p1 -157,183 [X] l1 v0 s19         p1  576,736     l1 v6 s19
+4712   p4 -170,141 [X] l0 v0 s29         p4 -168,859 [X] l0 v0 s29
+       p2  195,605     l1 v1 s2          p2  123,894     l1 v1 s2
+       p0  296,000     l0 v0 s0          p0 -138,039 [X] l0 v0 s2
+4713   p4 -288,638 [X] l0 v0 s31         p4 -290,949 [X] l0 v0 s31
+       p0 -284,642 [X] l1 v0 s2          p0 -256,082 [X] l0 v0 s2
+       p3  500,000     l0 v0 s0          p3  500,000     l0 v0 s0
+4714   p4 -147,283 [X] l0 v0 s29         p4 -145,573 [X] l0 v0 s29
+       p2   44,651     l0 v0 s2          p2 -166,757 [X] l1 v0 s2
+       p3  500,000     l0 v0 s0          p3  500,000     l0 v0 s0
+```
+
+**What it bought, stated plainly.** Seed 4711's road company - the one D-216
+lost - goes **-157,183 EUR [wound up], 0 vehicles -> +576,736 EUR alive, six
+vehicles, one line**, above the 538,469 it earned before D-216. Living vehicles
+across all twelve competitors go **1 -> 7**; companies still owning a fleet
+1/12 -> 2/12. `aiGame`'s M8 acceptance is green with room: nothing winds up on
+its seed, where one company did.
+
+**What it did NOT buy, stated just as plainly.** Ten of twelve competitors
+still own no vehicle after twenty-five years, and the four-seed total value
+falls **1,085,782 -> 928,593 EUR** with wound-up companies 5/12 -> 6/12. That
+is not the fix regressing: it is the husks finally being ABLE to build, and
+then losing money on the bus economics the diagnosis ranks third - a town-pair
+line that earns ~20 EUR per bus-month against ~76 of upkeep passes every gate
+the AI has, because `startProject` asks only whether the company can AFFORD a
+project and never whether it will pay. Two named causes are left for their own
+bundles: a closed line strands its stations and its road (nothing in
+`src/sim/ai` ever demolishes anything, and `closeDeadLine`'s `owed` sees only
+vehicle upkeep), and the missing absolute profitability floor. Both figures
+above reproduce the diagnosis's isolated channel C1 to the euro, which is what
+says this change is that channel and nothing else.
+
+**Save discipline (Z5), verified rather than assumed. SAVE_VERSION stays 30.**
+The only persistent state this touches is `map.roadBits`, saved and hashed
+since M2; not one field, layer or entity changed shape, so `saveFieldCoupling`,
+the round trip and every migration test pass untouched.
+
+**Hashed values moved in exactly one fixture, and the other two were checked
+rather than presumed.** The **soak fixture** (D-190/D-130 protocol) is
+re-recorded: `051d20db6ca47f1b` -> **`15e0eca37ca9b897`**, recorded command
+count **3,818 -> 5,442** - the competitors issue forty percent more orders
+because their roads now connect and their projects reach the stage that buys
+vehicles. The **canonical cross-OS pin (D-137) did NOT move** and stands at
+`ddaacd4b970d31db`: its world is the recorded ROAD fixture at seed 424,242, and
+none of its player commands was a run of nothing but existing road. The **save
+corpus manifest did not move** either - the format is untouched.
+
+**The band correction this bundle owes its successor, and does not spend.**
+`aiGame.spec.ts` is green at HEAD only because it plays seed 4711 alone; on
+seed 4713 its `woundUp.length <= 1` assertion fails both before and after this
+change. The four-row table in the comment above `VALUE_FLOOR_CT` was measured
+at the commit BEFORE D-216 landed and no longer reproduces; the sweep above is
+recorded there as the current one. No band value is touched here - re-banding
+needs its own trace and its own bundle.
+
+**Cost.** Zero save bump, zero migration edit, zero snapshot bytes, zero
+protocol fields, zero new constants, zero i18n strings, zero new RNG draws, one
+new unit spec. `npm run typecheck`, `npm run lint` and `npx prettier --check`
+clean; `tests/unit` 108 files and 1,446 tests green, `tests/determinism` and
+`tests/corpus` 38 green, `tests/balance` 63 green + 2 skipped, `tests/soak` 4
+green on the re-recorded fixture.
