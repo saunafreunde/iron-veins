@@ -8,7 +8,7 @@ import {
   TICKS_PER_YEAR,
   TILE_PUBLIC,
 } from '../../src/sim/constants';
-import { PERSONALITY_COUNT } from '../../src/sim/ai/types';
+import { PERSONALITY_COUNT, Personality } from '../../src/sim/ai/types';
 import { VehicleState } from '../../src/sim/vehicles/VehicleStore';
 import { hashWorld, World } from '../../src/sim/World';
 import {
@@ -17,6 +17,7 @@ import {
   recordOutcomes,
   refusalTrace,
   undeclared,
+  watchForeignStops,
   type CompanyOutcomes,
 } from './aiRefusals';
 import { AI_SWEEP_SEEDS, aiSweepSeeds, hashTwin } from './determinism';
@@ -125,6 +126,8 @@ interface Run {
   readonly queue: CommandQueue;
   readonly rows: readonly Measured[];
   readonly outcomes: CompanyOutcomes;
+  /** Schedules a competitor wrote to a station it does not own (D-223). */
+  readonly foreignStops: readonly string[];
 }
 
 function play(years: number, seed: number): Run {
@@ -139,14 +142,24 @@ function play(years: number, seed: number): Run {
   });
   const queue = new CommandQueue();
 
-  // A pure observer over `World.step`'s own outcome sink: it reads what the
-  // command layer already decided and writes nothing back, so the world it
-  // watches is the world the soak fixture replays.
+  // Two pure observers over `World.step`'s own outcome sink: both read what the
+  // command layer already decided and write nothing back, so the world they
+  // watch is the world the soak fixture replays. The second one watches what
+  // the first cannot see - a schedule written to somebody else's stop is a
+  // sequence of ACCEPTED commands (D-223).
   const { outcomes, sink } = recordOutcomes();
+  const foreign = watchForeignStops(world);
+  const both = (
+    envelope: Parameters<typeof sink>[0],
+    outcome: Parameters<typeof sink>[1],
+  ): void => {
+    sink(envelope, outcome);
+    foreign.sink(envelope, outcome);
+  };
 
-  for (let tick = 0; tick < years * TICKS_PER_YEAR; tick++) world.step(queue, sink);
+  for (let tick = 0; tick < years * TICKS_PER_YEAR; tick++) world.step(queue, both);
   const rows = world.ai.map((state) => measure(world, state.companyId));
-  return { seed, world, queue, rows, outcomes };
+  return { seed, world, queue, rows, outcomes, foreignStops: foreign.calls };
 }
 
 /**
@@ -183,10 +196,51 @@ function quarterCentury(): Run {
 const TOTAL_EXPOSURE_CT = START_CAPITAL_CT[Difficulty.Normal]! + LOAN_MIN_LIMIT_CT;
 
 /**
- * **The measured sweep at D-222's HEAD** - the trace the assertions below were
+ * **The per-personality floors, restored** (D-224), because one of them said
+ * something the exposure bound does not.
+ *
+ * The table existed from M11 stage C2 (D-156) until D-220 replaced the whole
+ * map with `TOTAL_EXPOSURE_CT` for everybody. Two of its three rows lost
+ * nothing by that: D-211 had already moved Rail and Road TO the exposure bound,
+ * with its own trace. The third row did. `TownNetwork: 0` asserted that the
+ * town-network competitor ends its quarter century having destroyed none of its
+ * own equity, and it vanished without an entry of its own - the residual an
+ * independent verifier named at 5d32299.
+ *
+ * It is restored rather than re-derived, and what makes it worth having is that
+ * it is the guard on the profitability floor of D-221. Measured at D-220's
+ * commit, before that floor existed, the town-network row was the WORST company
+ * in the game on nearly every seed - eight seeds, one row each: -117,468 [X],
+ * -325,286 [X], -415,716 [X], +147,155, -168,859 [X], -290,949 [X], -145,573
+ * [X], +23,385 [X]. **Six of eight below zero, seven of eight wound up, and
+ * three of the four seeds this file sweeps red.** Measured at HEAD, over the
+ * same eight seeds: +383,214, +500,000, +456,327, +412,641, +500,000, +410,475,
+ * +382,931, +500,000 - **eight of eight above the floor, the tightest by
+ * 382,931 EUR.**
+ *
+ * So it is a floor with margin rather than a band under a chaotic run, it is
+ * red on the simulation as it stood two bundles ago, and it is the one
+ * assertion in this file that would notice the town-pair bus business going
+ * back to losing money.
+ */
+const VALUE_FLOOR_CT: ReadonlyMap<number, number> = new Map([
+  [Personality.Rail, -TOTAL_EXPOSURE_CT],
+  [Personality.Road, -TOTAL_EXPOSURE_CT],
+  [Personality.TownNetwork, 0],
+]);
+
+/**
+ * **The measured sweep at D-224's HEAD** - the trace the assertions below were
  * written from, printed by the first test on every run so it can never rot into
  * a quoted number nobody re-measured. Format: personality, value EUR,
  * [X] = wound up, l lines / v vehicles / s stations.
+ *
+ * **D-223 moved not one of these figures**, and that is stated rather than
+ * hidden: the eight-seed sweep is identical to the euro before and after it,
+ * because the rival-station adoption it removes is not exercised on any of
+ * these eight worlds TODAY - it was on seed 60613 at 5d32299, where it cost one
+ * company its whole fleet. What guards it is the unit test that is red on the
+ * old code and the accepted-order audit below, not a number in this table.
  *
  * ```
  * 4711  p0    55,935     l0 v0 s2  | p4  412,641     l0 v0 s4  | p1 540,495     l1 v6  s4
@@ -281,6 +335,14 @@ describe('M8 acceptance: a quarter century against three competitors, swept over
         const woundUp = rows.filter((row) => row.bankrupt);
         expect(rows.length - woundUp.length).toBeGreaterThanOrEqual(1);
 
+        // **Re-measured over all EIGHT seeds after D-222 and D-223, because it
+        // was asserted here as if it were a property of the simulation and an
+        // independent verifier found it false on seed 60613 at 5d32299** (the
+        // richest competitor there finished at +23,385 EUR and wound up). It
+        // holds on all eight today - 4711 540,495; 4713 1,687,871; 4712
+        // 500,000; 4714 500,000; 2718 500,000; 31415 500,000; 60613 500,000;
+        // 12345 383,214, none of them bankrupt - so it stays, and this comment
+        // is what says on which worlds that was measured.
         const best = rows.reduce((a, b) => (b.valueCt > a.valueCt ? b : a));
         expect(best.bankrupt, `${best.name} is the richest and was wound up`).toBe(false);
 
@@ -288,7 +350,29 @@ describe('M8 acceptance: a quarter century against three competitors, swept over
           expect(row.valueCt, `${row.name} inside its exposure`).toBeGreaterThanOrEqual(
             -TOTAL_EXPOSURE_CT,
           );
+          // And the floor its personality owns, where it owns one that says
+          // more than the exposure bound (see VALUE_FLOOR_CT).
+          const floor = VALUE_FLOOR_CT.get(row.personality as Personality);
+          if (floor === undefined) continue;
+          expect(row.valueCt, `${row.name} above its personality floor`).toBeGreaterThanOrEqual(
+            floor,
+          );
         }
+      });
+
+      it('never writes a schedule calling at a stop it does not own', () => {
+        // **D-223, and the reason it is watched at the moment the orders are
+        // accepted rather than read off year twenty-five.** A project observes
+        // its own stops off the map (D-108); the observation did not ask who
+        // owned them, so a stop the AI planned onto a tile a rival had already
+        // built on was refused `Occupied` - a DECLARED, tolerated refusal - and
+        // the next cycle adopted the rival's station, bought six buses and gave
+        // them a schedule to a stop no road of theirs could reach. Every one of
+        // those commands was ACCEPTED, so the refusal profile above is blind to
+        // it; the only visible trace was six `SetVehicleRunning|noRouteToStop`
+        // on seed 60613, which is not a seed this file sweeps, and by year
+        // twenty-five the review had closed the line and left nothing to audit.
+        expect(swept(seed).foreignStops).toEqual([]);
       });
 
       it('keeps the network of every competitor that took the field', () => {

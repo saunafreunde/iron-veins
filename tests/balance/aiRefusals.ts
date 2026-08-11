@@ -1,5 +1,7 @@
 import { CommandKind, RejectReason } from '../../src/sim/commands/types';
 import type { CommandEnvelope, CommandOutcome } from '../../src/sim/commands/types';
+import { OrderTarget } from '../../src/sim/vehicles/VehicleStore';
+import type { World } from '../../src/sim/World';
 
 /**
  * **What the AI acceptance runs could not see, for the whole project.**
@@ -74,6 +76,50 @@ export function recordOutcomes(): OutcomeRecorder {
 }
 
 /**
+ * **A schedule this company wrote, calling somewhere it does not own** - the
+ * second observer over the same sink, and the one D-223 needed.
+ *
+ * The refusal profile above is blind to this by construction: taking a rival's
+ * stop for your own produces no rejection at all. Every command involved is
+ * ACCEPTED - the line is opened, the schedule is set, the vehicles are bought
+ * and assigned - and what fails is `SetVehicleRunning`, once per vehicle, on a
+ * seed nobody swept. A year-end audit is blind to it too: the review closes the
+ * line that never moved, and by year twenty-five there is nothing left to look
+ * at (measured - on seed 60613 at D-220's commit, the year-25 line list is
+ * empty and the six refusals are the only trace).
+ *
+ * So it is watched where it happens, at the moment the orders are ACCEPTED.
+ * Like {@link recordOutcomes} this reads what the command layer already decided
+ * and writes nothing back.
+ */
+export function watchForeignStops(world: World): {
+  readonly calls: string[];
+  readonly sink: (envelope: CommandEnvelope, outcome: CommandOutcome) => void;
+} {
+  const calls: string[] = [];
+  const sink = (envelope: CommandEnvelope, outcome: CommandOutcome): void => {
+    if (!outcome.ok) return;
+    const command = envelope.command;
+    if (
+      command.kind !== CommandKind.SetLineOrders &&
+      command.kind !== CommandKind.SetVehicleOrders
+    ) {
+      return;
+    }
+    for (const order of command.orders) {
+      if (order.target !== OrderTarget.Station) continue;
+      const station = world.stations[order.targetId];
+      if (station === undefined || station.ownerId === envelope.companyId) continue;
+      calls.push(
+        `company ${envelope.companyId} scheduled a stop at station ${station.id} ` +
+          `of company ${station.ownerId} (tick ${world.tick})`,
+      );
+    }
+  };
+  return { calls, sink };
+}
+
+/**
  * How many times one company may issue one command KIND before the suite
  * insists that at least one of them was accepted.
  *
@@ -132,7 +178,20 @@ export const DECLARED_REFUSALS: ReadonlyMap<string, string> = new Map([
     "the capital spent on way and stations with nothing left to crew them - D-158's " +
       'open bottleneck, verbatim',
   ],
+  [
+    `BuyRoadVehicle|${RejectReason.InsufficientFunds}`,
+    'the road twin of the row above, and the same bottleneck: measured x4 on seed ' +
+      '2718 against 8 accepted and x3 on 12345 against 21, both on the SECOND or ' +
+      'third line of a company that had already spent on way and stops (D-223)',
+  ],
 ]);
+
+/**
+ * **Deliberately NOT declared**, so it stays red if it ever returns:
+ * `SetVehicleRunning|cmd.reject.noRouteToStop`. It was the whole visible trace
+ * of D-223 - six buses of one company on seed 60613 - and a refusal whose cause
+ * has been removed is a refusal this table must not learn to tolerate.
+ */
 
 /**
  * Commands one company ordered {@link LOOP_ISSUES} times or more without a

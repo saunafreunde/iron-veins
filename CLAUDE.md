@@ -2255,6 +2255,73 @@ pinned refuted in `tests/unit/aiModeFallback.spec.ts`.
   (`1f76e2df98be99a3`, 191 commands, re-run not presumed), cross-OS pin
   `ddaacd4b970d31db` unmoved, scenario 5 bit-identical, v30 stands.
 
+## The AI's stops - a read-back that asks who owns them (D-223)
+
+**The second connectivity defect, found by playing a seed the sweep does not
+cover.** `SetVehicleRunning|cmd.reject.noRouteToStop x6` on seed 60613,
+reproduced at 5d32299 and traced tile by tile: company 3's six buses on their
+own shed tile at 196,103, **81 tiles of the company's own road under them**
+reaching its own far stop, and the line's OTHER order calling at **station 27,
+which belongs to company 2** - a bay one tile south, joined to nothing of
+theirs.
+
+- **`advanceProject` observed the map and never asked the owner.** D-108's rule
+  is that a stage reads back what the last one left behind; the read-back was
+  "the first station with a module on this tile". So: the AI plans its stop onto
+  a tile a rival already built on, `BuildRoadStop` refuses it `Occupied` - a
+  **declared, tolerated** refusal since D-220 - and the next cycle adopts the
+  rival's station, buys the fleet, opens the line and starts it.
+  `ownStationAtTile` is the D-219 ownership question one file along.
+- **Every command in that sequence is ACCEPTED**, so the refusal profile is
+  blind to it, and by year twenty-five `closeDeadLine` has removed the evidence.
+  Hence a second pure observer over the same sink, `watchForeignStops`, which
+  watches accepted `SetLineOrders`/`SetVehicleOrders` for a stop the issuing
+  company does not own. **It is red at 5d32299 on five schedules over two seeds,
+  three of them on seed 4711** - the recorded, SWEPT seed, the one every AI
+  claim in this project was measured on, so the default sweep would have been
+  red - and zero at HEAD, before this fix as well as after it. The two seeds
+  differ and both are said: on 4711 the adopted stop did no visible harm (line,
+  six vehicles, no `NoRoute` at year 25), on 60613 it cost the whole fleet.
+- **It moves not one euro on the eight seeds**, before and after identical to
+  the euro, because the adoption is not exercised on those worlds today. Said
+  plainly: this removes a reachable defect and buys no measured improvement. The
+  evidence is `tests/unit/aiForeignStation.spec.ts`, red on the old simulation
+  in two of its four assertions with its two controls green on both sides.
+- **`SetVehicleRunning|noRouteToStop` stays UNDECLARED on purpose.**
+  `BuyRoadVehicle|insufficientFunds` was declared instead, with its measurement
+  (x4 on 2718 against 8 accepted, x3 on 12345 against 21) - the road twin of the
+  `BuyTrain` row and the same D-158 bottleneck.
+- No save bump, no re-record: soak `1f76e2df98be99a3` at 191 commands and the
+  canonical pin `ddaacd4b970d31db` both re-run and unmoved, v30 stands.
+
+## The AI's floors - what a vanished band asserted (D-224)
+
+**A band moved without a complete trace and this is the trace.** D-220 replaced
+`aiGame`'s three-row `VALUE_FLOOR_CT` with one `TOTAL_EXPOSURE_CT` for
+everybody. Rail and Road lost nothing - D-211 had already moved them TO the
+exposure bound. **`TownNetwork: 0` did**, and it went without an entry.
+
+- **What it asserted**: the town-network competitor ends its quarter century
+  having destroyed **none of its own equity** (M11 stage C2, D-156, pinned under
+  a measured +96,512 EUR).
+- **Measured at D-220's commit**, before D-221's profitability floor: the
+  town-network row is the worst company in the game on nearly every seed -
+  -117,468 [X], -325,286 [X], -415,716 [X], +147,155, -168,859 [X], -290,949
+  [X], -145,573 [X], +23,385 [X], i.e. **six of eight below zero and three of
+  the four SWEPT seeds red**. Measured at HEAD: +383,214, +500,000, +456,327,
+  +412,641, +500,000, +410,475, +382,931, +500,000 - **eight of eight, tightest
+  by 382,931 EUR.** So it is restored, with margin, as the one assertion in the
+  file that would notice the town-pair bus business going back to losing money.
+- **"The richest competitor is solvent" was re-measured before it was kept.** It
+  is FALSE on seed 60613 at 5d32299 (the richest finished at +23,385 EUR and was
+  wound up) and true on all eight seeds today; the comment above it now says on
+  which worlds that was measured.
+- **Eight seeds over the whole AI thread**: total value 18,435 -> **9,233,799
+  EUR**, wound up **14 -> 2** (D-221's own report said 8 for the before-state;
+  re-measured at the same commit it is 14 - the value lines reproduce to the
+  euro), living vehicles 6 -> 40, competitors running a line with a fleet 1 -> 4
+  on four of eight seeds. Nothing in `tests/balance` was loosened.
+
 ## Still outstanding
 
 - **The two named walls of D-158.** A passenger pile a fleet merely

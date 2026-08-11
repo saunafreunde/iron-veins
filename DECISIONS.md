@@ -45,14 +45,14 @@ no entry below. A number may appear under several topics.
 - **Balancing & scenarios:** D-038, D-039, D-040, D-041, D-066, D-087, D-088,
   D-116, D-151, D-152, D-156, D-158, D-159, D-187, D-190, D-194, D-195,
   D-196, D-197, D-198, D-199, D-200, D-203, D-204, D-207, D-211, D-213,
-  D-215, D-216, D-220, D-221, D-222
+  D-215, D-216, D-220, D-221, D-222, D-224
 - **Vehicles & fleet:** D-043, D-044, D-045, D-068, D-076, D-089, D-093,
   D-096, D-142, D-143, D-145, D-146, D-155, D-157, D-171, D-174, D-181, D-185,
   D-201, D-207
 - **Water & air:** D-094, D-095, D-096, D-097, D-098, D-099
 - **Competitors, AI & tenders:** D-107, D-108, D-109, D-115, D-116, D-121,
   D-122, D-147, D-152, D-153, D-154, D-155, D-156, D-158, D-216, D-218,
-  D-219, D-220, D-221, D-222
+  D-219, D-220, D-221, D-222, D-223, D-224
 - **Rendering & art:** D-013, D-014, D-033, D-035, D-112, D-117, D-125, D-127,
   D-136, D-140, D-160, D-161, D-162, D-163, D-164, D-165, D-166, D-169, D-170,
   D-171, D-172, D-173, D-174, D-175, D-177, D-179, D-186, D-202, D-205, D-206,
@@ -11644,3 +11644,156 @@ re-run and compared rather than presumed - and the canonical cross-OS pin
 `ddaacd4b970d31db` did not move. Scenario 5 is **bit-identical to D-221's**
 (road 1,022,084, rail 228,047, expansive -241,309), and no band, threshold or
 assertion in `tests/balance` was loosened or moved.
+
+### D-223 A project reads its stops back off the map, and the read-back must ask who owns them
+
+**The second connectivity defect, and the one D-218's fix walked past.** An
+independent verifier played the shipped `aiGame` assertions over a seed the
+sweep does not cover and found `company 3
+SetVehicleRunning|cmd.reject.noRouteToStop x6` on seed 60613 - a whole fleet
+refused the moment it was told to start, on a build that had just fixed
+junctions. Reproduced at 5d32299 before anything was touched, and traced the way
+D-218 was traced: the command outcome sink, the actual `roadBits` at the stop,
+and a flood fill from the shed.
+
+**What the trace says, tile by tile.** Tick 943,468, company 3, six buses, all
+standing on their own shed tile at 196,103. The flood fill over joined road bits
+from that tile reaches **81 tiles** - the company's road is fine, and the FAR
+stop of the line, its own station 34 at 228,108, is inside it. The NEAR stop is
+not: the line's other order calls at **station 27, owned by company 2**, whose
+bay lies at 196,104, one tile south of the shed, with `roadBits` 8 (South only)
+against the shed's 1 (West only). The two are neighbours and are joined by
+nothing. There is no asymmetric bit pair, no missing junction and no defect in
+`buildRoad` here - the AI simply built a line to somebody else's stop.
+
+- **The cause is one missing ownership question**, and it is the D-219 shape one
+  file along. `advanceProject` observes what the previous cycle left behind
+  rather than trusting the commands it sent (D-108), and the observation was
+  `stationAtTile(world, tile)`: the first station with a module on that tile,
+  whoever owns it. So the sequence is: the AI plans its stop onto a tile a rival
+  has already built on; `BuildRoadStop` refuses it `Occupied`; **that refusal is
+  DECLARED and tolerated** (D-220, and D-219a measured that fixing the scan
+  costs -281,115 EUR); the next cycle finds the rival's station on the tile,
+  adopts it as its own terminus, buys the fleet, opens the line, sets the
+  schedule and starts the vehicles. `ownStationAtTile` is that question asked,
+  and a project whose stop is not its own ends like any other failed project -
+  what was built stays standing and stays paid for.
+- **Every command in that sequence is ACCEPTED**, which is why the refusal
+  profile of D-220 could not see it: the only rejection in the whole story is
+  the `SetVehicleRunning` at the end, six of them, one per bus. And a year-25
+  audit cannot see it either - `closeDeadLine` closes the line that never moved,
+  so on seed 60613 at year twenty-five the line list is empty and the company
+  owns 18 stations, 403 tiles of road and nothing that runs.
+- **The road to it was never buildable either**, which is the second half of why
+  the buses are stranded rather than merely slow: the rival's stop tile belongs
+  to the rival the moment it is paved (D-101), so `BuildRoad` onto it answers
+  `NotYours` - the declared refusal `BuildRoad|notYours` in the profile is the
+  same event seen from the other side. `roadTilePassable` refuses the tile too,
+  so `planRoadRuns` never even offers a run that would reach it; the search
+  starts ON that tile and walks away from it.
+- **It stays something a player could do** (D-109). `SetLineOrders` accepts a
+  foreign station id - a player may write that schedule too, and gets the same
+  useless line - so nothing here is a rule the AI plays by and the player does
+  not. What is fixed is that the AI stops doing it by accident.
+- **Measured over the eight seeds, twenty-five years each: not one euro moved.**
+  Every one of the twenty-four rows is identical before and after, to the euro,
+  with identical station, road, rail, line and vehicle counts. The adoption is
+  simply not exercised on these eight worlds at today's HEAD - it was at
+  5d32299, where it cost company 3 of seed 60613 its whole fleet. That is stated
+  rather than dressed up: **this bundle removes a reachable defect and buys no
+  measured improvement.**
+- **So the guards are the evidence, and both are red on the old code.**
+  `tests/unit/aiForeignStation.spec.ts` builds the situation directly - a rival
+  bay on the tile the project planned its stop at - and fails two of its four
+  assertions on the pre-fix simulation (the project buys its fleet and advances
+  to stage 2); its two controls, the company's OWN stop on that tile and the
+  command layer's own `Occupied`/`NotYours` verdicts, pass on both sides. And
+  `watchForeignStops` in `tests/balance/aiRefusals.ts` is a second pure observer
+  over the same sink `recordOutcomes` uses, watching ACCEPTED `SetLineOrders`
+  and `SetVehicleOrders` for a station order the issuing company does not own -
+  the audit that is not blind to a sequence of accepted commands, asserted per
+  swept seed.
+- **What that observer says about the eight seeds, and it is worse than the one
+  report.** At 5d32299 it fires **five** times over two seeds: twice on 60613
+  (ticks 31,068 and 943,468 - the second is the six stranded buses) and **three
+  times on seed 4711**, at ticks 31,068, 865,868 and 1,057,868. 4711 is the
+  RECORDED seed, the swept seed, and the one every AI claim in this project was
+  ever measured on: the default two-seed sweep would have been red. Said
+  precisely, because the two seeds differ: on 4711 the adopted stop did the
+  company no visible harm - it ends with its line, six vehicles and no `NoRoute`
+  - so a rival's station is sometimes simply a free ride, and on 60613 it cost
+  the whole fleet. Neither is something the AI should do by accident. At HEAD
+  the observer is **zero on all eight seeds**, before this fix as well as after
+  it, which the bit-identical sweep proves: had any adoption happened, refusing
+  it would have changed the run.
+- **`SetVehicleRunning|noRouteToStop` is deliberately NOT declared.** It was
+  D-223's whole visible trace; a refusal whose cause has been removed must stay
+  red if it returns.
+- **One refusal WAS declared, with its measurement**:
+  `BuyRoadVehicle|insufficientFunds`, seen x4 on seed 2718 against 8 accepted
+  and x3 on 12345 against 21. It is the road twin of the already-declared
+  `BuyTrain|insufficientFunds` and the same D-158 bottleneck - a company that
+  has spent on way and stops and cannot crew the next line. It appears on
+  neither of the two default sweep seeds, which is why nothing had named it.
+- **No save bump, verified rather than assumed.** The change is one ownership
+  test inside a private helper of `src/sim/ai/ai.ts`; no field, layer or entity
+  changed shape, and no world on the eight seeds even reaches a different state,
+  so SAVE_VERSION stays 30, the soak hash `1f76e2df98be99a3` stands at 191
+  commands (re-run, not presumed) and the canonical cross-OS pin
+  `ddaacd4b970d31db` did not move.
+
+### D-224 The per-personality value floors, restored - and "the richest competitor is solvent" re-measured before it was kept
+
+**A band moved without a complete trace, and this entry is the trace.** At
+b9c337a `aiGame` carried a three-row `VALUE_FLOOR_CT`: Rail and Road at
+`-(START_CAPITAL_CT[Normal] + LOAN_MIN_LIMIT_CT)`, TownNetwork at **0**. D-220
+replaced the whole map with one `TOTAL_EXPOSURE_CT` applied to every row. **Two
+of those three rows lost nothing**: D-211 had already moved Rail and Road TO the
+exposure bound, with its own A/B trace and its own admission that this was a
+loosening. **The third row did**, and it went without an entry of its own.
+
+- **What the old floor asserted.** `TownNetwork: 0` is not an exposure bound: it
+  says the town-network competitor finishes its quarter century having destroyed
+  **none of its own equity**. It came from M11 stage C2 (D-156), pinned under a
+  measured run - road solvent at 544,857 EUR, rail alive at -15,142, the town
+  network wound up at +96,512 - and the 0 is the floor under that last figure.
+- **What was measured now, on eight seeds and twenty-five years each.** At
+  D-220's own commit, before the profitability floor of D-221 existed, the
+  town-network row was the worst company in the game on nearly every seed:
+  -117,468 [X], -325,286 [X], -415,716 [X], +147,155, -168,859 [X], -290,949
+  [X], -145,573 [X], +23,385 [X] - **six of eight below zero, seven of eight
+  wound up, and three of the four seeds this file sweeps red**. At today's HEAD,
+  same eight worlds: +383,214, +500,000, +456,327, +412,641, +500,000, +410,475,
+  +382,931, +500,000 - **eight of eight above the floor, the tightest by 382,931
+  EUR.**
+- **Why restoring it is not a re-band.** The number is not fitted to anything:
+  it is zero, it was zero in M11, and it has 382,931 EUR of margin on the worst
+  of eight seeds. What it guards is exactly the thing D-221 fixed - a town-pair
+  bus business that loses money on a generated map - and it is the one assertion
+  in the file that would go red if that came back, because an exposure bound of
+  -800,000 EUR sits comfortably below every one of those eight negative figures.
+  Rail and Road stay at the exposure bound for D-211's reason, and the exposure
+  bound now applies to Expansive and Conservative as well, which is what D-220
+  added and is kept.
+- **The register entry D-220 owed.** Said plainly, because that is the standing
+  rule here: replacing the three floors with one exposure bound WAS a weakening
+  for the town-network row, it was not declared, and the reason it was not
+  noticed is that the row it weakened was deeply negative on three of the four
+  swept seeds at the time - the assertion would have been red, and a floor that
+  is red is a floor somebody deletes. It is restored now because the simulation
+  earned it.
+
+**And the claim beside it, re-measured rather than kept on faith.** "The richest
+competitor is solvent" is asserted per swept seed. On seed 60613 at 5d32299 it
+is **false** - the richest of the three finished at +23,385 EUR and was wound up
+- which is what the verifier found. Re-measured over all eight seeds at HEAD it
+holds: 4711 540,495; 4713 1,687,871; 4712 500,000; 4714 500,000; 2718 500,000;
+31415 500,000; 60613 500,000; 12345 383,214, none of them bankrupt. So it stays,
+and the comment above it now says on which worlds that was measured and where it
+was false - the project's rule is that a test asserts what holds, and what makes
+this one honest is the eight-seed measurement rather than the four-seed sample
+it runs on.
+
+**No band was loosened.** Nothing in `tests/balance` moved except in the
+tightening direction: one restored floor, one new per-seed audit, one newly
+declared refusal, and a trace comment re-measured. SAVE_VERSION stays 30.

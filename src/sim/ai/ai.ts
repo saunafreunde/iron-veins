@@ -280,11 +280,14 @@ function advanceProject(world: World, queue: CommandQueue, state: AiState): void
     return;
   }
 
-  const from = stationAtTile(world, world.map.tileIndex(project.fromX, project.fromY));
-  const to = stationAtTile(world, world.map.tileIndex(project.toX, project.toY));
+  const fromTile = world.map.tileIndex(project.fromX, project.fromY);
+  const toTile = world.map.tileIndex(project.toX, project.toY);
+  const from = ownStationAtTile(world, fromTile, state.companyId);
+  const to = ownStationAtTile(world, toTile, state.companyId);
   if (from === null || to === null || from.id === to.id) {
-    // The infrastructure did not come out the way it was ordered. Whatever DID
-    // get built stays standing and stays paid for - which is exactly what a
+    // The infrastructure did not come out the way it was ordered - the stop was
+    // refused, or what stands on the tile is somebody else's (D-223). Whatever
+    // DID get built stays standing and stays paid for, which is exactly what a
     // failed project costs a player.
     state.project = null;
     return;
@@ -729,8 +732,30 @@ function loadingStationOf(world: World, lineId: number): Station | null {
   return fallback;
 }
 
-function stationAtTile(world: World, tile: number): Station | null {
+/**
+ * **This company's** station on that tile, or null - and the ownership half is
+ * the whole point (D-223).
+ *
+ * A project reads its stops back off the map rather than trusting the commands
+ * it sent (D-108), and this is the read-back. Without the owner test it
+ * answered with whatever station stood on the tile, including a RIVAL'S: the
+ * stop the AI planned there was refused `Occupied` (there is already a station
+ * on the tile), the refusal was declared and tolerated, and the very next cycle
+ * found the rival's stop, took it for its own, bought six buses and gave them a
+ * schedule calling at a station on a tile the company may not build on - so the
+ * road to it was refused `NotYours` too and every bus of the line was refused
+ * `SetVehicleRunning|noRouteToStop`, standing in its shed for the rest of the
+ * game. Traced on seed 60613 at D-220's commit: company 3's shed at 196,103,
+ * eighty-one tiles of its own road reaching its own far stop, and its NEAR stop
+ * the rival's bay at 196,104 - one tile away, and not joined to anything of
+ * this company's.
+ *
+ * It is the D-219 shape one file along: an ownership question the command layer
+ * asks and the AI's own side of it did not.
+ */
+function ownStationAtTile(world: World, tile: number, companyId: number): Station | null {
   for (const station of world.stations) {
+    if (station.ownerId !== companyId) continue;
     for (const module of station.modules) {
       if (module.tileIndex === tile) return station;
     }

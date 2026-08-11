@@ -394,7 +394,60 @@ Headroom und lehrt, ein rotes Gate zu ignorieren (D-136).
 | M17 | 2026-08-08 | **1,241 ms / 2,564 ms** (max 18,40 ms über 6 500 Ticks; Abschlusslauf nach allen vier Bundles) | **−0,70 ms** (Budget-Zeile +0,05 eingehalten: der Tages-Hook kehrt in einer Welt ohne Ziele auf seiner ersten Zeile zurück, gemessen 0,17–0,71 B Allokation je Spieltag; B4 fügt dem Tick NICHTS hinzu — Marker und Punktformel laufen einmal je Spieltag auf der Publish-Kadenz, auf der die Flottenliste ohnehin sendet) | D-193–D-196 |
 | M18 | 2026-08-08 | **1,431 / 1,548 / 1,449 ms p50** und **3,108 / 3,890 / 2,768 ms p99** (drei saubere Abschlussläufe nach allen fünf Bundles; die B4-Abschlussläufe lauteten 1,531/3,006 und 1,508/3,225) | **−0,02 / +0,10 / −0,00 ms p50** (Budget-Zeile +0,15 eingehalten; zwei der drei p99 liegen UNTER der Grundlinie, der dritte 0,63 ms darüber und damit im dokumentierten ±0,7-ms-Laufrauschen — wie die Bundle-Läufe 1,296/2,841 (B1), 1,613/2,934 (B2), 1,702–1,542 / 3,796–3,156 über vier Läufe (B3) und 1,531/1,508 / 3,006/3,225 (B4). **Die Referenzflotte fährt die Regel AUS**, wo `updateWeather`, `weatherCellAt` und `winterFrictionAt` auf ihrer ersten Zeile zurückkehren; die Per-Fahrzeug-Kosten mit Regel AN sind auf diesem Fixture NICHT gemessen und D-201 sagt das, und B5s AN-Kosten sind EIN Funktionsaufruf je Spieltag außerhalb der Regionenschleife) | D-200–D-204 |
 | M19 | 2026-08-09 | **3,446 / 3,705 ms p50** und **28,896 / 10,700 ms p99** (zwei Läufe nach allen vier Bundles) — **das ist AUSDRÜCKLICH KEINE Abnahmezahl** | **nicht abgenommen, und der Grund ist gemessen statt behauptet.** Die Maschine trug während des gesamten Meilensteins parallele Agenten (achtzehn `node`-Prozesse, 16 146 s kumulierte CPU beim Abschlusslauf), und das 8-ms-p99-Gate ist auf dem BASELINE-Commit ebenso rot. B4 misst deshalb erstmals den GANZEN Meilenstein gegen `5b0758a`, den Commit vor D-207, in zwei abwechselnden Paaren: M19 komplett 3,446/28,896 und 3,705/10,700 ms, pre-M19 3,594/15,924 und 3,496/9,829 — Mittel p50 3,576 gegen 3,545, also **+0,031 ms für alle drei zustandsberührenden Bundles zusammen** gegen die Budgetzeile +0,10 ms, bei p99 mit WECHSELNDEM Vorzeichen und einer Streuung 9,8–28,9 ms INNERHALB eines Commits (genau die Größe, die D-167 als unter Last um Vielfache aufgebläht beschreibt). Beide Seiten liegen bei 3,4–3,7 ms p50 gegen die Referenz 1,43–1,45, die Box also um rund Faktor 2,4 belastet. Die Bundle-Läufe: B1 vier A/B-Paare, Mittel p50 +0,10 ms; B2 vier Läufe, eigen 0,18 ms schneller; B3 zwei Paare, eigen 0,09 ms schneller; B4 null neue Per-Tick-Arbeit (ein Kommentar unter `src/`). **Die saubere Abnahmemessung auf der Referenzmaschine steht aus und ist das EINZIGE, was M19 offen lässt** — sie wird benannt statt erfunden | D-207, D-211, D-213, D-215 |
+| KI-Ökonomie (D-221 … D-224) | 2026-08-11 | **keine Tick-Messung, und auch das ist die ehrliche Angabe** — der ganze Faden lebt im Entscheidungszyklus, der je Firma alle 400 Ticks läuft und dessen teure Hälfte der `lastBuildTick`-Riegel auf einen Spielmonat deckelt; D-224 ändert unter `src/` **null Byte**. Gemessen wurde stattdessen der Ertrag über ACHT Seeds; Rohwerte im Detailabsatz unten | **±0,00 ms per Konstruktion** (keine Arbeit je Tick: D-221/D-222 filtern und bepreisen die Kandidatenliste, D-223 stellt einer Projekt-Rückfrage eine Besitzerfrage voran, D-224 fasst nur Tests und Dokumentation an) | D-221, D-222, D-223, D-224 |
 | KI-Faden (D-216 … D-220) | 2026-08-11 | **keine Tick-Messung, und das ist die ehrliche Angabe** — D-218 und D-219 ändern je eine Handvoll Zeilen in einem Kommando-Guard bzw. einem Planer, D-220 ändert unter `src/` **null Byte**. Gemessen wurde stattdessen, was der Faden wirklich kostet und wirklich bringt; Rohwerte im Detailabsatz unten | **±0,00 ms per Konstruktion** (D-220: kein `src/`-Byte; D-218/D-219: keine Arbeit je Tick, nur eine zusätzliche Tabellenabfrage in einem Guard bzw. eine Besitzerfrage in einem Planer, der ohnehin nur alle `AI_RETRY_TICKS` läuft) | D-216, D-217, D-218, D-219, D-220 |
+
+KI-Ökonomie-Zeile im Detail (D-224, 11.08.2026): **kein SAVE_VERSION-Bump,
+kein Snapshot-Byte, keine Atlas-Zelle, kein i18n-Satz, kein RNG-Zug.** Neu sind
+zwei Konstanten mit Messung (`AI_MIN_PROFIT_MARGIN`, `AI_RAIL_PROJECTED_*`,
+D-221/D-222); D-223 fügt einer privaten Projekt-Rückfrage eine Besitzerprüfung
+hinzu, D-224 fasst `src/` überhaupt nicht an. Pins **nachgeprüft statt
+vermutet**: Soak `45ccb46dc67e1fdf` → **`1f76e2df98be99a3`** bei 3 419 → **191**
+aufgezeichneten Kommandos (einmal neu aufgezeichnet, in D-221; D-222, D-223 und
+D-224 spielen Seed 4711 bit-identisch), kanonischer Cross-OS-Pin
+`ddaacd4b970d31db` unverändert, Korpus-Manifest unverändert, SAVE_VERSION 30.
+
+Was diese Zeile protokolliert, ist der **Ertrag über ACHT Seeds** — die vier
+des Sweeps plus vier, die vorher nie jemand gespielt hatte —, je 25 Jahre,
+256er-Karte, drei Konkurrenten. Format: Persönlichkeit, Firmenwert €,
+[X] abgewickelt, Linien/Fahrzeuge/Stationen.
+
+| Seed | vor dem Faden (5d32299) | nach D-224 (HEAD) |
+|---|---|---|
+| 4711 | p0 500 000 0/0/0 · p4 147 155 0/0/11 · p1 576 736 1/6/19 | p0 55 935 0/0/2 · p4 412 641 0/0/4 · **p1 540 495 1/6/4** |
+| 4713 | p4 −290 949 [X] · p0 −256 082 [X] · p3 500 000 | p4 410 475 0/0/4 · **p0 1 687 871 3/18/4** · p3 500 000 |
+| 4712 | p4 −168 859 [X] · p2 −279 226 [X] · p0 58 097 | p4 500 000 · p2 63 551 0/0/2 · p0 500 000 |
+| 4714 | p4 −145 573 [X] · p2 −166 757 [X] · p3 500 000 | p4 382 931 0/0/5 · **p2 415 718 1/6/5** · p3 500 000 |
+| 2718 | p3 500 000 · p0 −483 604 [X] · p4 −325 286 [X] | p3 500 000 · p0 −196 058 0/0/5 · p4 500 000 |
+| 31415 | p3 500 000 · p4 −415 716 [X] · p2 −326 599 [X] | p3 500 000 · p4 456 327 0/0/2 · p2 −103 538 [X] 1/0/4 |
+| 60613 | p0 −140 020 · p4 23 385 [X] · p1 −47 967 [X] | p0 −157 950 [X] 0/0/2 · p4 500 000 · p1 448 473 0/0/3 |
+| 12345 | p4 −117 468 [X] · p2 −622 832 [X] · p0 500 000 | p4 383 214 0/0/6 · **p2 337 369 2/9/6** · p0 96 345 1/1/2 |
+
+Summe über 24 Konkurrenten **18 435 € → 9 233 799 €**, der asservierte
+Vier-Seed-Sweep **974 542 € → 5 969 617 €**, abgewickelt **14 → 2**, lebende
+Fahrzeuge **6 → 40**, Konkurrenten mit Linie UND Flotte **1 → 4** auf **vier
+von acht Seeds**, `NoRoute` durchgehend 0. **Eine Korrektur an den eigenen
+Berichten**: D-221 protokollierte für den Ausgangszustand „8 abgewickelt"; am
+selben Commit nachgemessen sind es **14 von 24** — die Wert- und Summenzeilen
+reproduzieren dagegen auf den Euro.
+
+**D-223 bewegt davon keinen einzigen Euro** und sagt das: die acht Seeds sind
+vor und nach der Besitzerprüfung Zeile für Zeile identisch, weil die
+Fremdstations-Übernahme auf diesen acht Welten HEUTE nicht mehr vorkommt. Bei
+5d32299 kam sie vor — der neue Beobachter `watchForeignStops` findet dort
+**fünf** angenommene Fahrpläne auf fremde Halte, davon **drei auf Seed 4711**,
+dem aufgezeichneten und GESWEEPTEN Seed, auf dem das ganze Projekt seine
+KI-Aussagen gemessen hat (der Standard-Sweep wäre also rot gewesen), und zwei
+auf 60613, wo sechs Busse deswegen ihr Leben im Depot verbracht haben. Bei HEAD
+sind es null — vor dieser Korrektur wie nach ihr, was der zeilengleiche Sweep
+beweist.
+
+Suite-Stände nach diesem Pass: `tests/unit` **112 Dateien / 1 468 Tests**
+(vorher 111 / 1 464), `tests/balance` **12 Dateien / 81 grün + 2 übersprungen**
+(vorher 79 + 2), `npm run test:balance:full` **101 grün** (vorher 97),
+`tests/determinism` **7 Dateien / 33 grün**,
+`npm run test:soak` **4 grün** auf unverändertem Hash `1f76e2df98be99a3` bei
+191 Kommandos.
 
 KI-Faden-Zeile im Detail (D-220, 11.08.2026): **kein SAVE_VERSION-Bump, kein
 Snapshot-Byte, keine Atlas-Zelle, keine neue Konstante, kein i18n-Satz, kein
