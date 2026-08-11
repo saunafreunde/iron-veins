@@ -20,26 +20,26 @@ no entry below. A number may appear under several topics.
 - **Lines & timetables:** D-145, D-146, D-147, D-148, D-149, D-150, D-151,
   D-152, D-155, D-159
 - **Map generation & terrain:** D-018, D-019, D-020, D-021, D-022, D-023,
-  D-025, D-027, D-197, D-198, D-199, D-216
+  D-025, D-027, D-197, D-198, D-199, D-216, D-231
 - **Terraforming & structures:** D-028, D-034, D-050, D-051, D-052, D-124,
   D-141
 - **Save format, migrations & replays:** D-007, D-025, D-026, D-027, D-048,
   D-111, D-130, D-131, D-134, D-142, D-144, D-145, D-146, D-147, D-153, D-178,
   D-181, D-184, D-185, D-188, D-189, D-190, D-191, D-192, D-193, D-194,
-  D-197, D-198, D-200, D-207, D-213
+  D-197, D-198, D-200, D-207, D-213, D-231
 - **Rail & track:** D-042, D-043, D-044, D-045, D-046, D-047, D-053, D-141,
   D-153, D-157, D-184, D-230
 - **Signals & reservations:** D-054, D-055, D-056, D-057, D-058, D-059, D-060,
   D-061, D-073, D-080, D-081, D-082, D-083, D-157, D-173, D-184, D-185, D-186
 - **Stations & catchment:** D-049, D-080, D-095, D-150, D-159, D-178, D-179,
-  D-208, D-210, D-230
+  D-208, D-210, D-230, D-231
 - **Cargo, payment & routing:** D-036, D-037, D-065, D-067, D-075, D-077,
   D-078, D-118, D-142, D-151, D-176, D-178, D-187, D-207, D-211, D-213,
   D-215
 - **Industry & production:** D-022, D-062, D-063, D-064, D-069, D-071, D-079,
   D-085, D-086, D-174, D-201, D-202, D-205, D-225
 - **Towns, council & ownership:** D-101, D-102, D-103, D-104, D-205, D-207,
-  D-206, D-213, D-216, D-217
+  D-206, D-213, D-216, D-217, D-231
 - **Economy, finance & emissions:** D-008, D-090, D-091, D-092, D-105, D-154,
   D-180, D-193, D-196, D-228, D-229
 - **Balancing & scenarios:** D-038, D-039, D-040, D-041, D-066, D-087, D-088,
@@ -65,7 +65,7 @@ no entry below. A number may appear under several topics.
 - **Performance & measurement:** D-002, D-120, D-135, D-136, D-161, D-162,
   D-163, D-164, D-167, D-170, D-171, D-172, D-173, D-174, D-176, D-177, D-184,
   D-185, D-186, D-187, D-191, D-192, D-193, D-196, D-200, D-201, D-202, D-205,
-  D-206, D-209, D-214
+  D-206, D-209, D-214, D-231
 - **Platform, tooling & build:** D-012, D-014, D-015, D-016, D-017, D-029,
   D-030, D-031, D-160, D-168, D-169, D-170, D-172, D-175, D-192, D-206, D-208,
   D-227
@@ -74,7 +74,7 @@ no entry below. A number may appear under several topics.
   D-167, D-183, D-186, D-188, D-189, D-190, D-191, D-192, D-193, D-194,
   D-195, D-196, D-197, D-198, D-199, D-200, D-201, D-202, D-203, D-204,
   D-205, D-207, D-206, D-208, D-209, D-210, D-212, D-213, D-215, D-216,
-  D-217, D-219, D-220, D-221, D-222, D-228, D-229, D-230
+  D-217, D-219, D-220, D-221, D-222, D-228, D-229, D-230, D-231
 - **Process & specification:** D-070, D-123, D-129, D-133, D-138, D-140,
   D-185, D-191, D-197, D-198, D-199, D-203, D-204, D-205, D-206, D-215,
   D-222, D-225, D-226, D-227, D-228, D-229
@@ -12518,3 +12518,180 @@ every touched file; `npx vitest run tests/unit` **114 files / 1,477 tests**
 green (109 -> 114 files, +5 cases); `npm run test:balance:full` **12 files /
 101 tests** green in 178.6 s - the red gate closed; `tests/determinism` **7
 files / 33** green; `npm run test:soak` **4** green at the unchanged hash.
+
+## SPEC2 M20 - lebendige Städte
+
+### D-231 A town builds - the growth rate finally puts up houses and lays street, one town a day, through the guards the player builds through
+
+**Until this bundle a town was pixel-identical in 1950 and in 2050.** `growTowns`
+has computed a 13.2 growth rate since M2 and moved a population number with it;
+nothing on the map ever changed, so the most visible thing a transport game has
+to show for a century of play - a village that became a city - did not exist.
+This is SPEC2 M20 bundle 1: the physical half of section 13.2. The 13.2 formula
+itself (the building-material term, the company-rating factor, the twelve-month
+window, the shrinkage), the zone economy and the council elections are the later
+bundles of the same milestone and are NOT here; **what is here is the fabric.**
+
+- **The monthly hook mutates the world directly, and that is E-10 rather than a
+  shortcut.** Architecture law #6 binds the PLAYER's interventions; `growTowns`
+  has been a legitimate author of state since M2. A pseudo-company command would
+  flood the replay log with non-player noise (Fehlerkatalog 29), and it would
+  have to be issued BY somebody - which would hand a company the town's own
+  streets and break D-104 on the way. The growth pass therefore sits in the
+  daily hook beside `updateGoals` and `reportNews` and writes the map itself.
+- **The placement is `mapgen/towns.ts`'s own, called with the DEFICIT.** D-216
+  had just rebuilt that file - extent derived from where houses can actually
+  stand, dead-end pruning to a fixed point, paving last - and growth had to
+  extend that shape rather than undo it. `placeBuildings` is exported and now
+  answers how many it put up; a tile that already carries a house fails
+  `plotBuildable`, so "place four more" and "place four in total" are ONE loop
+  and there is exactly one answer in the project to "where does a house go".
+  `buildingsWantedFor` is the founding ratio shared with the growth for the same
+  reason `coalLine.ts` is one object (D-203): two copies of it would be two
+  different towns within a game year of the first edit.
+- **A street's own next tile is not a building plot, and that one rule is what
+  makes growth possible at all.** Without it the first house built beside a
+  street end caps that street for ever, because every tile a street could grow
+  onto is a tile a house may stand on - measured, and it is not a corner case:
+  a town fills the band beside its streets within a game month and then never
+  builds again. `continuesStreet` is the identity read off the road layer - the
+  neighbour in direction k carries a road bit that ALSO points in direction k,
+  i.e. the street runs through it and away from us - so it needs no saved street
+  pattern and no RNG draw to know where a street line lies. **It is a no-op at
+  generation time**: a street-line tile inside the laid radius carries a road
+  unless it was impassable, and impassable fails `plotBuildable` too. That claim
+  is not argued, it is held - every figure in `SCENARIO_WORLD_CLAIMS` and every
+  assertion in `mapgen.spec.ts` is unmoved, and those pin eight generated worlds
+  exactly (D-197/D-198/D-199).
+- **The street extension is SPEC.md 13.2's own sentence, in its own order.**
+  "Neue Gebaeude werden entlang bestehender Strassen platziert; wenn kein Platz,
+  verlaengert die Stadt selbst eine Strasse (max. 3 Tiles/Monat)." So the street
+  is the answer to there being no plot and never the first move, it is at most
+  `TOWN_GROWTH_ROAD_TILES_PER_MONTH` = 3 tiles a month, and the house goes up in
+  the SAME step the tile is laid - a candidate is only ever accepted if it opens
+  at least one new plot, which is D-216's 1,013 unserved dead ends refusing to
+  come back. The winner is an explicit total order and never the order of the
+  walk (law #3): nearest the centre first, then most plots opened, then lowest
+  tile index, which no two candidates tie on.
+- **One town a day, and the cursor is not a save field.** 140 towns searching
+  for a plot in one tick is the 7.3 cadence mistake transferred to towns
+  (Fehlerkatalog 32), so the pass grows the town at `day % towns.length` and no
+  other. SPEC2's ledger row for v31 names a "Wachstums-Cursor" beside the rest;
+  it is not stored, because the tick is already saved and hashed and the town
+  list never changes length after genesis, so a stored cursor would be a second
+  source of truth for a pure function of the first - the D-174 pattern, where
+  the layout bump the ledger named turned out to be already paid for.
+- **Zero randomness, deliberately.** Nothing here draws, from `world.rng` or
+  from a named stream (Z3, the D-093 precedent). A new periodic subsystem
+  normally gets its OWN stream (D-106) precisely so that it cannot shift a later
+  breakdown roll; a subsystem that draws NOTHING cannot shift one either, and
+  the deficit, the ring order, the extension candidate and its tie-breaks are
+  all total orders over tile indices. Every existing seed therefore keeps its
+  breakdown sequence, and the only reason a world hash moves is the state that
+  moved.
+- **The guards are the player's own.** `roadBuildableAt` - the ground test the
+  road command and its hover preview share since D-210 - refuses water, an
+  industry, a house and anything steeper than `TOWN_ROAD_MAX_SLOPE`, so the town
+  refuses exactly what the player refuses. On top of it the town asks three
+  questions: the tile must be its own claimed ground, it must be `TILE_PUBLIC`
+  (which in ONE array read covers a company's road, its track and every station
+  module, because all three take the tile - D-101, `attachModule`), and it must
+  carry no track, structure or waypoint. **A town does not build level crossings
+  and it never terraforms**: it builds where the ground already allows, which is
+  why the M10-hardened terraform guard is not reached rather than bypassed. And
+  every tile it touches stays PUBLIC, which is what D-104 says a town's own
+  street is for ever - asserted on the diff, not promised.
+
+**SAVE_VERSION 30 -> 31, and it is the smallest field a bump in this chain has
+been spent on.** `Town.roadTilesThisMonth` is the month's own street budget:
+the cap is per MONTH while the pass runs per DAY, so the tally is real history
+and derivable from nothing the world holds (Z4). A counter rebuilt as zero on
+load would let a town lay three more tiles in a month it had already spent - the
+same street, priced differently after a load, which is law #3 broken in the
+silence Z4 was written about. Saved, hashed and parsed as a required field, so
+the D-134 audit picked it up by existing and needed no allowlist row. The
+migration enters zero, which is exactly what a version 30 world knew about
+itself; the milestone's later bundles extend `v30_to_v31` IN PLACE and add no
+number (Z5).
+
+**Found on the way, and fixed: a derived station field nobody refreshed.**
+`station.commercialShare` - the M19 zone mix that decides whether a stop sells
+commuter or business tickets - is DERIVED, and `World.fromData` recomputes it
+for every station on load. Growth moves `buildingKind`, so leaving it stale
+would make a loaded game split its passengers differently from the game that was
+saved. **The same hole was already open on `DemolishBuilding`** since M19 gave
+the share a meaning: that command unzoned a covered tile and refreshed nothing.
+`refreshCommercialShare` is its own allocation-free function now (the industry
+scan beside it builds a list; this one counts two integers), called by
+`assignStationIndustries`, by the growth and by the demolition. The test asserts
+both ends: a ten-year grown world reproduces every station's share through a
+save and a load, and a demolition leaves the share exactly where a fresh read of
+the map puts it.
+
+**Measured.** The Fertig-wenn's own before/after tile diff, on a fully served
+town over ten game years (`tests/unit/townGrowth.spec.ts`): **28 -> 60
+buildings, 22 -> 34 street tiles, population 8,000 -> 10,538 at a passenger
+supply of 96.5 %.** The three-a-month cap BINDS on that fixture (busiest month
+exactly 3, asserted so the cap assertion cannot go vacuous) and the town then
+stops when its streets reach the ground it claimed. On a GENERATED world - seed
+4,711, 256 tiles, 40 towns, nobody serving anything - ten years move **661 ->
+695 buildings and 872 -> 881 street tiles** against a population of 66,100 ->
+69,772: the growth keeps pace with what the population asks for, which is what
+an unserved world should look like.
+
+**Cost.** The pass allocates **0.990 B per game day** over 50,000 days against
+an allocating control at 1,621 B (law #7), and costs **0.75 us per game day** on
+a 512 map of 40 towns, i.e. **0.023 ms per game month** - the whole monthly bill
+the ledger prices at +0.10 ms. Tick on the reference fixture, three runs: p50
+1.666 / 1.707 / 1.862 ms, p99 3.677 / 3.675 / 4.345 ms against the M10 baseline
+1.45 / 3.26 on a box whose documented run noise is +-0.7 ms; the arithmetic
+bounds the real contribution at about 4 ns a tick, so the spread is the box and
+not the growth. **No 6.1.1 row is claimed here** - that table takes ONE row per
+milestone at its close, and M20 is one bundle in.
+
+**Pins, and which of them moved and why.** Every world hash in the project moves
+on this bundle whether or not a town grew, because every town hashes one more
+integer. Canonical cross-OS pin `ddaacd4b970d31db` -> **`6e46c92e5d94c66b`**;
+soak fixture `f08265c0152efea9` -> **`ad5247561331af6e`** at unchanged 143
+recorded commands and all sixteen checkpoints; corpus manifest re-recorded with
+a `v31-played.ironsave`. **The corpus is the first case in this project where
+the fixtures do NOT all decode to one world**, and the reason is worth stating
+rather than smoothing: the nine frozen fixtures were played by builds whose
+towns did not grow, so migrating them yields that world plus an unspent road
+budget (all nine agree, at `960a2e5587108419`), while the v31 fixture is the
+same thirty days played by THIS build, with the growth in it
+(`4466ebea223a0d74`). Both are right, and the suite only ever required v22 and
+v23 to agree - a container-only change is the one case where two fixtures must
+be the same world.
+
+**Bands: not one moved, and scenario 5 is identical to the euro.** Road
+1,022,084 / rail 1,802,165 / expansive 2,153,604, all seventy-five yearly values
+and all three refusal profiles unchanged; `aiGame`'s four-seed sweep unchanged;
+scenario 1 payback year 3, scenario 2 249,980 EUR / year 6, scenario 3 159,516
+EUR/yr, Netzdesign 3.73, Punktzahl 5,889, Harter Winter -4.36 %. **That is a
+finding, not an absence of effort**, and it names this bundle's own residual:
+`station.buildingsCovered` is a BUILD-TIME reading and the growth does not
+refresh it, so a town that doubles its houses offers its stop no more cargo -
+`produceTownCargo` normalises the per-station share and the town's total is
+population-driven, so the new houses are zoning and scenery and not yet
+tonnage. It is a saved field, so nothing diverges on load; it becomes load
+bearing in the ZONE-ECONOMY bundle of this milestone, and that is where it is
+booked.
+
+**Two further residuals, named rather than discovered.** A town extends the
+streets it HAS and never starts a new one - which is SPEC.md 13.2's literal
+sentence ("verlaengert ... eine Strasse") and keeps D-216's grid a grid - and it
+never grows past the ground it claimed at genesis, so `TOWN_START_RADIUS` is a
+hard ceiling on the fabric until the 13.3 Stadtgebiet becomes something that can
+move. The measured consequence on the test fixture is that growth stops after
+four months with the arms at the claim boundary; on a generated map, where a
+town's grid has many street lines and its claim is about twice its built
+radius, there is room for a century.
+
+**Verified by running**, on the final tree: `npm run typecheck` clean;
+`npm run lint` over the whole repo clean; `npx vitest run tests/unit`
+**115 files / 1,496 tests** green (114 -> 115 files, +19 cases);
+`npx vitest run tests/corpus tests/determinism` **8 files / 38** green after the
+re-record; `npm run test:balance:full` **12 files / 101 tests** green;
+`npm run test:soak` **4** green at the re-recorded hash; `npm run test:perf`
+green with the three tick samples above.

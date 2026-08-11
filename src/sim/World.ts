@@ -70,6 +70,7 @@ import { createAiStates } from './ai/roster';
 import type { AiState } from './ai/types';
 import { reviewContracts, type Contract } from './economy/contracts';
 import { reviewCouncils } from './town/council';
+import { growTownFabric } from './town/growth';
 import { growTowns, produceTownCargo } from './town/update';
 import {
   ageVehicles,
@@ -561,6 +562,13 @@ export class World {
       // deliveries, so a goal about tonnage sees them. Allocation-free
       // (goals/evaluate.ts) and skipped entirely by a world with no goals.
       updateGoals(this);
+      // The physical half of section 13.2 (SPEC2 M20, E-10): ONE town a day,
+      // round robin, so that 140 towns never search for a plot in the same
+      // tick (Fehlerkatalog 32). It runs after the goals - a goal about a
+      // town's population reads a figure the MONTHLY hook moved, never a house
+      // this pass has just put up - and before the news, so a later bundle's
+      // growth milestone is reported on the day it happened.
+      growTownFabric(this);
       // Last of the daily pass, so what it reports is the state the day ended
       // in rather than a half-updated one.
       reportNews(this);
@@ -968,6 +976,11 @@ function hashDynamicState(h: Fnv1a64, world: World): void {
     h.u32(town.x).u32(town.y).u32(town.sizeClass).int(town.population).u32(town.radius);
     h.f64(town.producedThisMonth).f64(town.transportedThisMonth);
     h.f64(town.goodsDeliveredThisMonth).f64(town.foodDeliveredThisMonth);
+    // The month's own road budget (SPEC2 M20): saved history, so hashed like
+    // every other saved figure (D-134). Two worlds that differ only in how
+    // much street a town has already laid this month will lay it differently
+    // next week, and the digest has to be able to tell them apart.
+    h.u32(town.roadTilesThisMonth);
     h.u32(town.name.length).str(town.name);
     h.int(town.exclusiveCompanyId).u32(town.exclusiveUntilTick);
     h.u32(town.transportedByCompany.length);

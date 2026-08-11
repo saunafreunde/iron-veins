@@ -59,6 +59,7 @@ import { planRoadStop, roadBuildableAt, RoadStopShape } from '../net/roadBuilder
 import { planTrack } from '../net/trackBuilder';
 import {
   airportSize,
+  inCatchment,
   isSupportModule,
   isWaterModule,
   joinTargetIdFor,
@@ -68,6 +69,7 @@ import {
   type Station,
   type StationModule,
 } from '../station/types';
+import { refreshCommercialShare } from '../industry/catchment';
 import { createMonthCounters, createStationHistory } from '../station/history';
 import { createReturnState } from '../station/returns';
 import { assignStationCatchment } from '../town/update';
@@ -1206,6 +1208,16 @@ export function demolishBuilding(world: World, x: number, y: number): CommandOut
 
   map.buildingKind[tile] = 0;
   map.buildingLevel[tile] = 0;
+  // The zone mix every covering stop sells tickets by is DERIVED and is
+  // recomputed for every station on load, so a demolition that left it stale
+  // made the same world split its passengers differently after a load than
+  // before the save - law #3, silently, since M19 gave the share a meaning.
+  // Found while SPEC2 M20 gave the growth the same duty (D-231).
+  for (let index = 0; index < world.stations.length; index++) {
+    const station = world.stations[index]!;
+    if (!inCatchment(station, x, y)) continue;
+    refreshCommercialShare(map, station);
+  }
   bookExpense(world.company, chargeCt);
   bookDemolition(world, tile);
   map.revision++;

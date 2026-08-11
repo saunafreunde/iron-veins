@@ -1422,6 +1422,33 @@ const v29_to_v30: SaveMigration = (payload) => {
 };
 
 /**
+ * M20 gave a town a body: the monthly growth rate finally puts up houses and
+ * lays street, and SPEC.md 13.2's cap of three tiles a month needs a counter
+ * to be a cap at all (SPEC2 M20's one Z5 bump - v31).
+ *
+ * A version 30 town never built anything, so it had spent nothing of any
+ * month's road budget. Zero is not a default chosen for convenience - it is
+ * exactly what that world knew about itself, the same sentence every migration
+ * in this chain since v25 has been able to write.
+ *
+ * The growth CURSOR is deliberately not migrated in, because it is not stored:
+ * the town whose turn it is comes from the game day and the town count
+ * (`town/growth.ts`), both of which a version 30 save already carries. Later
+ * bundles of this milestone - the twelve-month supply window, the council
+ * elections - extend THIS migration in place rather than adding a v32 (Z5).
+ */
+const v30_to_v31: SaveMigration = (payload) => {
+  const inner = state(payload);
+  return {
+    ...payload,
+    state: {
+      ...inner,
+      ...mapSection(inner, 'towns', (town) => withFields(town, { roadTilesThisMonth: 0 })),
+    },
+  };
+};
+
+/**
  * Registry keyed by the version a migration reads (section 19.1).
  *
  * There is deliberately no entry for 1 -> 2: a version 1 world had no map at
@@ -1457,6 +1484,7 @@ export const SAVE_MIGRATIONS: ReadonlyMap<number, SaveMigration> = new Map<numbe
   [27, v27_to_v28],
   [28, v28_to_v29],
   [29, v29_to_v30],
+  [30, v30_to_v31],
 ]);
 
 /**

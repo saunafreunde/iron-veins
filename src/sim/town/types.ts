@@ -49,6 +49,22 @@ export interface Town {
   /** Goods and food delivered into the town this month. [units] */
   goodsDeliveredThisMonth: number;
   foodDeliveredThisMonth: number;
+  /**
+   * Tiles of street the town has laid for itself this game month. [tiles]
+   *
+   * SPEC.md 13.2 caps a town's own road building at three tiles a month, and
+   * the cap is per MONTH while the growth pass runs per DAY (E-10's round
+   * robin), so the count is real history: it is not derivable from the tick,
+   * from the map or from anything else the world holds, which under SPEC2's Z4
+   * makes it saved state rather than a field rebuilt on load. A counter
+   * rebuilt as zero would let a loaded game lay three more tiles in a month it
+   * had already spent - the same road, priced differently after a load, which
+   * is law #3 broken in the silence Z4 was written about.
+   *
+   * Cleared by `growTowns` with the other monthly counters, on the convention
+   * that whoever reads a monthly figure is the one who resets it.
+   */
+  roadTilesThisMonth: number;
 
   /**
    * Of the passengers and mail carried away this month, how much each company

@@ -164,6 +164,7 @@ export function makeTown(id: number, x: number, y: number, population: number, n
     transportedThisMonth: 0,
     goodsDeliveredThisMonth: 0,
     foodDeliveredThisMonth: 0,
+    roadTilesThisMonth: 0,
     transportedByCompany: [],
     councilRating: [],
     councilGoodwill: [],

@@ -624,7 +624,11 @@ describe('the v29 -> v30 remap', () => {
 });
 
 describe('the save version', () => {
-  it('is the one M19 bump', () => {
-    expect(SAVE_VERSION).toBe(30);
+  it('has moved past M19 and left the class remap where it was', () => {
+    // M19's one bump was 30 and it is where the two classes live for ever;
+    // this file's migration tests all run 29 -> 30 explicitly, so they keep
+    // testing that step whatever the head of the chain has reached. 31 is
+    // M20's (SPEC2 Z5, D-231).
+    expect(SAVE_VERSION).toBeGreaterThanOrEqual(30);
   });
 });

@@ -1469,6 +1469,16 @@ export const TOWN_PRODUCTION_SLICES_PER_MONTH = 30;
  */
 export const TOWN_GROWTH_BASE_RATE = 0.0015;
 
+/**
+ * Tiles of street a town may lay for itself in one game month. [tiles/month]
+ *
+ * Origin: SPEC.md 13.2 verbatim - "wenn kein Platz, verlaengert die Stadt
+ * selbst eine Strasse (max. 3 Tiles/Monat)". Not a balancing knob: it is the
+ * specification's own figure, and it is the only thing that stops a town with
+ * a large housing deficit paving its whole claim inside a game year.
+ */
+export const TOWN_GROWTH_ROAD_TILES_PER_MONTH = 3;
+
 // ------------------------------------------------------------- town council
 
 /**

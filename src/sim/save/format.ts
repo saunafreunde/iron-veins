@@ -581,6 +581,7 @@ function parseTowns(value: unknown, path: string): Town[] {
         raw['foodDeliveredThisMonth'],
         `${path}[${i}].foodDeliveredThisMonth`,
       ),
+      roadTilesThisMonth: asInt(raw['roadTilesThisMonth'], `${path}[${i}].roadTilesThisMonth`),
       transportedByCompany: parseNumbers(
         raw['transportedByCompany'],
         `${path}[${i}].transportedByCompany`,

@@ -88,9 +88,20 @@
  * parcel, refit, order, history slot and lifetime tally that named the old
  * `Passengers` id now names `CommuterPax`. A version 29 world carried exactly
  * one kind of passenger; the migration says which of the two it was, and
- * changes nothing else.
+ * changes nothing else. 31 is M20's one bump, and it is the smallest field a
+ * bump in this chain has ever been spent on: the towns of section 13.2 grow
+ * physically now - houses along their streets, and a street of their own when
+ * there is no plot left - and the three-tiles-a-month cap that governs the
+ * street needs the month's tally to be a cap. `Town.roadTilesThisMonth` is
+ * that tally, saved and hashed because it is HISTORY (Z4): a counter rebuilt
+ * as zero on load would let a town lay three more tiles in a month it had
+ * already spent. The round-robin cursor the ledger names beside it is NOT a
+ * field - it is the game day modulo the town count, a pure function of state
+ * that is already saved (D-231, the D-174 pattern). A version 30 town had
+ * never built anything, so the migration enters a spent budget of zero, which
+ * is exactly what that world knew.
  */
-export const SAVE_VERSION = 30;
+export const SAVE_VERSION = 31;
 
 /** File extension used for manual and automatic saves. */
 export const SAVE_EXTENSION = '.ironsave';

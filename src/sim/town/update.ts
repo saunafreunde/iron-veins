@@ -172,6 +172,11 @@ export function growTowns(world: World): void {
     town.transportedThisMonth = 0;
     town.goodsDeliveredThisMonth = 0;
     town.foodDeliveredThisMonth = 0;
+    // The month's street budget of SPEC.md 13.2, cleared with the rest on the
+    // convention this function owns: whoever reads a monthly figure resets it.
+    // The physical growth itself runs DAILY (`town/growth.ts`, E-10's round
+    // robin), which is exactly why the cap needs a counter rather than a flag.
+    town.roadTilesThisMonth = 0;
   }
 }
 

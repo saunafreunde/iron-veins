@@ -2488,6 +2488,75 @@ job before claiming an AI bundle is clean.
   move are the three that had a doomed railway, and one of them LOSES 339,844.
   Scenario 5 identical to the euro, soak hash and `SAVE_VERSION` 30 unmoved.
 
+## M20 bundle 1 - a town builds (D-231)
+
+**A town was pixel-identical in 1950 and in 2050**, although `growTowns` has
+computed the 13.2 rate since M2. It puts up houses and lays street now. ONE save
+bump for the milestone (**v30 -> v31**, spent here, extended in place by every
+later M20 bundle - Z5); the 13.2 formula itself, the zone economy and the
+council elections are those later bundles.
+
+- **The daily hook writes the map, and that is E-10.** Law #6 binds the
+  PLAYER's interventions; `growTowns` has been a legitimate author since M2, and
+  a pseudo-company command would flood the replay log AND hand a company the
+  town's own street. **The placement is `mapgen/towns.ts`'s own**, called with
+  the DEFICIT: a tile with a house already fails `plotBuildable`, so "four more"
+  and "four in total" are ONE loop and D-216's five passes stay the shape growth
+  extends. **Zero randomness** - no `world.rng`, no named stream (D-093's
+  precedent, so no existing seed's breakdown roll moves).
+- **A street's own next tile is not a building plot, and without that rule
+  growth is impossible.** The first house beside a street end otherwise caps
+  that street for ever. `continuesStreet` reads it off the road layer (the
+  neighbour in direction k carries a bit pointing in direction k), needs no
+  saved street pattern, and is a **no-op at generation time** - every
+  `SCENARIO_WORLD_CLAIMS` figure and every `mapgen.spec.ts` assertion is
+  unmoved, which is what proves it.
+- **The extension is SPEC.md 13.2's own sentence in its own order**: houses
+  along existing streets first, a street only when there is no plot, at most
+  **3 tiles a month**, and only onto a tile that OPENS a plot - D-216's 1,013
+  unserved dead ends refusing to come back. Winner by explicit total order
+  (nearest the centre, then most plots, then lowest tile index), never by walk
+  order. **One town a day** (`day % towns.length`, Fehlerkatalog 32); the
+  "Wachstums-Cursor" the ledger names is NOT stored, because the tick already
+  is (the D-174 pattern).
+- **The guards are the player's own**: `roadBuildableAt` (D-210), plus the
+  town's own ground, `TILE_PUBLIC` - one array read that covers a company's
+  road, its track and every station module - and no track, structure or
+  waypoint. **A town never terraforms and never builds a level crossing**, and
+  every tile it lays stays PUBLIC (D-104), asserted on the diff.
+- **v31 is spent on `Town.roadTilesThisMonth`**: the cap is per MONTH and the
+  pass runs per DAY, so the tally is history derivable from nothing (Z4) - a
+  counter rebuilt as zero would let a town lay three more tiles in a month it
+  had already spent. Saved, hashed, required by the parser, so the D-134 audit
+  picked it up by existing.
+- **Found on the way and fixed**: `station.commercialShare` is DERIVED and
+  recomputed for every station on load, and **`DemolishBuilding` never
+  refreshed it** - a save/load divergence open since M19 gave the share a
+  meaning. `refreshCommercialShare` is one allocation-free function now, called
+  by the station scan, by the growth and by the demolition.
+- **Measured** (`tests/unit/townGrowth.spec.ts`): a fully served town over ten
+  game years **28 -> 60 buildings, 22 -> 34 street tiles, population 8,000 ->
+  10,538 at 96.5 % passenger supply**, with the three-a-month cap BINDING. A
+  generated 256 world (seed 4,711, 40 towns, nobody serving anything) moves
+  **661 -> 695 buildings, 872 -> 881 street tiles** over ten years. Cost:
+  **0.990 B per game day** (control 1,621 B) and **0.75 us per game day**, i.e.
+  0.023 ms a game month against the ledger's +0.10 ms.
+- **Pins**: every world hash moves because every town hashes one integer more.
+  Canonical `ddaacd4b970d31db` -> **`6e46c92e5d94c66b`**, soak
+  `f08265c0152efea9` -> **`ad5247561331af6e`** at unchanged 143 commands, corpus
+  re-recorded with `v31-played.ironsave`. **The corpus fixtures no longer all
+  decode to ONE world and that is correct**: the nine frozen ones were played by
+  builds whose towns did not grow (they agree at `960a2e5587108419`), the v31
+  one is the same thirty days played by THIS build (`4466ebea223a0d74`); only
+  v22/v23 were ever required to agree.
+- **Not one band moved and scenario 5 is identical to the euro** - which names
+  the residual: **`station.buildingsCovered` is a build-time reading** the
+  growth does not refresh, so a town that doubles its houses offers its stop no
+  more cargo. It is a SAVED field, so nothing diverges on load; it becomes load
+  bearing in the zone-economy bundle. Two more residuals: a town extends the
+  streets it HAS and never starts a new one (13.2's literal sentence), and it
+  never grows past the ground it claimed at genesis.
+
 ## Still outstanding
 
 - **A player still practically never meets a railway competitor, and D-228 says

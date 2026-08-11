@@ -45,6 +45,27 @@ const INHABITANTS_PER_BUILDING = 100;
 /** Even the smallest hamlet gets a crossroads and four houses. */
 const MIN_BUILDINGS = 4;
 
+/**
+ * How many buildings a population of this size wants.
+ *
+ * Exported because SPEC2 M20's physical growth is the SAME question asked
+ * every month instead of once at founding: a town that has grown past its
+ * housing stock is a town with a deficit, and the deficit is this figure minus
+ * what stands. Two copies of the ratio would be two different towns within a
+ * game year of the first edit (D-203's `coalLine.ts` argument, one subsystem
+ * along), so `town/growth.ts` calls this rather than repeating it.
+ */
+export function buildingsWantedFor(population: number): number {
+  return Math.max(MIN_BUILDINGS, Math.round(population / INHABITANTS_PER_BUILDING));
+}
+
+/** Deltas of the four orthogonal neighbours, and the bit that points at each. */
+const STEP_DX = [-1, 1, 0, 0] as const;
+const STEP_DY = [0, 0, -1, 1] as const;
+const STEP_BIT = [RoadBit.West, RoadBit.East, RoadBit.North, RoadBit.South] as const;
+/** The bit the tile in direction k carries BACK, i.e. the opposite of STEP_BIT. */
+const STEP_BACK_BIT = [RoadBit.East, RoadBit.West, RoadBit.South, RoadBit.North] as const;
+
 /** How many towns a map of this size should have. */
 export function targetTownCount(size: number): number {
   const byArea = Math.round((size * size) / TILES_PER_TOWN);
@@ -141,8 +162,35 @@ function streetPassable(map: TileMap, town: Town, x: number, y: number): boolean
   return slopeRise(map.slopeAt(x, y)) <= TOWN_ROAD_MAX_SLOPE;
 }
 
+/**
+ * Is this bare tile the straight continuation of a street that runs into it?
+ *
+ * The identity is one array read per direction: the neighbour in direction k
+ * carries a road bit that ALSO points in direction k, i.e. the street runs
+ * through that neighbour and away from us - so we are the next tile of it.
+ *
+ * A street line is not a building plot, and that is what makes SPEC2 M20's
+ * growth possible at all: without this rule the first house built beside a
+ * street end caps the street for ever, because every tile a street could grow
+ * onto is a tile a house may stand on. It is a NO-OP at generation time - a
+ * street-line tile inside the laid radius carries a road unless it was
+ * impassable, and impassable fails {@link plotBuildable} too - which is why it
+ * lives in the shared function instead of in a second copy for the growth.
+ */
+export function continuesStreet(map: TileMap, x: number, y: number): boolean {
+  if (!map.contains(x, y)) return false;
+  if (map.roadBits[map.tileIndex(x, y)] !== 0) return false;
+  for (let k = 0; k < 4; k++) {
+    const nx = x + STEP_DX[k]!;
+    const ny = y + STEP_DY[k]!;
+    if (!map.contains(nx, ny)) continue;
+    if ((map.roadBits[map.tileIndex(nx, ny)]! & STEP_BIT[k]!) !== 0) return true;
+  }
+  return false;
+}
+
 /** True if a house may stand on this tile - the town's own ground, buildable. */
-function plotBuildable(map: TileMap, town: Town, x: number, y: number): boolean {
+export function plotBuildable(map: TileMap, town: Town, x: number, y: number): boolean {
   if (!map.contains(x, y)) return false;
   const index = map.tileIndex(x, y);
   if (map.townId[index] !== town.id) return false;
@@ -303,8 +351,23 @@ function zoneFor(distance: number, radius: number): BuildingKind {
   return BuildingKind.Industrial;
 }
 
-/** Place buildings on tiles that touch a street, from the centre outwards. */
-function placeBuildings(map: TileMap, town: Town, radius: number, wanted: number): void {
+/**
+ * Place up to `wanted` NEW buildings on tiles that touch a street, from the
+ * centre outwards, and answer how many went up.
+ *
+ * Exported for SPEC2 M20 (E-10): a town's monthly growth is this same pass
+ * over a played map, asked for the deficit rather than for the whole stock -
+ * a tile that already carries a house fails {@link plotBuildable}, so "place
+ * `wanted` more" and "place `wanted` in total" are the same loop. Writing a
+ * second placement routine for the growth is what the milestone was told not
+ * to do, and it would have been a second answer to "where does a house go".
+ *
+ * The paving is per tile and at the moment the house is certain, which is
+ * D-216's "pave last" seen from the growth's side: at generation time the
+ * final pass paves every built tile of the town anyway, so this line changes
+ * not one generated pixel; during a game there is no final pass to wait for.
+ */
+export function placeBuildings(map: TileMap, town: Town, radius: number, wanted: number): number {
   let placed = 0;
 
   // Ring by ring from the centre, so a town that runs out of room stays dense
@@ -317,6 +380,8 @@ function placeBuildings(map: TileMap, town: Town, radius: number, wanted: number
         const x = town.x + dx;
         const y = town.y + dy;
         if (!plotBuildable(map, town, x, y)) continue;
+        // A street's own next tile belongs to the street (see above).
+        if (continuesStreet(map, x, y)) continue;
 
         const index = map.tileIndex(x, y);
         const touchesRoad =
@@ -332,11 +397,64 @@ function placeBuildings(map: TileMap, town: Town, radius: number, wanted: number
         const distance = Math.sqrt(dx * dx + dy * dy);
         map.buildingKind[index] = zoneFor(distance, town.radius);
         map.buildingLevel[index] = distance < town.radius * 0.5 ? 2 : 1;
+        map.terrain[index] = Terrain.TownGround;
         placed++;
       }
     }
   }
+  return placed;
 }
+
+/**
+ * How many buildings stand on the town's own ground inside `radius`.
+ *
+ * The growth's other half of the deficit, and it is COUNTED rather than
+ * carried: a saved counter would have to be kept in step with the demolition
+ * command, the industry pass and every future rule that clears a tile, and a
+ * counter that drifts silently is the very thing the M14 x-ray was written
+ * about. A square of at most 21x21 read once a game day is the cheaper answer.
+ */
+export function countTownBuildings(map: TileMap, town: Town, radius: number): number {
+  let count = 0;
+  for (let dy = -radius; dy <= radius; dy++) {
+    const y = town.y + dy;
+    for (let dx = -radius; dx <= radius; dx++) {
+      const x = town.x + dx;
+      if (!map.contains(x, y)) continue;
+      const index = map.tileIndex(x, y);
+      if (map.townId[index] !== town.id) continue;
+      if (map.buildingKind[index] !== BuildingKind.None) count++;
+    }
+  }
+  return count;
+}
+
+/**
+ * Join a new town street tile to the neighbour in direction `k`, both ways.
+ *
+ * The write and the question are one table (`STEP_BIT` / `STEP_BACK_BIT`),
+ * which is D-218's rule in this file: `buildRoad` keeps its own `joinBit`
+ * because it works from tile indices, and the two are held together by
+ * `tests/unit/townGrowth.spec.ts` asserting the pair is symmetric.
+ */
+export function joinStreetTile(map: TileMap, index: number, neighbour: number, k: number): void {
+  map.roadBits[index] = map.roadBits[index]! | STEP_BIT[k]!;
+  map.roadBits[neighbour] = map.roadBits[neighbour]! | STEP_BACK_BIT[k]!;
+}
+
+/**
+ * Deltas and bits of the four orthogonal neighbours, for the growth pass.
+ *
+ * `STREET_STEP_BIT[k]` is the connection a tile carries TOWARDS its neighbour
+ * in direction k - which is why "the neighbour in direction k carries
+ * `STREET_STEP_BIT[k]` too" reads as "the street runs through it and away from
+ * us". {@link continuesStreet} and `town/growth.ts` share the table rather than
+ * each writing the arithmetic out (D-218's rule: one table for the write and
+ * for the question).
+ */
+export const STREET_STEP_DX: readonly number[] = STEP_DX;
+export const STREET_STEP_DY: readonly number[] = STEP_DY;
+export const STREET_STEP_BIT: readonly number[] = STEP_BIT;
 
 /** A tile with something on it a street could exist for. */
 function occupiedTile(map: TileMap, index: number): boolean {
@@ -592,6 +710,7 @@ export function generateTowns(map: TileMap, rng: Rng): Town[] {
       measureReadyTick: [],
       goodsDeliveredThisMonth: 0,
       foodDeliveredThisMonth: 0,
+      roadTilesThisMonth: 0,
     };
     towns.push(town);
 

@@ -1,5 +1,6 @@
 import { Cargo, CARGO_COUNT } from '../cargo/types';
 import { STATION_CATCHMENT_SCAN_RADIUS } from '../constants';
+import type { TileMap } from '../map/TileMap';
 import { inCatchment, type Station } from '../station/types';
 import { BuildingKind } from '../town/types';
 import type { World } from '../World';
@@ -68,6 +69,49 @@ export const STATION_ALWAYS_ACCEPTED: readonly Cargo[] = [
 export const TOWN_CARGO: readonly Cargo[] = [Cargo.Goods, Cargo.Food, Cargo.Electronics];
 
 /**
+ * Recompute the zone mix of SPEC2 M19 from the map.
+ *
+ * `commercialShare` is DERIVED - the decoder overwrites whatever a save says
+ * and `World.fromData` recomputes it for every station on load - so anything
+ * that moves a `buildingKind` mid-game has to refresh it, or the same world
+ * splits its passengers differently after a load than before the save. That is
+ * law #3 broken in silence, and it was already true before SPEC2 M20: nothing
+ * refreshed the share after `DemolishBuilding`, which is the one command that
+ * has been able to unzone a covered tile since M8 (fixed with this bundle).
+ *
+ * Its own function rather than a line inside the scan below because the growth
+ * calls it once a game day and must not allocate (law #7): the industry scan
+ * builds a list, this one counts two integers. The price is a second pass over
+ * the catchment when a station is BUILT, which is not a hot path.
+ */
+export function refreshCommercialShare(map: TileMap, station: Station): void {
+  let zoned = 0;
+  let commercial = 0;
+  if (station.townId >= 0) {
+    const radius = STATION_CATCHMENT_SCAN_RADIUS;
+    for (let dy = -radius; dy <= radius; dy++) {
+      const y = station.y + dy;
+      if (y < 0 || y >= map.size) continue;
+      for (let dx = -radius; dx <= radius; dx++) {
+        const x = station.x + dx;
+        if (x < 0 || x >= map.size) continue;
+        if (!inCatchment(station, x, y)) continue;
+
+        const index = map.tileIndex(x, y);
+        // Only the station's OWN town counts, exactly as
+        // `assignStationCatchment` counts `buildingsCovered`.
+        if (map.townId[index] !== station.townId) continue;
+        const kind = map.buildingKind[index]!;
+        if (kind === BuildingKind.None) continue;
+        zoned++;
+        if (kind === BuildingKind.Commercial) commercial++;
+      }
+    }
+  }
+  station.commercialShare = zoned > 0 ? commercial / zoned : 0;
+}
+
+/**
  * Work out which industries a station reaches and which cargo it accepts.
  *
  * Acceptance is what stops a lorry dropping goods in open country and being
@@ -78,8 +122,8 @@ export function assignStationIndustries(world: World, station: Station): void {
   const map = world.map;
   const served: number[] = [];
   const radius = STATION_CATCHMENT_SCAN_RADIUS;
-  let zoned = 0;
-  let commercial = 0;
+
+  refreshCommercialShare(map, station);
 
   for (let dy = -radius; dy <= radius; dy++) {
     const y = station.y + dy;
@@ -90,23 +134,11 @@ export function assignStationIndustries(world: World, station: Station): void {
       if (!inCatchment(station, x, y)) continue;
 
       const index = map.tileIndex(x, y);
-      // The zone mix of SPEC2 M19, counted in the scan the station already
-      // makes. Only the station's OWN town counts, exactly as
-      // `assignStationCatchment` counts `buildingsCovered`.
-      if (station.townId >= 0 && map.townId[index] === station.townId) {
-        const kind = map.buildingKind[index]!;
-        if (kind !== BuildingKind.None) {
-          zoned++;
-          if (kind === BuildingKind.Commercial) commercial++;
-        }
-      }
-
       const industryId = map.industryId[index]!;
       if (industryId < 0) continue;
       if (!served.includes(industryId)) served.push(industryId);
     }
   }
-  station.commercialShare = zoned > 0 ? commercial / zoned : 0;
   // Ascending id, so every pass over the list is in a fixed order.
   served.sort((a, b) => a - b);
   station.servedIndustries = served;
