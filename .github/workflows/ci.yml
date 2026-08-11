@@ -76,7 +76,12 @@ jobs:
   #    seven cheap scenarios; the two quarter-century AI scenarios cost 143 s
   #    of the 186 s a complete twin takes, so they are switched on here rather
   #    than on every developer's machine (tests/balance/determinism.ts states
-  #    the split and the measurements).
+  #    the split and the measurements);
+  #  - and, since D-220, the same variable switches aiGame's AI acceptance
+  #    sweep from two seeds to four. That file asserted on ONE seed for the
+  #    whole project and every claim it made about the AI was a property of
+  #    that seed; a quarter century costs 40-70 s, so the full sweep is +150 s
+  #    per push here rather than +13 s on every local run.
   #
   # It runs on windows-latest, the platform both pins were recorded on. The
   # cross-OS question is D-137's and has its own fixture, deliberately sized to

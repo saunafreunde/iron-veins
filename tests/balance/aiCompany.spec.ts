@@ -10,6 +10,14 @@ import {
 } from '../../src/sim/constants';
 import { Personality } from '../../src/sim/ai/types';
 import { World } from '../../src/sim/World';
+import {
+  LOOP_ISSUES,
+  looping,
+  recordOutcomes,
+  refusalTrace,
+  undeclared,
+  type CompanyOutcomes,
+} from './aiRefusals';
 import { hashTwin } from './determinism';
 
 /**
@@ -31,9 +39,10 @@ import { hashTwin } from './determinism';
  * per-personality:
  *
  *  - ROAD (seed 4711, the compounding personality): 0.8 - 3.2 million.
- *    Measured 1,119,720 EUR at M11, 978,528 after M19 closed, **1,173,298
- *    since D-216 tightened the towns** - building, renewing at year
- *    twenty-one and growing straight through it. The floor is the stall
+ *    Measured 1,119,720 EUR at M11, 978,528 after M19 closed, 1,173,298
+ *    since D-216 tightened the towns, **1,156,463 since D-218 and D-219 fixed
+ *    the AI's road joins and its railway permission** - building, renewing at
+ *    year twenty-one and growing straight through it. The floor is the stall
  *    detector (the pre-C2 stall states measured 433,000 and 580,000); the
  *    ceiling is the economy-breakage detector, anchored above the probe's
  *    free-capital growth so only a broken tariff or gate can reach it.
@@ -48,6 +57,27 @@ import { hashTwin } from './determinism';
  *
  * When this leaves its band the constants get investigated and adjusted,
  * never the test (the balance rule of CLAUDE.md).
+ *
+ * **D-220 re-measured all three rows on the fixed AI and moved NOTHING, which
+ * is the point of writing it down.** D-158's evidence rule is that a band moves
+ * only when a measurement says the old one described a world that no longer
+ * exists, and both numbers go in the entry either way. Measured at D-220's
+ * HEAD, against the D-216 figures this file already carried:
+ *
+ *  - ROAD 1,173,298 -> **1,156,463 EUR** (-1.4 %), 12 vehicles and 2 lines in
+ *    both. Comfortably inside 0.8 - 3.2 M; the band describes this world.
+ *  - RAIL **228,047 EUR**, 2 stations, no line, no vehicle - unchanged to the
+ *    euro. D-219's fix cannot reach it: this company's opportunities never
+ *    take the single-track fallback branch on this map.
+ *  - EXPANSIVE **-241,309 EUR [wound up]**, 5 stations, 1 line, 0 vehicles -
+ *    also unchanged to the euro.
+ *
+ * **And the honest closing sentence about SPEC.md 19.4's 5 - 25 million: the
+ * AI does not reach it and this bundle does not claim it does.** 1,156,463 is a
+ * factor 4.3 under the original floor. D-116 stays closed on D-158's
+ * recalibrated band and on the achievability probe behind it - the map's
+ * physical offer, not the AI's competence, is what 5 M was measured against -
+ * and nothing in D-218, D-219 or D-220 moved that argument by a euro.
  */
 
 const YEARS = 25;
@@ -73,6 +103,7 @@ interface Run {
   readonly lines: number;
   readonly vehicles: number;
   readonly stations: number;
+  readonly outcomes: CompanyOutcomes;
 }
 
 function play(seed: number): Run {
@@ -88,9 +119,14 @@ function play(seed: number): Run {
   const queue = new CommandQueue();
   const state = world.ai[0]!;
 
+  // The pure observer of `./aiRefusals.ts` - D-220's instrument, the one thing
+  // this scenario could not see: what the company ORDERED, as against what it
+  // was worth at the end.
+  const { outcomes, sink } = recordOutcomes();
+
   const yearlyValueCt: number[] = [];
   for (let year = 0; year < YEARS; year++) {
-    for (let tick = 0; tick < TICKS_PER_YEAR; tick++) world.step(queue, null);
+    for (let tick = 0; tick < TICKS_PER_YEAR; tick++) world.step(queue, sink);
     const company = world.companyOf(state.companyId);
     yearlyValueCt.push(company.cashCt - company.loanCt + company.fixedAssetsCt);
   }
@@ -111,6 +147,7 @@ function play(seed: number): Run {
     lines: world.lines.ownedBy(state.companyId).length,
     vehicles,
     stations: world.stations.filter((s) => s.ownerId === state.companyId).length,
+    outcomes,
   };
 }
 
@@ -132,6 +169,13 @@ describe('scenario 5: an AI company alone on a 512 map, twenty-five years', () =
           (run.bankrupt ? ' [wound up]' : '') +
           ` - value by year ${run.yearlyValueCt.map(euros).join(' / ')}`,
       );
+    }
+    for (const [name, run] of [
+      ['road', road],
+      ['rail', rail],
+      ['expansive', expansive],
+    ] as const) {
+      for (const line of refusalTrace(run.outcomes)) console.log(`${name} refused: ${line}`);
     }
     expect(road.yearlyValueCt).toHaveLength(YEARS);
   });
@@ -197,6 +241,39 @@ describe('scenario 5: an AI company alone on a 512 map, twenty-five years', () =
    * it reserves the price of a vehicle before it lays its last kilometre of
    * road is M11's work and is named in the report, not papered over here.
    */
+  /**
+   * **The half of this scenario that was invisible for the whole project**
+   * (D-220). Everything above reads the balance sheet at year twenty-five, and
+   * a company that spent a century ordering a railway it was never allowed to
+   * build has a perfectly plausible balance sheet - that is exactly what D-219
+   * found, in the OTHER AI scenario, after this one had been green through nine
+   * bundles. The instrument and its two guards are argued in `./aiRefusals.ts`;
+   * they are shared with `aiGame` because what the AI is refused for is a
+   * property of the AI and not of the fixture.
+   *
+   * Measured here at D-220's HEAD: the road company collects
+   * `BuildRoad|nothingToDo` and `BuildRoadStop|occupied`, the rail and expansive
+   * companies collect nothing at all, and no company loops. The trace is printed
+   * by the reporting test above on every run.
+   */
+  it('orders nothing it is never allowed to order, on any personality', () => {
+    for (const [name, run] of [
+      ['road', road],
+      ['rail', rail],
+      ['expansive', expansive],
+    ] as const) {
+      expect(
+        looping(run.outcomes),
+        `${name}: commands ordered ${LOOP_ISSUES}+ times and never once accepted`,
+      ).toEqual([]);
+      expect(
+        undeclared(run.outcomes),
+        `${name}: a rejection nobody has diagnosed - measure why the AI orders it, then fix ` +
+          'it or add it to DECLARED_REFUSALS with the reason it is tolerated',
+      ).toEqual([]);
+    }
+  });
+
   it('rail and expansive still build, inside their own exposure', () => {
     expect(rail.bankrupt).toBe(false);
     expect(rail.valueCt).toBeGreaterThan(0);

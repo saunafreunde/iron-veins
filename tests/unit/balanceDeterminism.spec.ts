@@ -2,9 +2,12 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
+  AI_SWEEP_DEFAULT_SIZE,
+  AI_SWEEP_SEEDS,
+  aiSweepSeeds,
   BALANCE_SCENARIOS,
   COSTLY_SCENARIOS,
-  FULL_HASH_ENV,
+  FULL_BALANCE_ENV,
   twinRuns,
   type BalanceScenario,
 } from '../balance/determinism';
@@ -112,18 +115,62 @@ describe('the balance suite as a desync guard', () => {
     expect(COSTLY_SCENARIOS.length).toBeGreaterThan(0);
     expect(COSTLY_SCENARIOS.length).toBeLessThan(BALANCE_SCENARIOS.length);
 
-    const previous = process.env[FULL_HASH_ENV];
+    const previous = process.env[FULL_BALANCE_ENV];
     try {
-      delete process.env[FULL_HASH_ENV];
+      delete process.env[FULL_BALANCE_ENV];
       const skipped = BALANCE_SCENARIOS.filter((id) => !twinRuns(id));
       expect([...skipped].sort(byName)).toEqual([...COSTLY_SCENARIOS].sort(byName));
 
-      process.env[FULL_HASH_ENV] = 'all';
+      process.env[FULL_BALANCE_ENV] = 'all';
       const skippedInFull = BALANCE_SCENARIOS.filter((id: BalanceScenario) => !twinRuns(id));
       expect(skippedInFull).toEqual([]);
     } finally {
-      if (previous === undefined) delete process.env[FULL_HASH_ENV];
-      else process.env[FULL_HASH_ENV] = previous;
+      if (previous === undefined) delete process.env[FULL_BALANCE_ENV];
+      else process.env[FULL_BALANCE_ENV] = previous;
     }
+  });
+
+  /**
+   * The second thing that switch carries since D-220: `aiGame`'s seed sweep.
+   *
+   * The lesson it exists for is that a single-seed acceptance run asserts
+   * properties of its seed and calls them properties of the simulation, and the
+   * two ways that lesson rots are silent: the sweep shrinks back to one seed, or
+   * the "small" sweep quietly becomes the whole thing and every developer pays
+   * five minutes for it. Both are checked here rather than inside the
+   * quarter-century file, where the check would cost a quarter century to reach.
+   */
+  describe("and as the AI acceptance run's seed sweep", () => {
+    it('sweeps at least four distinct seeds', () => {
+      expect(AI_SWEEP_SEEDS.length).toBeGreaterThanOrEqual(4);
+      expect(new Set(AI_SWEEP_SEEDS).size).toBe(AI_SWEEP_SEEDS.length);
+    });
+
+    it('keeps the small sweep a real, proper prefix of the full one', () => {
+      expect(AI_SWEEP_DEFAULT_SIZE).toBeGreaterThanOrEqual(2);
+      expect(AI_SWEEP_DEFAULT_SIZE).toBeLessThan(AI_SWEEP_SEEDS.length);
+    });
+
+    it('plays the small sweep by default and every seed in the full job', () => {
+      const previous = process.env[FULL_BALANCE_ENV];
+      try {
+        delete process.env[FULL_BALANCE_ENV];
+        expect(aiSweepSeeds()).toEqual(AI_SWEEP_SEEDS.slice(0, AI_SWEEP_DEFAULT_SIZE));
+
+        process.env[FULL_BALANCE_ENV] = 'all';
+        expect(aiSweepSeeds()).toEqual(AI_SWEEP_SEEDS);
+      } finally {
+        if (previous === undefined) delete process.env[FULL_BALANCE_ENV];
+        else process.env[FULL_BALANCE_ENV] = previous;
+      }
+    });
+
+    it('has the recorded seed first, so every run plays the game the soak fixture replays', () => {
+      // 4711 is the seed `tests/soak` recorded and the seed `aiGame`'s desync
+      // twin hashes. If it ever stops being first, the default two-seed run
+      // stops covering the world the rest of the project's AI evidence is
+      // about, and the twin would replay a world no assertion had looked at.
+      expect(AI_SWEEP_SEEDS[0]).toBe(4_711);
+    });
   });
 });

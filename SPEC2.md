@@ -394,7 +394,39 @@ Headroom und lehrt, ein rotes Gate zu ignorieren (D-136).
 | M17 | 2026-08-08 | **1,241 ms / 2,564 ms** (max 18,40 ms über 6 500 Ticks; Abschlusslauf nach allen vier Bundles) | **−0,70 ms** (Budget-Zeile +0,05 eingehalten: der Tages-Hook kehrt in einer Welt ohne Ziele auf seiner ersten Zeile zurück, gemessen 0,17–0,71 B Allokation je Spieltag; B4 fügt dem Tick NICHTS hinzu — Marker und Punktformel laufen einmal je Spieltag auf der Publish-Kadenz, auf der die Flottenliste ohnehin sendet) | D-193–D-196 |
 | M18 | 2026-08-08 | **1,431 / 1,548 / 1,449 ms p50** und **3,108 / 3,890 / 2,768 ms p99** (drei saubere Abschlussläufe nach allen fünf Bundles; die B4-Abschlussläufe lauteten 1,531/3,006 und 1,508/3,225) | **−0,02 / +0,10 / −0,00 ms p50** (Budget-Zeile +0,15 eingehalten; zwei der drei p99 liegen UNTER der Grundlinie, der dritte 0,63 ms darüber und damit im dokumentierten ±0,7-ms-Laufrauschen — wie die Bundle-Läufe 1,296/2,841 (B1), 1,613/2,934 (B2), 1,702–1,542 / 3,796–3,156 über vier Läufe (B3) und 1,531/1,508 / 3,006/3,225 (B4). **Die Referenzflotte fährt die Regel AUS**, wo `updateWeather`, `weatherCellAt` und `winterFrictionAt` auf ihrer ersten Zeile zurückkehren; die Per-Fahrzeug-Kosten mit Regel AN sind auf diesem Fixture NICHT gemessen und D-201 sagt das, und B5s AN-Kosten sind EIN Funktionsaufruf je Spieltag außerhalb der Regionenschleife) | D-200–D-204 |
 | M19 | 2026-08-09 | **3,446 / 3,705 ms p50** und **28,896 / 10,700 ms p99** (zwei Läufe nach allen vier Bundles) — **das ist AUSDRÜCKLICH KEINE Abnahmezahl** | **nicht abgenommen, und der Grund ist gemessen statt behauptet.** Die Maschine trug während des gesamten Meilensteins parallele Agenten (achtzehn `node`-Prozesse, 16 146 s kumulierte CPU beim Abschlusslauf), und das 8-ms-p99-Gate ist auf dem BASELINE-Commit ebenso rot. B4 misst deshalb erstmals den GANZEN Meilenstein gegen `5b0758a`, den Commit vor D-207, in zwei abwechselnden Paaren: M19 komplett 3,446/28,896 und 3,705/10,700 ms, pre-M19 3,594/15,924 und 3,496/9,829 — Mittel p50 3,576 gegen 3,545, also **+0,031 ms für alle drei zustandsberührenden Bundles zusammen** gegen die Budgetzeile +0,10 ms, bei p99 mit WECHSELNDEM Vorzeichen und einer Streuung 9,8–28,9 ms INNERHALB eines Commits (genau die Größe, die D-167 als unter Last um Vielfache aufgebläht beschreibt). Beide Seiten liegen bei 3,4–3,7 ms p50 gegen die Referenz 1,43–1,45, die Box also um rund Faktor 2,4 belastet. Die Bundle-Läufe: B1 vier A/B-Paare, Mittel p50 +0,10 ms; B2 vier Läufe, eigen 0,18 ms schneller; B3 zwei Paare, eigen 0,09 ms schneller; B4 null neue Per-Tick-Arbeit (ein Kommentar unter `src/`). **Die saubere Abnahmemessung auf der Referenzmaschine steht aus und ist das EINZIGE, was M19 offen lässt** — sie wird benannt statt erfunden | D-207, D-211, D-213, D-215 |
+| KI-Faden (D-216 … D-220) | 2026-08-11 | **keine Tick-Messung, und das ist die ehrliche Angabe** — D-218 und D-219 ändern je eine Handvoll Zeilen in einem Kommando-Guard bzw. einem Planer, D-220 ändert unter `src/` **null Byte**. Gemessen wurde stattdessen, was der Faden wirklich kostet und wirklich bringt; Rohwerte im Detailabsatz unten | **±0,00 ms per Konstruktion** (D-220: kein `src/`-Byte; D-218/D-219: keine Arbeit je Tick, nur eine zusätzliche Tabellenabfrage in einem Guard bzw. eine Besitzerfrage in einem Planer, der ohnehin nur alle `AI_RETRY_TICKS` läuft) | D-216, D-217, D-218, D-219, D-220 |
 
+KI-Faden-Zeile im Detail (D-220, 11.08.2026): **kein SAVE_VERSION-Bump, kein
+Snapshot-Byte, keine Atlas-Zelle, keine neue Konstante, kein i18n-Satz, kein
+RNG-Zug** — bei D-220 ist unter `src/` überhaupt nichts angefasst worden, und
+alle drei Pins stehen deshalb unverändert und **nachgeprüft statt vermutet**:
+Soak `45ccb46dc67e1fdf` bei 3 419 aufgezeichneten Kommandos, kanonischer
+Cross-OS-Pin `ddaacd4b970d31db`, Korpus-Manifest unverändert, SAVE_VERSION 30.
+
+Was diese Zeile stattdessen protokolliert, sind **Suite-Kosten und
+Suite-Ertrag**, weil genau das der Gegenstand des Bundles ist. Kosten
+(Ganzdatei-Wanduhr, eine Datei nach der anderen, dieselbe Maschine): ein
+Vierteljahrhundert des `aiGame`-Fixtures dauert je nach Maschinenlast
+**40–70 s**; die Datei geht von **93,9 s** (ein Seed) auf **106,8 s** (der
+Zwei-Seed-Sweep jedes Laufs) und auf **242,1 s** (vier Seeds plus
+Desync-Zwilling, der `soak`-Job) — also **+13 s je Lauf** und **+150 s je
+Push**. Suite-Stände: `tests/balance` **12 Dateien / 79 grün + 2 übersprungen**
+in 139 s (vorher 63 + 2), `npm run test:balance:full` **97 grün** in 292 s,
+`tests/unit` **109 Dateien / 1 455 Tests** (vorher 1 446), `tests/determinism` +
+`tests/corpus` **38**, `npm run test:soak` **4** auf unverändertem Hash.
+
+Ertrag, gemessen über die vier Seeds: Gesamtwert **974 542 €**, **sechs von
+zwölf abgewickelt, EINE von zwölf besitzt ein Fahrzeug**, neun von zwölf haben
+überhaupt gebaut. Das Refusal-Profil, das vorher niemand sehen konnte, zeigt
+**null** `BuildTrack|notYours` und **null** `BuildRailStop|needsTrack` (D-219
+bestätigt) bei gleichzeitig **952** `BuyRoadVehicle|needsDepot`, **589**
+`BuildRoadStop|occupied` und **584** `BuildRoad|notYours` auf EINER Firma —
+2 811 Ablehnungen gegen 71 angenommene Bauten, **97,5 % Ablehnungsquote in der
+Bau-Familie**, jetzt bei jedem Lauf gedruckt. Bänder: **keines verschoben**
+(Szenario 5 Road 1 173 298 → **1 156 463 €**, Rail **228 047 €**, Expansiv
+**−241 309 €**), und **SPEC.md 19.4s 5–25 Mio. werden weiterhin nicht erreicht
+— Faktor 4,3 darunter, ausdrücklich nicht behauptet** (D-158/D-116 bleiben die
+Begründung).
 M11-Zeile im Detail: **SAVE_VERSION v24** — genau EIN Bump für alle drei
 Stufen (Z5; Order-Grammatik-Stride, LineStore, Takt-Felder,
 AiState-Migration inkl. `AiProject.railTrains`); Snapshot-Layout-Bump
@@ -1098,6 +1130,25 @@ Schließt D-093, D-116 und D-121.
   positivem Wert (gemessen 90 230 € / 121 328 €), deren Stagnation
   bleibt der benannte nächste KI-Engpass. SPEC.md bleibt unangetastet
   (D-123).]*
+  *[Nachtrag 11.08.2026, D-220: Die zweite Hälfte dieser Zusage —
+  „`aiGame.spec.ts`-Assertions gehärtet" — war auf EINEN Seed gehärtet.
+  Jede Aussage, die diese Datei über die KI traf, war eine Eigenschaft von
+  Seed 4711; D-216 hat das gemessen, D-218 und D-219 haben je einen Defekt
+  gefunden, auf dem der grüne Ein-Seed-Lauf seit M8 saß. Der Abnahmelauf
+  ist jetzt ein **Vier-Seed-Sweep** (4711, 4713, 4712, 4714; zwei je Lauf,
+  alle vier im CI-`soak`-Job über dieselbe `IRON_VEINS_BALANCE_HASH=all`-
+  Weiche), und asserted wird nur, was auf ALLEN vier gilt. Ausdrücklich
+  NICHT mehr asserted, weil auf drei von vier Seeds rot: „höchstens eine
+  Firma wird abgewickelt" und „die reichste Firma hat gebaut". Dazu ein
+  **Refusal-Profil** (`tests/balance/aiRefusals.ts`) über den Outcome-Sink
+  von `World.step` — reiner Beobachter, null Sim-Änderung —, das genau die
+  Klasse Defekt sieht, die die Bilanz zum Jahr 25 nicht zeigt: eine KI, die
+  ein Kommando 8+ Mal ohne eine einzige Annahme absetzt (D-219 waren 253
+  und 1 265), und eine DEKLARIERTE Liste der (Kommando, Ablehnungsgrund)-
+  Paare, die die KI sammeln darf. Szenario 5 auf der reparierten KI neu
+  gemessen und NICHT verschoben: Road 1 173 298 → **1 156 463 €**, Rail
+  **228 047 €**, Expansiv **−241 309 € [abgewickelt]**, die letzten beiden
+  auf den Euro unverändert.]*
 * Neues Balance-Band: eine getaktete 2-Zug-Linie verdient innerhalb ±10 %
   einer ungetakteten, halbiert aber die Stationsbewertungs-Varianz.
   *[Nachtrag 07.08.2026, D-151/D-159: Gemessen am Lieferbahnhof 0,57,
@@ -1131,6 +1182,21 @@ Renewal-Compounding, Rail/Expansiv Solvenz-Floors — nachdem Probe und
 KI-Messung belegen, dass 5 Mio. auf dieser Ökonomie von keinem Spielstil
 erreichbar sind. Beide Bänder sind in der Suite grün; SPEC.md bleibt
 per D-123 unverändert.]*
+
+*[Nachtrag 11.08.2026 zum Fertig-wenn, D-220: „Szenario 5 grün" ist auf
+der reparierten KI (D-218/D-219) NEU GEMESSEN und das Band ist NICHT
+verschoben worden — Road 1 156 463 € tief im 0,8–3,2-Mio.-Band, Rail und
+Expansiv auf den Euro unverändert. **Die 5 Mio. werden weiterhin nicht
+erreicht und das wird nicht behauptet**: 1,16 Mio. ist Faktor 4,3 unter
+dem ursprünglichen Boden, D-116 bleibt auf dem D-158-Band geschlossen.
+Was sich geändert hat, ist die ANDERE KI-Zusage dieses Meilensteins:
+`aiGame` spielt seit D-220 vier Seeds statt einem und asserted nur noch,
+was auf allen vieren gilt — die Zeile „Solvenz-Zahl asserted statt
+narrated" war eine Eigenschaft von Seed 4711 und ist auf drei von vier
+Seeds rot. Zehn von zwölf Konkurrenten besitzen nach 25 Jahren kein
+Fahrzeug; der Sweep macht das bei jedem Push sichtbar, statt es einmal je
+Meilenstein zu entdecken. Das Schließen dieser Lücke ist M24s Sache und
+ausdrücklich nicht die von M11.]*
 
 ---
 

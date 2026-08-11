@@ -8,24 +8,65 @@ import {
   TICKS_PER_YEAR,
   TILE_PUBLIC,
 } from '../../src/sim/constants';
-import { PERSONALITY_COUNT, Personality } from '../../src/sim/ai/types';
+import { PERSONALITY_COUNT } from '../../src/sim/ai/types';
+import { VehicleState } from '../../src/sim/vehicles/VehicleStore';
 import { hashWorld, World } from '../../src/sim/World';
-import { hashTwin } from './determinism';
+import {
+  LOOP_ISSUES,
+  looping,
+  recordOutcomes,
+  refusalTrace,
+  undeclared,
+  type CompanyOutcomes,
+} from './aiRefusals';
+import { AI_SWEEP_SEEDS, aiSweepSeeds, hashTwin } from './determinism';
 
 /**
  * The acceptance criterion of M8: a twenty-five year game against three AI
  * companies runs through with no player input, and the competitors build
  * plausible, DISTINGUISHABLE networks.
  *
- * "Distinguishable" is the part worth testing, because it is the part that is
- * easy to fake: five personalities that all optimise the same number produce
- * five identical companies. So the run is measured - who laid rail, who laid
- * road, who borrowed - and the measurements are printed, the way the balancing
- * scenarios print theirs.
+ * **This file used to play ONE seed, and every claim it made about the AI was
+ * a property of that seed.** D-216 measured it: played at HEAD on 4712, 4713
+ * and 4714, two competitors wind up, nobody owns a vehicle after twenty-five
+ * years, and the richest company is the one that never built. D-218 and D-219
+ * each found a defect the green single-seed run had been sitting on top of for
+ * the whole project - a road run refused before it wrote its junctions, and a
+ * railway ordered on ground its owner was never allowed to build on, re-ordered
+ * every month for two and a half centuries of game time.
+ *
+ * So the acceptance run is a SEED SWEEP now, and the assertions below are the
+ * properties that hold on EVERY swept seed, measured rather than hoped for. A
+ * claim that holds on one of the four is a printed number in the trace and
+ * nothing more.
  */
 
 const YEARS = 25;
 const MAP_SIZE = 256;
+
+/**
+ * The swept seeds and the size of the small sweep live in `./determinism.ts`,
+ * beside the costly-twin split they share a switch with, and the coupling audit
+ * in `tests/unit/balanceDeterminism.spec.ts` holds both honest. The order of
+ * the seeds and the measured cost of a seed are argued there.
+ *
+ * In short, measured whole-file on this machine: the default run plays the
+ * first two seeds (`AI_SWEEP_DEFAULT_SIZE`) at **106.8 s** against the old
+ * single-seed file's **93.9 s**, and `IRON_VEINS_BALANCE_HASH=all` - the CI
+ * `soak` job of SPEC2 6.3, on every push, plus `npm run test:balance:full`
+ * locally - plays all four with the desync twin at **242.1 s**. Coverage of
+ * every swept seed is therefore per-push, not "eventually".
+ */
+function sweptSeeds(): readonly number[] {
+  return aiSweepSeeds();
+}
+
+/**
+ * The refusal net both AI scenarios share lives in `./aiRefusals.ts` - the
+ * declared table of rejections, the loop guard and their argument. It is one
+ * table because what the AI orders and is refused for is a property of the AI
+ * and not of the fixture it is measured in.
+ */
 
 interface Measured {
   readonly name: string;
@@ -34,6 +75,7 @@ interface Measured {
   readonly railTiles: number;
   readonly stations: number;
   readonly vehicles: number;
+  readonly noRoute: number;
   readonly lines: number;
   readonly loanCt: number;
   readonly valueCt: number;
@@ -51,8 +93,11 @@ function measure(world: World, companyId: number): Measured {
   }
 
   let vehicles = 0;
+  let noRoute = 0;
   for (let id = 0; id < world.vehicles.count; id++) {
-    if (world.vehicles.alive[id] === 1 && world.vehicles.ownerId[id] === companyId) vehicles++;
+    if (world.vehicles.alive[id] !== 1 || world.vehicles.ownerId[id] !== companyId) continue;
+    vehicles++;
+    if (world.vehicles.state[id] === VehicleState.NoRoute) noRoute++;
   }
 
   const company = world.companyOf(companyId);
@@ -64,6 +109,7 @@ function measure(world: World, companyId: number): Measured {
     railTiles,
     stations: world.stations.filter((station) => station.ownerId === companyId).length,
     vehicles,
+    noRoute,
     // Real line entities since M11 (E-06): a competitor's lines are counted
     // where everybody's are, in the world's own store.
     lines: world.lines.ownedBy(companyId).length,
@@ -73,7 +119,15 @@ function measure(world: World, companyId: number): Measured {
   };
 }
 
-function play(years: number, seed = 4_711): { world: World; queue: CommandQueue } {
+interface Run {
+  readonly seed: number;
+  readonly world: World;
+  readonly queue: CommandQueue;
+  readonly rows: readonly Measured[];
+  readonly outcomes: CompanyOutcomes;
+}
+
+function play(years: number, seed: number): Run {
   const world = World.create({
     seed,
     difficulty: Difficulty.Normal,
@@ -84,273 +138,275 @@ function play(years: number, seed = 4_711): { world: World; queue: CommandQueue 
     aiCompanies: 3,
   });
   const queue = new CommandQueue();
-  for (let tick = 0; tick < years * TICKS_PER_YEAR; tick++) world.step(queue, null);
-  return { world, queue };
+
+  // A pure observer over `World.step`'s own outcome sink: it reads what the
+  // command layer already decided and writes nothing back, so the world it
+  // watches is the world the soak fixture replays.
+  const { outcomes, sink } = recordOutcomes();
+
+  for (let tick = 0; tick < years * TICKS_PER_YEAR; tick++) world.step(queue, sink);
+  const rows = world.ai.map((state) => measure(world, state.companyId));
+  return { seed, world, queue, rows, outcomes };
 }
 
 /**
- * The twenty-five year world is played ONCE and shared: every long test in
- * this file reads it and none of them writes, and replaying the same
- * deterministic quarter century three times was most of the suite's wall
- * time.
+ * Each swept quarter century is played ONCE and shared: every test in this file
+ * reads its runs and none of them writes, and replaying the same deterministic
+ * quarter century per assertion was most of the suite's wall time.
  */
-let sharedRun: { world: World; queue: CommandQueue } | null = null;
-function quarterCentury(): { world: World; queue: CommandQueue } {
-  sharedRun ??= play(YEARS);
-  return sharedRun;
+const played = new Map<number, Run>();
+function swept(seed: number): Run {
+  let run = played.get(seed);
+  if (run === undefined) {
+    run = play(YEARS, seed);
+    played.set(seed, run);
+  }
+  return run;
+}
+
+/** The recorded seed - the soak fixture's own game, and the twin's world. */
+function quarterCentury(): Run {
+  return swept(AI_SWEEP_SEEDS[0]!);
 }
 
 /**
- * The floors of M11 stage C2 (DECISIONS.md D-156), in cents, pinned under
- * the measured run so a regression of the kind that stage fixed - a
- * personality that stops building, a renewal that eats a company, a loan
- * churn - goes red by name rather than shifting a printed number nobody
- * reads. Measured on this seed at M11: road solvent at 544,857 EUR with a
- * six-vehicle line, rail alive at -15,142 EUR (its train frozen by the
- * braking defect D-156 names), the town network wound up at 96,512 EUR.
+ * Everything a company can possibly lose: what it started with plus the credit
+ * line every company may draw whatever its balance sheet says. Below this line
+ * money came from nowhere, which is a defect and not a bad run (D-211).
  *
- * **The rail floor was re-banded in SPEC2 M19 bundle 1 (D-207), with both
- * measurements taken on the same machine an hour apart.** The passenger trade
- * became two fare classes, the towns of this generated map carry commercial
- * zones, and the ROAD company - which runs the bus lines - therefore earns the
- * business premium, builds ten more tiles of road (345 -> 355) and finishes at
- * 550,942 EUR instead of 544,857. The three competitors share one world, so
- * from there every later decision is a different decision: this run's rail
- * company buys and writes off one train (~144,000 EUR of depreciated asset)
- * that the M11 run never bought, and ends at -159,142 EUR instead of -15,142.
- *
- * What the floor is FOR is unchanged and still holds: at both figures the rail
- * personality is the stagnant husk D-158 names as an open bottleneck - no
- * line, no vehicle, two stations - and neither run is a company that stopped
- * building.
- *
- * **SPEC2 M19 bundle 2 moved it a SECOND time, and stopped pinning it to a
- * run** (D-211). The gravity rule re-weights where a town's passengers are
- * going, the road company's fourteen-stop bus line carries different traffic
- * because of it, the towns on that line therefore grow at different rates -
- * and the rail company picks a different project out of the world that
- * results. Measured back to back in two clean worktrees at the same commit,
- * differing only in the three files of the gravity rule: rail
- * **-159,142 -> -509,219 EUR** (95 -> 167 tiles of track, 2 -> 4 stations, a
- * line where it had none, and wound up where it was merely insolvent), road
- * 550,942 -> 536,615 EUR, town network 95,788 [wound up] -> 100,763 alive.
- * **The rail company has ZERO vehicles in BOTH runs**, so the gravity rule
- * cannot have reached one cent of its revenue: the whole of the difference is
- * a bigger railway bought out of the same capital and the same credit line.
- *
- * So the floor becomes the thing every version of this comment has described
- * it as - the company's total exposure, its starting capital plus the credit
- * line every company can draw whatever its balance sheet says. Below that
- * line, money came from nowhere. **That is a LOOSENING and it is said plainly
- * rather than dressed up**: a number set one and a half times under a chaotic
- * twenty-five year run needs re-banding every time the shared world reshuffles
- * which husk dies, which is twice in one milestone now, and a band that moves
- * with every bundle guards nothing. What the old number caught that the new
- * one does not - a personality that stops BUILDING - is asserted directly
- * below instead, where it can be read.
- *
- * **D-216 reshuffled it a third time, and the ROAD row goes the same way.**
- * Every generated town now lays only the streets its houses need, so the
- * public network a company leans on falls 56 % (9,962 -> 4,359 road tiles over
- * five seeds and 200 towns) and each connection pays for its own last mile.
- * Measured back to back on this machine, baseline in a stash at the same
- * commit: Seeblick (road) lays 345 -> **546** tiles of its own road, builds
- * 14 -> 19 stations, draws its credit line to the limit and finishes
- * 538,469 -> **-157,183 EUR [wound up]**; Rautenberg (rail) stops building
- * altogether (95 rail tiles and 2 stations -> none) and therefore KEEPS its
- * capital, 20,792 -> 450,000; Dornbach (town network) 101,636 -> 147,413.
- * Exactly one company winds up in both runs and two finish solvent in both -
- * the M8 acceptance criterion is unmoved, only WHICH husk dies is, which this
- * comment has said twice already is not something to pin.
- *
- * The counter-evidence that says the change did not break the road AI is in
- * `aiCompany.spec.ts`: the SAME personality on its own 512-map world goes
- * 978,528 -> 1,173,298 EUR and doubles its fleet. What Seeblick ran into is
- * the AI hole D-158 already names - it spends its capital on way and stations
- * and has nothing left to crew them with - and that is M11's to fix, named in
- * the report rather than tuned away in the generator.
- *
- * **And the figures below were a property of SEED 4711, which D-216 measured
- * rather than assumed.** The identical fixture, played at HEAD with the
- * generator untouched, on the three seeds next to this one:
+ * It replaced a set of per-personality figures that had been re-banded three
+ * times in one milestone as the shared world reshuffled which husk dies, and
+ * the reason it replaced them stands: a band that moves with every bundle
+ * guards nothing. What the old numbers caught that an exposure bound cannot - a
+ * personality that stops BUILDING - is asserted directly, per seed, below.
+ */
+const TOTAL_EXPOSURE_CT = START_CAPITAL_CT[Difficulty.Normal]! + LOAN_MIN_LIMIT_CT;
+
+/**
+ * **The measured sweep at D-220's HEAD** - the trace the assertions below were
+ * written from, printed by the first test on every run so it can never rot into
+ * a quoted number nobody re-measured. Format: personality, value EUR,
+ * [X] = wound up, l lines / v vehicles / s stations.
  *
  * ```
- * 4711  p0    20,792 l0 v0 s2  | p4  101,636 l0 v0 s16 | p1 538,469 l1 v6 s14
- * 4712  p4  -150,281 [X] s29   | p2 -161,432 [X] s2    | p0 415,000 l0 v0 s0
- * 4713  p4  -200,910 [X] s29   | p0 -650,744 [X] s3    | p3 500,000 l0 v0 s0
- * 4714  p4  -129,117 [X] s29   | p2 -477,036 [X] s3    | p3 500,000 l0 v0 s0
- * ```
- *
- * On three of the four, TWO competitors wind up, no competitor owns a vehicle
- * after twenty-five years, and the richest company is the one that never built
- * anything - every assertion in this block fails, at HEAD, with nothing of
- * D-216 in the tree. So "the winner is a real network" was never a property of
- * the simulation; it was a property of one lucky sample, and D-216 moved that
- * sample onto the pile where its neighbours already sat. The block is loosened
- * to what the four runs actually share, the sweep is recorded here as the
- * reason, and **the defect it stops covering up is named**: the AI builds
- * networks it cannot crew. That is M11's, it is D-158's open bottleneck, and
- * it is not something a town generator should be shaped around.
- *
- * **The sweep above no longer reproduces, and D-218 re-recorded it.** That
- * block was measured at the commit BEFORE D-216 landed, which D-216 says of
- * itself; quoting it as the current state of the four seeds is what the next
- * re-banding must not do. Played at D-218's HEAD, the same fixture on the same
- * four seeds - and this is a MEASUREMENT, not a band; not one number below is
- * asserted:
- *
- * ```
- * 4711  p0  247,067     l0 v0 s0  | p4  147,155     l0 v0 s11 | p1  576,736     l1 v6 s19
- * 4712  p4 -168,859 [X] l0 v0 s29 | p2  123,894     l1 v1 s2  | p0 -138,039 [X] l0 v0 s2
+ * 4711  p0  500,000     l0 v0 s0  | p4  147,155     l0 v0 s11 | p1  576,736     l1 v6 s19
  * 4713  p4 -290,949 [X] l0 v0 s31 | p0 -256,082 [X] l0 v0 s2  | p3  500,000     l0 v0 s0
+ * 4712  p4 -168,859 [X] l0 v0 s29 | p2 -279,226 [X] l1 v0 s3  | p0   58,097     l0 v0 s2
  * 4714  p4 -145,573 [X] l0 v0 s29 | p2 -166,757 [X] l1 v0 s2  | p3  500,000     l0 v0 s0
  * ```
  *
- * D-218 fixed a `buildRoad` defect - a run that laid no new tile was refused
- * before it wrote the junction it named, so a quarter of the AI's own roads
- * never joined and its buses lived in `NoRoute`. Seed 4711's road company goes
- * -157,183 [wound up] -> **576,736 with six vehicles**, which is why this file
- * is comfortably green again; living vehicles across the twelve competitors go
- * 1 -> 7. What it does NOT fix, and what the assertions below therefore still
- * have to tolerate: ten of twelve competitors own no vehicle after twenty-five
- * years, and **on seed 4713 `woundUp.length <= 1` fails, before this change and
- * after it**. This fixture plays 4711 alone, and that is the whole reason it is
- * green. The two causes left are named in D-218 - a closed line strands its
- * stations and its road, and nothing asks whether a line will PAY - and each
- * wants its own bundle with its own trace.
+ * Total value 974,542 EUR, **six of twelve wound up, ONE of twelve owns a
+ * vehicle**, nine of twelve took the field at all, three hold a line. That is
+ * the honest state of the AI after D-218 and D-219, and the assertions are cut
+ * to it rather than to the seed that flatters it:
+ *
+ *  - **holds on all four**: at least one competitor alive; the richest
+ *    competitor solvent; somebody built a network; everybody who took the field
+ *    still owns it; everybody inside the exposure bound; three distinct
+ *    personalities producing distinguishable networks; no living vehicle
+ *    stranded in `NoRoute`; no company looping on a command it is never
+ *    allowed; no undeclared rejection.
+ *  - **does NOT hold, and is therefore not asserted**: `woundUp.length <= 1`
+ *    (red on 4712, 4713 and 4714), "the richest company built something" (red
+ *    on 4713 and 4714, where the richest is the conservative company that never
+ *    left the yard with its 500,000 intact), and any claim that a competitor
+ *    crews what it builds - ten of twelve do not, which is what the
+ *    sweep-wide floor below says out loud instead of hiding.
  */
-const VALUE_FLOOR_CT: ReadonlyMap<number, number> = new Map([
-  [Personality.Rail, -(START_CAPITAL_CT[Difficulty.Normal]! + LOAN_MIN_LIMIT_CT)],
-  [Personality.Road, -(START_CAPITAL_CT[Difficulty.Normal]! + LOAN_MIN_LIMIT_CT)],
-  [Personality.TownNetwork, 0],
-]);
-
-describe('M8 acceptance: twenty-five years against three competitors', () => {
-  it('runs through without the player touching anything', () => {
-    const { world } = quarterCentury();
-
-    expect(world.date.year).toBe(1950 + YEARS);
-    expect(world.companies.length).toBe(4);
-    expect(world.ai.length).toBe(3);
-
-    const rows = world.ai.map((state) => measure(world, state.companyId));
-    for (const row of rows) {
-      console.log(
-        `${row.name} (personality ${row.personality}): ` +
-          `${row.lines} lines, ${row.railTiles} rail, ${row.roadTiles} road, ` +
-          `${row.stations} stations, ${row.vehicles} vehicles, ` +
-          `loan ${Math.round(row.loanCt / 100)}, value ${Math.round(row.valueCt / 100)}` +
-          (row.bankrupt ? ' [wound up]' : ''),
-      );
+describe('M8 acceptance: a quarter century against three competitors, swept over seeds', () => {
+  it('reports what every swept seed measured', () => {
+    for (const seed of sweptSeeds()) {
+      const run = swept(seed);
+      expect(run.world.date.year).toBe(1950 + YEARS);
+      for (const row of run.rows) {
+        console.log(
+          `seed ${seed} ${row.name} (personality ${row.personality}): ` +
+            `${row.lines} lines, ${row.railTiles} rail, ${row.roadTiles} road, ` +
+            `${row.stations} stations, ${row.vehicles} vehicles, ` +
+            `loan ${Math.round(row.loanCt / 100)}, value ${Math.round(row.valueCt / 100)}` +
+            (row.bankrupt ? ' [wound up]' : ''),
+        );
+      }
+      // The refusal profile is printed beside the balance sheet, because it is
+      // the half of the trace that was invisible for the whole project, and
+      // because the two guards below read it: a scenario that starts collecting
+      // a new refusal should be readable in the log before it is red.
+      for (const line of refusalTrace(run.outcomes)) console.log(`seed ${seed} refused: ${line}`);
     }
 
-    // Somebody built something. A twenty-five year game in which no competitor
-    // ever laid a rail is a decision cycle that does not work, however tidy the
-    // code is.
-    const builders = rows.filter((row) => row.stations > 0);
-    expect(builders.length).toBeGreaterThan(0);
+    const rows = sweptSeeds().flatMap((seed) => swept(seed).rows);
+    const withFleet = rows.filter((row) => row.vehicles > 0).length;
+    console.log(
+      `sweep: ${rows.length} competitors over ${sweptSeeds().length} seeds, ` +
+        `${rows.filter((row) => row.bankrupt).length} wound up, ` +
+        `${rows.filter((row) => row.stations > 0).length} took the field, ` +
+        `${withFleet} own a vehicle, ` +
+        `total value ${Math.round(rows.reduce((sum, row) => sum + row.valueCt, 0) / 100)} EUR`,
+    );
   });
 
-  it('holds the measured solvency count and the per-personality value floors', () => {
-    // ASSERTED, not narrated (M11 stage C2, D-156): the printed table above
-    // stayed green through every regression this stage dug out, because a
-    // printed number fails nobody's build.
-    const { world } = quarterCentury();
-    const rows = world.ai.map((state) => measure(world, state.companyId));
+  for (const seed of sweptSeeds()) {
+    describe(`seed ${seed}`, () => {
+      it('runs through without the player touching anything, and somebody builds', () => {
+        const { world, rows } = swept(seed);
 
-    // Solvency: at most one competitor may be wound up, and at least two
-    // must finish the quarter century alive. WHICH one dies is deliberately
-    // not asserted - it has been the town network and it is the rail company
-    // since the M19 gravity rule reshuffled the shared world (D-211) - but
-    // that at most one does is the acceptance criterion of M8.
-    const woundUp = rows.filter((row) => row.bankrupt);
-    expect(woundUp.length).toBeLessThanOrEqual(1);
-    expect(rows.length - woundUp.length).toBeGreaterThanOrEqual(2);
+        expect(world.date.year).toBe(1950 + YEARS);
+        expect(world.companies.length).toBe(4);
+        expect(world.ai.length).toBe(3);
 
-    // Value floors per personality: the exposure bound (see VALUE_FLOOR_CT).
-    for (const row of rows) {
-      const floor = VALUE_FLOOR_CT.get(row.personality as Personality);
-      if (floor === undefined) continue;
-      expect(row.valueCt).toBeGreaterThanOrEqual(floor);
-    }
+        // A twenty-five year game in which no competitor ever laid a rail is a
+        // decision cycle that does not work, however tidy the code is - and on
+        // every swept seed at least one competitor builds a real network, not
+        // merely a tile.
+        expect(rows.some((row) => row.stations >= 2)).toBe(true);
+      });
 
-    // And the thing the old rail number caught that an exposure bound cannot:
-    // a personality that stops BUILDING. This is the regression M11 stage C2
-    // dug out (D-156) and it is now asserted rather than implied by a figure -
-    // every competitor that took the field still owns a network at the end.
-    for (const row of rows) {
-      if (row.stations === 0) continue;
-      expect(row.stations, `${row.name} kept its stations`).toBeGreaterThanOrEqual(2);
-      expect(row.roadTiles + row.railTiles, `${row.name} kept its way`).toBeGreaterThan(0);
-    }
+      it('leaves at least one competitor solvent, inside its own exposure', () => {
+        const { rows } = swept(seed);
 
-    // The richest competitor is at least not a wound-up one, somebody took the
-    // field, and a company that still has a fleet works a network with it
-    // rather than the degenerate pile the 4.05M note in the project history
-    // warns about. What this block used to demand of the RICHEST company - a
-    // line, two vehicles, two stations - held on seed 4711 and on none of its
-    // three neighbours, at HEAD; the sweep is in the comment above
-    // VALUE_FLOOR_CT and the AI defect it was covering is named there.
-    const best = rows.reduce((a, b) => (b.valueCt > a.valueCt ? b : a));
-    expect(best.bankrupt).toBe(false);
-    expect(rows.some((row) => row.stations >= 2)).toBe(true);
-    for (const row of rows) {
-      if (row.vehicles === 0) continue;
-      expect(row.stations, `${row.name} works stations`).toBeGreaterThanOrEqual(2);
-      expect(row.vehicles, `${row.name} fleet density`).toBeLessThanOrEqual(row.stations * 6);
-    }
+        // Not "at most one dies" - that was seed 4711's luck and it is red on
+        // the other three. What must hold is that the quarter century does not
+        // wipe the field, and that the richest survivor is a survivor.
+        const woundUp = rows.filter((row) => row.bankrupt);
+        expect(rows.length - woundUp.length).toBeGreaterThanOrEqual(1);
+
+        const best = rows.reduce((a, b) => (b.valueCt > a.valueCt ? b : a));
+        expect(best.bankrupt, `${best.name} is the richest and was wound up`).toBe(false);
+
+        for (const row of rows) {
+          expect(row.valueCt, `${row.name} inside its exposure`).toBeGreaterThanOrEqual(
+            -TOTAL_EXPOSURE_CT,
+          );
+        }
+      });
+
+      it('keeps the network of every competitor that took the field', () => {
+        // The regression M11 stage C2 dug out (D-156): a personality that
+        // stops BUILDING, and a company that prunes itself back to nothing.
+        for (const row of swept(seed).rows) {
+          if (row.stations === 0) continue;
+          expect(row.stations, `${row.name} kept its stations`).toBeGreaterThanOrEqual(2);
+          expect(row.roadTiles + row.railTiles, `${row.name} kept its way`).toBeGreaterThan(0);
+        }
+      });
+
+      it('builds networks that can be told apart', () => {
+        const { rows } = swept(seed);
+
+        // Three personalities drawn from five without replacement, which is the
+        // whole reason personalities exist.
+        const personalities = new Set(rows.map((row) => row.personality));
+        expect(personalities.size).toBe(rows.length);
+        for (const row of rows) {
+          expect(row.personality).toBeGreaterThanOrEqual(0);
+          expect(row.personality).toBeLessThan(PERSONALITY_COUNT);
+        }
+
+        // And the networks themselves differ. Two companies with identical tile
+        // counts, station counts and fleet sizes would mean the personality is
+        // a label rather than a behaviour.
+        const shapes = new Set(
+          rows.map((row) => `${row.railTiles}:${row.roadTiles}:${row.stations}`),
+        );
+        expect(shapes.size).toBeGreaterThan(1);
+      });
+
+      it('runs the fleet it owns, and strands none of it', () => {
+        for (const row of swept(seed).rows) {
+          if (row.vehicles === 0) continue;
+          // A fleet works a network rather than being the degenerate pile the
+          // 4.05M note in the project history warns about.
+          expect(row.stations, `${row.name} works stations`).toBeGreaterThanOrEqual(2);
+          expect(row.vehicles, `${row.name} fleet density`).toBeLessThanOrEqual(row.stations * 6);
+          // D-218's own damage, read at the end of the run: buses whose stops
+          // were never joined by road lived their whole lives in NoRoute. Six
+          // living vehicles across the sweep is all this can see today, and it
+          // gets stronger exactly as the AI gets better at crewing.
+          expect(row.noRoute, `${row.name} has vehicles with no route`).toBe(0);
+        }
+      });
+
+      it('never loops on a command it is never allowed to issue', () => {
+        // **The net that was missing.** D-219's rail company issued 253
+        // BuildTrack and 1,265 BuildRailStop over two hundred and fifty game
+        // months and had not one of them accepted; the balance sheet at year
+        // twenty-five showed a tidy husk and every assertion in this file was
+        // green. A kind tried LOOP_ISSUES times without a single accept is a
+        // planner ordering what the command layer exists to refuse.
+        const loops = looping(swept(seed).outcomes);
+        expect(loops, `commands ordered ${LOOP_ISSUES}+ times and never once accepted`).toEqual([]);
+      });
+
+      it('collects only rejections this project has looked at and named', () => {
+        expect(
+          undeclared(swept(seed).outcomes),
+          'a rejection nobody has diagnosed - measure why the AI orders it, then fix it or ' +
+            'add it to DECLARED_REFUSALS with the reason it is tolerated',
+        ).toEqual([]);
+      });
+
+      it('plays by the same rules the player does', () => {
+        const { world } = swept(seed);
+
+        for (const state of world.ai) {
+          const company = world.companyOf(state.companyId);
+          // No resource bonus: a competitor's money came from its own revenue
+          // and its own credit line, so it can be overdrawn and wound up.
+          expect(company.cashCt + company.fixedAssetsCt).toBeLessThan(1_000_000_000_00);
+          expect(company.id).toBeGreaterThan(0);
+        }
+
+        // Everything a competitor built is marked as its own on the map,
+        // exactly as a player's is - which is also what a council reads as
+        // noise.
+        const map = world.map;
+        let ownedByAi = 0;
+        for (let tile = 0; tile < map.tileCount; tile++) {
+          const owner = map.owner[tile]!;
+          if (owner !== TILE_PUBLIC && owner > 0) ownedByAi++;
+        }
+        console.log(`seed ${seed}: tiles owned by competitors: ${ownedByAi}`);
+        expect(ownedByAi).toBeGreaterThan(0);
+      });
+    });
+  }
+
+  it('has, somewhere in the sweep, a competitor that crews what it builds', () => {
+    // **The floor is one company in twelve and it is stated as such.** A
+    // simulation in which no competitor anywhere runs a line is a decision
+    // cycle that does not work; that this is the FLOOR rather than the
+    // measurement is the AI's largest open defect, named in D-218 and D-219
+    // and owned by M24. Raising it is what closing that defect will look like.
+    const rows = sweptSeeds().flatMap((seed) => swept(seed).rows);
+    const crewed = rows.filter((row) => row.lines >= 1 && row.vehicles >= 2);
+    expect(
+      crewed.length,
+      'no competitor on any swept seed runs a line with a fleet',
+    ).toBeGreaterThanOrEqual(1);
   });
 
-  it('builds networks that can be told apart', () => {
-    const { world } = quarterCentury();
-    const rows = world.ai.map((state) => measure(world, state.companyId));
-
-    // Every competitor got its own personality - three drawn from five without
-    // replacement, which is the whole reason personalities exist.
-    const personalities = new Set(rows.map((row) => row.personality));
-    expect(personalities.size).toBe(rows.length);
-    for (const row of rows) {
-      expect(row.personality).toBeGreaterThanOrEqual(0);
-      expect(row.personality).toBeLessThan(PERSONALITY_COUNT);
-    }
-
-    // And the networks themselves differ. Two companies with identical tile
-    // counts, station counts and fleet sizes would mean the personality is a
-    // label rather than a behaviour.
-    const shapes = new Set(rows.map((row) => `${row.railTiles}:${row.roadTiles}:${row.stations}`));
-    expect(shapes.size).toBeGreaterThan(1);
-  });
-
-  it('plays by the same rules the player does', () => {
-    const { world } = quarterCentury();
-
-    for (const state of world.ai) {
-      const company = world.companyOf(state.companyId);
-      // No resource bonus: a competitor's money came from its own revenue and
-      // its own credit line, so it can be overdrawn and it can be wound up.
-      expect(company.cashCt + company.fixedAssetsCt).toBeLessThan(1_000_000_000_00);
-      expect(company.id).toBeGreaterThan(0);
-    }
-
-    // Everything a competitor built is marked as its own on the map, exactly as
-    // a player's is - which is also what a council reads as noise.
-    const map = world.map;
-    let ownedByAi = 0;
-    for (let tile = 0; tile < map.tileCount; tile++) {
-      const owner = map.owner[tile]!;
-      if (owner !== TILE_PUBLIC && owner > 0) ownedByAi++;
-    }
-    console.log(`tiles owned by competitors: ${ownedByAi}`);
+  it('seed 4711 stays the run the soak fixture recorded', () => {
+    // The one deliberately seed-SPECIFIC block left, and it is labelled: this
+    // seed is what `tests/soak` replays and what the desync twin below hashes,
+    // so a change that quietly makes it worse should be a red test here and not
+    // only a re-recorded fixture. Nothing in it is claimed of the simulation -
+    // it is red on 4713 by construction.
+    const { rows } = quarterCentury();
+    expect(rows.filter((row) => row.bankrupt).length, 'seed 4711: nobody wound up').toBe(0);
+    expect(
+      rows.some((row) => row.lines >= 1 && row.vehicles >= 2),
+      'seed 4711: the road company still runs its line',
+    ).toBe(true);
   });
 
   it('is reproducible: the same seed plays the same game', () => {
-    const first = play(5);
-    const second = play(5);
+    const first = play(5, AI_SWEEP_SEEDS[0]!);
+    const second = play(5, AI_SWEEP_SEEDS[0]!);
     expect(hashWorld(second.world)).toBe(hashWorld(first.world));
   });
 
   it('leaves every command it issued in the replay log', () => {
-    const { queue } = play(3);
+    const { queue } = play(3, AI_SWEEP_SEEDS[0]!);
 
     // The player did nothing, so every command in the log is a competitor's -
     // and there IS a log, which is what "uses the same commands as the player"
@@ -359,14 +415,19 @@ describe('M8 acceptance: twenty-five years against three competitors', () => {
     for (const envelope of queue.log) expect(envelope.companyId).toBeGreaterThan(0);
   });
 
-  // The quarter century itself, not the five-year probe above: costly enough
-  // to be one of the two scenarios the default run skips (see
-  // ./determinism.ts), and covered on every push by the CI `soak` job and by
-  // the long-run fixture, which replays exactly this game against the
-  // sixteen hashes its checkpoint ring committed to.
+  // The quarter century itself, not the five-year probe above: costly enough to
+  // be one of the two scenarios the default run skips (see ./determinism.ts),
+  // and covered on every push by the CI `soak` job and by the long-run fixture,
+  // which replays exactly this game against the sixteen hashes its checkpoint
+  // ring committed to.
+  //
+  // The twin is deliberately ONE world - the recorded seed - and not the whole
+  // sweep, for `hardWinter`'s reason (D-203): a desync shows up in one world as
+  // well as in four, and four replayed quarter centuries would put the full job
+  // over its budget for evidence it already has.
   hashTwin(
     'aiGame',
     () => [quarterCentury().world],
-    () => [play(YEARS).world],
+    () => [play(YEARS, AI_SWEEP_SEEDS[0]!).world],
   );
 });

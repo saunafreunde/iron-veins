@@ -37,6 +37,12 @@ import { hashWorld, type World } from '../../src/sim/World';
  *    `IRON_VEINS_BALANCE_HASH=all` and twins all nine, on every push. Coverage
  *    of every scenario is therefore per-push, not "eventually".
  *
+ * **The same switch carries `aiGame`'s seed sweep since D-220.** That file used
+ * to play one seed and every claim it made about the AI was a property of that
+ * seed; it plays four now, at 40-70 s each, and the same argument applies for
+ * the same reason - two seeds on every run, all four in the `soak` job. The
+ * split and its measurements are below; `fullBalanceMode()` is what both read.
+ *
  * The two costly ones are not unguarded in the meantime either: the long-run
  * soak fixture re-simulates a full twenty-five year AI game and compares it
  * against twenty-six committed hashes on every push, which is the same
@@ -75,17 +81,69 @@ export type BalanceScenario = (typeof BALANCE_SCENARIOS)[number];
  */
 export const COSTLY_SCENARIOS: readonly BalanceScenario[] = ['aiGame', 'aiCompany'];
 
-/** The environment variable that asks for every twin. */
-export const FULL_HASH_ENV = 'IRON_VEINS_BALANCE_HASH';
+/**
+ * The environment variable that asks for the whole expensive half of the
+ * balance suite.
+ *
+ * Its NAME is historical - it was born switching hash twins on - and it is kept
+ * because CI, `tools/run-full-balance.mjs` and every developer's shell alias
+ * already say it. What it means is broader since D-220: this variable is
+ * "run the full balance job", and the two things that hang off it are the
+ * costly desync twins above and `aiGame`'s four-seed sweep, which is the other
+ * quarter-century-per-seed cost in the suite. One switch, because CI's `soak`
+ * job is one job.
+ */
+export const FULL_BALANCE_ENV = 'IRON_VEINS_BALANCE_HASH';
 
-/** True when every scenario is to be twinned - the CI `soak` job's mode. */
-export function fullHashMode(): boolean {
-  return process.env[FULL_HASH_ENV] === 'all';
+/**
+ * True when this run is the full balance job - every twin, and every swept
+ * seed. The CI `soak` job's mode, and `npm run test:balance:full` locally.
+ */
+export function fullBalanceMode(): boolean {
+  return process.env[FULL_BALANCE_ENV] === 'all';
 }
 
 /** Whether this run twins `scenario`. */
 export function twinRuns(scenario: BalanceScenario): boolean {
-  return fullHashMode() || !COSTLY_SCENARIOS.includes(scenario);
+  return fullBalanceMode() || !COSTLY_SCENARIOS.includes(scenario);
+}
+
+/**
+ * The seeds `aiGame` sweeps, and the order is deliberate (D-220).
+ *
+ * 4711 is the seed the whole project's AI evidence is recorded on - the soak
+ * fixture replays exactly that game (D-190) - and it is the one seed on which
+ * every claim `aiGame` made from M8 to D-219 was true. **4713 is second because
+ * it is the counterexample**: two of its three competitors wind up, the richest
+ * built nothing at all, and `woundUp.length <= 1` is red on it before D-218 and
+ * after it. A run that plays only the lucky seed learns nothing, so the small
+ * sweep is the recorded seed AND the seed that breaks it.
+ *
+ * They live here rather than in the spec because this is the module that says
+ * what the full balance job costs and what it therefore buys, and because the
+ * coupling audit in `tests/unit/balanceDeterminism.spec.ts` holds the split
+ * honest from the outside.
+ */
+export const AI_SWEEP_SEEDS: readonly number[] = [4_711, 4_713, 4_712, 4_714];
+
+/**
+ * How many of them every run plays.
+ *
+ * **Measured on this machine, one file at a time, and the spread is real**: one
+ * quarter century of the `aiGame` fixture takes 40-70 s depending on what else
+ * the box is running. Whole-file wall clock, three runs on the same afternoon:
+ * the old single-seed file **93.9 s**, the two-seed sweep **106.8 s**, the
+ * four-seed sweep with the desync twin **242.1 s** (160.6 s of it the four
+ * quarter centuries, 61.6 s the twin's replay). So the small sweep costs about
+ * **+13 s on every run** and the full one about **+150 s on every push** - the
+ * same trade as the costly twins above, settled the same way and with the same
+ * switch.
+ */
+export const AI_SWEEP_DEFAULT_SIZE = 2;
+
+/** The seeds this run sweeps: the first two, or all of them in the full job. */
+export function aiSweepSeeds(): readonly number[] {
+  return fullBalanceMode() ? AI_SWEEP_SEEDS : AI_SWEEP_SEEDS.slice(0, AI_SWEEP_DEFAULT_SIZE);
 }
 
 /**

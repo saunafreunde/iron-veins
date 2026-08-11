@@ -45,14 +45,14 @@ no entry below. A number may appear under several topics.
 - **Balancing & scenarios:** D-038, D-039, D-040, D-041, D-066, D-087, D-088,
   D-116, D-151, D-152, D-156, D-158, D-159, D-187, D-190, D-194, D-195,
   D-196, D-197, D-198, D-199, D-200, D-203, D-204, D-207, D-211, D-213,
-  D-215, D-216
+  D-215, D-216, D-220
 - **Vehicles & fleet:** D-043, D-044, D-045, D-068, D-076, D-089, D-093,
   D-096, D-142, D-143, D-145, D-146, D-155, D-157, D-171, D-174, D-181, D-185,
   D-201, D-207
 - **Water & air:** D-094, D-095, D-096, D-097, D-098, D-099
 - **Competitors, AI & tenders:** D-107, D-108, D-109, D-115, D-116, D-121,
   D-122, D-147, D-152, D-153, D-154, D-155, D-156, D-158, D-216, D-218,
-  D-219
+  D-219, D-220
 - **Rendering & art:** D-013, D-014, D-033, D-035, D-112, D-117, D-125, D-127,
   D-136, D-140, D-160, D-161, D-162, D-163, D-164, D-165, D-166, D-169, D-170,
   D-171, D-172, D-173, D-174, D-175, D-177, D-179, D-186, D-202, D-205, D-206,
@@ -72,7 +72,7 @@ no entry below. A number may appear under several topics.
   D-167, D-183, D-186, D-188, D-189, D-190, D-191, D-192, D-193, D-194,
   D-195, D-196, D-197, D-198, D-199, D-200, D-201, D-202, D-203, D-204,
   D-205, D-207, D-206, D-208, D-209, D-210, D-212, D-213, D-215, D-216,
-  D-217, D-219
+  D-217, D-219, D-220
 - **Process & specification:** D-070, D-123, D-129, D-133, D-138, D-140,
   D-185, D-191, D-197, D-198, D-199, D-203, D-204, D-205, D-206, D-215
 
@@ -11237,3 +11237,160 @@ candidate on it loses money - seed 4713's conservative company issues ZERO
 commands in twenty-five years and keeps exactly its starting capital. D-109's
 compounding gap is still open, and on these maps it is now the bus economics
 and nothing else.
+
+---
+
+## The AI's acceptance net: one seed was never a measurement (2026-08-11)
+
+### D-220 The AI acceptance run is a seed sweep, and what it could not see is a refusal profile
+
+**`tests/balance/aiGame.spec.ts` asserted on ONE seed for the whole project, and
+every claim it made about the AI was a property of that seed.** D-216 measured
+that and said so; D-218 and D-219 then each found a defect the green single-seed
+run had been sitting on top of since M8. This bundle closes the hole the two of
+them walked through, and it changes no simulation code at all: `src/` is
+untouched.
+
+**The sweep.** `aiGame` plays four seeds now - `AI_SWEEP_SEEDS = [4711, 4713,
+4712, 4714]`, defined in `tests/balance/determinism.ts` beside the costly-twin
+split it shares a switch with. **The order is the argument**: 4711 is the seed
+the whole project's AI evidence is recorded on (the soak fixture replays exactly
+that game, D-190) and the one seed on which every old claim was true; **4713 is
+second because it is the counterexample** - two of its three competitors wind up,
+the richest built nothing at all, and `woundUp.length <= 1` is red on it before
+D-218 and after it. A run that plays only the lucky seed learns nothing, so the
+small sweep is the recorded seed AND the seed that breaks it.
+
+**The split, measured rather than guessed.** One quarter century of this fixture
+takes 40-70 s depending on machine load. Whole-file wall clock, three runs on
+the same afternoon: the old single-seed file **93.9 s**, the two-seed sweep
+**106.8 s**, the four-seed sweep with the desync twin **242.1 s** (160.6 s of it
+the four quarter centuries, 61.6 s the twin's replay). So the default run pays
+about **+13 s** and the CI `soak` job about **+150 s on every push**, which is
+the same trade `determinism.ts` already made for the two costly twins and it is
+settled with the same switch: `IRON_VEINS_BALANCE_HASH=all`. The variable's NAME
+is now narrower than its meaning and it is kept anyway, because CI, the runner
+script and every developer alias already say it; `fullHashMode` is renamed
+`fullBalanceMode` so the code does not lie about it. **No CI change was needed** -
+the `soak` job already sets the variable, and only its comment moved. The split
+is guarded from outside by four new cases in
+`tests/unit/balanceDeterminism.spec.ts`: at least four distinct seeds, the small
+sweep a proper non-empty prefix, the two modes producing exactly the two lists,
+and 4711 first - if it stops being first, the default run stops covering the
+world the rest of the project's AI evidence is about, and the twin would replay
+a world no assertion had looked at.
+
+**What the four seeds actually share, measured at this HEAD** - format:
+personality, value EUR, [X] wound up, l lines / v vehicles / s stations:
+
+```
+4711  p0  500,000     l0 v0 s0  | p4  147,155     l0 v0 s11 | p1  576,736     l1 v6 s19
+4713  p4 -290,949 [X] l0 v0 s31 | p0 -256,082 [X] l0 v0 s2  | p3  500,000     l0 v0 s0
+4712  p4 -168,859 [X] l0 v0 s29 | p2 -279,226 [X] l1 v0 s3  | p0   58,097     l0 v0 s2
+4714  p4 -145,573 [X] l0 v0 s29 | p2 -166,757 [X] l1 v0 s2  | p3  500,000     l0 v0 s0
+```
+
+Total 974,542 EUR, **six of twelve wound up, ONE of twelve owns a vehicle**,
+nine of twelve took the field, three hold a line. It reproduces D-219's table to
+the euro. Asserted, because it holds on all four: at least one competitor alive;
+the richest competitor solvent; somebody built a network of at least two
+stations; everybody who took the field still owns it; everybody inside the total
+exposure bound; three distinct personalities producing distinguishable networks;
+no living vehicle stranded in `NoRoute`. **Deliberately NOT asserted, because it
+is red on the sweep**: `woundUp.length <= 1` (red on three of four) and "the
+richest company built something" (red on 4713 and 4714, where the richest is the
+conservative company that never left the yard with its 500,000 intact). The
+sweep-wide floor is stated as the embarrassment it is - **at least ONE company
+in twelve runs a line with a fleet** - rather than dressed up as a property.
+
+**The instrument that was missing, and it is the larger half of this bundle.**
+Both AI scenarios measured exactly one thing: the balance sheet at year
+twenty-five. A company that ordered a railway it was never allowed to build,
+every month for two hundred and fifty game months, has a perfectly plausible
+balance sheet - which is precisely what D-219 was, and nothing in the suite could
+see it. `tests/balance/aiRefusals.ts` counts `World.step`'s own outcome sink per
+company and per command kind. It is a pure observer: it reads what the command
+layer already decided and writes nothing back, proved by scenario 5's twenty-five
+yearly values being identical to the euro with the sink attached. Two guards,
+**and neither is a band**:
+
+- **`looping`** - a kind issued `LOOP_ISSUES` = 8 times with not one accept
+  among them. Eight is not tuned toward anything: the decision cycle re-plans
+  every `AI_RETRY_TICKS` (one game month), so eight issues without an accept is
+  eight months of the same order going out and coming back. D-219 was 253
+  `BuildTrack` and 1,265 `BuildRailStop` with zero accepts - red by a factor of
+  thirty. Below eight, a rejection is ordinary bad luck and says nothing.
+- **`undeclared`** - the (kind, reason) pairs the AI collects are DECLARED, each
+  with the reason it is tolerated, and anything else is a defect until somebody
+  measures it. Same shape as the project's other coupling audits (D-133, D-183),
+  and asserted in ONE direction on purpose: seen-but-not-declared fails,
+  declared-but-not-seen does not, because a two-seed run legitimately does not
+  produce all six and a road-only scenario produces none of the rail ones.
+
+**The six declared pairs, which are the honest state of the AI**, measured over
+the four seeds: `BuildRoad|nothingToDo` (a run whose tiles and joins are all
+already there - since D-218 this really is nothing to do),
+`BuildRoad|notYours` **x584 on one company**, `BuildRoadStop|occupied` **x589**,
+`BuildRoadStop|roadNotYours` **x292**, `BuyRoadVehicle|needsDepot` **x952** and
+`BuyTrain|insufficientFunds`. The first five are D-219a's reverted fix and its
+downstream, the last is D-158's bottleneck verbatim. **Zero `BuildTrack|notYours`
+and zero `BuildRailStop|needsTrack` anywhere in the sweep**, and `TakeLoan`
+accepted 7/1/2/2/1/1/1/2 times per company instead of 339 - D-219's fix
+confirmed by an instrument that was not in the tree when it was written. One
+company still collects 2,811 refusals against 71 accepted builds, a **97.5 %
+refusal rate on the build family**, and that number is printed on every run now
+instead of being invisible. Scenario 5's map is clean by comparison: 7 refusals
+across three companies over seventy-five game years.
+
+**The bands were re-measured on the fixed behaviour and NOT ONE MOVED**, which
+is the point of writing it down - D-158's evidence rule is that a band moves only
+when a measurement says the old one described a world that no longer exists, and
+both numbers go in the entry either way. Scenario 5: ROAD **1,173,298 ->
+1,156,463 EUR** (-1.4 %, 12 vehicles and 2 lines in both), inside 0.8-3.2 M with
+margin; RAIL **228,047** and EXPANSIVE **-241,309 [wound up]**, both unchanged to
+the euro - D-219's fix cannot reach them, their opportunities never take the
+single-track fallback branch on that map. `aiGame`'s exposure bound is unmoved at
+-(START_CAPITAL + LOAN_MIN_LIMIT); the assertions around it changed, the bound
+did not.
+
+**And the sentence that would have been the prize, said plainly instead: the AI
+does NOT reach SPEC.md 19.4's 5-25 million, and this bundle does not claim it
+does.** 1,156,463 EUR is a factor 4.3 under the original floor. D-116 stays
+closed on D-158's recalibrated band and on the achievability probe behind it -
+the map's physical offer, not the AI's competence, is what five million was
+measured against - and nothing in D-218, D-219 or D-220 moved that argument by a
+euro.
+
+**No save bump, and it is verified rather than assumed: `src/` is not touched at
+all.** The soak fixture hash is unchanged (`45ccb46dc67e1fdf`, 3,419 recorded
+commands, re-run and compared, not presumed), the canonical cross-OS pin
+`ddaacd4b970d31db` is unchanged, the corpus manifest is unchanged, and
+SAVE_VERSION stays 30. Zero snapshot bytes, zero constants, zero i18n strings,
+zero RNG draws, zero `CommandKind`s.
+
+**Both new guards were verified RED on the pre-D-219 simulation, by reverting
+that fix in a working copy and re-running the DEFAULT two-seed sweep.** The loop
+guard fails with `company 1 BuildRailStop: 1265 refused, 0 accepted
+(cmd.reject.needsTrack x1265)` and `company 1 BuildTrack: 253 refused, 0
+accepted (cmd.reject.notYours x253)`; the declared-set guard fails naming the
+same two pairs as undiagnosed. Those are D-219's own numbers, reproduced by a
+test that did not exist when D-219 was written - which is the whole claim of
+this bundle, demonstrated instead of asserted. `src/sim/ai/build.ts` was
+restored afterwards and `git diff src/` is empty.
+
+**Verified by running**, in this order, on the final tree: `npm run typecheck`
+clean; `npm run lint` over the whole repo, architecture laws included, clean;
+`npx prettier --check` clean on every file touched; `tests/unit` **109 files /
+1,455 tests** green; `tests/balance` **12 files / 79 green + 2 skipped** in 139 s
+(was 63 + 2); `npm run test:balance:full` **12 files / 97 green** in 292 s;
+`tests/determinism` + `tests/corpus` **8 files / 38** green; `npm run test:soak`
+**4** green at the unchanged hash.
+
+**What this does NOT do, named so the next bundle does not have to rediscover
+it.** The two coupled causes of D-219a are untouched: the stop scan has the
+identical ownership defect, and its fix must ship WITH an economics half built
+from the real lift the builder knows. Ten of twelve competitors still own no
+vehicle after twenty-five years. The sweep makes that visible on every push now
+instead of once a milestone, and the `NoRoute` guard covers six living vehicles
+today - it gets stronger exactly as the AI gets better at crewing, which is the
+right direction for a net to grow in.
