@@ -37,7 +37,7 @@ no entry below. A number may appear under several topics.
   D-078, D-118, D-142, D-151, D-176, D-178, D-187, D-207, D-211, D-213,
   D-215
 - **Industry & production:** D-022, D-062, D-063, D-064, D-069, D-071, D-079,
-  D-085, D-086, D-174, D-201, D-202, D-205
+  D-085, D-086, D-174, D-201, D-202, D-205, D-225
 - **Towns, council & ownership:** D-101, D-102, D-103, D-104, D-205, D-207,
   D-206, D-213, D-216, D-217
 - **Economy, finance & emissions:** D-008, D-090, D-091, D-092, D-105, D-154,
@@ -45,14 +45,14 @@ no entry below. A number may appear under several topics.
 - **Balancing & scenarios:** D-038, D-039, D-040, D-041, D-066, D-087, D-088,
   D-116, D-151, D-152, D-156, D-158, D-159, D-187, D-190, D-194, D-195,
   D-196, D-197, D-198, D-199, D-200, D-203, D-204, D-207, D-211, D-213,
-  D-215, D-216, D-220, D-221, D-222, D-224
+  D-215, D-216, D-220, D-221, D-222, D-224, D-225, D-226
 - **Vehicles & fleet:** D-043, D-044, D-045, D-068, D-076, D-089, D-093,
   D-096, D-142, D-143, D-145, D-146, D-155, D-157, D-171, D-174, D-181, D-185,
   D-201, D-207
 - **Water & air:** D-094, D-095, D-096, D-097, D-098, D-099
 - **Competitors, AI & tenders:** D-107, D-108, D-109, D-115, D-116, D-121,
   D-122, D-147, D-152, D-153, D-154, D-155, D-156, D-158, D-216, D-218,
-  D-219, D-220, D-221, D-222, D-223, D-224
+  D-219, D-220, D-221, D-222, D-223, D-224, D-225, D-226
 - **Rendering & art:** D-013, D-014, D-033, D-035, D-112, D-117, D-125, D-127,
   D-136, D-140, D-160, D-161, D-162, D-163, D-164, D-165, D-166, D-169, D-170,
   D-171, D-172, D-173, D-174, D-175, D-177, D-179, D-186, D-202, D-205, D-206,
@@ -66,7 +66,8 @@ no entry below. A number may appear under several topics.
   D-185, D-186, D-187, D-191, D-192, D-193, D-196, D-200, D-201, D-202, D-205,
   D-206, D-209, D-214
 - **Platform, tooling & build:** D-012, D-014, D-015, D-016, D-017, D-029,
-  D-030, D-031, D-160, D-168, D-169, D-170, D-172, D-175, D-192, D-206, D-208
+  D-030, D-031, D-160, D-168, D-169, D-170, D-172, D-175, D-192, D-206, D-208,
+  D-227
 - **Crash safety:** D-132, D-139, D-190
 - **Testing method & fixtures:** D-010, D-038, D-072, D-074, D-084, D-133,
   D-167, D-183, D-186, D-188, D-189, D-190, D-191, D-192, D-193, D-194,
@@ -75,7 +76,7 @@ no entry below. A number may appear under several topics.
   D-217, D-219, D-220, D-221, D-222
 - **Process & specification:** D-070, D-123, D-129, D-133, D-138, D-140,
   D-185, D-191, D-197, D-198, D-199, D-203, D-204, D-205, D-206, D-215,
-  D-222
+  D-222, D-225, D-226, D-227
 
 ---
 
@@ -11529,8 +11530,10 @@ ordered over a quarter century was a line that could not pay.
 
 **Verified by running**, on the final tree: `npm run typecheck` clean;
 `npm run lint` over the whole repo clean; `npx prettier --check` clean on every
-touched file (the repo-wide check is red at HEAD too - the CRLF working tree of
-CLAUDE.md's environment note); `tests/unit` **110 files / 1,459 tests** green;
+touched file (the repo-wide check is red at HEAD too - **and the cause stated
+here was wrong: read D-227**, which measured that the working tree is LF
+throughout and that the 31 files have simply never been through the formatter);
+`tests/unit` **110 files / 1,459 tests** green;
 `tests/balance` **12 files / 79 green + 2 skipped**; `npm run test:balance:full`
 **12 files / 97 green**, the four-seed sweep included; `tests/determinism`
 **7 files / 33** green at the unmoved pin; `npm run test:soak` **4** green at the
@@ -11797,3 +11800,191 @@ it runs on.
 **No band was loosened.** Nothing in `tests/balance` moved except in the
 tightening direction: one restored floor, one new per-seed audit, one newly
 declared refusal, and a trace comment re-measured. SAVE_VERSION stays 30.
+
+---
+
+## The AI's residuals: a traced regression and a false stated cause (2026-08-11)
+
+### D-225 Seed 918273 traced: the profitability floor refused nothing, and what killed the line was a factory the AI woke and never collected from
+
+**A seed nobody had played got worse and no report named it.** At 5d32299 seed
+918273 read p2 232,129 | p1 828,767 with one line and six vehicles | p4 -58,032,
+total 1,002,864 EUR; at HEAD it reads p2 -130,562 [X] | p1 437,994 with nothing
+running | p4 412,615, total 720,047. The obvious suspects were D-221's
+profitability floor and D-222's constants. **Both are refuted by the trace, and
+the trace names a third cause that is neither of them.**
+
+**The floor refused nothing.** Company 2 (Road personality) builds the SAME line
+at HEAD that it built at 5d32299, at the IDENTICAL tick 5,734 (game month
+1950.0), with the identical six lorries: coal from the mine at 67,139 to the
+steel mill at 76,187, 49 tiles. `projectLine` passes it; it sits at rank two of
+the opportunity list in both builds. It then runs for NINE GAME YEARS at 4.2-5.0
+times its fleet's half-yearly bill - 24,662 to 29,130 EUR per review window,
+which are the figures the 5d32299 run earned on the same line. Nothing D-221 or
+D-222 added ever touched it.
+
+**What killed it, month by month.** The instrument is a probe on the mill's own
+tile (76,187) plus a log in `closeDeadLine`, both temporary and reverted:
+
+```
+1950.0   the coal line opens; the mill takes coal and cannot produce -
+         a SteelMill wants coal AND iron ore, and nobody brings iron ore
+1950-56  mill: open, prod 0, monthsWithoutCollection 0, inputStock pinned at
+         1,440 (the eight-month cap) - DORMANT, and dormant is immortal
+         (CLAUDE.md's own rule, 7.3 / D-086)
+1956.4   tick 461,734: the AI opens a SECOND line into the SAME station -
+         iron ore from 180,171, 105 tiles, six lorries
+1956.7   the mill produces for the first time: prod 168, out 168.
+         monthsWithoutCollection starts, because nothing carries steel away
+1956.8   through 1958.6: neglect 1, 2, 3 ... 23. Every third month 168 units
+         of steel go into the station's waiting pile and rot there - D-085,
+         a works is judged on what left ON A VEHICLE, never on what a
+         station took
+1958.7   neglect 24. The mill CLOSES: map.industryId at its tile is -1 and
+         the station's servedIndustries is empty
+1958.11  the iron line earns 17,333 against 32,754 - the sink is gone
+1959.5   the iron line gains 0 over a whole review window; closed, fleet sold
+1959.7   the coal line - nine years old - gains 0; closed, fleet sold
+1959-75  company 2 never builds again and coasts 856,831 -> 437,994 EUR
+```
+
+At 5d32299 the same mill reads `open=true prod=0 in=1440/0 neglect=0` at every
+one of the twenty-five year boundaries. **The coal line survived there because
+the sink was never woken.**
+
+- **So the AI destroyed its own best business by completing a factory's input
+  set.** `onwardLegExists` already guards a pair whose sink PRODUCES - "a pair
+  ending at one is only offered when the NEXT leg is there to be built" - but it
+  asks whether an onward leg is POSSIBLE, never whether this company is going to
+  build it. It is the D-219 shape a third time: two halves of one decision
+  disagreeing about what is really going to happen.
+- **And the onward leg WAS there, priced, and ranked FIRST for twenty-two game
+  years.** The same trace: from tick 221,734 (1953.0) to the end of the game
+  company 2's candidate list is headed by
+  `road cargo=Steel d=59 76,187->96,131`, `projectLine` margin **4.230** against
+  the 1.25 floor. It was skipped **67 times** with one reason - `noBorrow`. It needs 469,594-478,046
+  EUR at the 1.4 capital factor and the company held 413,688-437,977 in cash; a
+  Road personality that already runs one line may not borrow, because
+  `bootstrapping` is `lines.length === 0` and only Expansive is exempt (D-154).
+  **The AI missed the onward leg of its own chain by about 8 % of its price**,
+  and then spent some 270,000 EUR on the feeder that killed the chain instead.
+- **Why 5d32299 did not do it is chaotic, and it is stated as chaotic.** By 1956
+  the two worlds have diverged - at 5d32299 company 2 owns 17 stations and six
+  dead lines against four stations and one live line at HEAD, and the iron-ore
+  pair 180,171->76,187 is simply not in its candidate list there. D-221's floor
+  is what removed the junk town-pair lines and therefore what made this world
+  reachable; it is the occasion, not the defect. **The defect is that the AI
+  feeds a works it does not collect from, and it would fire on any world that
+  offered the same shape.**
+- **Nothing is fixed here, deliberately.** The two candidate cures - refuse a
+  pair that would COMPLETE a sink's input set unless we collect its output, and
+  let a company borrow for the onward leg of a chain it already feeds - are both
+  simulation changes that re-roll twelve seeds, scenario 5, `aiGame`, the soak
+  fixture and the cross-OS pin, and the brief for this bundle scoped a fix to
+  the case where the FLOOR's projection is wrong. It is not. What this entry
+  buys is that the next pass starts from a measurement rather than from a total:
+  **the profitability floor is not the cause of seed 918273's regression, and
+  saying that it was would have been the class of claim D-227 supersedes.**
+
+### D-226 The twelve-seed bar, re-measured at HEAD - and the rail bundle that was never landed
+
+**Measured at HEAD e06cd94**: twelve seeds, twenty-five years each, three
+competitors, 256 map, a player company that does nothing. The previous bundle's
+rail shuttle was measured and REVERTED, so there is no rail bundle in the tree
+and this table is HEAD's. It reproduces that bundle's own HEAD figures to the
+euro, which is what says the two harnesses measure the same thing.
+
+Format: personality, value EUR, [X] wound up, lines / vehicles / stations, and
+owned rail tiles where there are any.
+
+| seed   | competitor 1                | competitor 2              | competitor 3                   |
+| ------ | --------------------------- | ------------------------- | ------------------------------ |
+| 4711   | p0 55,935 0/0/2 115rt       | p4 412,641 0/0/4          | **p1 540,495 1/6/4**           |
+| 4713   | p4 410,475 0/0/4            | **p0 1,687,871 3/18/4**   | p3 500,000 0/0/0               |
+| 4712   | p4 500,000 0/0/0            | p2 63,551 0/0/2 126rt     | p0 500,000 0/0/0               |
+| 4714   | p4 382,931 0/0/5            | **p2 415,718 1/6/5 62rt** | p3 500,000 0/0/0               |
+| 2718   | p3 500,000 0/0/0            | p0 -196,058 0/0/5 18rt    | p4 500,000 0/0/0               |
+| 31415  | p3 500,000 0/0/0            | p4 456,327 0/0/2          | p2 -103,538 [X] 1/0/4 149rt    |
+| 60613  | p0 -157,950 [X] 0/0/2 88rt  | p4 500,000 0/0/0          | p1 448,473 0/0/3               |
+| 12345  | p4 383,214 0/0/6            | **p2 337,369 2/9/6**      | p0 96,345 1/1/2 99rt (1 train) |
+| 77003  | p4 399,565 0/0/5            | **p0 300,967 1/6/5**      | p1 409,410 0/0/4               |
+| 918273 | p2 -130,562 [X] 0/0/4 235rt | p1 437,994 0/0/5          | p4 412,615 0/0/4               |
+| 131313 | p1 454,465 0/0/2            | p2 500,000 0/0/0          | p3 500,000 0/0/0               |
+| 860213 | p4 341,841 0/0/8            | p3 500,000 0/0/0          | p2 -394,521 [X] 0/0/4 125rt    |
+
+**Totals: 12,965,575 EUR over thirty-six competitors, 4 wound up, 46 living
+vehicles of which exactly ONE is a train, `NoRoute` 0 on every seed, rail lines
+alive 1.**
+
+**The bar, as two numbers, because it is two questions.**
+
+- **At least one competitor finishes year twenty-five alive with a line and two
+  or more vehicles: 5 of 12 seeds** - 4711, 4713, 4714, 12345, 77003. It is
+  unchanged from the previous bundle's measurement of the same HEAD, and of the
+  four seeds nobody had played before that bundle - 77003, 918273, 131313 and
+  860213 - exactly ONE contributes. Seed 31415's rail company owns a line and no
+  vehicle and is wound up, which is why the question is "alive AND crewed" and
+  not "has a line".
+- **The richest competitor owns something it built: 5 of 12 seeds** - 4711,
+  4713, 12345, 77003, 918273. **On seven of twelve the richest competitor is one
+  that never left the yard with its 500,000 intact**, which is the claim
+  `aiGame.spec.ts` names as red on 4712 and refuses to assert - now measured
+  over three times as many worlds. On only **2 of 12** does the richest
+  competitor also own a fleet (4711, 4713).
+- **The rail personality still has no business.** One rail line and one train
+  alive in thirty-six competitor-lifetimes; five of the six companies that own
+  rail tiles at year twenty-five own no train at all. That is D-222's named
+  remaining cause, unmoved.
+
+### D-227 The repo-wide `format:check` is red because nothing has ever run the formatter, and the CRLF working tree is measurably not the cause - superseding the claim in D-221 and two bundle reports
+
+**Three bundle reports stated that the red `npm run format:check` at HEAD is
+caused by "the CRLF working tree of CLAUDE.md's environment note"** - D-221 says
+it in its own verification paragraph, and two reports repeat it. An independent
+verifier measured that this is false. It is, and this entry is the correction,
+because this project supersedes a wrong entry with a named one and never
+rewrites it quietly.
+
+**What is measured, at HEAD, on a clean tree:**
+
+- **Every file in the working tree is LF.** `git config core.autocrlf` answers
+  `false`, `git check-attr` reports `text: set, eol: lf` for the sources
+  (D-168's pin), and a byte scan for carriage returns over the failing files
+  finds none.
+- **A CRLF file would fail differently, and the difference is arithmetic.**
+  `.prettierrc.json` sets `endOfLine: "lf"`, so prettier rewrites EVERY line of
+  a CRLF file. Converted to CRLF, `src/sim/ai/evaluate.ts` (811 lines) produces
+  a **1,622-line** diff - two per line, every line. The 31 files that really
+  fail produce **3 to 520** diff lines each, and every one of those diffs is a
+  wrap width or a table column.
+- **The real cause is that the formatter has never been run on them, and
+  nothing gates it.** `format:check` exists in `package.json` and appears in
+  **no CI job** - `.github/workflows/ci.yml` runs typecheck, lint, determinism,
+  `npm test` and the soak - and there is no git hook and no husky. Checked file
+  by file: **25 of the 31 were already prettier-dirty at the commit that ADDED
+  them** (SPEC.md at `6b90035`, README.md at `a6f5bbc`, `tools/bake-lib.ts` and
+  `tools/assets-manifest.json` at `69c0e7b`, `src/sim/lines/metrics.ts` at
+  `0d0c6f6`, and so on), and the other six - CLAUDE.md, DECISIONS.md,
+  `src-tauri/tauri.conf.json`, `src/sim/commands/execute.ts`,
+  `src/ui/FleetPanel.tsx`, `tests/unit/terraform.spec.ts` - were clean when
+  written and drifted under later hand edits.
+- **What the diffs actually are**, sampled in all four families: markdown pipe
+  tables written without padded columns, which prettier pads (CLAUDE.md,
+  DECISIONS.md, README.md, SPEC.md, SPEC2.md - 54 to 520 lines each);
+  `*emphasis*` where prettier writes `_emphasis_`; hand-broken JSON arrays
+  prettier collapses onto one line (`tauri.conf.json`,
+  `tools/assets-manifest.json`); and TypeScript wrapped by hand on both sides of
+  `printWidth: 100` - `src/sim/lines/metrics.ts` has one line broken at 95
+  characters and another left unbroken at 101, in the same file.
+- **SPEC.md and SPEC2.md are a separate, permanent case, and it is named.**
+  CLAUDE.md's first sentence is that SPEC.md "is the original brief, verbatim";
+  reformatting it would break that rule to satisfy a formatter. Those two files
+  are 1,002 of the roughly 1,300 dirty lines in the repository.
+
+**Nothing is reformatted here.** The repair belongs in its own session with its
+own diff - touching 31 files inside a bundle about the AI is exactly the
+sweeping change this project refuses - and it has to decide the SPEC question
+first. What changes now is that the stated cause is true: the CRLF paragraph in
+CLAUDE.md's environment note stays a correct repair procedure for a checkout
+that predates D-168 on an `autocrlf=true` machine, and it is no longer offered
+as the explanation for THIS repository's red check.

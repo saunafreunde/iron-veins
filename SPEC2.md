@@ -394,6 +394,7 @@ Headroom und lehrt, ein rotes Gate zu ignorieren (D-136).
 | M17 | 2026-08-08 | **1,241 ms / 2,564 ms** (max 18,40 ms über 6 500 Ticks; Abschlusslauf nach allen vier Bundles) | **−0,70 ms** (Budget-Zeile +0,05 eingehalten: der Tages-Hook kehrt in einer Welt ohne Ziele auf seiner ersten Zeile zurück, gemessen 0,17–0,71 B Allokation je Spieltag; B4 fügt dem Tick NICHTS hinzu — Marker und Punktformel laufen einmal je Spieltag auf der Publish-Kadenz, auf der die Flottenliste ohnehin sendet) | D-193–D-196 |
 | M18 | 2026-08-08 | **1,431 / 1,548 / 1,449 ms p50** und **3,108 / 3,890 / 2,768 ms p99** (drei saubere Abschlussläufe nach allen fünf Bundles; die B4-Abschlussläufe lauteten 1,531/3,006 und 1,508/3,225) | **−0,02 / +0,10 / −0,00 ms p50** (Budget-Zeile +0,15 eingehalten; zwei der drei p99 liegen UNTER der Grundlinie, der dritte 0,63 ms darüber und damit im dokumentierten ±0,7-ms-Laufrauschen — wie die Bundle-Läufe 1,296/2,841 (B1), 1,613/2,934 (B2), 1,702–1,542 / 3,796–3,156 über vier Läufe (B3) und 1,531/1,508 / 3,006/3,225 (B4). **Die Referenzflotte fährt die Regel AUS**, wo `updateWeather`, `weatherCellAt` und `winterFrictionAt` auf ihrer ersten Zeile zurückkehren; die Per-Fahrzeug-Kosten mit Regel AN sind auf diesem Fixture NICHT gemessen und D-201 sagt das, und B5s AN-Kosten sind EIN Funktionsaufruf je Spieltag außerhalb der Regionenschleife) | D-200–D-204 |
 | M19 | 2026-08-09 | **3,446 / 3,705 ms p50** und **28,896 / 10,700 ms p99** (zwei Läufe nach allen vier Bundles) — **das ist AUSDRÜCKLICH KEINE Abnahmezahl** | **nicht abgenommen, und der Grund ist gemessen statt behauptet.** Die Maschine trug während des gesamten Meilensteins parallele Agenten (achtzehn `node`-Prozesse, 16 146 s kumulierte CPU beim Abschlusslauf), und das 8-ms-p99-Gate ist auf dem BASELINE-Commit ebenso rot. B4 misst deshalb erstmals den GANZEN Meilenstein gegen `5b0758a`, den Commit vor D-207, in zwei abwechselnden Paaren: M19 komplett 3,446/28,896 und 3,705/10,700 ms, pre-M19 3,594/15,924 und 3,496/9,829 — Mittel p50 3,576 gegen 3,545, also **+0,031 ms für alle drei zustandsberührenden Bundles zusammen** gegen die Budgetzeile +0,10 ms, bei p99 mit WECHSELNDEM Vorzeichen und einer Streuung 9,8–28,9 ms INNERHALB eines Commits (genau die Größe, die D-167 als unter Last um Vielfache aufgebläht beschreibt). Beide Seiten liegen bei 3,4–3,7 ms p50 gegen die Referenz 1,43–1,45, die Box also um rund Faktor 2,4 belastet. Die Bundle-Läufe: B1 vier A/B-Paare, Mittel p50 +0,10 ms; B2 vier Läufe, eigen 0,18 ms schneller; B3 zwei Paare, eigen 0,09 ms schneller; B4 null neue Per-Tick-Arbeit (ein Kommentar unter `src/`). **Die saubere Abnahmemessung auf der Referenzmaschine steht aus und ist das EINZIGE, was M19 offen lässt** — sie wird benannt statt erfunden | D-207, D-211, D-213, D-215 |
+| KI-Programm, Abschluss (D-225 … D-227) | 2026-08-11 | **keine Tick-Messung, und das ist korrekt statt bequem** — dieser Bundle ändert unter `src/` **null Byte**; gemessen wurde der ZWÖLF-Seed-Ertrag des ganzen KI-Programms und die eine Regression, die niemand gespielt hatte. Zwölf Seeds × 25 Jahre × 3 Konkurrenten, 256er-Karte: **12 965 575 €, 4 abgewickelt, 46 lebende Fahrzeuge davon EIN Zug, `NoRoute` 0 auf jedem Seed, EINE lebende Schienenlinie**. Die Latte: ein Konkurrent beendet Jahr 25 lebend mit Linie und ≥ 2 Fahrzeugen auf **5 von 12** Seeds, und der REICHSTE Konkurrent besitzt etwas Gebautes auf **5 von 12** — auf sieben von zwölf ist der Reichste eine Firma, die den Hof nie verlassen hat. Rohwerte im Detailabsatz unten | **±0,00 ms per Konstruktion** (kein `src/`-Byte: D-225 ist eine Messung mit reverteter Instrumentierung, D-226 die Zwölf-Seed-Tabelle, D-227 eine Korrektur einer falsch angegebenen Ursache) | D-225, D-226, D-227 |
 | KI-Ökonomie (D-221 … D-224) | 2026-08-11 | **keine Tick-Messung, und auch das ist die ehrliche Angabe** — der ganze Faden lebt im Entscheidungszyklus, der je Firma alle 400 Ticks läuft und dessen teure Hälfte der `lastBuildTick`-Riegel auf einen Spielmonat deckelt; D-224 ändert unter `src/` **null Byte**. Gemessen wurde stattdessen der Ertrag über ACHT Seeds; Rohwerte im Detailabsatz unten | **±0,00 ms per Konstruktion** (keine Arbeit je Tick: D-221/D-222 filtern und bepreisen die Kandidatenliste, D-223 stellt einer Projekt-Rückfrage eine Besitzerfrage voran, D-224 fasst nur Tests und Dokumentation an) | D-221, D-222, D-223, D-224 |
 | KI-Faden (D-216 … D-220) | 2026-08-11 | **keine Tick-Messung, und das ist die ehrliche Angabe** — D-218 und D-219 ändern je eine Handvoll Zeilen in einem Kommando-Guard bzw. einem Planer, D-220 ändert unter `src/` **null Byte**. Gemessen wurde stattdessen, was der Faden wirklich kostet und wirklich bringt; Rohwerte im Detailabsatz unten | **±0,00 ms per Konstruktion** (D-220: kein `src/`-Byte; D-218/D-219: keine Arbeit je Tick, nur eine zusätzliche Tabellenabfrage in einem Guard bzw. eine Besitzerfrage in einem Planer, der ohnehin nur alle `AI_RETRY_TICKS` läuft) | D-216, D-217, D-218, D-219, D-220 |
 
@@ -430,6 +431,46 @@ von acht Seeds**, `NoRoute` durchgehend 0. **Eine Korrektur an den eigenen
 Berichten**: D-221 protokollierte für den Ausgangszustand „8 abgewickelt"; am
 selben Commit nachgemessen sind es **14 von 24** — die Wert- und Summenzeilen
 reproduzieren dagegen auf den Euro.
+
+KI-Programm-Zeile im Detail (D-225 … D-227, 11.08.2026): **kein SAVE_VERSION-Bump,
+kein Snapshot-Byte, keine Atlas-Zelle, kein i18n-Satz, kein RNG-Zug, keine
+Konstante, kein `src/`-Byte.** Der Rail-Shuttle des vorigen Bundles wurde
+gemessen und ZURÜCKGENOMMEN — es gibt kein Rail-Bundle im Baum, und die
+Zwölf-Seed-Tabelle ist HEADs eigene. Sie reproduziert die Acht-Seed-Teilmenge
+oben auf den Euro, was sagt, dass beide Messgeräte dasselbe messen. Pins
+unverändert: Soak `1f76e2df98be99a3` bei 191 Kommandos, kanonisch
+`ddaacd4b970d31db`, Korpus-Manifest, SAVE_VERSION 30 — nachgeprüft durch
+Ausführen.
+
+| Seed   | drei Konkurrenten bei HEAD (Persönlichkeit, Wert €, [X] abgewickelt, Linien/Fahrzeuge/Stationen) |
+| ------ | ------------------------------------------------------------------------------------------------ |
+| 4711   | p0 55 935 0/0/2 · p4 412 641 0/0/4 · **p1 540 495 1/6/4**                                        |
+| 4713   | p4 410 475 0/0/4 · **p0 1 687 871 3/18/4** · p3 500 000 0/0/0                                    |
+| 4712   | p4 500 000 0/0/0 · p2 63 551 0/0/2 · p0 500 000 0/0/0                                            |
+| 4714   | p4 382 931 0/0/5 · **p2 415 718 1/6/5** · p3 500 000 0/0/0                                       |
+| 2718   | p3 500 000 0/0/0 · p0 −196 058 0/0/5 · p4 500 000 0/0/0                                          |
+| 31415  | p3 500 000 0/0/0 · p4 456 327 0/0/2 · p2 −103 538 [X] 1/0/4                                      |
+| 60613  | p0 −157 950 [X] 0/0/2 · p4 500 000 0/0/0 · p1 448 473 0/0/3                                      |
+| 12345  | p4 383 214 0/0/6 · **p2 337 369 2/9/6** · p0 96 345 1/1/2 (1 Zug)                                |
+| 77003  | p4 399 565 0/0/5 · **p0 300 967 1/6/5** · p1 409 410 0/0/4                                       |
+| 918273 | p2 −130 562 [X] 0/0/4 · p1 437 994 0/0/5 · p4 412 615 0/0/4                                      |
+| 131313 | p1 454 465 0/0/2 · p2 500 000 0/0/0 · p3 500 000 0/0/0                                           |
+| 860213 | p4 341 841 0/0/8 · p3 500 000 0/0/0 · p2 −394 521 [X] 0/0/4                                      |
+
+**Und die eine Regression, die niemand gemeldet hatte, weil niemand den Seed
+gespielt hatte** (D-225): Seed 918273 fiel 1 002 864 → 720 047 €, und die
+Ursache ist NICHT die Rentabilitätsschwelle. Dieselbe Kohlelinie wird bei HEAD
+im IDENTISCHEN Tick 5 734 mit denselben sechs Lastwagen gebaut und läuft NEUN
+Jahre bei 4,2–5,0 der Flottenrechnung. Getötet hat sie eine Fabrik, die die KI
+GEWECKT und nie abgeholt hat: ein Stahlwerk, das sechs Jahre lang Kohle nahm und
+NICHTS produzierte — schlafend, und schlafend ist unsterblich (7.3 / D-086) —
+begann in dem Monat zu produzieren, in dem die ZWEITE Linie der KI ihm Eisenerz
+brachte; den Stahl trug nie jemand weg (D-085), `monthsWithoutCollection` lief
+1 … 24, und im Monat 1958.7 schloss das Werk und nahm die Senke BEIDER Linien
+mit. Das Anschlussbein war da, stand ab 1953 auf **Rang 1** der Kandidatenliste
+mit Marge **4,230** gegen die Schwelle 1,25 — und wurde **67-mal** mit dem Grund
+`noBorrow` übersprungen: eine Straßen-Persönlichkeit mit bereits einer laufenden
+Linie darf nicht borgen (D-154), und es fehlten rund 8 % des Preises an Bargeld.
 
 **D-223 bewegt davon keinen einzigen Euro** und sagt das: die acht Seeds sind
 vor und nach der Besitzerprüfung Zeile für Zeile identisch, weil die

@@ -135,6 +135,19 @@ red `npm run format:check`; repair it ONCE, with a clean tree:
 `git rm -r --cached -q . && git reset --hard`. A plain `git checkout`
 rewrites nothing - the cached-rm is what forces the re-checkout.
 
+**That paragraph is NOT why `npm run format:check` is red in this repository,
+and three bundle reports said it was** (D-227, which supersedes the claim).
+Measured: the working tree is LF throughout, `core.autocrlf` is `false`, and a
+CRLF file would produce a diff on EVERY line (1,622 lines for an 811-line file),
+where the 31 failing files produce 3 to 520 lines each, all of them table
+padding, emphasis markers, collapsed JSON arrays and hand wrapping around
+`printWidth: 100`. **The cause is that the formatter has never been run on
+them**: `format:check` is in `package.json` and in no CI job, there is no hook,
+and 25 of the 31 were already dirty at the commit that added them. SPEC.md and
+SPEC2.md - 1,002 of the roughly 1,300 dirty lines - are a permanent case,
+because this file's first sentence says SPEC.md is the brief VERBATIM. Repairing
+the rest is its own session with its own diff.
+
 ## Rendering
 
 - The tile layers live in a SharedArrayBuffer the worker owns; `src/render`
@@ -2321,6 +2334,40 @@ exposure bound. **`TownNetwork: 0` did**, and it went without an entry.
   re-measured at the same commit it is 14 - the value lines reproduce to the
   euro), living vehicles 6 -> 40, competitors running a line with a fleet 1 -> 4
   on four of eight seeds. Nothing in `tests/balance` was loosened.
+
+## The AI's residuals - a traced regression and a false stated cause (D-225 to D-227)
+
+The two things the AI thread left owed, measured rather than argued. **No
+simulation byte changed in this bundle**; SAVE_VERSION stays 30 and no pin
+moved.
+
+- **Seed 918273 regressed, and the profitability floor is NOT why** (D-225).
+  The line that earned 828,767 EUR at 5d32299 is built at HEAD at the IDENTICAL
+  tick 5,734 with the identical six lorries and runs NINE YEARS at 4.2-5.0 times
+  its fleet's bill. **What killed it is a factory the AI woke and never
+  collected from**: a SteelMill that had taken the AI's coal for six years while
+  producing NOTHING - dormant, and dormant is immortal (7.3 / D-086) - started
+  making steel the month the AI's SECOND line brought it iron ore, nobody ever
+  carried the steel away (D-085), and `monthsWithoutCollection` climbed 1 to 24
+  and closed it in 1958.7, taking the sink of BOTH lines with it. `onwardLegExists`
+  guards exactly this and asks the wrong question: whether an onward leg is
+  POSSIBLE, never whether this company will build it. **And the onward leg was
+  ranked FIRST for twenty-two game years at margin 4.230** and skipped 67 times
+  for `noBorrow` - a Road personality that already runs one line may not borrow
+  (D-154), and it was about 8 % of the price short in cash. Both cures are named
+  and neither is built here.
+- **The twelve-seed bar, at HEAD** (D-226; the previous bundle's rail shuttle was
+  measured and REVERTED, so there is no rail bundle in the tree). Twelve seeds x
+  25 years x 3 competitors: **12,965,575 EUR, 4 wound up, 46 living vehicles of
+  which ONE is a train, `NoRoute` 0 everywhere, one rail line alive.** A
+  competitor finishes alive with a line and two or more vehicles on **5 of 12**
+  seeds; the richest competitor owns something it built on **5 of 12**, and on
+  **seven of twelve the richest is a company that never left the yard** with its
+  500,000 intact. The rail personality still has no business - five of the six
+  companies holding rail tiles at year twenty-five own no train.
+- **The red `npm run format:check` had a false stated cause in three reports**
+  (D-227), corrected in the environment note above: the tree is LF, and the 31
+  files have simply never been through the formatter, which no CI job runs.
 
 ## Still outstanding
 
