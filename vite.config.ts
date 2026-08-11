@@ -18,6 +18,16 @@ const crossOriginIsolation = {
   'Cross-Origin-Embedder-Policy': 'require-corp',
 };
 
+/**
+ * The dev port, 5183 unless PORT says otherwise.
+ *
+ * `strictPort` stays on: a silently relocated dev server is worse than a
+ * refusal, because the Tauri shell and the documented URL both point at one
+ * place. Reading PORT is what lets a SECOND server run beside a first one
+ * (a preview tool, a colleague's session) without either of them guessing.
+ */
+const devPort = Number(process.env.PORT) || 5183;
+
 export default defineConfig({
   plugins: [react()],
   // Tauri pipes the vite output through its own logger; clearing the screen
@@ -27,7 +37,7 @@ export default defineConfig({
     __APP_VERSION__: JSON.stringify(pkg.version),
   },
   server: {
-    port: 5183,
+    port: devPort,
     strictPort: true,
     headers: crossOriginIsolation,
     watch: {
