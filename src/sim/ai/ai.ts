@@ -1,11 +1,9 @@
 import { CommandKind } from '../commands/types';
 import { CommandQueue } from '../commands/queue';
-import type { Cargo } from '../cargo/types';
 import {
   AI_BUILD_CAPITAL_FACTOR,
   AI_CANDIDATES_TRIED,
   AI_LIFT_REAL_SHARE,
-  AI_TAKT_UTILISATION,
   AI_CASH_RESERVE_CT,
   AI_DECISION_INTERVAL_TICKS,
   AI_LINE_REVIEW_TICKS,
@@ -15,7 +13,6 @@ import {
   AI_RAIL_MAX_TRAINS,
   AI_REINFORCE_WAITING,
   AI_RETRY_TICKS,
-  AI_SERVICE_INTERVAL_MIN_TICKS,
   AI_TICKS_PER_TILE,
   LOAN_STEP_CT,
   RAIL_DEPOT_COST_CT,
@@ -25,16 +22,15 @@ import {
   STATION_CATCHMENT_SCAN_RADIUS,
   TAKT_MAX_TICKS,
   TAKT_MIN_TICKS,
-  TICKS_PER_MONTH,
   TICKS_PER_YEAR,
 } from '../constants';
 import { loanLimitCt } from '../economy/company';
-import { adviseFleet, lineVehicles } from '../lines/metrics';
+import { lineVehicles } from '../lines/metrics';
 import type { Station } from '../station/types';
 import { aggregateConsist } from '../vehicles/consist';
 import { OrderLoad, OrderTarget, OrderUnload, VehicleState } from '../vehicles/VehicleStore';
 import { VehicleKind } from '../vehicles/spec';
-import { capacityFor, vehicleSpec } from '../vehicles/catalog';
+import { vehicleSpec } from '../vehicles/catalog';
 import {
   depotTileNear,
   enqueueInfrastructure,
@@ -42,7 +38,7 @@ import {
   pickTrain,
   stopTileNear,
 } from './build';
-import { opportunities, stationMonthlyOutput } from './evaluate';
+import { fleetFor, loadUnitsOf, opportunities, stationMonthlyOutput } from './evaluate';
 import { Personality, type AiState } from './types';
 import type { World } from '../World';
 
@@ -92,49 +88,6 @@ function decide(world: World, queue: CommandQueue, state: AiState): void {
 }
 
 // ---------------------------------------------------------------- new lines
-
-/** Units one vehicle of this composition lifts of the cargo. */
-function loadUnitsOf(specIds: readonly number[], cargo: number): number {
-  let units = 0;
-  for (const specId of specIds) units += capacityFor(vehicleSpec(specId), cargo as Cargo);
-  return units;
-}
-
-/**
- * How many vehicles a line needs, and the takt it will run: THE fleet advisor
- * of section 12.3 - `adviseFleet` in lines/metrics.ts, literally the same
- * function the line panel shows the player (E-06; this is what replaced the
- * old `AI_VEHICLES_PER_LINE = 1`).
- *
- * Two advisor calls, one question each. The FLEET is sized against the
- * interval the traffic demands - how often a departure planned
- * AI_TAKT_UTILISATION full must leave to lift what the source makes in a
- * month, floored at one a day - and the TAKT is then the fleet's own natural
- * spacing, round / fleet, NOT that demand interval. The first version fed the
- * demand interval straight into SetLineTakt, and the trace showed why that
- * strangles a line: a small pair's interval was thirty days, so a fleet whose
- * natural cadence was a departure every eighteen days was THROTTLED to one a
- * month, the pile never drained below a month of age, and oldest-first served
- * every passenger at the 10 % floor - 255 EUR in five months, closed by its
- * own review. The takt exists here to de-bunch the fleet (bought in one tick,
- * it runs as a convoy - measured: six lorries delivered as one), never to
- * slow it down.
- *
- * The advisor divides the REAL round, and the caller only knows the nominal
- * one - about half of what the vehicles then drive (AI_LIFT_REAL_SHARE, the
- * measured ratio). Sizing on the nominal figure fields half the fleet the
- * traffic needs, and the queue the sizing was meant to drain never drains.
- */
-function fleetFor(roundTicks: number, loadUnits: number, monthlyOutput: number, cap: number): number {
-  const realRound = roundTicks / AI_LIFT_REAL_SHARE;
-  const interval = Math.max(
-    AI_SERVICE_INTERVAL_MIN_TICKS,
-    (loadUnits * AI_TAKT_UTILISATION * TICKS_PER_MONTH) / (monthlyOutput > 1 ? monthlyOutput : 1),
-  );
-  const demanded = adviseFleet(realRound, interval);
-  const wanted = demanded === null ? 1 : demanded.vehiclesNeeded;
-  return wanted < 1 ? 1 : wanted > cap ? cap : wanted;
-}
 
 /**
  * The takt for a fleet that actually got bought: its own even spacing over
@@ -215,6 +168,13 @@ function startProject(world: World, queue: CommandQueue, state: AiState): void {
       opportunity.monthlyOutput,
       opportunity.rail ? AI_RAIL_MAX_TRAINS : AI_MAX_VEHICLES_PER_LINE,
     );
+
+    // WILL IT PAY? - the question this cycle never asked - is settled BEFORE
+    // the list gets here: `opportunities` drops every pair whose projected
+    // revenue does not clear the whole monthly bill it creates by
+    // AI_MIN_PROFIT_MARGIN, quoted for this same vehicle and this same fleet
+    // (`projectLine`). Everything from here on is the separate question of
+    // whether the company can AFFORD to lay it.
 
     // The estimate is the WHOLE project: the way, the two stops, the depot and
     // the vehicles that have to run on it.

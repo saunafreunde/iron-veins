@@ -80,6 +80,32 @@ export function clearStopTile(world: World, x: number, y: number): boolean {
  * catchment is a radius, so any tile that touches the works will do, and a
  * deterministic scan is one fewer thing that can differ between two runs of the
  * same seed.
+ *
+ * **"The stop the AI plants covers four buildings" was measured and is not a
+ * placement defect - four is the whole town.** Over the eight seeds of the
+ * acceptance sweep, every town of population 500 or under carries EXACTLY
+ * 4.00 building tiles (24-33 such towns a seed, 96-132 buildings, the figure
+ * identical on all eight), and the radius-4 catchment of a two-module road
+ * stop reaches 3.79-4.00 of them. The best legal placement anywhere within
+ * ten tiles of the centre reaches 3.79-4.00 as well: the gap this scan leaves
+ * on a small town is between 0.00 and 0.11 buildings, and on four of the
+ * eight seeds it is exactly zero. Over ALL towns the scan covers 54.8-74.3 %
+ * of a town's stock against a best-placement 58.1-77.7 %, and the whole of
+ * that 2-5 point difference is on the large towns whose houses do not fit
+ * inside one disc at any centre.
+ *
+ * A second measurement says the coverage would not be worth much even if it
+ * could be raised: `produceTownCargo` hands a town's monthly output to its
+ * stations by SHARE - `station.buildingsCovered * rating / totalWeight` - and
+ * the shares sum to one, so the SOLE station of a town receives the town's
+ * whole output whatever it covers. `buildingsCovered` decides which town a
+ * stop belongs to, whether the stop takes goods and food at all, and how two
+ * stations of one town split it. It does not scale a passenger line's
+ * revenue, and the AI's stops are one to a town.
+ *
+ * What a town of 400 cannot support is the LINE, not the stop, and that is
+ * refused now by the profitability floor in `ai.ts` rather than by moving a
+ * stop one tile.
  */
 export function stopTileNear(world: World, x: number, y: number): { x: number; y: number } | null {
   for (let radius = 1; radius <= 3; radius++) {

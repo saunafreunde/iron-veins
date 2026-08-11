@@ -45,14 +45,14 @@ no entry below. A number may appear under several topics.
 - **Balancing & scenarios:** D-038, D-039, D-040, D-041, D-066, D-087, D-088,
   D-116, D-151, D-152, D-156, D-158, D-159, D-187, D-190, D-194, D-195,
   D-196, D-197, D-198, D-199, D-200, D-203, D-204, D-207, D-211, D-213,
-  D-215, D-216, D-220
+  D-215, D-216, D-220, D-221
 - **Vehicles & fleet:** D-043, D-044, D-045, D-068, D-076, D-089, D-093,
   D-096, D-142, D-143, D-145, D-146, D-155, D-157, D-171, D-174, D-181, D-185,
   D-201, D-207
 - **Water & air:** D-094, D-095, D-096, D-097, D-098, D-099
 - **Competitors, AI & tenders:** D-107, D-108, D-109, D-115, D-116, D-121,
   D-122, D-147, D-152, D-153, D-154, D-155, D-156, D-158, D-216, D-218,
-  D-219, D-220
+  D-219, D-220, D-221
 - **Rendering & art:** D-013, D-014, D-033, D-035, D-112, D-117, D-125, D-127,
   D-136, D-140, D-160, D-161, D-162, D-163, D-164, D-165, D-166, D-169, D-170,
   D-171, D-172, D-173, D-174, D-175, D-177, D-179, D-186, D-202, D-205, D-206,
@@ -72,7 +72,7 @@ no entry below. A number may appear under several topics.
   D-167, D-183, D-186, D-188, D-189, D-190, D-191, D-192, D-193, D-194,
   D-195, D-196, D-197, D-198, D-199, D-200, D-201, D-202, D-203, D-204,
   D-205, D-207, D-206, D-208, D-209, D-210, D-212, D-213, D-215, D-216,
-  D-217, D-219, D-220
+  D-217, D-219, D-220, D-221
 - **Process & specification:** D-070, D-123, D-129, D-133, D-138, D-140,
   D-185, D-191, D-197, D-198, D-199, D-203, D-204, D-205, D-206, D-215
 
@@ -11394,3 +11394,143 @@ vehicle after twenty-five years. The sweep makes that visible on every push now
 instead of once a milestone, and the `NoRoute` guard covers six living vehicles
 today - it gets stronger exactly as the AI gets better at crewing, which is the
 right direction for a net to grow in.
+
+### D-221 A competitor may not build a business that cannot pay - and the four-building stop was measured and refuted
+
+**`rate` scored revenue per unit of capital, which is a RANKING with no floor,
+and `startProject` asked only whether the company could AFFORD the build. So
+nothing anywhere asked whether a line would cover its own costs**, and the best
+of a list of loss-makers was built exactly as a good line would have been - and
+then built again, because the list does not change when the money goes. Measured
+first, on the four seeds of the sweep plus four nobody had played (2718, 31415,
+60613, 12345), twenty-five years, 256 map, three competitors each:
+
+```
+seed   before                                       after
+4711    500,000 |  147,155     |  576,736             55,935     |  412,641 |  540,495
+4713   -290,949 [X] | -256,082 [X] |  500,000        411,226     | -247,794 [X] |  500,000
+4712   -168,859 [X] | -279,226 [X] |   58,097        500,000     |   63,551 |  500,000
+4714   -145,573 [X] | -166,757 [X] |  500,000        382,931     |  500,000 |  500,000
+2718    500,000 | -483,604 [X] | -325,286 [X]        500,000     |  222,570 |  500,000
+31415   500,000 | -415,716 [X] | -326,599 [X]        500,000     |  456,327 | -408,030 [X]
+60613  -140,020 |   23,385 [X] |  -47,967 [X]       -157,950 [X] |  500,000 |  448,473
+12345  -117,468 [X] | -622,832 [X] |  500,000        377,602     |   35,576 |  500,000
+```
+
+**Total over twenty-four competitors 18,435 -> 7,593,553 EUR; wound up 8 -> 3;
+the four unplayed seeds alone -956,108 -> 3,474,568.** The four-seed sweep the
+acceptance run asserts on moves 974,542 -> 4,118,986 with six windings-up down to
+one. What did NOT move is the thing that matters most, and it is said out loud:
+**one competitor in twenty-four still runs a line with a fleet** - seed 4711's
+road company, one line, six vehicles - and nine of twenty-four now finish with
+their 500,000 untouched, against four before. **This bundle stops the AI
+destroying capital; it does not yet make it build.** The second named cause -
+three personalities of five see an EMPTY opportunity list on a generated map,
+because they collect industry pairs only and the map carries 9-15 industries - is
+deliberately untouched, and it is what the next bundle is for. Giving them town
+pairs while the bus business still lost money was measured at -3,123,753 EUR.
+
+**`projectLine` is the absolute test beside the ratio**, and three things make it
+different from `rate`'s estimate - D-219a measured a floor built out of `rate`'s
+own figures and it stopped the AI building anything at all (+3.1 M, ten of twelve
+companies with no station), because `rate` quotes a NOMINAL 20-unit lorry load
+where the 1950 bus lifts 150. (1) The REAL vehicle and the REAL fleet: the specs
+the builder will buy and the size the 12.3 advisor gives. (2) The REAL round, at
+`AI_LIFT_REAL_SHARE` of the nominal speed, on both the capacity and the decay
+side. (3) **The decay is charged.** D-122's verdict that decay must stay out of
+the ranking stands untouched - it was about ORDERING candidates, and depressing
+every score equally cannot change an order; a floor is exactly where the honest
+arrival value belongs. The cost side is the whole monthly bill: fleet upkeep, two
+stops, the shed and the way. **It is deliberately NOT folded into
+`buildCostCt`** - that field is the WAY and nothing else, because the builder
+adds the stops, the shed and the vehicles to it when it asks about
+financeability, and a figure that already contained them is D-121's measured
+double count that put every rail line permanently out of reach.
+
+**The gate sits in `opportunities`, not only in `startProject`, and that was
+measured too.** With the floor in the builder alone, the refused town pairs went
+on sitting at the top of the ranking for ever and the builder spends a fixed
+`AI_CANDIDATES_TRIED` on them: scenario 5's road company did not reach its coal
+pair until game year nine. Dropped from the LIST, the pairs that pay rise into
+the candidates the builder actually tries. `fleetFor` and `loadUnitsOf` moved
+from `ai.ts` into `evaluate.ts` for that - ONE definition, because a filter and
+the builder it filters for drifting apart is the D-219 defect one file along.
+
+**`AI_MIN_PROFIT_MARGIN = 1.25`, and it is a measurement rather than a knob.**
+Eleven quarter-century games were instrumented (the four sweep seeds, the four
+unplayed ones, and scenario 5's three personalities): every project logged the
+projection it was built on, and every line review logged what it had actually
+earned against the same whole-bill basis. 114 lines, 492 reviews. Sorted by
+projection, per line, on the best review window a line ever had:
+
+| projected margin | lines | ever covered their whole monthly bill |
+| ---------------- | ----- | ------------------------------------- |
+| under 0.9        | 77    | 7 (9 %)                               |
+| 0.9 and over     | 37    | 17 (46 %)                             |
+| 1.4 and over     | 10    | 6 (60 %)                              |
+| 2.0 and over     | 4     | 4 (100 %)                             |
+
+**The value is not read off that table** - picking the column that flatters a
+band is what this project does not do. It is the reciprocal of the projection's
+own measured optimism: over all 114 lines the MEDIAN one realised **0.815** of
+its projected margin (quartiles 0.54 and 1.47), so 1 / 0.815 = **1.23** is what
+the median line needs in order to cover its bill in fact. Rounded to 1.25. The
+sensitivity is stated because it is real: seed 2's expansive company builds at
+1.435 and 1.488 and seed 3's rail company at 1.881, so a floor above 1.435 would
+stop two of scenario 5's three personalities building at all - a property of how
+thin the industry offer is on a generated map, not of this number.
+
+**The other half of the diagnosis was measured and REFUTED, and that is the
+finding rather than a fix.** "The stop the AI plants covers FOUR buildings in a
+town of 400" is true, and it is not a placement defect: **four is the whole
+town.** On every one of the eight swept seeds, every town of population 500 or
+under carries EXACTLY 4.00 building tiles (24-33 such towns a seed, 96-132
+buildings, the figure identical on all eight), and `stopTileNear`'s radius-4
+catchment reaches **3.79-4.00** of them against a best-legal-placement
+**3.79-4.00**: the whole head-room a cleverer scan could win on a small town is
+between 0.00 and 0.11 buildings, and on four of the eight seeds it is exactly
+zero. Over ALL towns the scan covers 54.8-74.3 % of a town's stock against a
+best of 58.1-77.7 %, and every point of that 2-5 point gap is on the large towns
+whose houses do not fit inside one disc at any centre. A second measurement says
+the coverage would not be worth much even if it could be raised:
+**`produceTownCargo` hands a town's output to its stations by SHARE**
+(`buildingsCovered * rating / totalWeight`) and the shares sum to one, so the
+SOLE station of a town - which is what an AI town always has - receives the
+town's WHOLE monthly output whatever it covers. `buildingsCovered` decides which
+town a stop belongs to, whether it takes goods and food at all, and how two
+stations of one town split the traffic; it does not scale a passenger line's
+revenue. **`stopTileNear` is therefore unchanged**, and both numbers are pinned
+in `tests/unit/aiProfitFloor.spec.ts` and written over the function so the day
+is not spent again. What a town of 400 cannot support is the LINE, and the floor
+above is what refuses it: two towns of 400 at 26 tiles project **0.623**.
+
+**Bands re-measured, and the one that moved is documentation, not a band.**
+Scenario 5 ROAD **1,156,463 -> 1,022,084 EUR** (-11.6 %), still two lines, twelve
+vehicles, still compounding through the year-twenty-one renewal, comfortably
+inside 0.8-3.2 M; the fall is chaotic divergence and the trace says so - with the
+two loss-making town pairs refused, the AI consumes different RNG and that map's
+coal pair appears in a different game year (the 1950 list on that seed holds
+nothing BUT two pop-400 bus pairs, projected 0.623 and 0.266). RAIL **228,047**
+and EXPANSIVE **-241,309 [wound up]** unchanged to the euro. Every other
+scenario - the bus line, the coal train, the wood chain, bankruptcy, the mine
+closure, the takt, Netzdesign, harter Winter, Punktzahl - bit-identical.
+
+**No save bump, verified rather than assumed.** `Opportunity` is a transient
+ranking record and gained one derived field (`offeredPerMonth`, both ends of a
+passenger pair rather than the larger one); `AiState` and `AiProject` are
+untouched, so no field, layer or entity changed shape and **SAVE_VERSION stays
+30**. The **canonical cross-OS pin `ddaacd4b970d31db` did NOT move** - checked by
+running `tests/determinism`, not presumed, because its world is the recorded ROAD
+fixture and carries no AI. The **soak fixture is re-recorded**:
+`45ccb46dc67e1fdf` -> **`1f76e2df98be99a3`**, and the number in it worth reading
+is the command count, **3,419 -> 191**. Nine tenths of what that competitor
+ordered over a quarter century was a line that could not pay.
+
+**Verified by running**, on the final tree: `npm run typecheck` clean;
+`npm run lint` over the whole repo clean; `npx prettier --check` clean on every
+touched file (the repo-wide check is red at HEAD too - the CRLF working tree of
+CLAUDE.md's environment note); `tests/unit` **110 files / 1,459 tests** green;
+`tests/balance` **12 files / 79 green + 2 skipped**; `npm run test:balance:full`
+**12 files / 97 green**, the four-seed sweep included; `tests/determinism`
+**7 files / 33** green at the unmoved pin; `npm run test:soak` **4** green at the
+re-recorded hash.

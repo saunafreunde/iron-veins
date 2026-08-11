@@ -641,6 +641,40 @@ export const AI_LIFT_REAL_SHARE = 0.5;
 export const AI_DRAIN_MARGIN = 1.5;
 
 /**
+ * How far a line's projected monthly revenue must clear the whole monthly
+ * bill it creates before a competitor will build it at all. [factor]
+ *
+ * The floor `startProject` never had. `rate` scores revenue per unit of
+ * capital, which is a RANKING with no bottom, and `startProject` then asked
+ * only whether the company could AFFORD the build - so the best of a list of
+ * loss-makers was built, and built again, until the money was gone. Measured
+ * over eleven quarter-century AI games (the four `aiGame` sweep seeds, four
+ * unplayed seeds and scenario 5's three personalities), 114 lines were built
+ * and reviewed 492 times, and the outcome sorts almost perfectly by the
+ * projection of `projectLine`:
+ *
+ * | projected margin | lines | ever covered their whole monthly bill |
+ * | ---------------- | ----- | ------------------------------------- |
+ * | under 0.9        |    77 | 7 (9 %)                               |
+ * | 0.9 and over     |    37 | 17 (46 %)                             |
+ * | 2.0 and over     |     4 | 4 (100 %)                             |
+ *
+ * The value is NOT read off that table - picking the column that flatters a
+ * band is exactly what this project does not do. It is the reciprocal of the
+ * measured optimism of the projection itself: over all 114 lines the MEDIAN
+ * one realised **0.815** of its projected margin at its best review window
+ * (quartiles 0.54 and 1.47), so a projection of 1 / 0.815 = **1.23** is what
+ * the median line needs in order to cover its bill in fact. Rounded to 1.25.
+ *
+ * Sensitivity, stated because it is real: seed 2's expansive company builds
+ * at 1.435 and 1.488 and seed 3's rail company at 1.881, so a floor above
+ * 1.435 would stop two of scenario 5's three personalities building at all.
+ * That is a property of how thin the industry offer is on a generated map
+ * (the second named cause, deliberately untouched here), not of this number.
+ */
+export const AI_MIN_PROFIT_MARGIN = 1.25;
+
+/**
  * How far off the straight corridor the AI's road planner may look, per side.
  * [tiles]
  *

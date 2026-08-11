@@ -40,8 +40,9 @@ import { hashTwin } from './determinism';
  *
  *  - ROAD (seed 4711, the compounding personality): 0.8 - 3.2 million.
  *    Measured 1,119,720 EUR at M11, 978,528 after M19 closed, 1,173,298
- *    since D-216 tightened the towns, **1,156,463 since D-218 and D-219 fixed
- *    the AI's road joins and its railway permission** - building, renewing at
+ *    since D-216 tightened the towns, 1,156,463 after D-218 and D-219 fixed
+ *    the AI's road joins and its railway permission, **1,022,084 since D-221
+ *    refused the lines that cannot pay** - building, renewing at
  *    year twenty-one and growing straight through it. The floor is the stall
  *    detector (the pre-C2 stall states measured 433,000 and 580,000); the
  *    ceiling is the economy-breakage detector, anchored above the probe's
@@ -71,6 +72,22 @@ import { hashTwin } from './determinism';
  *    take the single-track fallback branch on this map.
  *  - EXPANSIVE **-241,309 EUR [wound up]**, 5 stations, 1 line, 0 vehicles -
  *    also unchanged to the euro.
+ *
+ * **D-221 moved the road row and the trace says why, which is the only reason a
+ * measurement is allowed to move without the band moving with it.** The AI may
+ * no longer build a line whose projected revenue misses the whole monthly bill
+ * it creates (`AI_MIN_PROFIT_MARGIN`), and on this map the 1950 candidate list
+ * of the road personality holds NOTHING but two pop-400 bus pairs, projected
+ * 0.623 and 0.266 - both refused now, both built before. The company therefore
+ * consumes different randomness from its first decision on, that seed's coal
+ * pair enters its list in a different game year, and the quarter century that
+ * follows is a different one: **1,156,463 -> 1,022,084 EUR** (-11.6 %), two
+ * lines and twelve vehicles in both, still growing through the year-twenty-one
+ * renewal, still well inside 0.8 - 3.2 M. RAIL **228,047** and EXPANSIVE
+ * **-241,309 [wound up]** are unchanged to the euro: both build at projections
+ * of 1.435 - 1.881, so the floor never reaches them. On the twenty-four
+ * competitors of the eight-seed `aiGame` sweep the same change is worth
+ * 18,435 -> 7,593,553 EUR and takes windings-up from eight to three.
  *
  * **And the honest closing sentence about SPEC.md 19.4's 5 - 25 million: the
  * AI does not reach it and this bundle does not claim it does.** 1,156,463 is a

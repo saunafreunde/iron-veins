@@ -2161,6 +2161,50 @@ closes the hole they walked through and touches **no simulation code at all**.
   soak hash `45ccb46dc67e1fdf`, the canonical pin `ddaacd4b970d31db` and the
   corpus manifest all stand - re-run and compared, not presumed. v30 stands.
 
+## The AI's economics - a business that cannot pay is not built (D-221)
+
+**The third cause D-218 named, and the one the other two were sitting on.**
+`rate` scores revenue per unit of CAPITAL - a ratio with no floor - and
+`startProject` asked only whether the company could AFFORD the build, so the
+best of a list of loss-makers was built exactly as a good line would have been,
+and then built again. Measured over the four sweep seeds plus four nobody had
+played, twenty-five years each: **total value over twenty-four competitors
+18,435 -> 7,593,553 EUR, wound up 8 -> 3**, the four unplayed seeds alone
+-956,108 -> 3,474,568, the asserted four-seed sweep 974,542 -> 4,118,986.
+
+- **`projectLine` is the absolute test beside the ratio**, and it is quoted for
+  the REAL vehicle, the REAL fleet the 12.3 advisor sizes and the REAL round at
+  `AI_LIFT_REAL_SHARE` - D-219a measured a floor built out of `rate`'s own
+  nominal 20-unit lorry load and it stopped the AI building at all. The cost
+  side is the whole monthly bill: fleet upkeep, two stops, the shed and the way,
+  and it is deliberately NOT folded into `buildCostCt` (D-121's double count).
+  The decay IS charged here; D-122's verdict was about the RANKING and stands.
+- **The gate lives in `opportunities`, not only in the builder.** With it in the
+  builder alone the refused pairs sat at the top of the ranking for ever and the
+  builder spends a fixed `AI_CANDIDATES_TRIED` on them. `fleetFor` and
+  `loadUnitsOf` moved into `evaluate.ts` so filter and builder cannot drift.
+- **`AI_MIN_PROFIT_MARGIN = 1.25` is a measurement, not a knob**: 114 lines and
+  492 reviews across eleven quarter-century games, and the median line realises
+  **0.815** of its projected margin at its best window, so 1/0.815 = 1.23.
+  Sorted by projection, 7 of 77 lines under 0.9 ever covered their whole bill
+  against 4 of 4 at 2.0 and over.
+- **"The stop covers four buildings" was measured and REFUTED - four is the
+  whole town.** Every town of population <= 500 on all eight seeds has exactly
+  4.00 building tiles; `stopTileNear` reaches 3.79-4.00 of them against a best
+  legal placement of 3.79-4.00. And `produceTownCargo` normalises the share, so
+  the sole station of a town gets the town's WHOLE output whatever it covers.
+  `stopTileNear` is unchanged and both numbers are pinned in
+  `tests/unit/aiProfitFloor.spec.ts`.
+- **What it does NOT do, said plainly: one competitor in twelve still runs a
+  line with a fleet.** This bundle stops the AI destroying capital; the second
+  cause - three of five personalities see an EMPTY candidate list on a generated
+  map - is the next one, and doing it first was measured at -3,123,753 EUR.
+- **Ripple**: scenario 5 road 1,156,463 -> **1,022,084 EUR** (chaotic
+  divergence, band untouched), rail and expansive unchanged to the euro, every
+  other scenario bit-identical. Soak fixture re-recorded `45ccb46dc67e1fdf` ->
+  **`1f76e2df98be99a3`**, commands **3,419 -> 191**; the canonical cross-OS pin
+  `ddaacd4b970d31db` did NOT move (checked); **SAVE_VERSION stays 30**.
+
 ## Still outstanding
 
 - **The two named walls of D-158.** A passenger pile a fleet merely
