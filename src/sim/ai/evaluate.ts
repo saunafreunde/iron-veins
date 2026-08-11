@@ -15,7 +15,8 @@ import {
   AI_PRODUCING_SINK_PENALTY,
   AI_LORRY_PRICE_CT,
   AI_PLATFORM_TILES,
-  AI_RAIL_MAX_TRAINS,
+  AI_RAIL_PROJECTED_TRACKS,
+  AI_RAIL_PROJECTED_TRAINS,
   AI_RIVAL_PENALTY,
   AI_TICKS_PER_TILE,
   AI_TILES_PER_MONTH,
@@ -190,10 +191,44 @@ export function stationMonthlyOutput(
  * builder walks down it: the best pair is often unbuildable - a mountain, a
  * competitor's exclusive rights, no route - and the second best is a perfectly
  * good railway.
+ *
+ * **A mode preference is not a vow of poverty** (D-222). The two rail
+ * personalities used to see their pairs priced as railways and as nothing
+ * else, and on a generated map that is regularly an empty list: the AI's
+ * railway is two platforms, a shed and a double way (D-153's one-way oval),
+ * and past roughly eighty tiles that bill beats what two trains can lift.
+ * Measured at game start over the eight sweep seeds, with the distance window
+ * already opened to the economic horizon: the same industry pairs pay by road
+ * on **14** counts and by rail on **6**, and on 4711, 4712, 4714 and 12345 the
+ * rail list is empty while a road line on the identical pair projects
+ * 1.83-2.56 against the 1.25 floor. So a personality whose PREFERRED mode
+ * offers nothing that pays looks at the same pairs on the other one, and only
+ * then. It is safe in a way it was not before D-221: what comes back is
+ * filtered by the profitability floor like everything else, so the fallback
+ * can only offer lines that pay - the experiment that widened the offer while
+ * the offer still lost money was measured at -3,123,753 EUR.
+ *
+ * It runs one way only, and that is measured too: **no** town pair on any of
+ * the eight seeds pays as a railway (0 of 780 per seed, best margin 0.07), and
+ * the industry pairs that pay by rail are a subset of those that pay by road,
+ * so a road personality falling back to rail would find nothing. An
+ * unconditional both-modes list would also make the five personalities one
+ * personality, which is what they exist not to be.
  */
 export function opportunities(world: World, personality: number, companyId: number): Opportunity[] {
+  const prefersRail = personality === Personality.Rail || personality === Personality.Expansive;
+  const preferred = collectFor(world, personality, companyId, prefersRail);
+  if (preferred.length > 0 || !prefersRail) return preferred;
+  return collectFor(world, personality, companyId, false);
+}
+
+function collectFor(
+  world: World,
+  personality: number,
+  companyId: number,
+  rail: boolean,
+): Opportunity[] {
   const found: Opportunity[] = [];
-  const rail = personality === Personality.Rail || personality === Personality.Expansive;
 
   // The town specialist works passengers between towns exclusively; the road
   // personality works BOTH - section 15 step 1 says "alle Paare (Quelle,
@@ -265,7 +300,13 @@ export function opportunities(world: World, personality: number, companyId: numb
     const liftUnits = loadUnitsOf(specIds, opportunity.cargo);
     if (liftUnits <= 0) return false;
     const roundsPerMonth = AI_TILES_PER_MONTH / (2 * opportunity.distance);
-    const cap = opportunity.rail ? AI_RAIL_MAX_TRAINS : AI_MAX_VEHICLES_PER_LINE;
+    // The largest fleet the line will REALLY get, which on rail is
+    // AI_RAIL_PROJECTED_TRAINS and not AI_RAIL_MAX_TRAINS: the second train
+    // exists only on the one-way oval, and the oval does not fit on generated
+    // terrain (measured, ten railways of ten - the constant carries the
+    // count). Both the drain gate and the profitability floor below are quoted
+    // for it, because they are two halves of one question about one line.
+    const cap = opportunity.rail ? AI_RAIL_PROJECTED_TRAINS : AI_MAX_VEHICLES_PER_LINE;
     const maxLift = cap * liftUnits * roundsPerMonth * AI_LIFT_REAL_SHARE;
     // The fleet must OUT-lift a decaying source, not merely match it: a pile
     // it can never eat pins at a month of age and pays the floor for ever
@@ -693,7 +734,11 @@ export interface LineProjection {
  *
  *  1. **The real vehicle and the real fleet.** `specIds` is what the builder
  *     will actually buy and `fleet` is what the 12.3 advisor sized, so the
- *     capacity term is the one the line will really have.
+ *     capacity term is the one the line will really have - and on rail that
+ *     means AI_RAIL_PROJECTED_TRAINS over AI_RAIL_PROJECTED_TRACKS, the
+ *     single-track fallback the builder really lays, not the oval it asks for
+ *     first (D-222; it used to quote two trains over a double way, and the
+ *     line that was priced was never the line that got built).
  *  2. **The real round.** Rounds a month are quoted at AI_LIFT_REAL_SHARE of
  *     the nominal speed - the measured ratio - on both the capacity and the
  *     decay side.
@@ -745,10 +790,15 @@ export function projectLine(
   const modulesCt = opportunity.rail
     ? RAIL_PLATFORM_UPKEEP_CT * AI_PLATFORM_TILES * 2 + RAIL_DEPOT_UPKEEP_CT
     : ROAD_STOP_UPKEEP_CT * 2 + ROAD_DEPOT_UPKEEP_CT;
-  // TWICE the per-tile figure for rail, for `rate`'s own reason: the AI lays a
-  // one-way oval, an outbound and a return track.
+  // `rate` charges TWICE the per-tile figure for rail because D-153's one-way
+  // oval is an outbound and a return track. The PROJECTION charges
+  // AI_RAIL_PROJECTED_TRACKS, because the oval is what the builder would like
+  // to lay and the single track is what it lays: measured over eight seeds and
+  // twenty-five years each, every railway the AI built was the fallback
+  // (D-222). Where the oval does fit, the line beats its own projection, which
+  // is the safe direction for a floor to be wrong in.
   const wayCt = opportunity.rail
-    ? RAIL_TYPE_UPKEEP_CT[RailType.Plain]! * opportunity.distance * 2
+    ? RAIL_TYPE_UPKEEP_CT[RailType.Plain]! * opportunity.distance * AI_RAIL_PROJECTED_TRACKS
     : ROAD_UPKEEP_PER_TILE_CT * opportunity.distance;
   const upkeepCtPerYear2 = upkeepCtPerYear * fleet + modulesCt + wayCt;
   const upkeepCtPerMonth = world.costCt(upkeepCtPerYear2 / MONTHS_PER_YEAR);

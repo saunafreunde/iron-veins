@@ -45,14 +45,14 @@ no entry below. A number may appear under several topics.
 - **Balancing & scenarios:** D-038, D-039, D-040, D-041, D-066, D-087, D-088,
   D-116, D-151, D-152, D-156, D-158, D-159, D-187, D-190, D-194, D-195,
   D-196, D-197, D-198, D-199, D-200, D-203, D-204, D-207, D-211, D-213,
-  D-215, D-216, D-220, D-221
+  D-215, D-216, D-220, D-221, D-222
 - **Vehicles & fleet:** D-043, D-044, D-045, D-068, D-076, D-089, D-093,
   D-096, D-142, D-143, D-145, D-146, D-155, D-157, D-171, D-174, D-181, D-185,
   D-201, D-207
 - **Water & air:** D-094, D-095, D-096, D-097, D-098, D-099
 - **Competitors, AI & tenders:** D-107, D-108, D-109, D-115, D-116, D-121,
   D-122, D-147, D-152, D-153, D-154, D-155, D-156, D-158, D-216, D-218,
-  D-219, D-220, D-221
+  D-219, D-220, D-221, D-222
 - **Rendering & art:** D-013, D-014, D-033, D-035, D-112, D-117, D-125, D-127,
   D-136, D-140, D-160, D-161, D-162, D-163, D-164, D-165, D-166, D-169, D-170,
   D-171, D-172, D-173, D-174, D-175, D-177, D-179, D-186, D-202, D-205, D-206,
@@ -72,9 +72,10 @@ no entry below. A number may appear under several topics.
   D-167, D-183, D-186, D-188, D-189, D-190, D-191, D-192, D-193, D-194,
   D-195, D-196, D-197, D-198, D-199, D-200, D-201, D-202, D-203, D-204,
   D-205, D-207, D-206, D-208, D-209, D-210, D-212, D-213, D-215, D-216,
-  D-217, D-219, D-220, D-221
+  D-217, D-219, D-220, D-221, D-222
 - **Process & specification:** D-070, D-123, D-129, D-133, D-138, D-140,
-  D-185, D-191, D-197, D-198, D-199, D-203, D-204, D-205, D-206, D-215
+  D-185, D-191, D-197, D-198, D-199, D-203, D-204, D-205, D-206, D-215,
+  D-222
 
 ---
 
@@ -11534,3 +11535,112 @@ CLAUDE.md's environment note); `tests/unit` **110 files / 1,459 tests** green;
 **12 files / 97 green**, the four-seed sweep included; `tests/determinism`
 **7 files / 33** green at the unmoved pin; `npm run test:soak` **4** green at the
 re-recorded hash.
+
+### D-222 A mode preference is not a vow of poverty, and a projection must price the railway that gets built
+
+**Cause 4 of the AI diagnosis - "three of five personalities see an EMPTY
+opportunity list" - is half right, and the half that is wrong was named as the
+filter to fix.** Measured before anything was changed, on all eight seeds of
+the acceptance set at game start (256 map, three competitors):
+
+| what | 4711 | 4713 | 4712 | 4714 | 2718 | 31415 | 60613 | 12345 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| industries / towns | 9/40 | 12/40 | 11/40 | 11/40 | 12/40 | 13/40 | 13/40 | 15/40 |
+| pairs whose sink accepts the source's cargo | 6 | 9 | 8 | 4 | 4 | 4 | 5 | 6 |
+| dropped `tooFar` (>120) | 3 | 2 | 2 | 4 | 0 | 1 | 4 | 5 |
+| dropped `noOnwardLeg` | 2 | 6 | 1 | 0 | 2 | 1 | 0 | 0 |
+| dropped `canSupply` (unsupplied factory) | 0 | 0 | 1 | 5 | 2 | 3 | 5 | 7 |
+| dropped by the FRESH rot gate | **0** | **0** | **0** | **0** | **0** | **0** | **0** | **0** |
+| reaching the economics | 1 | 1 | 5 | 0 | 2 | 2 | 1 | 1 |
+
+- **The rot gate is refuted, and it is pinned refuted.** `arrivesAlive` drops
+  **zero** industry pairs on all eight seeds, and the whole candidate list is
+  IDENTICAL with it on and off - both modes, both pair sources, distance window
+  at 120 and lifted. Everything it would refuse the D-221 floor refuses anyway,
+  because `projectLine` charges the real transit decay properly. The 0.10
+  survival figure in the diagnosis is the STALE branch, not the fresh one, and
+  that branch is CORRECT: it is what refuses a farm making 307 units a month to
+  six lorries at sixty-five tiles, and seven of the thirteen pairs that reach
+  the economics are exactly that. `tests/unit/aiModeFallback.spec.ts` holds the
+  zero.
+- **The personalities are not idle for want of building, either.** The
+  lifecycle trace nobody had taken: of twenty-four competitors, **fourteen
+  built AND crewed** - three road companies bought 12-18 buses, eight rail
+  companies bought a train each - and then `closeDeadLine` sold the fleet and
+  deleted the line, after which the standing stations act as the graveyard
+  marker (`servedByUs`) and the pair is never tried again. Thirteen of the
+  fourteen finished with no vehicle. **Every railway ever built died**, ten of
+  ten.
+- **THE DEFECT: the projection priced a railway the builder never lays.**
+  `enqueueInfrastructure` lays D-153's one-way oval only where two straight
+  clear rows fit the whole span, and on generated terrain they never do -
+  `BuyTrain` accepted exactly ONCE per rail company, ten of ten, and
+  `AiProject.railTrains` was 1 every time. `projectLine` was quoting **two
+  trains over a double way**. Measured at the closing review of every rail line
+  the eight seeds produced, earnings against the FLEET upkeep alone came to
+  0.61, 0.71, 0.89, 0.96, 0.96 and 0.99 of what was owed, against projections
+  of 1.3-1.9 times the whole bill. `AI_RAIL_PROJECTED_TRAINS` /
+  `AI_RAIL_PROJECTED_TRACKS` are 1 and 1 now, used by the drain gate and the
+  floor together; where the oval does fit the line beats its own projection,
+  which is the safe direction for a floor to be wrong in. This is D-219's
+  lesson one file along - a filter and the builder it filters for must not
+  disagree about what is being built.
+- **THE FIX FOR THE EMPTY LIST: a mode preference is not a vow of poverty.**
+  A personality whose PREFERRED mode offers nothing that pays now looks at the
+  same pairs on the other one, and only then. It is safe in a way it was not
+  before D-221 - what comes back is filtered by the profit floor like
+  everything else, and widening the offer while the offer still lost money was
+  measured at -3,123,753 EUR. It runs ONE way, measured: **no** town pair on
+  any seed pays as a railway (0 of 780 per seed, best margin 0.07) and the
+  industry pairs that pay by rail are a subset of those that pay by road, so a
+  road personality falling back to rail would find nothing and would only blur
+  the five personalities into one. Over the eight seeds, four of sixteen
+  rail-personality lists stay rail and six fall back.
+- **Measured, eight seeds, twenty-five years each: total value 7,593,553 ->
+  9,233,799 EUR (+21.6 %), wound up 3 -> 2, competitors running a line with a
+  fleet 1 -> 4 on 4 of 8 SEEDS (4711, 4713, 4714, 12345), living vehicles
+  6 -> 40, `NoRoute` 0 throughout.** The asserted four-seed sweep goes
+  4,118,986 -> 5,969,618 with nobody wound up. Seed 4713's rail company reads
+  -247,794 [wound up] -> **+1,687,871 with three lines and eighteen vehicles**;
+  4714's expansive 500,000 untouched -> 415,718 with a line and six vehicles.
+  Two rows got worse and are named: 2718's rail company 222,570 -> -196,058
+  (alive, five stations, a road business it now runs at a loss) and 31415's
+  expansive -408,030 [X] -> -103,538 [X], still wound up but for two thirds of
+  the money.
+
+**AI_MAX_DISTANCE was measured, and the bands refused it.** The window is
+SPEC.md section 15's own "Distanz 15-120 Tiles", written when the opportunity
+list had no profitability test at all - so it is a proxy standing beside the
+instrument D-221 built for it, and the natural conclusion was to open it. The
+evidence for opening it is real: 21 of the 51 accepting pairs are further apart
+than 120 tiles, the per-seed median accepting pair is 33-168, the window also
+bounds `onwardLegExists` and so kills complete chains whose NEXT leg is beyond
+it (4712: IronOre->SteelMill at 83 tiles, refused because SteelMill->Machine
+Factory is 163), and the game's own **economic horizon** - the longest haul at
+which `projectLine` can clear the floor for ANY cargo, swept tile by tile over
+twenty cargoes, both modes, five source sizes and six decades of catalogue - is
+**233 tiles**. Opened to 240 the eight-seed set improves (7,593,553 ->
+7,829,962 with the fallback, 42 living vehicles). **It is not shipped**: on
+scenario 5's 512 map the road company falls **1,022,084 -> 797,873 EUR**,
+0.27 % under D-158's measured floor, and stops compounding through its year-21
+renewal - not through anything in its own line, but because the rail company on
+the same map now competes for the same ground. The bands own the constants
+(D-087). The whole measurement is in the constant's own comment so the next
+pass starts from it.
+
+**And one thing that was retried and is still not the answer.** D-122 reverted
+charging `rate`'s ranking the honest transit decay. It was retried here because
+D-221 changed the world the revert was measured in - the ranking is no longer
+the build decision, so a term that depresses every score equally can no longer
+stop anything being built, only reorder. Measured on scenario 5 with the window
+open: **not one cent of difference.** D-122's real finding was that the order
+does not move, and it stands.
+
+**No save bump, verified rather than assumed.** `Opportunity` is a transient
+ranking record and nothing in `AiState` or `AiProject` changed shape, so
+SAVE_VERSION stays 30. **The soak fixture did NOT need re-recording** - seed
+4711 plays the identical game, hash `1f76e2df98be99a3` at 191 commands,
+re-run and compared rather than presumed - and the canonical cross-OS pin
+`ddaacd4b970d31db` did not move. Scenario 5 is **bit-identical to D-221's**
+(road 1,022,084, rail 228,047, expansive -241,309), and no band, threshold or
+assertion in `tests/balance` was loosened or moved.

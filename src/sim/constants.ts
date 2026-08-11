@@ -422,8 +422,56 @@ export const ENERGY_COST_CT_PER_MJ: readonly number[] = [
  */
 export const AI_DECISION_INTERVAL_TICKS = 400;
 
-/** Shortest and longest haul a competitor will consider. [tiles] */
+/**
+ * Shortest haul a competitor will consider. [tiles]
+ *
+ * SPEC.md section 15 names 15, and it is not only a spec figure: a station's
+ * catchment is `STATION_CATCHMENT_SCAN_RADIUS` tiles across, so two stops much
+ * closer than this serve the same buildings and the line carries its own
+ * passengers in a circle.
+ */
 export const AI_MIN_DISTANCE = 15;
+
+/**
+ * Longest haul a competitor will consider. [tiles]
+ *
+ * SPEC.md section 15 - "Alle Paare (Quelle, Senke) mit Distanz 15-120 Tiles" -
+ * and that IS its origin: it is a spec figure, written when the opportunity
+ * list had no profitability test at all, so the distance window WAS the test.
+ * D-221 built the real one, which makes this a proxy standing beside the
+ * instrument it stood in for. **D-222 measured raising it and did not ship
+ * it**, and the measurement is recorded here so the next pass starts from it
+ * rather than from the idea:
+ *
+ *  - What the window costs. Over the eight sweep seeds at game start on 256
+ *    maps, of the 51 (source, sink) pairs whose sink accepts what the source
+ *    makes, **21 are further apart than 120 tiles**; the per-seed median
+ *    accepting pair is 33-168. Opening the window alone takes the industry
+ *    offer from 5 paying road candidates to 14 and 5 rail to 6 - everything
+ *    else refused by the profit floor and the drain gate, not by distance -
+ *    and on three seeds the pair it refused was the only industrial business
+ *    on the map. It also bounds `onwardLegExists`, so it kills complete chains
+ *    whose NEXT leg is beyond it (seed 4712: IronOre->SteelMill at 83 tiles,
+ *    refused because SteelMill->MachineFactory is 163).
+ *  - Where an honest window would sit. The game's own **economic horizon** -
+ *    the longest haul at which `projectLine` can clear AI_MIN_PROFIT_MARGIN
+ *    for ANY cargo, swept tile by tile over all twenty cargoes, both modes,
+ *    five source sizes and six decades of catalogue - is **233 tiles** (gravel
+ *    by road, 1970 catalogue on; 206 in 1950).
+ *  - Why it is still 120. At 240 the balance suite refuses it: scenario 5's
+ *    road company falls **1,022,084 -> 797,873 EUR**, 0.27 % under D-158's
+ *    measured floor, and stops compounding through its year-21 renewal - not
+ *    through any mechanism in its own line, but because the rail company on
+ *    the same 512 map now competes for the same ground. The bands own the
+ *    constants (D-087), and this one says no.
+ *
+ * Two things that were tried on the way and are NOT the answer, so nobody
+ * spends the day again: charging `rate`'s ranking the honest transit decay
+ * (D-122's reverted term, retried because D-221 separated ranking from the
+ * build decision so a uniform depression can no longer stop a build) changed
+ * scenario 5 by **not one cent** - the order really does not move; and
+ * relaxing AI_MIN_ARRIVAL_FACTOR is pointless, see that constant.
+ */
 export const AI_MAX_DISTANCE = 120;
 
 /**
@@ -482,6 +530,20 @@ export const AI_SERVICE_INTERVAL_MIN_TICKS = TICKS_PER_DAY;
  * was a 123-tile grain haul - 44 days one-way against grain's 14-day grace,
  * arrival factor 0.46 - and every vehicle put on it earned the 10 % floor
  * while the estimate had quoted it fresh.
+ *
+ * **Since D-221 the FRESH half of this gate refuses nothing, and D-222
+ * measured it rather than assuming it**: over the eight sweep seeds at game
+ * start, industry pairs and town pairs, road and rail, with the distance
+ * window both at 120 and lifted, the candidate list is IDENTICAL with
+ * `arrivesAlive` on and off - every pair it drops the profitability floor
+ * drops too, because `projectLine` charges the real transit decay properly.
+ * It stays because it is a cheap early-out in front of an expensive
+ * projection, and because it is the gate that keeps a pair out of the RANKING
+ * where D-122 forbids the same term. What it is NOT is the reason the industry
+ * personalities see an empty list: on the eight seeds the fresh gate drops
+ * **zero** industry pairs. The survivors are dropped by the STALE branch of
+ * the rot gate below (a farm making 307 units a month against six lorries at
+ * sixty-five tiles - that refusal is correct) and by the floor.
  */
 export const AI_MIN_ARRIVAL_FACTOR = 0.5;
 
@@ -572,6 +634,31 @@ export const AI_MAX_VEHICLES_PER_LINE = 6;
  * sit on the ring, so a third train buys waiting, not throughput.
  */
 export const AI_RAIL_MAX_TRAINS = 2;
+
+/**
+ * The railway a competitor's PROFITABILITY test is quoted for: one train on
+ * one track. [trains, tracks]
+ *
+ * Not AI_RAIL_MAX_TRAINS and not the oval's double way, and the difference is
+ * measured rather than assumed. `enqueueInfrastructure` lays D-153's one-way
+ * oval only where two straight clear rows fit the whole span, and on generated
+ * terrain they do not: over the eight sweep seeds, twenty-five years each,
+ * **every single railway the AI built was the single-track fallback with one
+ * train** - `BuyTrain` accepted exactly once per rail company, ten of ten, and
+ * `AiProject.railTrains` 1 every time. `projectLine` was quoting two trains
+ * over a double way, so the line that was PRICED was never the line that got
+ * BUILT: half the lift, and the review then judged the real one. Measured on
+ * the closing review of every rail line the eight seeds produced, earnings
+ * against the fleet upkeep alone came to 0.61-0.99 of what was owed, against a
+ * projection of 1.3-1.9 times the whole bill.
+ *
+ * Quoting the fallback is also the SAFE direction: where the oval does fit the
+ * line gets two trains over two tracks and beats its own projection. This is
+ * the D-219 lesson one file along - a filter and the builder it filters for
+ * must not disagree about what is being built.
+ */
+export const AI_RAIL_PROJECTED_TRAINS = 1;
+export const AI_RAIL_PROJECTED_TRACKS = 1;
 
 /** Cargo waiting at a line's first stop before it is reinforced. [units] */
 export const AI_REINFORCE_WAITING = 300;

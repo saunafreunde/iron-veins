@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   AI_MAX_VEHICLES_PER_LINE,
   AI_MIN_PROFIT_MARGIN,
-  AI_RAIL_MAX_TRAINS,
+  AI_RAIL_PROJECTED_TRAINS,
   AI_TICKS_PER_TILE,
   Difficulty,
   MapClimate,
@@ -60,7 +60,9 @@ function project(w: World, opportunity: Opportunity): number {
     2 * opportunity.distance * AI_TICKS_PER_TILE,
     units,
     opportunity.monthlyOutput,
-    opportunity.rail ? AI_RAIL_MAX_TRAINS : AI_MAX_VEHICLES_PER_LINE,
+    // The shape the FILTER prices, which on rail is the single-track fallback
+    // the builder really lays and not the oval it asks for first (D-222).
+    opportunity.rail ? AI_RAIL_PROJECTED_TRAINS : AI_MAX_VEHICLES_PER_LINE,
   );
   return projectLine(w, opportunity, specIds, fleet).margin;
 }

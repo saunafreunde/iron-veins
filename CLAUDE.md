@@ -2205,6 +2205,56 @@ played, twenty-five years each: **total value over twenty-four competitors
   **`1f76e2df98be99a3`**, commands **3,419 -> 191**; the canonical cross-OS pin
   `ddaacd4b970d31db` did NOT move (checked); **SAVE_VERSION stays 30**.
 
+## The AI's mode - a preference is not a vow of poverty (D-222)
+
+**The second cause D-221 named, and it was half a different defect.** "Three of
+five personalities see an empty opportunity list" is true; the reason given for
+it was not. Re-measured on all eight seeds at game start, the funnel is 9-15
+industries, 4-9 pairs whose sink accepts what the source makes, and the killers
+are `tooFar` (21 of 51), `canSupply` - an unsupplied factory (23) - and
+`noOnwardLeg` (12). **The fresh rot gate drops ZERO**, and the whole candidate
+list is identical with it on and off, on every seed, both modes, both pair
+sources: everything it would refuse the D-221 floor refuses anyway. It is
+pinned refuted in `tests/unit/aiModeFallback.spec.ts`.
+
+- **The lifecycle trace nobody had taken.** Fourteen of twenty-four
+  competitors built AND crewed - and then `closeDeadLine` sold the fleet and
+  deleted the line, after which the standing stations are the graveyard marker
+  and the pair is never tried again. **Every railway ever built died, ten of
+  ten.**
+- **Because the projection priced a railway the builder never lays.** The
+  one-way oval needs two straight clear rows across the whole span and
+  generated terrain never has them: `BuyTrain` accepted exactly once per rail
+  company, ten of ten. `projectLine` was quoting **two trains over a double
+  way**; at the closing review, earnings against fleet upkeep alone came to
+  0.61-0.99 of what was owed against projections of 1.3-1.9 times the whole
+  bill. `AI_RAIL_PROJECTED_TRAINS`/`_TRACKS` are 1 and 1 now, used by the drain
+  gate and the floor together. Where the oval does fit, the line beats its
+  projection - the safe direction for a floor to be wrong in.
+- **And a mode preference stopped being a vow of poverty.** A personality whose
+  preferred mode offers nothing that pays looks at the same pairs on the other
+  one, and only then - safe now, because what comes back is filtered by the
+  floor. **One way only, measured**: no town pair on any seed pays as a railway
+  (0 of 780 per seed, best margin 0.07) and the rail-paying industry pairs are
+  a subset of the road-paying ones.
+- **Eight seeds, twenty-five years each: 7,593,553 -> 9,233,799 EUR, wound up
+  3 -> 2, competitors running a line with a fleet 1 -> 4 on FOUR of eight seeds,
+  living vehicles 6 -> 40, NoRoute 0.** Seed 4713's rail company -247,794
+  [wound up] -> **+1,687,871, three lines, eighteen vehicles**. Two rows got
+  worse and D-222 names them.
+- **`AI_MAX_DISTANCE` was measured and the bands refused it.** 120 is SPEC 15's
+  own figure, written before there was a profitability test; the economic
+  horizon is **233 tiles** and 21 of 51 accepting pairs are beyond 120. Opened
+  to 240 the eight seeds improve - and scenario 5's road company falls
+  1,022,084 -> 797,873, 0.27 % under D-158's floor. The bands own the constants;
+  the whole measurement lives in the constant's comment for the next pass.
+- **D-122 retried and still right**: charging the RANKING the honest transit
+  decay - retried because D-221 separated ranking from the build decision -
+  changed scenario 5 by not one cent.
+- **No save bump, no re-record**: seed 4711 plays the identical game
+  (`1f76e2df98be99a3`, 191 commands, re-run not presumed), cross-OS pin
+  `ddaacd4b970d31db` unmoved, scenario 5 bit-identical, v30 stands.
+
 ## Still outstanding
 
 - **The two named walls of D-158.** A passenger pile a fleet merely

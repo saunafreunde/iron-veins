@@ -183,27 +183,30 @@ function quarterCentury(): Run {
 const TOTAL_EXPOSURE_CT = START_CAPITAL_CT[Difficulty.Normal]! + LOAN_MIN_LIMIT_CT;
 
 /**
- * **The measured sweep at D-221's HEAD** - the trace the assertions below were
+ * **The measured sweep at D-222's HEAD** - the trace the assertions below were
  * written from, printed by the first test on every run so it can never rot into
  * a quoted number nobody re-measured. Format: personality, value EUR,
  * [X] = wound up, l lines / v vehicles / s stations.
  *
  * ```
- * 4711  p0   55,935     l0 v0 s2  | p4  412,641     l0 v0 s4  | p1  540,495     l1 v6 s4
- * 4713  p4  411,226     l0 v0 s4  | p0 -247,794 [X] l0 v0 s2  | p3  500,000     l0 v0 s0
- * 4712  p4  500,000     l0 v0 s0  | p2   63,551     l0 v0 s2  | p0  500,000     l0 v0 s0
- * 4714  p4  382,931     l0 v0 s5  | p2  500,000     l0 v0 s0  | p3  500,000     l0 v0 s0
+ * 4711  p0    55,935     l0 v0 s2  | p4  412,641     l0 v0 s4  | p1 540,495     l1 v6  s4
+ * 4713  p4   410,475     l0 v0 s4  | p0 1,687,871    l3 v18 s4 | p3 500,000     l0 v0  s0
+ * 4712  p4   500,000     l0 v0 s0  | p2   63,551     l0 v0 s2  | p0 500,000     l0 v0  s0
+ * 4714  p4   382,931     l0 v0 s5  | p2  415,718     l1 v6  s5 | p3 500,000     l0 v0  s0
  * ```
  *
- * Total value 4,118,986 EUR, **one of twelve wound up, ONE of twelve owns a
- * vehicle**, seven of twelve took the field at all. Before D-221 refused the
- * lines that cannot pay it read 974,542 EUR with SIX of twelve wound up and
- * nine of twelve on the field: the competitors that stopped building were
- * building businesses measured to lose money, twenty-nine stations and 643 road
- * tiles at a time. What did not move is the sentence that matters most, and it
- * is still the sweep-wide floor at the end of this file: **one company in twelve
- * runs a line with a fleet.** The assertions are cut to what all four seeds
- * share rather than to the seed that flatters them:
+ * Total value 5,969,618 EUR, **nobody wound up, THREE of twelve own a fleet**,
+ * eight of twelve took the field. D-221 read 4,118,986 with one wound up and
+ * ONE of twelve owning a vehicle, and D-220 before it 974,542 with six wound
+ * up. What moved this time is the sentence that had not moved since M8: D-222
+ * took the rail personalities off a mode they cannot pay for on a generated map
+ * and quoted the projection for the single-track railway the builder really
+ * lays. Over the wider eight-seed set the same change reads 7,593,553 ->
+ * **9,233,799 EUR**, wound up 3 -> **2**, competitors running a line with a
+ * fleet 1 -> **4**, living vehicles 6 -> **40**.
+ *
+ * The assertions are still cut to what all four seeds share rather than to the
+ * seed that flatters them:
  *
  *  - **holds on all four**: at least one competitor alive; the richest
  *    competitor solvent; somebody built a network; everybody who took the field
@@ -215,9 +218,11 @@ const TOTAL_EXPOSURE_CT = START_CAPITAL_CT[Difficulty.Normal]! + LOAN_MIN_LIMIT_
  *    was red on 4712, 4713 and 4714 when this was written and is green on all
  *    four today - it stays out, because a claim that became true by accident of
  *    one bundle is not a property of the simulation; "the richest company built
- *    something" (still red on 4712 and 4714, where the richest is a company
- *    that never left the yard with its 500,000 intact); and any claim that a
- *    competitor crews what it builds - eleven of twelve do not.
+ *    something" (still red on 4712, where the richest is a company that never
+ *    left the yard with its 500,000 intact); and any claim about how many
+ *    competitors crew what they build - three of twelve here, four seeds of
+ *    eight over the wider set, and the floor at the end of this file stays a
+ *    floor.
  */
 describe('M8 acceptance: a quarter century against three competitors, swept over seeds', () => {
   it('reports what every swept seed measured', () => {
@@ -378,17 +383,19 @@ describe('M8 acceptance: a quarter century against three competitors, swept over
   }
 
   it('has, somewhere in the sweep, a competitor that crews what it builds', () => {
-    // **The floor is one company in twelve and it is stated as such.** A
-    // simulation in which no competitor anywhere runs a line is a decision
-    // cycle that does not work; that this is the FLOOR rather than the
-    // measurement is the AI's largest open defect, named in D-218 and D-219
-    // and owned by M24. Raising it is what closing that defect will look like -
-    // and D-221 deliberately did NOT: it stopped the AI destroying capital
-    // (18,435 -> 7,593,553 EUR over the eight measured seeds, eight windings-up
-    // down to three) without making one more competitor crew a line, because
-    // the offer three of five personalities can see is empty on a generated map
-    // and widening it while the bus business still lost money was measured at
-    // -3,123,753 EUR. Order first, then breadth.
+    // **This is a FLOOR, not the measurement, and it stays one.** A simulation
+    // in which no competitor anywhere runs a line is a decision cycle that does
+    // not work; that the floor had to be written at ONE company in twelve was
+    // the AI's largest open defect, named in D-218 and D-219 and owned by M24.
+    // D-221 stopped the AI destroying capital without moving it. D-222 moved
+    // it: three of twelve on the sweep, four of eight SEEDS over the wider set,
+    // 6 -> 40 living vehicles, by taking the rail personalities off a mode a
+    // generated map does not pay for and quoting the projection for the
+    // railway the builder really lays. The assertion is deliberately NOT
+    // re-banded to three - it depends on how many seeds the run plays, and a
+    // number that moves with a switch guards nothing. What guards the
+    // improvement is the trace at the top of this file, re-measured on every
+    // run.
     const rows = sweptSeeds().flatMap((seed) => swept(seed).rows);
     const crewed = rows.filter((row) => row.lines >= 1 && row.vehicles >= 2);
     expect(
