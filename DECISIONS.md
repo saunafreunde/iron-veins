@@ -28,11 +28,11 @@ no entry below. A number may appear under several topics.
   D-181, D-184, D-185, D-188, D-189, D-190, D-191, D-192, D-193, D-194,
   D-197, D-198, D-200, D-207, D-213
 - **Rail & track:** D-042, D-043, D-044, D-045, D-046, D-047, D-053, D-141,
-  D-153, D-157, D-184
+  D-153, D-157, D-184, D-230
 - **Signals & reservations:** D-054, D-055, D-056, D-057, D-058, D-059, D-060,
   D-061, D-073, D-080, D-081, D-082, D-083, D-157, D-173, D-184, D-185, D-186
 - **Stations & catchment:** D-049, D-080, D-095, D-150, D-159, D-178, D-179,
-  D-208, D-210
+  D-208, D-210, D-230
 - **Cargo, payment & routing:** D-036, D-037, D-065, D-067, D-075, D-077,
   D-078, D-118, D-142, D-151, D-176, D-178, D-187, D-207, D-211, D-213,
   D-215
@@ -52,7 +52,8 @@ no entry below. A number may appear under several topics.
 - **Water & air:** D-094, D-095, D-096, D-097, D-098, D-099
 - **Competitors, AI & tenders:** D-107, D-108, D-109, D-115, D-116, D-121,
   D-122, D-147, D-152, D-153, D-154, D-155, D-156, D-158, D-216, D-218,
-  D-219, D-220, D-221, D-222, D-223, D-224, D-225, D-226, D-228, D-229
+  D-219, D-220, D-221, D-222, D-223, D-224, D-225, D-226, D-228, D-229,
+  D-230
 - **Rendering & art:** D-013, D-014, D-033, D-035, D-112, D-117, D-125, D-127,
   D-136, D-140, D-160, D-161, D-162, D-163, D-164, D-165, D-166, D-169, D-170,
   D-171, D-172, D-173, D-174, D-175, D-177, D-179, D-186, D-202, D-205, D-206,
@@ -73,7 +74,7 @@ no entry below. A number may appear under several topics.
   D-167, D-183, D-186, D-188, D-189, D-190, D-191, D-192, D-193, D-194,
   D-195, D-196, D-197, D-198, D-199, D-200, D-201, D-202, D-203, D-204,
   D-205, D-207, D-206, D-208, D-209, D-210, D-212, D-213, D-215, D-216,
-  D-217, D-219, D-220, D-221, D-222, D-228, D-229
+  D-217, D-219, D-220, D-221, D-222, D-228, D-229, D-230
 - **Process & specification:** D-070, D-123, D-129, D-133, D-138, D-140,
   D-185, D-191, D-197, D-198, D-199, D-203, D-204, D-205, D-206, D-215,
   D-222, D-225, D-226, D-227, D-228, D-229
@@ -12352,3 +12353,168 @@ re-recorded, because it replays a quarter century WITH competitors:
 Total **25,597,942 EUR**, **nobody wound up**, 105 living vehicles, 18 lines
 alive, `NoRoute` 0 everywhere, a crewed competitor on **11 of 16** seeds - and
 **0 rail lines, 0 trains**, which no value of this constant changes.
+
+---
+
+## A railway needs ground its own stops can still stand on (2026-08-12)
+
+### D-230 The rail planner asks whether a station already stands where its shed will go - the refusal only the FULL balance job could see, traced, and the broader cure measured and refused
+
+**The gate D-220 built went red for the first time, and only in
+`npm run test:balance:full`.** `undeclared` collected two pairs on seed 4714 -
+`company 2 BuildRailStop|cmd.reject.occupied x1` and `company 2
+BuyTrain|cmd.reject.needsRailDepot x1` - and **two bundles in a row missed it
+because they ran the default suite**, which plays `AI_SWEEP_SEEDS`' first two
+seeds only (D-220's split). 4714 is the fourth. The class of gate that reads a
+whole quarter century's command outcomes lives in the four-seed sweep and the
+`soak` CI job, nowhere else; a green `npm run test:balance` says nothing about
+it. That sentence is in CLAUDE.md's digest now.
+
+**The trace, tile by tile, from D-220's own outcome sink** (seed 4714, company
+2 "Nordwind Verkehr", personality Expansive, 256 map):
+
+- **1955-01-28, tick 365,735**: `BuildRoadStop LorryBay` at **171,96** -
+  ACCEPTED. The company's own station 1. `roadBits` 8, terrain TownGround,
+  owner 2.
+- **1955-02-28, tick 371,735**, one `AI_RETRY_TICKS` month later, the same
+  company starts a RAIL project over the single-track fallback of D-153:
+  `BuildTrack 171,96 -> 196,94` (assistant) ACCEPTED, sixty-two tiles;
+  platforms at 172,96 / 173,96 / 195,95 / 194,96 - the route's tiles 1, 2,
+  last-1, last-2 - all four ACCEPTED; and `BuildRailStop RailDepot` at
+  **171,96**, the route's tile 0, **REFUSED `Occupied`**. The lorry bay is
+  standing on it.
+- **1955-03-00, tick 372,135**, the next decision cycle: stage 1 finds its two
+  platform stations, re-derives the fleet and orders `BuyTrain` at the shed
+  tile - **REFUSED `needsRailDepot`**. Stage 2 then finds no vehicle in the
+  depot and ends the project. Sixty-two tiles of track and four platforms
+  bought, charged upkeep for twenty-three more years, and never crewed.
+
+**So they are ONE defect and not two.** The `BuyTrain` is strictly downstream:
+with the shed built there is a shed to buy a train in. And it is not a D-108
+race - the bay had been standing for a whole game month and was on the map when
+the plan was made. **Neither was declared. Both were fixed at the cause.** The
+same pair appears on seed 555777 of the wider set, with the same signature.
+
+**The cause is an asymmetry between two commands, and a planner that knew only
+one half of it.** `buildTrack` lays rails straight through a tile a station
+module stands on - a level crossing is a legal thing, and the trace shows
+`trackBits` going 0 -> 1 under a bay that stays - while `buildRailStop` refuses
+that same tile `Occupied`. `enqueueSingleTrack` validates every tile of the
+alignment for OWNERSHIP (that is D-219's fix, in that very loop) and never
+asked the other question, although the alignment's **tile 0 IS the engine shed**
+and its tiles 1 and 2 are platforms. `clearRailTile`, the oval's own ground
+test, had the identical hole: its stub tile is the shed.
+
+**The fix is one question, asked in both rail branches out of ONE definition.**
+`stationOnTile(stations, tile)` moves into `src/sim/station/types.ts` beside
+`joinTargetIdFor`, for that helper's own stated reason - one rule, two callers,
+no drift. `commands/build.ts`'s private `stationAt` becomes a one-line
+delegation to it, so the ten `cmd.reject.occupied` sites and the AI planner
+cannot answer differently. A railway whose shed tile is taken is refused
+WHOLE, exactly as a route the assistant cannot find is: `enqueueInfrastructure`
+returns null, `startProject`'s dry run skips the candidate, and **nothing is
+ordered** - the company keeps the money instead of sinking it into a line it
+can never crew.
+
+**THE BROADER CURE WAS BUILT, MEASURED OVER SIXTEEN SEEDS AND REFUSED**, which
+is the other half of this entry. The obvious place for the question is
+`clearStopTile`, whose own sentence has said "bare, flat, dry, and nobody
+else's" since M8 with the last clause as prose - D-219a named it and measured
+the whole trio (`tileOursOrPublic` + a station test + `planRoadStop`) at
+**-281,115 EUR**. The station test ALONE, at today's HEAD, is not that number:
+**25,597,942 -> 26,593,627 EUR (+995,685), lines 18 -> 27, vehicles 105 ->
+162, stations 70 -> 100.** It was refused anyway, on the three things that came
+with the money:
+
+1. **`SetVehicleRunning|cmd.reject.noRouteToStop` x6 on seed 860213** - the one
+   refusal D-223 says must never be tolerated again, and the exact signature of
+   the stranded fleet it removed.
+2. **Wound up 0 -> 1**, and it is the very company this bundle set out to
+   repair: seed 4714's competitor 2 finishes at **-188,733 [X]** with three
+   stations and nothing running.
+3. **It does not even close the gate**: `BuildRailStop|occupied` is still there,
+   moved to seed 918273, plus new `BuildRoadStop|notYours` on two seeds and
+   `RefitVehicle|insufficientFunds` x6 - **five undeclared pairs against the
+   four it started with.** The refusal storm is still the brake D-219a
+   described, and the rail builder is still the thing that was broken.
+
+**The sixteen-seed table, before and after the shipped fix** - personality,
+value EUR, lines/vehicles/stations. Twelve of sixteen seeds and forty-five of
+forty-eight companies are IDENTICAL TO THE EURO; only the three companies that
+had a doomed rail project move, and they are marked:
+
+```
+4711     p0   233,189 0/0/3  · p4   471,588 0/0/2  · p1   342,738 1/3/2
+4713     p4   500,000 0/0/0  · p0 1,842,457 3/18/4 · p3   500,000 0/0/0
+4712     p4   500,000 0/0/0  · p2   329,982 1/6/2  · p0   500,000 0/0/0
+4714     p4   500,000 0/0/0  · p2   304,670 1/6/5 -> 657,880 1/6/4  · p3 500,000
+2718     p3   500,000 0/0/0  · p0   150,934 0/0/4  · p4   500,000 0/0/0
+31415    p3   500,000 0/0/0  · p4   500,000 0/0/0  · p2   -48,583 0/0/6
+60613    p0 2,015,525 2/12/3 · p4   500,000 0/0/0  · p1   500,000 0/0/0
+12345    p4   500,000 0/0/0  · p2   457,387 1/6/4  · p0   392,540 1/6/2
+77003    p4   500,000 0/0/0  · p0   401,601 1/6/4  · p1   500,000 0/0/0
+918273   p2   397,325 0/0/3  · p1   500,000 0/0/0  · p4   500,000 0/0/0
+131313   p1   500,000 0/0/0  · p2   500,000 0/0/0  · p3   500,000 0/0/0
+860213   p4   500,000 0/0/0  · p3   500,000 0/0/0  · p2   669,626 2/12/7 -> 857,945 2/12/6
+8675309  p0   229,438 1/6/6  · p1   596,485 1/6/3  · p4   500,000 0/0/0
+246813   p0   370,653 0/0/2  · p4   500,000 0/0/0  · p2   500,000 0/0/0
+555777   p4   500,000 0/0/0  · p2   704,636 1/6/5 -> 364,792 1/6/5  · p3 500,000
+22071969 p1 1,235,752 2/12/3 · p2   500,000 0/0/0  · p4   500,000 0/0/0
+```
+
+Totals: **25,597,942 -> 25,799,627 EUR (+201,685, +0.79 %)**, wound up **0 ->
+0**, lines **18 -> 18**, living vehicles **105 -> 105**, stations **70 -> 68**
+(the platforms of the two abandoned railways), **rail lines alive 0 -> 0 and
+trains alive 0 -> 0** - this bundle does not buy a railway competitor and does
+not claim to; D-228 and D-229 already said what would. Undeclared pairs over
+the sixteen seeds: **4 -> 0**, so the gate is green on twelve seeds the suite
+does not play as well as on the four it does. `aiGame`'s own four-seed sweep
+reads **6,524,624 -> 6,877,833 EUR**, four of twelve owning a fleet in both.
+
+**Not every seed that gained is a seed that was broken, and one LOST.** 4714
++353,210 and 860213 +188,319 are the freed capital going into road lines that
+work; **555777 is -339,844** - the same company, refused the railway a month
+earlier, spends the money on a road pair that does worse than the one it built
+before. Three companies, two up and one down, and the net is stated rather than
+the two good ones.
+
+**Deliberately NOT done, so the next bundle does not have to rediscover it.**
+`advanceProject` stage 1 still orders `BuyTrain` without OBSERVING that a shed
+stands at the tile, which is D-108's rule half-applied - it reads its two stop
+stations back (with the owner test of D-223) and trusts the depot. That path is
+unreachable through the plan now, but a `BuildRailStop RailDepot` refused for
+`InsufficientFunds` or by the council would walk it again. It is left alone on
+purpose: the road twin `BuyRoadVehicle|needsDepot` is DECLARED and tolerated
+for exactly that shape, and pre-declaring the rail twin would widen the guard
+to swallow the next unknown refusal, which is the one thing the guard exists to
+prevent. The oval's platform list can also name one tile twice when the two
+ends are exactly two tiles apart along the corridor; it is not exercised on any
+of the sixteen seeds and is therefore not touched.
+
+**Guarded from outside by a test that is RED on the pre-fix simulation.**
+`tests/unit/aiRailShedTile.spec.ts`, the D-223 pattern: five cases, of which two
+fail on the old code - the single-track plan is ordered onto a taken shed tile,
+and the oval's shed is ordered onto a standing stop - and three pass on both
+sides as controls: the command layer's own asymmetry (`buildTrack` accepted and
+`buildRailStop` `Occupied` on the same tile), the ordinary railway still being
+planned with its shed on tile 0, and a RIVAL stop on that tile, which D-219's
+ownership question already refused.
+
+**No save bump, verified rather than assumed.** The change is two ground tests
+in `src/sim/ai/build.ts` and one helper moved into `src/sim/station/types.ts`;
+no field, layer or entity changed shape, so `SAVE_VERSION` stays **30**. The
+soak fixture is UNCHANGED and re-run rather than presumed - `f08265c0152efea9`
+at 143 recorded commands, all sixteen checkpoints - because seed 4711's quarter
+century is bit-identical, and the canonical cross-OS pin did not move.
+**Scenario 5 is identical to the euro on all three personalities and all
+seventy-five yearly values**, measured by reverting the fix in a working copy
+and re-running `aiCompany`: road 1,022,084 / rail 1,802,165 / expansive
+2,153,604 on both sides, same refusal profiles. No band moved and none was
+widened.
+
+**Verified by running**, in this order, on the final tree: `npm run typecheck`
+clean; `npm run lint` over the whole repo clean; `npx prettier --check` clean on
+every touched file; `npx vitest run tests/unit` **114 files / 1,477 tests**
+green (109 -> 114 files, +5 cases); `npm run test:balance:full` **12 files /
+101 tests** green in 178.6 s - the red gate closed; `tests/determinism` **7
+files / 33** green; `npm run test:soak` **4** green at the unchanged hash.

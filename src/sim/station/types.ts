@@ -224,6 +224,27 @@ export interface Station {
   returnMonths: number;
 }
 
+/**
+ * The station whose module already stands on that tile, or null - THE ONE
+ * definition of "this tile is taken", in the same place and for the same
+ * reason as `joinTargetIdFor` below.
+ *
+ * Every module-building command answers `cmd.reject.occupied` from it, and so
+ * does the AI's RAIL planner before it lays an alignment whose first tile
+ * becomes an engine shed (`ai/build.ts`): a planner and the command it plans
+ * for must not disagree about what is buildable (D-219), and this was the
+ * question that had drifted (D-230). The AI's ROAD stop scan deliberately
+ * still does not ask - see `clearStopTile` for the measurement that says why.
+ */
+export function stationOnTile(stations: readonly Station[], tile: number): Station | null {
+  for (const station of stations) {
+    for (const module of station.modules) {
+      if (module.tileIndex === tile) return station;
+    }
+  }
+  return null;
+}
+
 /** Does the station have at least one module of this kind? */
 export function hasModule(station: Station, kind: ModuleKind): boolean {
   // Indexed rather than `for...of`: this sits under `ratingTerms`, which the

@@ -2454,6 +2454,40 @@ optimised.
   and everywhere between. Soak fixture re-recorded (`1f76e2df98be99a3` ->
   `f08265c0152efea9`, 191 -> 143 commands); `SAVE_VERSION` stays 30.
 
+## The AI's shed - ground its own stops can still stand on (D-230)
+
+**The refusal gate of D-220 lives ONLY in the full balance job, and two bundles
+in a row missed a red one because they ran the default suite.**
+`npm run test:balance` plays the first two of `AI_SWEEP_SEEDS`; the refusal
+profile, the loop guard and the declared-set guard only see all four under
+`npm run test:balance:full` (and the CI `soak` job). **A green
+`npm run test:balance` says nothing about this class of gate** - run the full
+job before claiming an AI bundle is clean.
+
+- **What it caught**: seed 4714, `BuildRailStop|occupied x1` and
+  `BuyTrain|needsRailDepot x1`, and they are ONE defect. `buildTrack` lays rails
+  straight through a tile a station module stands on; `buildRailStop` refuses
+  that tile `Occupied`. The alignment's FIRST tile is where the single-track
+  builder puts the engine shed - so a competitor that planned a railway starting
+  on its own lorry bay laid sixty-two tiles of track, got four platforms, was
+  refused its shed, and ordered a train at a depot that does not exist. The
+  `BuyTrain` is downstream and dies with it. Both fixed, neither declared.
+- **`stationOnTile` is the one definition now** (`station/types.ts`, beside
+  `joinTargetIdFor`): the ten `Occupied` sites and both rail planners
+  (`enqueueSingleTrack`'s per-tile loop, `clearRailTile`) read it, so a railway
+  whose shed tile is taken is refused WHOLE and nothing is ordered.
+- **The broader cure was built, measured and REFUSED.** Putting the question in
+  `clearStopTile` - whose sentence has promised it since M8 - is +995,685 EUR
+  over sixteen seeds AND one company wound up, `BuildRoadStop|notYours` in two
+  new places, `BuildRailStop|occupied` still present on another seed, and six
+  `SetVehicleRunning|noRouteToStop`, the one refusal D-223 says must never be
+  tolerated again. D-219a's brake is still a brake.
+- **Sixteen seeds: 25,597,942 -> 25,799,627 EUR**, wound up 0, lines 18,
+  vehicles 105, **rail lines and trains still 0**, undeclared pairs **4 -> 0**.
+  Forty-five of forty-eight companies identical to the euro; the three that
+  move are the three that had a doomed railway, and one of them LOSES 339,844.
+  Scenario 5 identical to the euro, soak hash and `SAVE_VERSION` 30 unmoved.
+
 ## Still outstanding
 
 - **A player still practically never meets a railway competitor, and D-228 says

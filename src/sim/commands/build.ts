@@ -64,6 +64,7 @@ import {
   joinTargetIdFor,
   ModuleKind,
   recomputeCentre,
+  stationOnTile,
   type Station,
   type StationModule,
 } from '../station/types';
@@ -640,14 +641,9 @@ function clearWaypoint(world: World, tile: number): void {
   world.company.fixedAssetsCt -= WAYPOINT_COST_CT;
 }
 
-/** Station that owns a tile, or null. */
+/** Station that owns a tile, or null - the shared rule, asked of this world. */
 function stationAt(world: World, tile: number): Station | null {
-  for (const station of world.stations) {
-    for (const module of station.modules) {
-      if (module.tileIndex === tile) return station;
-    }
-  }
-  return null;
+  return stationOnTile(world.stations, tile);
 }
 
 /**

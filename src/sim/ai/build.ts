@@ -19,7 +19,7 @@ import { planTrack } from '../net/trackBuilder';
 import { RailType } from '../map/track';
 import { Structure } from '../map/structures';
 import { slopeRise, Terrain } from '../map/terrain';
-import { ModuleKind } from '../station/types';
+import { ModuleKind, stationOnTile } from '../station/types';
 import {
   availableRailVehicles,
   availableVehicles,
@@ -85,7 +85,21 @@ export interface BuiltLine {
   readonly wayCostCt: number;
 }
 
-/** A tile a stop can stand on: bare, flat, dry, and nobody else's. */
+/**
+ * A tile a stop can stand on: bare, flat, dry, and nobody else's.
+ *
+ * **The last clause is still prose, and that is a measured decision** (D-219a,
+ * re-measured in D-230). Teaching this scan the two questions `buildRoadStop`
+ * really asks - who owns the tile, and whether a station already stands on it
+ * - takes the brake off a road company that then builds itself into the
+ * ground: D-219a measured -281,115 EUR for the trio, and D-230 measured the
+ * station question ALONE over sixteen seeds at +995,685 EUR but one company
+ * wound up, `BuildRoadStop|notYours` in two new places and - the reason it was
+ * refused - six `SetVehicleRunning|noRouteToStop`, the one refusal D-223 says
+ * must never be tolerated again. The refusals this leaves are declared in
+ * `tests/balance/aiRefusals.ts`; what D-230 fixed is the RAIL builder, which
+ * is where the same tile becomes an engine shed (see `enqueueSingleTrack`).
+ */
 export function clearStopTile(world: World, x: number, y: number): boolean {
   const map = world.map;
   if (!map.contains(x, y)) return false;
@@ -369,7 +383,16 @@ function tileOursOrPublic(world: World, companyId: number, tile: number): boolea
   return owner === TILE_PUBLIC || owner === companyId;
 }
 
-/** A tile the return track of the oval may claim: bare of rail, ours to take. */
+/**
+ * A tile the return track of the oval may claim: bare of rail, bare of
+ * station, ours to take.
+ *
+ * The station half is D-230's, and it is the SAME question in the same place
+ * as `enqueueSingleTrack`'s: every platform and the engine shed of this plan
+ * stand on tiles this test cleared, `buildRailStop` refuses a tile a module
+ * already occupies, and `buildTrack` does NOT - so a railway laid across an
+ * own bus stop is laid, paid for, and then refused the shed it exists for.
+ */
 function clearRailTile(world: World, companyId: number, x: number, y: number): boolean {
   const map = world.map;
   if (!map.contains(x, y)) return false;
@@ -378,6 +401,7 @@ function clearRailTile(world: World, companyId: number, x: number, y: number): b
   if (map.structure[tile] !== Structure.None) return false;
   if (map.buildingKind[tile] !== 0 || map.industryId[tile] !== -1) return false;
   if (map.trackBits[tile] !== 0) return false;
+  if (stationOnTile(world.stations, tile) !== null) return false;
   return tileOursOrPublic(world, companyId, tile);
 }
 
@@ -716,6 +740,13 @@ function enqueueSingleTrack(
   if (tiles.length < AI_RAIL_MIN_TILES) return null;
   for (const tile of tiles) {
     if (!tileOursOrPublic(world, companyId, tile)) return null;
+    // And bare of stations, which is D-219's rule asked about the OTHER
+    // command this branch issues. `buildTrack` lays rails straight through a
+    // tile a module stands on; `buildRailStop` refuses that tile `Occupied`.
+    // The alignment's first tile IS the engine shed and its second is a
+    // platform, so one bus stop of this company's own under the route buys a
+    // whole railway that can never be crewed (D-230).
+    if (stationOnTile(world.stations, tile) !== null) return null;
   }
 
   push({
