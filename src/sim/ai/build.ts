@@ -59,6 +59,30 @@ export interface BuiltLine {
    * (D-059). Roads ignore it.
    */
   readonly railTrains: number;
+  /**
+   * Stop modules this plan really orders, the shed apart: two for a road line,
+   * `AI_PLATFORM_TILES * 2` for both railway shapes.
+   *
+   * The caller PRICES the project from it rather than from a figure of its
+   * own, and the two must never be allowed to drift apart - that is the D-219
+   * lesson one file along, and D-228 measured what it costs when a railway
+   * shape with a different platform count is added: the estimate quoted four
+   * platforms, the builder ordered eight, and the money for the second train
+   * was gone by the time it was ordered.
+   */
+  readonly platformTiles: number;
+  /**
+   * What the WAY this plan orders really costs, as the very planner the build
+   * command runs quotes it. [cent, before inflation]
+   *
+   * Zero for a road, whose runs are found by a search of its own; the caller
+   * keeps its straight-line estimate there. For a railway it is the whole
+   * ordered alignment, and it matters because `Opportunity.buildCostCt` prices
+   * the STRAIGHT LINE: measured on seed 4711, a pair 72 tiles apart is laid as
+   * 119 tiles of track around the hills between them, so the estimate was
+   * short by a third of the way before anything else was counted.
+   */
+  readonly wayCostCt: number;
 }
 
 /** A tile a stop can stand on: bare, flat, dry, and nobody else's. */
@@ -368,6 +392,8 @@ export interface OvalPlan {
   readonly from: { readonly x: number; readonly y: number };
   readonly to: { readonly x: number; readonly y: number };
   readonly shed: { readonly x: number; readonly y: number };
+  /** What the planner charges for every run this plan orders. [cent] */
+  readonly wayCostCt: number;
 }
 
 /**
@@ -484,10 +510,11 @@ function tryOval(
     { x1: at(hi, v).x, y1: at(hi, v).y, x2: at(hi, v2).x, y2: at(hi, v2).y },
     { x1: stubTop.x, y1: stubTop.y, x2: shed.x, y2: shed.y },
   ];
+  let wayCostCt = 0;
   for (const run of [...rows, ...plain]) {
-    if (!planTrack(world.map, run.x1, run.y1, run.x2, run.y2, RailType.Plain, false).ok) {
-      return null;
-    }
+    const planned = planTrack(world.map, run.x1, run.y1, run.x2, run.y2, RailType.Plain, false);
+    if (!planned.ok) return null;
+    wayCostCt += planned.route.costCt;
   }
 
   // Platforms on the outbound row, each running from its anchor towards the
@@ -496,7 +523,7 @@ function tryOval(
   for (let i = 0; i < AI_PLATFORM_TILES; i++) platforms.push(at(aU + i * dirU, v));
   for (let i = 0; i < AI_PLATFORM_TILES; i++) platforms.push(at(bU - i * dirU, v));
 
-  return { rows, plain, platforms, from: at(aU, v), to: at(bU, v), shed };
+  return { rows, plain, platforms, from: at(aU, v), to: at(bU, v), shed, wayCostCt };
 }
 
 /**
@@ -596,7 +623,14 @@ export function enqueueInfrastructure(
 
     // Where everything REALLY went - for a railway none of the three is the
     // point the caller asked for.
-    return { from: oval.from, to: oval.to, shed: oval.shed, railTrains: AI_RAIL_MAX_TRAINS };
+    return {
+      from: oval.from,
+      to: oval.to,
+      shed: oval.shed,
+      railTrains: AI_RAIL_MAX_TRAINS,
+      platformTiles: oval.platforms.length,
+      wayCostCt: oval.wayCostCt,
+    };
   }
 
   // The road is FOUND before anything is ordered - the road-branch twin of
@@ -632,7 +666,14 @@ export function enqueueInfrastructure(
     y: plan.depot.y,
     moduleKind: ModuleKind.RoadDepot,
   });
-  return { from: plan.from, to: plan.to, shed: plan.depot, railTrains: 1 };
+  return {
+    from: plan.from,
+    to: plan.to,
+    shed: plan.depot,
+    railTrains: 1,
+    platformTiles: 2,
+    wayCostCt: 0,
+  };
 }
 
 /**
@@ -721,5 +762,7 @@ function enqueueSingleTrack(
     to: farEnd,
     shed: { x: depotTile % map.size, y: (depotTile / map.size) | 0 },
     railTrains: 1,
+    platformTiles: AI_PLATFORM_TILES * 2,
+    wayCostCt: planned.route.costCt,
   };
 }

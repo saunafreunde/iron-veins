@@ -2369,7 +2369,51 @@ moved.
   (D-227), corrected in the environment note above: the tree is LF, and the 31
   files have simply never been through the formatter, which no CI job runs.
 
+## The rail question, closed on evidence (D-228)
+
+**A competitor's railway is UNAFFORDABLE, not unprofitable, and that is the
+answer the whole programme was missing.** The two-train `planRailShuttle` of the
+reverted bundle was rebuilt, proven safe (two trains, one game year, both
+termini five times each, zero `NoRoute`, no block), measured over sixteen seeds
+- and **refused**: it produces zero trains and zero rail lines, it makes a
+railway dearer and more often abandoned, and on scenario 5 it takes the rail
+personality 228,047 alive -> -238,132 wound up. What it DID do is expose a
+defect that was never about railways.
+
+- **A competitor does not start a project it cannot finish.** `takeLoan` drew
+  whatever the credit line had ROOM for and reported success either way, and
+  the estimate priced a straight-line way and a fixed four platforms whatever
+  the plan really was. Seed 4711's rail company: a project estimated at
+  **1,010,982 EUR** against 500,000 of cash and a 300,000 credit line; it laid
+  119 tiles of track for a 72-tile pair, ordered two trains, got one
+  (`insufficientFunds`), and was wound up owning a line and no fleet.
+  `BuiltLine` carries `platformTiles` and `wayCostCt` now, `startProject` dry-
+  runs BEFORE it prices, and `borrowableCt` asks what would really be lent
+  without taking it. **+1,260,517 EUR over sixteen seeds, wound up 4 -> 3, and
+  every band untouched** - scenario 5's road is identical to the euro and its
+  rail reads 228,581 against 228,047, so `rail.bankrupt === false` was never
+  re-banded.
+- **What the sixteen-seed bar says now**: 21,254,922 EUR over 48 competitors,
+  3 wound up, 90 living vehicles, **0 trains and 0 rail lines**, a crewed
+  competitor on 8 of 16 seeds. The one train of D-226 stood on a railway its
+  owner could not afford; seed 12345's rail company runs a road line worth
+  932,261 instead of a railway worth 96,345.
+- **`fleetThatPays`** - sizing a fleet against what the 7.3 collection gate will
+  really hand over rather than against ungated output (D-063/D-064) - was built
+  and is NOT shipped: without the shuttle `AiProject.railTrains` is 1 on every
+  railway the builder lays, so it can never bind. The world in which it fires is
+  the shuttle world.
+
 ## Still outstanding
+
+- **A player still practically never meets a railway competitor, and D-228 says
+  why in euros**: the first railway costs more than a starting company's whole
+  capital plus its whole credit line. The two candidate cures are a competitor
+  that reaches rail out of a road business it has already made money on (the
+  `bootstrapping` rule of D-154 forbids that borrowing, and D-225 measured it
+  costing seed 918273 its own chain by 8 % of the price) and a cheaper first
+  railway. Both are simulation changes with their own bundles; neither is a
+  constant to tune.
 
 - **The two named walls of D-158.** A passenger pile a fleet merely
   MATCHES pays the decay floor for ever - every town of 2,500+ pins its

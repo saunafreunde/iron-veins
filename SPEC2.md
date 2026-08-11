@@ -1292,6 +1292,21 @@ Fahrzeug; der Sweep macht das bei jedem Push sichtbar, statt es einmal je
 Meilenstein zu entdecken. Das Schließen dieser Lücke ist M24s Sache und
 ausdrücklich nicht die von M11.]*
 
+*[Nachtrag 11.08.2026, D-228: Die Schienen-Frage dieses Meilensteins ist auf
+Messung entschieden. Der Zwei-Zug-Shuttle (`planRailShuttle`: Trassierung vom
+Assistenten, an jedem Kopfbahnhof eine Ausweiche mit VERSCHMELZENDER Weiche,
+signallos, in einem Unit-Test über ein Spieljahr mit zwei Zügen bewiesen) wurde
+nachgebaut, über SECHZEHN Seeds gemessen und **abgelehnt**: null Züge, null
+Schienenlinien, und Szenario 5s Rail-Zeile 228 047 € lebend -> −238 132 €
+[abgewickelt]. Das Band `rail.bankrupt === false` wurde NICHT verschoben.
+Gemessen und geliefert wurde stattdessen der Defekt, den der Shuttle sichtbar
+gemacht hat: die KI begann Projekte, die sie nicht zu Ende finanzieren kann -
+Schätzung nach Luftlinie und fester Bahnsteigzahl, dazu eine TEIL-Kreditaufnahme,
+die Erfolg meldete. **Der Grund, warum ein Spieler keinen Schienen-Konkurrenten
+trifft, ist damit beziffert: eine Zwei-Zug-Bahn über das eigene 72-Kachel-Kohle-
+Paar kostet 1 010 982 € gegen 500 000 € Kapital und 300 000 € Kreditlinie. Nicht
+unrentabel - unbezahlbar.**]*
+
 ---
 
 ### M12 — Die Bühne: Hybrid-Renderer, Interpolation, Kartentext

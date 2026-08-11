@@ -9,7 +9,6 @@ import {
   AI_LINE_REVIEW_TICKS,
   AI_MAX_LINES,
   AI_MAX_VEHICLES_PER_LINE,
-  AI_PLATFORM_TILES,
   AI_RAIL_MAX_TRAINS,
   AI_REINFORCE_WAITING,
   AI_RETRY_TICKS,
@@ -184,14 +183,6 @@ function startProject(world: World, queue: CommandQueue, state: AiState): void {
     // the platform at the far end, so the project was abandoned with the money
     // gone and the track still charging upkeep. Measured on balancing scenario
     // 5: one such attempt in game year two finished the company.
-    let fleetCt = 0;
-    for (const specId of specIds) fleetCt += vehicleSpec(specId).priceCt;
-    const modulesCt = opportunity.rail
-      ? RAIL_PLATFORM_COST_CT * AI_PLATFORM_TILES * 2 + RAIL_DEPOT_COST_CT
-      : ROAD_STOP_COST_CT * 2 + ROAD_DEPOT_COST_CT;
-    const estimateCt =
-      opportunity.buildCostCt + world.costCt(modulesCt) + world.costCt(fleetCt) * wanted;
-
     const from = stopTileNear(world, opportunity.fromX, opportunity.fromY);
     const to = stopTileNear(world, opportunity.toX, opportunity.toY);
     if (from === null || to === null) continue;
@@ -201,10 +192,34 @@ function startProject(world: World, queue: CommandQueue, state: AiState): void {
     // Planned into a SCRATCH queue first: the plan is a pure function of the
     // world, so the dry run proves the way exists before any money moves. A
     // loan must never be taken for a line that cannot be laid.
+    //
+    // It is also what the estimate is PRICED from, and that is not a tidiness
+    // point but D-219's rule applied to money: a filter and the builder it
+    // filters for must not disagree about what is being built. The estimate
+    // used to quote a straight-line way and a fixed four platforms whatever
+    // the plan really was; the railway shape D-228 measured carries eight, and
+    // on seed 4711 the company built it, ordered two trains and was refused
+    // the second for `insufficientFunds`.
     const plan = { from, to, depot, rail: opportunity.rail };
-    if (enqueueInfrastructure(new CommandQueue(), world, state.companyId, plan) === null) {
-      continue;
-    }
+    const dry = enqueueInfrastructure(new CommandQueue(), world, state.companyId, plan);
+    if (dry === null) continue;
+
+    let fleetCt = 0;
+    for (const specId of specIds) fleetCt += vehicleSpec(specId).priceCt;
+    const modulesCt = opportunity.rail
+      ? RAIL_PLATFORM_COST_CT * dry.platformTiles + RAIL_DEPOT_COST_CT
+      : ROAD_STOP_COST_CT * dry.platformTiles + ROAD_DEPOT_COST_CT;
+    // And for the fleet the railway that will REALLY be laid can carry, not
+    // the largest any railway could: a one-train line budgeted for two trains
+    // ties up money the company then never spends.
+    const crew = opportunity.rail ? Math.min(wanted, dry.railTrains) : wanted;
+    // The way as the PLANNER quotes it where the planner knows (every railway),
+    // and the straight-line estimate where it does not (the road search).
+    // `Opportunity.buildCostCt` prices the straight line and the assistant lays
+    // the alignment: on seed 4711 that is 119 tiles for a 72-tile pair, so the
+    // way alone was under-quoted by a third.
+    const wayCt = dry.wayCostCt > opportunity.buildCostCt ? dry.wayCostCt : opportunity.buildCostCt;
+    const estimateCt = wayCt + world.costCt(modulesCt) + world.costCt(fleetCt) * crew;
 
     const requiredCt = estimateCt * capitalFactor(state.personality);
     if (company.cashCt < requiredCt) {
@@ -222,7 +237,22 @@ function startProject(world: World, queue: CommandQueue, state: AiState): void {
       // one out of what the last one earns.
       const bootstrapping = world.lines.ownedBy(state.companyId).length === 0;
       if (!bootstrapping && state.personality !== Personality.Expansive) continue;
-      if (!takeLoan(world, queue, state, requiredCt - company.cashCt)) continue;
+
+      // **A PART LOAN IS NOT A LOAN**, and this is the second half of the rule
+      // stated over the dry run above: a loan must never be taken for a line
+      // that cannot be laid, and a line whose fleet there is no money for is
+      // not laid, it is abandoned half built. `takeLoan` borrows what the
+      // credit line has ROOM for and used to report success either way, so a
+      // company whose project cost more than its cash plus its whole credit
+      // line built the way and the stops, ordered its trains, and was refused.
+      // Measured on seed 4711's rail company: a two-train railway priced at
+      // 1,010,982 EUR against 500,000 of cash and a 300,000 credit line - it
+      // laid 119 tiles of track, ordered two trains, got one, and was wound up
+      // owning a line and no fleet. The reserve factor is a RESERVE; what
+      // cannot be crossed is the estimate itself (D-228).
+      const raiseCt = borrowableCt(world, state, requiredCt - company.cashCt);
+      if (company.cashCt + raiseCt < estimateCt) continue;
+      if (!takeLoan(world, queue, state, raiseCt)) continue;
     }
 
     const built = enqueueInfrastructure(queue, world, state.companyId, plan);
@@ -692,13 +722,27 @@ function borrows(personality: number): boolean {
 
 /** Ask for a loan, on exactly the credit line a player would have. */
 function takeLoan(world: World, queue: CommandQueue, state: AiState, wantedCt: number): boolean {
-  const company = world.companyOf(state.companyId);
-  const room = loanLimitCt(company) - company.loanCt;
-  if (room < LOAN_STEP_CT) return false;
+  const amountCt = borrowableCt(world, state, wantedCt);
+  if (amountCt < LOAN_STEP_CT) return false;
 
-  const amountCt = Math.min(room, Math.ceil(wantedCt / LOAN_STEP_CT) * LOAN_STEP_CT);
   queue.enqueue({ kind: CommandKind.TakeLoan, amountCt }, world.tick + 1, state.companyId);
   return true;
+}
+
+/**
+ * What this company would really be lent towards `wantedCt`, in whole loan
+ * steps - the same arithmetic `takeLoan` uses, asked WITHOUT taking the money.
+ *
+ * It exists because the caller has to know the answer before it decides. Asking
+ * by borrowing and then abandoning the project leaves the interest running on a
+ * loan nothing was built with.
+ */
+function borrowableCt(world: World, state: AiState, wantedCt: number): number {
+  const company = world.companyOf(state.companyId);
+  const room = loanLimitCt(company) - company.loanCt;
+  if (room < LOAN_STEP_CT) return 0;
+  const wanted = Math.ceil(wantedCt / LOAN_STEP_CT) * LOAN_STEP_CT;
+  return room < wanted ? Math.floor(room / LOAN_STEP_CT) * LOAN_STEP_CT : wanted;
 }
 
 /**

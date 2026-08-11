@@ -41,18 +41,18 @@ no entry below. A number may appear under several topics.
 - **Towns, council & ownership:** D-101, D-102, D-103, D-104, D-205, D-207,
   D-206, D-213, D-216, D-217
 - **Economy, finance & emissions:** D-008, D-090, D-091, D-092, D-105, D-154,
-  D-180, D-193, D-196
+  D-180, D-193, D-196, D-228
 - **Balancing & scenarios:** D-038, D-039, D-040, D-041, D-066, D-087, D-088,
   D-116, D-151, D-152, D-156, D-158, D-159, D-187, D-190, D-194, D-195,
   D-196, D-197, D-198, D-199, D-200, D-203, D-204, D-207, D-211, D-213,
-  D-215, D-216, D-220, D-221, D-222, D-224, D-225, D-226
+  D-215, D-216, D-220, D-221, D-222, D-224, D-225, D-226, D-228
 - **Vehicles & fleet:** D-043, D-044, D-045, D-068, D-076, D-089, D-093,
   D-096, D-142, D-143, D-145, D-146, D-155, D-157, D-171, D-174, D-181, D-185,
   D-201, D-207
 - **Water & air:** D-094, D-095, D-096, D-097, D-098, D-099
 - **Competitors, AI & tenders:** D-107, D-108, D-109, D-115, D-116, D-121,
   D-122, D-147, D-152, D-153, D-154, D-155, D-156, D-158, D-216, D-218,
-  D-219, D-220, D-221, D-222, D-223, D-224, D-225, D-226
+  D-219, D-220, D-221, D-222, D-223, D-224, D-225, D-226, D-228
 - **Rendering & art:** D-013, D-014, D-033, D-035, D-112, D-117, D-125, D-127,
   D-136, D-140, D-160, D-161, D-162, D-163, D-164, D-165, D-166, D-169, D-170,
   D-171, D-172, D-173, D-174, D-175, D-177, D-179, D-186, D-202, D-205, D-206,
@@ -73,10 +73,10 @@ no entry below. A number may appear under several topics.
   D-167, D-183, D-186, D-188, D-189, D-190, D-191, D-192, D-193, D-194,
   D-195, D-196, D-197, D-198, D-199, D-200, D-201, D-202, D-203, D-204,
   D-205, D-207, D-206, D-208, D-209, D-210, D-212, D-213, D-215, D-216,
-  D-217, D-219, D-220, D-221, D-222
+  D-217, D-219, D-220, D-221, D-222, D-228
 - **Process & specification:** D-070, D-123, D-129, D-133, D-138, D-140,
   D-185, D-191, D-197, D-198, D-199, D-203, D-204, D-205, D-206, D-215,
-  D-222, D-225, D-226, D-227
+  D-222, D-225, D-226, D-227, D-228
 
 ---
 
@@ -11988,3 +11988,151 @@ first. What changes now is that the stated cause is true: the CRLF paragraph in
 CLAUDE.md's environment note stays a correct repair procedure for a checkout
 that predates D-168 on an `autocrlf=true` machine, and it is no longer offered
 as the explanation for THIS repository's red check.
+
+---
+
+## The rail question, decided on evidence (2026-08-11)
+
+### D-228 The competitor's railway is unaffordable rather than unprofitable: the shuttle rebuilt, measured over sixteen seeds and refused - and the project pricing it exposed, fixed
+
+**The programme's one unwon claim was that a player never meets a railway
+competitor** (D-226: one train on one line in thirty-six competitor-lifetimes).
+A previous bundle built a two-train `planRailShuttle`, measured it and reverted
+it because it turned scenario 5 red. This bundle rebuilt it from that
+description, reproduced the conflict, traced it, and lands the half the evidence
+supports. **The shuttle is not shipped. What is shipped is the defect the
+shuttle exposed**, and it is worth **+1,260,517 EUR over sixteen seeds with one
+fewer winding-up**, with every band in `tests/balance` untouched.
+
+**What was rebuilt, and it works.** `planRailShuttle` took the assistant's own
+single-track alignment and hung a passing place on each terminus: a turnout one
+step off the spine at forty-five degrees, so the branch MERGES rather than
+crosses (D-082), and a second platform face beside the first. No signals
+anywhere, which is the whole safety argument - `sectionEnd` then runs to the END
+of a train's route, so a departing train claims the whole way to its platform
+all or nothing and no second train can take a tile of it. The second train waits
+at a face of its own. `platformFor` hands each train the first face nobody holds
+(D-049/D-080), and the faces have to be listed END first, because a train
+stopped on the entry tile stands with its tail out on the running line.
+**Proven, not argued**: two trains, one game year, on the railway
+`enqueueInfrastructure` really orders - both worked both termini five times or
+more, zero `NoRoute`, nothing permanently blocked. D-059's stated limitation is
+answerable.
+
+**And it does not produce a railway competitor. Measured, sixteen seeds,
+twenty-five years each, three competitors, 256 map, a player company that does
+nothing:**
+
+| what                           | HEAD 807a0af | shuttle alone | shuttle + the pricing fix | **pricing fix alone (shipped)** |
+| ------------------------------ | ------------ | ------------- | ------------------------- | ------------------------------- |
+| total value EUR                | 19,994,405   | 19,401,262    | 23,333,839                | **21,254,922**                  |
+| wound up, of 48                | 4            | 6             | 4                         | **3**                           |
+| living vehicles                | 88           | 88            | 102                       | **90**                          |
+| **trains alive**               | **1**        | **0**         | **0**                     | **0**                           |
+| **rail lines alive**           | **1**        | **0**         | **0**                     | **0**                           |
+| seeds with a crewed competitor | 8/16         | 8/16          | 9/16                      | 8/16                            |
+
+The shuttle's own direct effect is that a railway costs MORE and is abandoned
+more often. The +2 M it adds on top of the pricing fix is chaos - different
+worlds, not railways - and it arrives with zero trains and zero rail lines. On
+scenario 5 it takes the rail personality from **228,047 EUR alive to -238,132
+[wound up]**, which is the conflict the previous bundle reported, reproduced.
+
+**The trace, and it names a cause neither the previous bundle nor the brief
+had.** The instrument is the command-outcome sink of D-220 plus a temporary
+probe in `startProject` and in the buying stage, both reverted.
+
+```
+seed 4711, company 1, the Rail personality, twenty-five years:
+  ONE project ever started, at tick 1,445,601 - game year 1970
+  distance 72 tiles       the way the ASSISTANT lays: 119 tiles of track
+  way      185,166 EUR
+  stops    122,872 EUR    EIGHT platforms and a shed; the estimate quoted FOUR
+  trains   351,472 EUR each, two of them
+  estimate 1,010,982 EUR  against cash 500,000 and a credit line of 300,000
+  -> TakeLoan accepted 1  - a PART loan, whatever room there was
+  -> BuildTrack accepted 5, BuildRailStop accepted 9: the railway IS built
+  -> BuyTrain accepted 1, cmd.reject.insufficientFunds 1
+  -> year 25: value 32,127 EUR [wound up] - a line, a railway, one train,
+     and the interest
+```
+
+- **`takeLoan` took what the credit line had ROOM for and reported success
+  either way.** `startProject`'s own stated rule, two lines above its dry run,
+  is that "a loan must never be taken for a line that cannot be laid"; the
+  second half of it - that a line whose fleet there is no money for is not laid
+  but abandoned half built - was never enforced. `borrowableCt` asks the same
+  arithmetic WITHOUT taking the money, and a project whose cash plus its whole
+  remaining credit line is under its own ESTIMATE is not started. The 1.4
+  capital factor stays what it is, a reserve; what may not be crossed is the
+  estimate itself.
+- **And the estimate was not the project's.** It priced the STRAIGHT LINE and a
+  FIXED `AI_PLATFORM_TILES * 2` whatever the plan really was. `BuiltLine`
+  carries `platformTiles` and `wayCostCt` now - the stops the plan really orders
+  and the planner's own price for the alignment it really orders - and
+  `startProject` does its dry run FIRST and prices that. It also budgets for the
+  fleet the railway that will really be laid can carry rather than for the
+  largest any railway could. This is D-219's lesson applied to money: a filter
+  and the builder it filters for must not disagree about what is being built.
+- **So the shuttle exposed the defect rather than causing it, and the brief's
+  preferred option was taken - the deeper cause was fixed first and
+  re-measured. It did not resolve the conflict, because the deeper cause is not
+  the one that had been named.** That candidate - `fleetFor` sizing against
+  UNGATED output while the 7.3 collection gate caps the offer at the station
+  rating times the covered share (D-063/D-064) - was built here as
+  `fleetThatPays`: the largest fleet up to the advisor's figure that still
+  clears `AI_MIN_PROFIT_MARGIN`, quoted through `projectLine`, whose lift is
+  already capped at what the line is offered. **It is not shipped either, and
+  the reason is arithmetic rather than taste**: it can only bind where a railway
+  carries more than one train, `AiProject.railTrains` is 1 on every railway the
+  builder lays without the shuttle (D-222 measured ten of ten), and
+  `fleetThatPays(..., 1)` returns 1. The world in which it fires is the shuttle
+  world. A second train the gate never feeds was never bought here, so the
+  defect it removes is one this bundle did not measure - and an unmeasured
+  change is not what this project ships.
+
+**The real reason there is no rail competitor, stated as a number.** A two-train
+railway over the AI's own 72-tile coal pair is priced at **1,010,982 EUR**
+against a starting company's **500,000 of cash and a 300,000 credit line**. It
+is not that the railway loses money - `projectLine` passes it at a margin above
+the floor - it is that no competitor can raise the price of one. With the
+pricing fix in place the AI correctly refuses those projects, which is why
+trains alive goes 1 -> 0 and why that is an improvement rather than a
+regression: the one train of D-226 stood on a railway its owner could not
+afford, and seed 12345's rail company now runs a ROAD line worth **932,261 EUR**
+instead of a railway worth 96,345. **A player will still practically never meet
+a railway competitor, and this entry says why in euros rather than in
+adjectives.** What would change it is a competitor that reaches a railway out of
+a road business it has already made money on - the `bootstrapping` rule of
+D-154 forbids exactly that borrowing, and D-225 measured it costing seed 918273
+the onward leg of its own chain by 8 % of the price - or a first railway that
+costs less than a company's whole capital. Both are simulation changes with
+their own bundles, and neither is a constant.
+
+**Two rows got worse and are named**, because refusing one project re-rolls the
+world that follows it: seed 246813's expansive company 500,000 -> **106,114**
+with a 39-tile railway (that seed falls 1,066,232 -> 818,052), and seed 860213's
+rail company -394,521 [X] -> -354,955 [X] is better and still wound up. Seeds
+4711, 4713, 4712, 4714, 77003, 131313, 8675309, 555777 and 22071969 are
+**identical to the euro**, which is what says the soak fixture's own game is
+untouched.
+
+**Bands: nothing moved, and that was measured rather than assumed.** Scenario 5
+reads road **1,022,084** (identical to the euro, 2 lines, 12 vehicles, growing
+through its year-21 renewal), rail **228,581** against 228,047 (+534, alive, 2
+stations - `rail.bankrupt === false` HOLDS and was not re-banded), expansive
+**-241,375** against -241,309 (wound up, 5 stations, 1 line, inside its
+exposure). The whole of `tests/balance` is green at 81 tests; `aiGame`'s four
+swept seeds are bit-identical; `tests/determinism` is 33 green and the soak
+fixture replays unchanged. No constant in `src/sim/constants.ts` was touched and
+`SAVE_VERSION` stays 30 - `BuiltLine` is a transient return record and nothing
+in `AiState` or `AiProject` changed shape.
+
+**The guard is `tests/unit/aiAffordable.spec.ts`, and it is RED on the pre-fix
+simulation**: two of its three assertions fail there, one because `BuiltLine`
+has no `platformTiles` to compare against the stops the plan enqueued, and one
+because the short company takes its part loan (`TakeLoan` accepted 1 where 0 is
+asserted). Its bar is derived rather than typed in - it plays the same project
+on the same world with money, reads what the company really sank into it, and
+then gives a second company a quarter of that with its credit line already drawn
+down to ten loan steps.
