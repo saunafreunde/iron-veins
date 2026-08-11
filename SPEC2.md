@@ -1307,6 +1307,21 @@ trifft, ist damit beziffert: eine Zwei-Zug-Bahn über das eigene 72-Kachel-Kohle
 Paar kostet 1 010 982 € gegen 500 000 € Kapital und 300 000 € Kreditlinie. Nicht
 unrentabel - unbezahlbar.**]*
 
+*[Nachtrag 11.08.2026, D-229: `AI_MIN_PROFIT_MARGIN` 1,25 → **2,00**, gewählt
+über einen Sweep von FÜNFZEHN Werten (0,60–3,00) × sechzehn Seeds × drei
+Konkurrenten × 25 Jahre, plus Szenario 5 bei jedem Wert. Optimiert wurde
+nicht das Geld, sondern **Konkurrenten, die am Ende eine Linie mit Mannschaft
+fahren**: 9 → **13** von 48, Seeds mit lebendem Gegner 8 → **11** von 16,
+abgewickelt 3 → **0**, Fahrzeuge 90 → **105**, Gesamtwert 21 254 922 →
+**25 597 942 €** — und gegen die 24 000 000 € Startkapital der 48 Firmen
+VERNICHTET das Feld bei 1,25 2 745 078 € und ERZEUGT bei 2,00 1 597 942 €.
+Der Preis wird genannt: Firmen, die überhaupt nichts bauen, 13 → 29 von 48.
+Kein Band verschoben; Szenario 5 Road **identisch auf den Euro**, Rail
+228 581 → **1 802 165 €** (3 Linien, 18 Fahrzeuge), Expansive −241 375
+[abgewickelt] → **2 153 604 €**. **Schienenlinien und Züge bleiben bei JEDEM
+der fünfzehn Werte NULL** — die Schienen-Frage ist D-228s Unbezahlbarkeit und
+nicht diese Schwelle.]*
+
 ---
 
 ### M12 — Die Bühne: Hybrid-Renderer, Interpolation, Kartentext

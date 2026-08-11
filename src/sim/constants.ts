@@ -746,20 +746,78 @@ export const AI_DRAIN_MARGIN = 1.5;
  * | 0.9 and over     |    37 | 17 (46 %)                             |
  * | 2.0 and over     |     4 | 4 (100 %)                             |
  *
- * The value is NOT read off that table - picking the column that flatters a
- * band is exactly what this project does not do. It is the reciprocal of the
+ * The value was NOT read off that table - picking the column that flatters a
+ * band is exactly what this project does not do. It was the reciprocal of the
  * measured optimism of the projection itself: over all 114 lines the MEDIAN
  * one realised **0.815** of its projected margin at its best review window
  * (quartiles 0.54 and 1.47), so a projection of 1 / 0.815 = **1.23** is what
  * the median line needs in order to cover its bill in fact. Rounded to 1.25.
  *
- * Sensitivity, stated because it is real: seed 2's expansive company builds
+ * **1.25 was a principled derivation with exactly ONE point measured, and
+ * D-229 swept the constant instead: fifteen values from 0.60 to 3.00, sixteen
+ * seeds x three competitors x twenty-five years each, plus scenario 5's three
+ * personalities at every value. 1.25 is not where the game is best, and the
+ * median-realisation argument is not wrong - it answers a question with the
+ * wrong quantile in it.** The curve, per value (48 companies; "crewed" = a
+ * company that finishes the quarter century running a line with a fleet;
+ * "husk" = stations standing with no fleet at all):
+ *
+ * | floor | value EUR  | wound up | crewed | seeds | vehicles | husks | idle |
+ * | ----- | ---------- | -------- | ------ | ----- | -------- | ----- | ---- |
+ * | 0.60  | 10,768,464 |       14 |      7 |  7/16 |       48 |    31 |   10 |
+ * | 0.95  | 14,122,339 |        8 |      5 |  5/16 |       48 |    34 |    9 |
+ * | 1.25  | 21,254,922 |        3 |      9 |  8/16 |       90 |    26 |   13 |
+ * | 1.55  | 24,814,668 |        0 |      8 |  8/16 |       78 |    12 |   28 |
+ * | 1.90  | 25,422,832 |        0 |     12 | 11/16 |       99 |     8 |   28 |
+ * | 2.00  | 25,597,942 |        0 |     13 | 11/16 |      105 |     6 |   29 |
+ * | 2.35  | 26,727,677 |        1 |     13 | 11/16 |      114 |     4 |   31 |
+ * | 2.60  | 24,616,844 |        0 |     10 |  9/16 |       72 |     7 |   31 |
+ * | 3.00  | 24,606,487 |        0 |      7 |  6/16 |       48 |     8 |   33 |
+ *
+ * **2.00 is the SMALLEST floor that reaches the plateau maximum of the
+ * property that was optimised** - competitors that finish running a business -
+ * and the plateau (1.90 - 2.35) is broad, so the choice is not a peak-fit. The
+ * money is not made by inaction, which is the trap a total-value objective
+ * falls into and is measured here rather than assumed: against the 24,000,000
+ * EUR the 48 companies start with, the field at 1.25 DESTROYS 2,745,078 and at
+ * 2.00 CREATES 1,597,942. What the higher floor costs is stated too:
+ * competitors that never build anything at all rise 13 -> 29 of 48, and one
+ * world of sixteen (seed 131313) ends with no competitor infrastructure at all
+ * against none at 1.25.
+ *
+ * **The re-derivation, and the disagreement that is the finding.** The same
+ * instrument D-221 used, re-run over 51 quarter centuries at a near-unfiltered
+ * floor of 0.60 (182 lines, every one of them reviewed): the median line
+ * realises **0.603** of its projection, and the projection at which the MEDIAN
+ * line covers its whole monthly bill in fact is **1.257** - which reproduces
+ * 1.25 on a sample sixty percent larger, so D-221's arithmetic stands. What
+ * the sweep says is that the median is the wrong statistic: a line that misses
+ * does not merely fail to compound, it consumes the capital, the review cycle
+ * and one of the company's AI_MAX_LINES slots, and the fourteen windings-up at
+ * the bottom of the table are that asymmetry priced. The THIRD QUARTILE of the
+ * same measurement - the projection at which three quarters of built lines
+ * cover their bill - is **2.26**, and it lands inside the sweep's plateau.
+ * Coverage by projected band on that unfiltered sample: under 0.9 18 %,
+ * 0.9-1.25 40 %, 1.25-1.9 53 %, 1.9-2.6 75 %, 2.6 and over 88 %.
+ *
+ * **The sensitivity this comment used to state is REFUTED, and that is why it
+ * is quoted rather than deleted.** It read: "seed 2's expansive company builds
  * at 1.435 and 1.488 and seed 3's rail company at 1.881, so a floor above
- * 1.435 would stop two of scenario 5's three personalities building at all.
- * That is a property of how thin the industry offer is on a generated map
- * (the second named cause, deliberately untouched here), not of this number.
+ * 1.435 would stop two of scenario 5's three personalities building at all."
+ * Measured: at 2.00 the rail company goes from a 228,581 EUR husk with no line
+ * and no vehicle to **1,802,165 EUR with 3 lines, 18 vehicles and 6 stations**,
+ * and the expansive company from **-241,375 [wound up]** to **2,153,604 EUR
+ * with 4 lines and 23 vehicles**. Refusing the line a company would have built
+ * does not stop the company; it sends it to the next candidate, later, with
+ * its capital intact. The road company is unmoved to the euro at every floor
+ * from 0.80 to 2.60.
+ *
+ * **What this constant does NOT buy, measured at all fifteen values: a railway
+ * competitor.** Rail lines alive and trains alive are ZERO at every floor from
+ * 0.60 to 3.00. The rail question is D-228's, and it is affordability, not
+ * this floor.
  */
-export const AI_MIN_PROFIT_MARGIN = 1.25;
+export const AI_MIN_PROFIT_MARGIN = 2.0;
 
 /**
  * How far off the straight corridor the AI's road planner may look, per side.

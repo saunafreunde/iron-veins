@@ -2196,11 +2196,12 @@ played, twenty-five years each: **total value over twenty-four competitors
   builder alone the refused pairs sat at the top of the ranking for ever and the
   builder spends a fixed `AI_CANDIDATES_TRIED` on them. `fleetFor` and
   `loadUnitsOf` moved into `evaluate.ts` so filter and builder cannot drift.
-- **`AI_MIN_PROFIT_MARGIN = 1.25` is a measurement, not a knob**: 114 lines and
-  492 reviews across eleven quarter-century games, and the median line realises
-  **0.815** of its projected margin at its best window, so 1/0.815 = 1.23.
-  Sorted by projection, 7 of 77 lines under 0.9 ever covered their whole bill
-  against 4 of 4 at 2.0 and over.
+- **`AI_MIN_PROFIT_MARGIN` was 1.25 as a measurement, not a knob**: 114 lines
+  and 492 reviews across eleven quarter-century games, and the median line
+  realises **0.815** of its projected margin at its best window, so 1/0.815 =
+  1.23. Sorted by projection, 7 of 77 lines under 0.9 ever covered their whole
+  bill against 4 of 4 at 2.0 and over. **It is 2.00 since D-229, which swept it
+  over fifteen values - see the digest at the end of this file.**
 - **"The stop covers four buildings" was measured and REFUTED - four is the
   whole town.** Every town of population <= 500 on all eight seeds has exactly
   4.00 building tiles; `stopTileNear` reaches 3.79-4.00 of them against a best
@@ -2403,6 +2404,55 @@ defect that was never about railways.
   and is NOT shipped: without the shuttle `AiProject.railTrains` is 1 on every
   railway the builder lays, so it can never bind. The world in which it fires is
   the shuttle world.
+
+## The profit floor, swept (D-229)
+
+**`AI_MIN_PROFIT_MARGIN` 1.25 -> 2.00, chosen on opponents that play rather than
+on money, over fifteen values x sixteen seeds x three competitors x twenty-five
+years, plus scenario 5 at every value.** The shape of the curve is the finding:
+total company value rises from 10.8 M at 0.60 to 26.7 M at 2.35 and falls back
+to 24.6 M at 2.60 and 3.00, but at the top end the money comes from an AI that
+builds almost nothing - which is a worse GAME, so total value is not what was
+optimised.
+
+- **The property optimised is competitors that finish the quarter century
+  RUNNING a line with a crew**, with the tie broken by MINIMALITY: 2.00 is the
+  smallest floor reaching the plateau maximum (13 crewed companies of 48, 11 of
+  16 seeds), the plateau 1.90-2.35 is broad, and the cliff at 2.60 is three grid
+  steps away. Against 1.25: total 21,254,922 -> **25,597,942 EUR**, wound up 3
+  -> **0**, crewed 9 -> **13**, seeds with a live opponent 8 -> **11**, living
+  vehicles 90 -> **105**, husks (stations, no fleet) 26 -> **6**.
+- **That the money is not made by inaction is measured**: against the 24,000,000
+  EUR the 48 companies start with, the field at 1.25 DESTROYS 2,745,078 and at
+  2.00 CREATES 1,597,942. **The price is stated too**: competitors that build
+  nothing at all rise 13 -> 29 of 48, and one world of sixteen ends with no
+  competitor infrastructure at all.
+- **The 1/0.815 derivation was re-measured on an uncensored sample and it is
+  RIGHT ARITHMETIC ON THE WRONG QUANTILE.** Over 51 quarter centuries at a
+  near-unfiltered floor (182 lines), the projection at which the MEDIAN line
+  covers its whole monthly bill in fact is **1.257** - it reproduces 1.25 on a
+  sample sixty percent larger. The same statistic at the THIRD QUARTILE is
+  **2.26**, inside the sweep's plateau. A median criterion is right only when a
+  miss costs what a hit gains, and a missed line eats the capital, the review
+  cycle and a line slot: the fourteen windings-up at the bottom of the sweep are
+  that asymmetry priced.
+- **A stated sensitivity, refuted.** D-221 predicted that a floor over 1.435
+  would stop two of scenario 5's three personalities building at all. Measured
+  at 2.00 both build MORE: rail a **228,581 husk -> 1,802,165 EUR with 3 lines
+  and 18 vehicles**, expansive **-241,375 [wound up] -> 2,153,604 with 4 lines
+  and 23 vehicles**. Road is identical to the euro at every floor from 0.80 to
+  2.60.
+- **No band moved and none was widened**; `tests/balance` is green at 81. Two
+  UNIT assertions went red and neither was widened either: `aiModeFallback`
+  measured rail preference at world creation (8 of 32 at 1.25, **0 of 32** at
+  2.00) where over played games the branch is alive (**650 of 5,700** scans,
+  first hit 1956-1968), so it is re-anchored on a played game; and
+  `replayTheatre` needed a competitor that ACTS, so its fixture moved off the
+  128-tile map (a size the game does not offer) onto 256.
+- **What this constant does NOT buy, at any of the fifteen values: a railway
+  competitor.** Rail lines alive and trains alive are ZERO at 0.60 and at 3.00
+  and everywhere between. Soak fixture re-recorded (`1f76e2df98be99a3` ->
+  `f08265c0152efea9`, 191 -> 143 commands); `SAVE_VERSION` stays 30.
 
 ## Still outstanding
 

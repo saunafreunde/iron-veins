@@ -249,10 +249,31 @@ const VALUE_FLOOR_CT: ReadonlyMap<number, number> = new Map([
  * 4714  p4   382,931     l0 v0 s5  | p2  415,718     l1 v6  s5 | p3 500,000     l0 v0  s0
  * ```
  *
+ * **Re-measured at D-229's HEAD, where `AI_MIN_PROFIT_MARGIN` moved 1.25 ->
+ * 2.00 on a fifteen-value sweep. Not one assertion below moved; the run did,
+ * and both are printed rather than one being quoted:**
+ *
+ * ```
+ * 4711  p0   233,189     l0 v0 s3  | p4  471,588     l0 v0 s2  | p1 342,738     l1 v3  s2
+ * 4713  p4   500,000     l0 v0 s0  | p0 1,842,457    l3 v18 s4 | p3 500,000     l0 v0  s0
+ * 4712  p4   500,000     l0 v0 s0  | p2  329,982     l1 v6  s2 | p0 500,000     l0 v0  s0
+ * 4714  p4   500,000     l0 v0 s0  | p2  304,670     l1 v6  s5 | p3 500,000     l0 v0  s0
+ * ```
+ *
+ * Total 5,969,618 -> **6,524,624 EUR**, nobody wound up in either, competitors
+ * owning a fleet 3 -> **4 of twelve**, companies that took the field 8 -> 5 -
+ * and the last of those is the price D-229 names and measures: a higher floor
+ * refuses more, so more competitors sit still, and the ones that do build run a
+ * business instead of a graveyard. Over the SIXTEEN seeds of that sweep the
+ * same change reads 21,254,922 -> **25,597,942 EUR**, wound up 3 -> **0**,
+ * crewed competitors 9 -> **13**, seeds with a live opponent 8 -> **11**.
+ *
+ * The D-224 numbers above were measured with the floor at 1.25:
+ *
  * Total value 5,969,618 EUR, **nobody wound up, THREE of twelve own a fleet**,
  * eight of twelve took the field. D-221 read 4,118,986 with one wound up and
  * ONE of twelve owning a vehicle, and D-220 before it 974,542 with six wound
- * up. What moved this time is the sentence that had not moved since M8: D-222
+ * up. What moved that time is the sentence that had not moved since M8: D-222
  * took the rail personalities off a mode they cannot pay for on a generated map
  * and quoted the projection for the single-track railway the builder really
  * lays. Over the wider eight-seed set the same change reads 7,593,553 ->

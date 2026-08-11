@@ -89,6 +89,28 @@ import { hashTwin } from './determinism';
  * competitors of the eight-seed `aiGame` sweep the same change is worth
  * 18,435 -> 7,593,553 EUR and takes windings-up from eight to three.
  *
+ * **D-229 swept `AI_MIN_PROFIT_MARGIN` over fifteen values and moved it 1.25 ->
+ * 2.00. Two of the three rows below improve out of all recognition and NOT ONE
+ * BAND MOVED - which is the only reason a measurement is allowed to move on its
+ * own.** Measured here at that HEAD:
+ *
+ *  - ROAD **1,022,084 EUR, identical to the euro**, 2 lines, 12 vehicles, still
+ *    compounding through the year-21 renewal. It is identical at EVERY floor
+ *    from 0.80 to 2.60: this company's candidate list never contains a line the
+ *    floor decides, so the constant simply does not reach it.
+ *  - RAIL 228,581 -> **1,802,165 EUR**, 0 lines and 0 vehicles -> **3 lines, 18
+ *    vehicles, 6 stations**. The husk this file has carried since D-216 is a
+ *    business. Its assertion still reads "alive, above zero, two stations",
+ *    because one measurement of a chaotic quarter century is not a band (D-158),
+ *    and a band that moves with every bundle guards nothing.
+ *  - EXPANSIVE -241,375 [wound up] -> **2,153,604 EUR**, 4 lines, 23 vehicles,
+ *    5 stations. Its assertion still reads "builds, inside its exposure".
+ *
+ * D-221's stated sensitivity - "a floor above 1.435 would stop two of scenario
+ * 5's three personalities building at all" - is REFUTED by exactly those two
+ * rows: refusing the line a company would have built does not stop the company,
+ * it sends it to the next candidate, later, with its capital intact.
+ *
  * **And the honest closing sentence about SPEC.md 19.4's 5 - 25 million: the
  * AI does not reach it and this bundle does not claim it does.** 1,156,463 is a
  * factor 4.3 under the original floor. D-116 stays closed on D-158's

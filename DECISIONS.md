@@ -41,18 +41,18 @@ no entry below. A number may appear under several topics.
 - **Towns, council & ownership:** D-101, D-102, D-103, D-104, D-205, D-207,
   D-206, D-213, D-216, D-217
 - **Economy, finance & emissions:** D-008, D-090, D-091, D-092, D-105, D-154,
-  D-180, D-193, D-196, D-228
+  D-180, D-193, D-196, D-228, D-229
 - **Balancing & scenarios:** D-038, D-039, D-040, D-041, D-066, D-087, D-088,
   D-116, D-151, D-152, D-156, D-158, D-159, D-187, D-190, D-194, D-195,
   D-196, D-197, D-198, D-199, D-200, D-203, D-204, D-207, D-211, D-213,
-  D-215, D-216, D-220, D-221, D-222, D-224, D-225, D-226, D-228
+  D-215, D-216, D-220, D-221, D-222, D-224, D-225, D-226, D-228, D-229
 - **Vehicles & fleet:** D-043, D-044, D-045, D-068, D-076, D-089, D-093,
   D-096, D-142, D-143, D-145, D-146, D-155, D-157, D-171, D-174, D-181, D-185,
   D-201, D-207
 - **Water & air:** D-094, D-095, D-096, D-097, D-098, D-099
 - **Competitors, AI & tenders:** D-107, D-108, D-109, D-115, D-116, D-121,
   D-122, D-147, D-152, D-153, D-154, D-155, D-156, D-158, D-216, D-218,
-  D-219, D-220, D-221, D-222, D-223, D-224, D-225, D-226, D-228
+  D-219, D-220, D-221, D-222, D-223, D-224, D-225, D-226, D-228, D-229
 - **Rendering & art:** D-013, D-014, D-033, D-035, D-112, D-117, D-125, D-127,
   D-136, D-140, D-160, D-161, D-162, D-163, D-164, D-165, D-166, D-169, D-170,
   D-171, D-172, D-173, D-174, D-175, D-177, D-179, D-186, D-202, D-205, D-206,
@@ -73,10 +73,10 @@ no entry below. A number may appear under several topics.
   D-167, D-183, D-186, D-188, D-189, D-190, D-191, D-192, D-193, D-194,
   D-195, D-196, D-197, D-198, D-199, D-200, D-201, D-202, D-203, D-204,
   D-205, D-207, D-206, D-208, D-209, D-210, D-212, D-213, D-215, D-216,
-  D-217, D-219, D-220, D-221, D-222, D-228
+  D-217, D-219, D-220, D-221, D-222, D-228, D-229
 - **Process & specification:** D-070, D-123, D-129, D-133, D-138, D-140,
   D-185, D-191, D-197, D-198, D-199, D-203, D-204, D-205, D-206, D-215,
-  D-222, D-225, D-226, D-227, D-228
+  D-222, D-225, D-226, D-227, D-228, D-229
 
 ---
 
@@ -12136,3 +12136,219 @@ asserted). Its bar is derived rather than typed in - it plays the same project
 on the same world with money, reads what the company really sank into it, and
 then gives a second company a quarter of that with its credit line already drawn
 down to ten loan steps.
+
+---
+
+## The profit floor, swept (2026-08-11)
+
+### D-229 `AI_MIN_PROFIT_MARGIN` swept over fifteen values: 1.25 -> 2.00, chosen on opponents that play rather than on money, and the median derivation that produced 1.25 re-measured and found to be the right arithmetic on the wrong quantile
+
+**D-221 derived `AI_MIN_PROFIT_MARGIN = 1.25` as `1 / 0.815` - the reciprocal of
+the median realisation of 114 measured lines. It is a principled derivation with
+exactly ONE point measured, and an independent verifier's recommendation was to
+sweep it.** This bundle is that sweep: fifteen values from 0.60 to 3.00, each
+played over the sixteen acceptance seeds on a 256 map with three competitors for
+twenty-five years (48 companies a value, 720 quarter centuries in all), plus
+scenario 5's three personalities on a 512 map at every value. The constant moves
+to **2.00**, one existing unit assertion is re-anchored on a measurement that
+proves its instrument could not see the property it asserted, and one unit
+fixture moves to a map size the game actually offers. **No band moved.**
+
+**THE CURVE, which is the finding rather than the winner.** "Crewed" is a
+company that finishes the quarter century running a line with a fleet - the
+thing a player actually meets; "husk" is stations standing with no fleet at all;
+"idle" is a company that never built anything. Every row is 48 companies over
+the same sixteen seeds:
+
+| floor | value EUR  | wound up | crewed | seeds crewed | lines built | lines alive | vehicles | husks | idle | rail lines | trains |
+| ----- | ---------- | -------- | ------ | ------------ | ----------- | ----------- | -------- | ----- | ---- | ---------- | ------ |
+| 0.60  | 10,768,464 |       14 |      7 |         7/16 |         177 |          11 |       48 |    31 |   10 |          0 |      0 |
+| 0.80  | 13,375,268 |       10 |      4 |         4/16 |          98 |          13 |       42 |    35 |    9 |          0 |      0 |
+| 0.95  | 14,122,339 |        8 |      5 |         5/16 |          99 |          13 |       48 |    34 |    9 |          0 |      0 |
+| 1.10  | 16,057,291 |        6 |      4 |         4/16 |          74 |           9 |       32 |    29 |   13 |          0 |      0 |
+| 1.25  | 21,254,922 |        3 |      9 |         8/16 |          69 |          16 |       90 |    26 |   13 |          0 |      0 |
+| 1.40  | 24,182,147 |        0 |      7 |         7/16 |          45 |          11 |       61 |    16 |   24 |          0 |      0 |
+| 1.55  | 24,814,668 |        0 |      8 |         8/16 |          37 |          13 |       78 |    12 |   28 |          0 |      0 |
+| 1.70  | 25,198,926 |        1 |     11 |        10/16 |          37 |          16 |       96 |     8 |   29 |          0 |      0 |
+| 1.80  | 25,077,729 |        0 |     11 |        10/16 |          37 |          16 |       93 |     9 |   28 |          0 |      0 |
+| 1.90  | 25,422,832 |        0 |     12 |        11/16 |          36 |          17 |       99 |     8 |   28 |          0 |      0 |
+| 2.00  | 25,597,942 |        0 |     13 |        11/16 |          37 |          18 |      105 |     6 |   29 |          0 |      0 |
+| 2.20  | 25,883,582 |        1 |     13 |        11/16 |          36 |          19 |      108 |     4 |   31 |          0 |      0 |
+| 2.35  | 26,727,677 |        1 |     13 |        11/16 |          33 |          20 |      114 |     4 |   31 |          0 |      0 |
+| 2.60  | 24,616,844 |        0 |     10 |         9/16 |          30 |          12 |       72 |     7 |   31 |          0 |      0 |
+| 3.00  | 24,606,487 |        0 |      7 |         6/16 |          20 |           8 |       48 |     8 |   33 |          0 |      0 |
+
+Scenario 5 at every value, and the road row is the one to read first:
+
+| floor | road (seed 4711)     | rail (seed 3)          | expansive (seed 2)      |
+| ----- | -------------------- | ---------------------- | ----------------------- |
+| 0.60  | 396,542 0l/0v/4s     | 228,581 0l/0v/2s       | -241,375 [X] 1l/0v/5s   |
+| 0.80  | 1,022,084 2l/12v/3s  | 228,581 0l/0v/2s       | -241,375 [X] 1l/0v/5s   |
+| 1.25  | 1,022,084 2l/12v/3s  | 228,581 0l/0v/2s       | -241,375 [X] 1l/0v/5s   |
+| 1.40  | 1,022,084 2l/12v/3s  | 228,581 0l/0v/2s       | 383,190 1l/6v/4s        |
+| 1.55  | 1,022,084 2l/12v/3s  | 228,581 0l/0v/2s       | 383,190 1l/6v/4s        |
+| 1.70  | 1,022,084 2l/12v/3s  | 62,433 [X] 1l/0v/4s    | 2,153,604 4l/23v/5s     |
+| 1.80  | 1,022,084 2l/12v/3s  | 1,802,165 3l/18v/6s    | 2,153,604 4l/23v/5s     |
+| 1.90  | 1,022,084 2l/12v/3s  | 1,802,165 3l/18v/6s    | 2,153,604 4l/23v/5s     |
+| 2.00  | 1,022,084 2l/12v/3s  | 1,802,165 3l/18v/6s    | 2,153,604 4l/23v/5s     |
+| 2.20  | 1,022,084 2l/12v/3s  | 1,802,165 3l/18v/6s    | 2,153,604 4l/23v/5s     |
+| 2.35  | 1,022,084 2l/12v/3s  | 1,802,165 3l/18v/6s    | 1,737,757 3l/18v/7s     |
+| 2.60  | 1,022,084 2l/12v/3s  | 1,802,165 3l/18v/6s    | 2,043,193 3l/18v/7s     |
+| 3.00  | 356,068 0l/0v/2s     | 1,078,817 1l/6v/4s     | 2,043,193 3l/18v/7s     |
+
+**WHAT WAS OPTIMISED, and why it is not the money.** Total company value alone
+is the wrong objective and this curve shows exactly how it fails: at 2.60 and
+3.00 the total is still 24.6 M with the AI building almost nothing (20 lines
+built against 69 at 1.25, 33 of 48 companies never leaving the yard), and a
+world with nobody in it is a worse GAME than a slightly poorer one with
+opponents. The property optimised is **competitors that finish running a
+business - a line with a crew** - with the number of SEEDS carrying at least one
+beside it, and the tie broken by MINIMALITY: **2.00 is the smallest floor that
+reaches the plateau maximum** (13 crewed companies, 11 of 16 seeds), the plateau
+1.90 - 2.35 is broad rather than a peak, and the cliff at 2.60 is three grid
+steps away.
+
+That the money is not made by inaction is measured rather than asserted.
+Against the **24,000,000 EUR** the 48 companies start with, the field at 1.25
+**destroys 2,745,078** of it and at 2.00 **creates 1,597,942**. Living vehicles
+rise 90 -> 105, lines alive 16 -> 18, husks fall 26 -> 6, windings-up 3 -> 0.
+
+**WHAT THE ALTERNATIVES COST, stated in the same units.** Staying at 1.25 costs
+4,343,020 EUR, three seeds of sixteen where the player meets nobody running
+anything, four crewed competitors, fifteen living vehicles, three companies
+destroyed and twenty husks left standing on the map. Taking the argmax 2.35 buys
+1,129,735 EUR more and **not one more crewed competitor**, while adding a
+winding-up, making scenario 5's expansive company worse (2,153,604 ->
+1,737,757), and sitting one grid step from 2.60, where the total falls 2.1 M and
+two seeds lose their live opponent. Choosing 1.55 - the last value at which
+every existing assertion stays green untouched, see below - keeps the money
+(24,814,668) and **loses the point**: 8 crewed companies against 9 at 1.25, i.e.
+it buys solvency without buying an opponent.
+
+**THE COST OF THE CHOICE, which is real and is not hidden.** Competitors that
+build nothing at all rise **13 -> 29 of 48**, and one world of sixteen (seed
+131313) ends with no competitor infrastructure at all where 1.25 left one
+company with two stations and no fleet. On the 128-tile map used only by a unit
+fixture the competitor goes completely silent (measured: not one command in
+120,000 ticks on any of eight seeds, against 55 by tick 20,000 at 1.25) - 128 is
+not a size the game offers (`MAP_SIZES` is 256, 512, 1024, 2048), and on eight
+128-maps played to year twenty-five the field was already a wasteland at 1.25:
+24 companies owning ONE living vehicle between them, against six vehicles and
+one crewed company at 2.00.
+
+**THE RE-DERIVATION, AND THE DISAGREEMENT THAT IS THE FINDING.** D-221's own
+instrument was rebuilt - every project logs the `projectLine` projection it was
+built on, every line review logs what it earned against that projection's own
+whole-bill denominator - and run over 51 quarter centuries at a near-unfiltered
+floor of 0.60, which is the sample the derivation needs and 1.25's sample was
+not (a floor censors the very lines its derivation is measured on). 182 lines,
+every one of them reviewed:
+
+- the median line realises **0.603** of its projection (D-221 measured 0.815 on
+  114 lines of eleven games), quartiles 0.058 and 1.310;
+- **the projection at which the MEDIAN line covers its whole monthly bill in
+  fact is 1.257** - which reproduces the shipped 1.25 on a sample sixty percent
+  larger. **D-221's arithmetic is not wrong.**
+- the same statistic at the THIRD QUARTILE - the projection at which three
+  quarters of built lines cover their bill - is **2.26**, and it lands inside
+  the sweep's measured plateau.
+- coverage by projected band on that unfiltered sample: under 0.9 **18 %**,
+  0.9-1.25 **40 %**, 1.25-1.9 **53 %**, 1.9-2.6 **75 %**, 2.6 and over **88 %**.
+
+So the two do not disagree about the arithmetic; they disagree about the
+QUANTILE, and the sweep is what settles it. A median criterion is the right one
+only when a miss costs what a hit gains. A missed line does not merely fail to
+compound: it consumes the capital, the review cycle and one of the company's
+`AI_MAX_LINES` slots, and the fourteen windings-up at the bottom of the table
+are that asymmetry priced. Read forwards, the coverage figures say the same
+thing - at 1.25 the admitted lines are a coin toss (53 % of the band above it
+ever cover their bill), at 1.9 - 2.6 three quarters do.
+
+**A STATED SENSITIVITY, REFUTED - and this is why the old sentence is quoted in
+the constant rather than deleted.** D-221 wrote: "seed 2's expansive company
+builds at 1.435 and 1.488 and seed 3's rail company at 1.881, so a floor above
+1.435 would stop two of scenario 5's three personalities building at all."
+Measured at 2.00, both build MORE: the rail company goes from a **228,581 EUR
+husk with no line and no vehicle** to **1,802,165 EUR with 3 lines, 18 vehicles
+and 6 stations**, and the expansive company from **-241,375 [wound up]** to
+**2,153,604 EUR with 4 lines and 23 vehicles**. Refusing the line a company
+would have built does not stop the company; it sends it to the next candidate,
+later, with its capital intact. The prediction was made from the projections of
+the lines those companies built THEN, and a floor changes which lines exist.
+
+**WHAT THIS CONSTANT DOES NOT BUY: a railway competitor.** Rail lines alive and
+trains alive are **ZERO at all fifteen values**, 0.60 to 3.00, over all 720
+quarter centuries. The programme's one unwon claim (D-226, D-228) is untouched
+by this floor, and the sweep is evidence for D-228's diagnosis rather than
+against it: what stops a competitor's railway is affordability, not
+profitability.
+
+**THE HONESTY LINE, because this is a constant chosen against measurements that
+include the acceptance scenarios.** The choice was made on properties the bands
+do not assert - crewed competitors, husks, capital created against capital
+started with - and every band was then re-measured rather than consulted. **None
+moved, and none was widened.** Scenario 5: road **1,022,084 EUR, identical to
+the euro** (and identical at every floor from 0.80 to 2.60 - the floor never
+reaches that company's list), still 2 lines, 12 vehicles, still compounding
+through its year-21 renewal; rail 228,047/228,581 -> **1,802,165, alive**, which
+its band asserts only as "alive with two stations"; expansive -241,309/-241,375
+[wound up] -> **2,153,604**, which its band asserts only as "builds, inside its
+exposure". The whole of `tests/balance` is green at **81 passed, 2 skipped**.
+`aiGame`'s swept seeds change - they are the same sixteen-seed measurement one
+map size down - and every assertion in that file holds on all four.
+
+**TWO UNIT ASSERTIONS WENT RED AT 2.00, AND NEITHER WAS WIDENED.**
+
+1. `tests/unit/aiModeFallback.spec.ts` asserted `keptRail > 0`: some rail
+   personality on some seed still prefers a railway. Measured at world creation
+   it is **8 of 32 at 1.25 and 0 of 32 at 2.00** (sixteen seeds x two rail
+   personalities; the 1.25 hits are seeds 2718, 60613, 918273, 860213). No
+   generated 1950 map offers a railway that clears 2.00 - the industries are
+   small and the catalogue is dear. But the property the test wants is TRUE and
+   its instrument could not see it: over the sixteen played quarter centuries
+   **650 of 5,700 rail-personality scans prefer a railway at 2.00** (11.4 %;
+   1,313 of 5,508 at 1.25), and the first rail-first list appears in **1956** on
+   seed 4714, 1962 on 4711, 1968 on 4713, never on 4712. The assertion is
+   therefore re-anchored on a PLAYED game (seed 4714, early exit at the first
+   hit, ~0.9 s) and the world-creation half keeps the fallback branch. A railway
+   that becomes worth building as the industries grow and the locomotives
+   improve is the right shape for this game.
+2. `tests/unit/replayTheatre.spec.ts` needed a competitor that ACTS inside
+   20,000 ticks; its subject is the replay SEAL, not the AI's economics. Its
+   world was a 128-tile map for cheapness, and at 2.00 the competitor is silent
+   there (0 commands in 120,000 ticks on eight seeds). The FIXTURE moved to a
+   256 map - the smallest size the game offers - where the first competitor
+   command lands at tick 5,601 exactly as before. The recorded replay every
+   other test in that file decodes is untouched.
+
+**No save bump and one re-recorded fixture.** `SAVE_VERSION` stays **30**: a
+constant's value is not a state shape. The cross-OS canonical pin is unmoved
+(its world is the recorded ROAD fixture and carries no AI) - checked by running
+`tests/determinism`, 33 green, rather than presumed. The soak fixture IS
+re-recorded, because it replays a quarter century WITH competitors:
+`1f76e2df98be99a3` -> **`f08265c0152efea9`**, command count **191 -> 143**.
+
+**THE SIXTEEN SEEDS AT 2.00**, personality, value EUR, lines/vehicles/stations:
+
+```
+4711     p0   233,189 0/0/3  · p4   471,588 0/0/2  · p1   342,738 1/3/2
+4713     p4   500,000 0/0/0  · p0 1,842,457 3/18/4 · p3   500,000 0/0/0
+4712     p4   500,000 0/0/0  · p2   329,982 1/6/2  · p0   500,000 0/0/0
+4714     p4   500,000 0/0/0  · p2   304,670 1/6/5  · p3   500,000 0/0/0
+2718     p3   500,000 0/0/0  · p0   150,934 0/0/4  · p4   500,000 0/0/0
+31415    p3   500,000 0/0/0  · p4   500,000 0/0/0  · p2   -48,583 0/0/6
+60613    p0 2,015,525 2/12/3 · p4   500,000 0/0/0  · p1   500,000 0/0/0
+12345    p4   500,000 0/0/0  · p2   457,387 1/6/4  · p0   392,540 1/6/2
+77003    p4   500,000 0/0/0  · p0   401,601 1/6/4  · p1   500,000 0/0/0
+918273   p2   397,325 0/0/3  · p1   500,000 0/0/0  · p4   500,000 0/0/0
+131313   p1   500,000 0/0/0  · p2   500,000 0/0/0  · p3   500,000 0/0/0
+860213   p4   500,000 0/0/0  · p3   500,000 0/0/0  · p2   669,626 2/12/7
+8675309  p0   229,438 1/6/6  · p1   596,485 1/6/3  · p4   500,000 0/0/0
+246813   p0   370,653 0/0/2  · p4   500,000 0/0/0  · p2   500,000 0/0/0
+555777   p4   500,000 0/0/0  · p2   704,636 1/6/5  · p3   500,000 0/0/0
+22071969 p1 1,235,752 2/12/3 · p2   500,000 0/0/0  · p4   500,000 0/0/0
+```
+
+Total **25,597,942 EUR**, **nobody wound up**, 105 living vehicles, 18 lines
+alive, `NoRoute` 0 everywhere, a crewed competitor on **11 of 16** seeds - and
+**0 rail lines, 0 trains**, which no value of this constant changes.

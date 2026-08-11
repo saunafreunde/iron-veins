@@ -55,12 +55,12 @@ interface Game {
   readonly ring: CheckpointRing;
 }
 
-function play(ticks: number, aiCompanies = 0): Game {
+function play(ticks: number, aiCompanies = 0, seed = SEED, mapSize = MAP_SIZE): Game {
   const world = World.create({
-    seed: SEED,
+    seed,
     difficulty: Difficulty.Normal,
     climate: MapClimate.Temperate,
-    mapSize: MAP_SIZE,
+    mapSize,
     companyName: 'Theaterbahn',
     companyColorIndex: 2,
     aiCompanies,
@@ -149,7 +149,18 @@ describe('a playback runs the recording and reaches what it claims', () => {
     // every one, because taking them from the log AND from the AI would run
     // each competitor command twice. Without the seal this test does not fail
     // an assertion, it THROWS on the queue's monotonic-tick check.
-    const game = play(20_000, 1);
+    //
+    // **The world moved to a 256 map in D-229, and it is the fixture that
+    // moved rather than an assertion.** This test needs a competitor that
+    // ACTS; what world it acts in is not its subject. D-229 raised
+    // `AI_MIN_PROFIT_MARGIN` to 2.00 and measured that on the 128-tile map this
+    // file uses for cheapness, the lone competitor then issues NOT ONE command
+    // in 120,000 ticks - on any of eight seeds, seed 828,282 among them (at
+    // 1.25 it issued 55 by tick 20,000). A 128 map is not a size the game
+    // offers: `MAP_SIZES` is 256, 512, 1024, 2048, and on the smallest of those
+    // this competitor's first command lands at tick 5,601 exactly as before.
+    // The recorded fixture every other test in this file decodes is untouched.
+    const game = play(20_000, 1, 4_711, 256);
     const bytes = encodeReplay(game.world, game.queue, game.ring, GAME_VERSION);
     const rival = game.queue.log.filter((envelope) => envelope.companyId !== 0);
     expect(rival.length).toBeGreaterThan(0);

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { CommandQueue } from '../../src/sim/commands/queue';
 import {
   AI_MAX_DISTANCE,
   AI_MIN_ARRIVAL_FACTOR,
@@ -9,6 +10,7 @@ import {
   Difficulty,
   MapClimate,
   TICKS_PER_DAY,
+  TICKS_PER_YEAR,
 } from '../../src/sim/constants';
 import { Cargo } from '../../src/sim/cargo/types';
 import { timeFactor } from '../../src/sim/cargo/payment';
@@ -90,6 +92,33 @@ describe('a competitor that cannot pay for a railway still goes into business', 
     }
   });
 
+  /**
+   * **Both branches are still live, and since D-229 the rail branch is
+   * measured in a PLAYED game rather than at world creation.**
+   *
+   * The assertion below used to read both counts off the 1950 list of eight
+   * freshly created worlds, and D-229 raised `AI_MIN_PROFIT_MARGIN` from 1.25
+   * to 2.00 on a fifteen-value sweep. That turned the 1950 half of it red, and
+   * the numbers are here rather than in a widened bound:
+   *
+   *  - at 1.25, at world creation: **8 of 32** (sixteen seeds x two rail
+   *    personalities) opened with a rail-first list, on seeds 2718, 60613,
+   *    918273 and 860213.
+   *  - at 2.00, at world creation: **0 of 32**. No generated 1950 map offers a
+   *    railway that clears the floor - the 1950 industries are small and the
+   *    1950 catalogue is dear.
+   *  - at 2.00, over sixteen played quarter centuries: **650 of 5,700**
+   *    rail-personality scans prefer a railway (11.4 %; at 1.25 it was 1,313 of
+   *    5,508). The first rail-first list appears in **1956** on seed 4714,
+   *    1962 on 4711, 1968 on 4713 and never on 4712.
+   *
+   * So the property this test wants - that a rail personality has not silently
+   * become a road personality - is TRUE and the old instrument could not see
+   * it: it sampled the world at the one instant a railway is least affordable.
+   * A railway that becomes worth building as the industries grow and the
+   * locomotives get better is the right shape for the game, and it is what the
+   * game-scale instrument below asserts.
+   */
   it('falls back to road exactly when no railway on the map pays, and does so somewhere', () => {
     let fellBack = 0;
     let keptRail = 0;
@@ -103,14 +132,31 @@ describe('a competitor that cannot pay for a railway still goes into business', 
       }
     }
     console.log(
-      `rail personalities over eight seeds: ${keptRail} rail lists, ${fellBack} fell back`,
+      `rail personalities over eight seeds at world creation: ` +
+        `${keptRail} rail lists, ${fellBack} fell back`,
     );
 
-    // Both branches are live. A fallback that never fires is dead code, and a
-    // fallback that always fires means the rail personalities have stopped
-    // being rail personalities.
+    // The fallback branch, at world creation where it always fires.
     expect(fellBack, 'the fallback never fires - it would be dead code').toBeGreaterThan(0);
-    expect(keptRail, 'no rail personality anywhere still prefers a railway').toBeGreaterThan(0);
+  });
+
+  it('still prefers a railway once the map has grown one worth building', () => {
+    // Seed 4714 is the cheapest of the four probed - its first rail-first list
+    // is in 1956 - and the loop leaves the moment it finds one, so a healthy
+    // run plays six game years and not twenty-five.
+    const w = world(4_714);
+    const queue = new CommandQueue();
+    let found = 0;
+    for (let year = 0; year <= 25 && found === 0; year++) {
+      for (const personality of RAIL_PERSONALITIES) {
+        const list = opportunities(w, personality, 1);
+        if (list.length > 0 && list[0]!.rail) found = 1950 + year;
+      }
+      if (found !== 0) break;
+      for (let tick = 0; tick < TICKS_PER_YEAR; tick++) w.step(queue, null);
+    }
+    console.log(`seed 4714: a rail personality prefers a railway again in ${found}`);
+    expect(found, 'no rail personality ever prefers a railway in a played game').toBeGreaterThan(0);
   });
 });
 
