@@ -187,8 +187,7 @@ function roadTilePassable(world: World, companyId: number, x: number, y: number)
   const map = world.map;
   if (!map.contains(x, y)) return false;
   const tile = map.tileIndex(x, y);
-  const owner = map.owner[tile]!;
-  if (owner !== TILE_PUBLIC && owner !== companyId) return false;
+  if (!tileOursOrPublic(world, companyId, tile)) return false;
   if (map.roadBits[tile] !== 0) return true;
   if (map.terrain[tile] === Terrain.Water) return false;
   if (map.industryId[tile] !== -1) return false;
@@ -307,6 +306,19 @@ export function planRoadRuns(
   return runs;
 }
 
+/**
+ * A tile this company may work on: unclaimed, or already its own.
+ *
+ * The ONE ownership question in this file, and the deliberate twin of
+ * `mayBuildOn` in commands/build.ts - the test that actually refuses a build
+ * with `cmd.reject.notYours`. Two copies of this arithmetic is how a planner
+ * and the command it plans for drift apart (D-219).
+ */
+function tileOursOrPublic(world: World, companyId: number, tile: number): boolean {
+  const owner = world.map.owner[tile]!;
+  return owner === TILE_PUBLIC || owner === companyId;
+}
+
 /** A tile the return track of the oval may claim: bare of rail, ours to take. */
 function clearRailTile(world: World, companyId: number, x: number, y: number): boolean {
   const map = world.map;
@@ -316,8 +328,7 @@ function clearRailTile(world: World, companyId: number, x: number, y: number): b
   if (map.structure[tile] !== Structure.None) return false;
   if (map.buildingKind[tile] !== 0 || map.industryId[tile] !== -1) return false;
   if (map.trackBits[tile] !== 0) return false;
-  const owner = map.owner[tile]!;
-  return owner === TILE_PUBLIC || owner === companyId;
+  return tileOursOrPublic(world, companyId, tile);
 }
 
 /** The geometry of an AI railway, found whole before anything is ordered. */
@@ -504,7 +515,7 @@ export function enqueueInfrastructure(
     // The whole oval is planned before anything is ordered; a pair no
     // straight corridor can serve falls back to the single line below.
     const oval = planRailOval(world, companyId, plan.from, plan.to);
-    if (oval === null) return enqueueSingleTrack(push, world, plan.from, plan.to);
+    if (oval === null) return enqueueSingleTrack(push, world, companyId, plan.from, plan.to);
 
     // The two one-way rows, signalled by the auto-signalling of 9.4 along
     // the drawn direction - which is the direction of travel, because
@@ -610,10 +621,25 @@ export function enqueueInfrastructure(
  * auto-signalling lays one-way signals facing the drawn direction, which on
  * a line worked out and back refuses the whole return trip (D-115) - and an
  * unsignalled single line carries exactly the one train this build reports.
+ *
+ * **The assistant answers about the GROUND; `buildTrack` also asks who owns
+ * every tile, and refuses the WHOLE run on the first one that is somebody
+ * else's** (D-219). This branch used to order whatever the assistant handed
+ * back, and because the decision cycle re-plans its best candidate every month,
+ * one rival tile anywhere on the alignment became a railway ordered and refused
+ * for the rest of the century. Measured over four seeds and twenty-five years:
+ * 350 `BuildTrack cmd.reject.notYours`, 1,750 `BuildRailStop
+ * cmd.reject.needsTrack` queued behind them, and - because a borrower enqueues
+ * the loan in the SAME batch (D-154) - 339 loans taken and 336 repaid, one pair
+ * a month, about 250,000 EUR of interest on seed 4711 alone for a company that
+ * never laid a rail. `planRailOval` has asked this question since D-153
+ * (`clearRailTile`) and `planRoadRuns` since D-154 (`roadTilePassable`); only
+ * this fallback - the one every rail company reaches - did not.
  */
 function enqueueSingleTrack(
   push: (command: Command) => void,
   world: World,
+  companyId: number,
   from: { readonly x: number; readonly y: number },
   to: { readonly x: number; readonly y: number },
 ): BuiltLine | null {
@@ -621,6 +647,9 @@ function enqueueSingleTrack(
   if (!planned.ok) return null;
   const tiles = planned.route.tiles;
   if (tiles.length < AI_RAIL_MIN_TILES) return null;
+  for (const tile of tiles) {
+    if (!tileOursOrPublic(world, companyId, tile)) return null;
+  }
 
   push({
     kind: CommandKind.BuildTrack,

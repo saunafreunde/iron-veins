@@ -2047,6 +2047,52 @@ been charged for.
   `aiGame` is green because it plays seed 4711 alone - `woundUp.length <= 1`
   fails on 4713 before this change and after it.
 
+## The AI's railway - ground it may build on (D-219)
+
+**A planner that cannot see the tile OWNER must not order a build.** `planTrack`
+is the route assistant: water, slope, curvature, gradient, and a `TileMap` with
+no company in it. `buildTrack` walks the finished route through
+`buildPermission` and refuses the WHOLE run on the first tile that is somebody
+else's. `enqueueSingleTrack` - the D-115 fallback every rail company reaches
+when no straight oval fits, which on generated terrain is nearly always -
+ordered whatever the assistant returned. `planRailOval` has asked the ownership
+question since D-153 and `planRoadRuns` since D-154; only that branch had not.
+`tileOursOrPublic` is the ONE ownership test in `src/sim/ai/build.ts` now, and
+the twin of `mayBuildOn` in `commands/build.ts`.
+
+- **Because the cycle re-plans its best candidate every month, one rival tile
+  is not one refused railway - it is the same one ordered for a century.**
+  Measured over four seeds and 25 years: **350 `BuildTrack notYours`** against 3
+  accepted, **1,750 `BuildRailStop needsTrack`** behind them, and - the loan
+  rides in the same batch (D-154) - **339 `TakeLoan` / 336 `RepayLoan`**. **The
+  loan churn D-154 declared dead was alive**: seed 4711's rail company took and
+  repaid 300,000 EUR **253 times**, month 49 to month 300, and lost 253,000 EUR
+  of interest without ever laying a rail.
+- **Measured, four seeds: total 928,593 -> 974,542 EUR, wound up 6/12 in both**,
+  refusals 350/1,750 -> 0/0, `TakeLoan` 339 -> 4, soak command count 5,442 ->
+  3,419. One row got worse and is named: 4712's expansive company now builds a
+  SECOND railway and cannot afford its train (`BuyTrain insufficientFunds`) -
+  D-158's open bottleneck verbatim.
+- **No save bump** - a refused plan writes nothing. Soak fixture re-recorded
+  (`15e0eca37ca9b897` -> `45ccb46dc67e1fdf`); the **cross-OS pin did not move**
+  (checked); no band touched, scenario 5 bit-identical.
+- **Two things D-219a measured and REVERTED, so nobody spends the day again.**
+  (a) The stop scan has the identical defect - `clearStopTile` says "nobody
+  else's" and never asked - and fixing it ALONE measures **-281,115 EUR, 7/12
+  wound up, ZERO living vehicles**: the 2,400 refusals were an accidental BRAKE
+  on suicidal building. (b) A break-even profitability floor built out of
+  `rate`'s RANKING estimate stops the AI building at all (**+3.1 M, ten of
+  twelve companies with no station**) - on scenario 5's own map no road
+  candidate ever scores 1.00 while that company earns 1.16 M. Both must ship
+  together, and the floor must come from the real lift the builder knows.
+- **Re-checked against the running code**: `adviseFleet` still has ONE
+  definition and the AI calls it (D-152); `closeDeadLine` still scales its
+  `owed` to the review window, so D-115's half-year error has not returned -
+  what it cannot see is stranded infrastructure; **every AI line has
+  auto-renewal on** (D-146), asserted at year 25; the hoarders hoard because
+  their candidate list is empty or loses money, not because the repayment rule
+  misfires.
+
 ## Still outstanding
 
 - **The two named walls of D-158.** A passenger pile a fleet merely

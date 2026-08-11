@@ -51,7 +51,8 @@ no entry below. A number may appear under several topics.
   D-201, D-207
 - **Water & air:** D-094, D-095, D-096, D-097, D-098, D-099
 - **Competitors, AI & tenders:** D-107, D-108, D-109, D-115, D-116, D-121,
-  D-122, D-147, D-152, D-153, D-154, D-155, D-156, D-158, D-216, D-218
+  D-122, D-147, D-152, D-153, D-154, D-155, D-156, D-158, D-216, D-218,
+  D-219
 - **Rendering & art:** D-013, D-014, D-033, D-035, D-112, D-117, D-125, D-127,
   D-136, D-140, D-160, D-161, D-162, D-163, D-164, D-165, D-166, D-169, D-170,
   D-171, D-172, D-173, D-174, D-175, D-177, D-179, D-186, D-202, D-205, D-206,
@@ -71,7 +72,7 @@ no entry below. A number may appear under several topics.
   D-167, D-183, D-186, D-188, D-189, D-190, D-191, D-192, D-193, D-194,
   D-195, D-196, D-197, D-198, D-199, D-200, D-201, D-202, D-203, D-204,
   D-205, D-207, D-206, D-208, D-209, D-210, D-212, D-213, D-215, D-216,
-  D-217
+  D-217, D-219
 - **Process & specification:** D-070, D-123, D-129, D-133, D-138, D-140,
   D-185, D-191, D-197, D-198, D-199, D-203, D-204, D-205, D-206, D-215
 
@@ -11086,3 +11087,153 @@ new unit spec. `npm run typecheck`, `npm run lint` and `npx prettier --check`
 clean; `tests/unit` 108 files and 1,446 tests green, `tests/determinism` and
 `tests/corpus` 38 green, `tests/balance` 63 green + 2 skipped, `tests/soak` 4
 green on the re-recorded fixture.
+
+### D-219 The AI's single-track railway is planned on ground it may build on, because the command it plans for asks
+
+`planTrack` is the route assistant. It answers about water, slope, curvature
+and gradient, and it knows nothing about who OWNS a tile - it takes a `TileMap`
+and not a `World`. `buildTrack` walks the finished route through
+`buildPermission` and refuses the WHOLE run on the first tile that belongs to
+somebody else. `enqueueSingleTrack` - the D-115 fallback every rail company
+reaches when no straight oval corridor fits, which on generated terrain is
+almost always - ordered whatever the assistant handed back.
+
+This is the D-076 shape a third time, and D-218's twin one file along: a
+planner and its command disagreeing about what is legal. `planRailOval` has
+asked the ownership question since D-153 (`clearRailTile`) and `planRoadRuns`
+since D-154 (`roadTilePassable`); only this branch did not.
+
+**What it cost, measured over four seeds and twenty-five years** (256 map,
+Temperate, Normal, three competitors - `aiGame`'s own fixture parameters,
+played on 4711, 4712, 4713 and 4714), by counting every command outcome:
+
+- **350 `BuildTrack cmd.reject.notYours`**, against 3 accepted.
+- **1,750 `BuildRailStop cmd.reject.needsTrack`** queued behind them - the
+  platforms and the shed for track that was never laid.
+- **339 `TakeLoan` and 336 `RepayLoan`.** A borrower enqueues the loan in the
+  SAME command batch as the build (D-154), so the money lands, the build is
+  refused, and the repayment rule hands it straight back at the next decision.
+  **The loan-churn standstill D-154 declared dead was alive**, one cycle a
+  month: seed 4711's rail company took and repaid a 300,000 EUR loan **253
+  times**, from month 49 to month 300, at 1,000 EUR of interest a turn. It ends
+  the quarter century with no station, no tile and no vehicle, and **253,000
+  EUR of its 500,000 gone**, having never laid a rail.
+
+Because the decision cycle re-plans its best candidate every `AI_RETRY_TICKS`,
+one rival tile anywhere on the alignment is not one refused railway: it is the
+same refused railway ordered every month for the rest of the century.
+
+**The fix is the question, asked in the branch that lacked it.**
+`tileOursOrPublic` is now the ONE ownership test in `src/sim/ai/build.ts` -
+`clearRailTile`, `roadTilePassable` and the new loop all read it - and the
+deliberate twin of `mayBuildOn` in `commands/build.ts`, which is the test that
+actually refuses. The plan is refused by the AI itself, before any money moves,
+and the candidate scan carries on to the next opportunity.
+`tests/unit/aiRailPermission.spec.ts` reproduces the command's refusal, the
+AI's own refusal of the plan, and the two controls that say it is about the
+OWNER and not about the road: the identical obstruction laid by the company
+ITSELF is no obstacle, and a public street is still crossable. Verified red on
+the old code - the fallback enqueued six commands where it must enqueue none.
+
+**Measured, same four seeds, before and after** (`l` lines, `v` vehicles,
+`s` stations, `[X]` wound up):
+
+```
+       before (D-218 HEAD)               after
+4711   p0  247,067     l0 v0 s0          p0  500,000     l0 v0 s0
+       p4  147,155     l0 v0 s11         p4  147,155     l0 v0 s11
+       p1  576,736     l1 v6 s19         p1  576,736     l1 v6 s19
+4712   p4 -168,859 [X] l0 v0 s29         p4 -168,859 [X] l0 v0 s29
+       p2  123,894     l1 v1 s2          p2 -279,226 [X] l1 v0 s3
+       p0 -138,039 [X] l0 v0 s2          p0   58,097     l0 v0 s2
+4713   p4 -290,949 [X] l0 v0 s31         p4 -290,949 [X] l0 v0 s31
+       p0 -256,082 [X] l0 v0 s2          p0 -256,082 [X] l0 v0 s2
+       p3  500,000     l0 v0 s0          p3  500,000     l0 v0 s0
+4714   p4 -145,573 [X] l0 v0 s29         p4 -145,573 [X] l0 v0 s29
+       p2 -166,757 [X] l1 v0 s2          p2 -166,757 [X] l1 v0 s2
+       p3  500,000     l0 v0 s0          p3  500,000     l0 v0 s0
+```
+
+Four-seed total **928,593 -> 974,542 EUR (+45,949)**, wound up 6/12 in both,
+`BuildTrack notYours` 350 -> 0, `BuildRailStop needsTrack` 1,750 -> 0,
+`TakeLoan` 339 -> 4. The soak fixture's recorded command count falls
+**5,442 -> 3,419**, which is the same 2,023 dead orders counted a second way.
+
+**The one row that got worse is named rather than averaged away.** Seed 4712's
+expansive company goes 123,894 alive with a train to -279,226 wound up with
+none. That is not the fix misbehaving: freed of the refusals it now builds a
+SECOND railway - two accepted `BuildTrack`, ten platforms - and cannot afford
+the train for it, `BuyTrain cmd.reject.insufficientFunds`. That is D-158's
+named open bottleneck verbatim, "it spends its capital on way and stations and
+has nothing left to crew them with", and it belongs to whoever closes it.
+
+**Save discipline (Z5), verified rather than assumed. SAVE_VERSION stays 30.**
+Nothing persistent is touched at all: this is a refusal inside a planner, and a
+refused plan writes nothing. `saveFieldCoupling`, the save round trip and every
+migration test pass untouched. The **canonical cross-OS pin (D-137) did NOT
+move** - `tests/determinism` and `tests/corpus`, 38 tests, green at
+`ddaacd4b970d31db` - because its world is a recorded ROAD fixture with no AI
+railway in it. The **save corpus manifest did not move.** The **soak fixture IS
+re-recorded**, under D-190/D-130: `15e0eca37ca9b897` ->
+**`45ccb46dc67e1fdf`**. **No band was touched and none needed to be**:
+`tests/balance` is 12 files, 63 passed and 2 skipped, unchanged, and scenario
+5's three rows are bit-identical (road 1,156,463 EUR, rail 228,047, expansive
+-241,309) - the road and expansive worlds never reach this branch, and the rail
+one's alignment was always its own.
+
+### D-219a What the same trace refutes, and what the rest of the AI hole costs
+
+The measurement above was taken on the way to the two causes D-218 named for
+their own bundles. Both were built, measured on the four-seed sweep and
+REVERTED, and the numbers are recorded here so the next bundle does not spend
+the same day finding them.
+
+**The stop scan has the identical defect, and fixing it ALONE is worth
+-281,115 EUR.** `clearStopTile`'s own sentence is "bare, flat, dry, and nobody
+else's", and the last clause was prose: it tested the ground and never asked
+who owned the tile, nor whether a station was already standing on it. Measured
+on seed 4711's town-network company over twenty-five years: **589
+`BuildRoadStop cmd.reject.occupied`, 292 `roadNotYours` and 584 `BuildRoad
+notYours` against 16 accepted stops and 19 accepted roads**, plus **952
+`BuyRoadVehicle cmd.reject.needsDepot`** - buses ordered at a shed the refused
+batch never built. Teaching the scan the command's own questions
+(`tileOursOrPublic`, a station test, and `planRoadStop` - the very function
+`buildRoadStop` runs, D-119/D-210) removes every one of those refusals, and the
+four-seed total goes **928,593 -> 647,478 EUR**, wound up **6/12 -> 7/12**,
+living vehicles **7 -> 0**. Seed 4711's road company - the one D-218 rescued -
+builds MORE (76 -> 87 accepted roads, 12 -> 14 lines) and goes **+576,736 ->
+-387,077 [wound up]**. The refusal storm was an accidental BRAKE on suicidal
+building; taking a brake off before fixing the reason for it is how a genuine
+defect fix measures negative. It ships with the economics or not at all.
+
+**An absolute profitability floor cannot be built out of the ranking
+estimate.** `rate`'s `revenueCtPerMonth` is a RANKING figure by construction -
+D-122's `ticksInTransit: 0`, and a nominal `AI_ROAD_LOAD_UNITS = 20` where the
+1950 bus lifts 150. Measured against the yearly upkeep of everything each
+project would build and run: on a generated 256 map the town pairs score
+**0.34-0.68** of their own upkeep and the coal railways **1.73-3.47**, which
+looks like exact separation - and on scenario 5's own 512 map, seed 4711, **no
+road candidate reaches 1.00 at month 1, 6, 24, 60 or 180**, while that company
+earns 1.16 M. A break-even gate at 1.0 therefore stops the AI building at all:
+measured on the four seeds, four-seed total **928,593 -> 4,078,104 EUR** with
+**ten of twelve companies holding zero stations and zero vehicles**. That is
+money by inaction, not a fix. A floor has to be built from the REAL lift the
+builder already knows - `loadUnitsOf`, the fleet it is about to buy, the real
+round of `AI_LIFT_REAL_SHARE` - and never from the ranking number.
+
+**Four recurring AI questions, re-checked against the running code rather than
+against this file.** (1) `adviseFleet` has exactly ONE definition,
+`src/sim/lines/metrics.ts`, and both the AI (`fleetFor`) and the line panel's
+advisor in `SimWorker` call it - D-152 holds. (2) D-115's
+half-year-against-a-full-year error has NOT come back: `closeDeadLine` scales
+its `owed` by `AI_LINE_REVIEW_TICKS / TICKS_PER_YEAR`. What that `owed` still
+cannot see is the infrastructure the closure strands, which is D-218's second
+named cause and stands. (3) Auto-renewal IS on for every AI line (D-146):
+`SetAutoRenew` is accepted once per line in every measured run - 7, 12, 16, 18
+and 21 per company - and every surviving AI line reads `autoRenew === 1` at
+year twenty-five. (4) Reinvestment: the repayment rule fires correctly, and the
+companies that hoard do so because their candidate list is empty or every
+candidate on it loses money - seed 4713's conservative company issues ZERO
+commands in twenty-five years and keeps exactly its starting capital. D-109's
+compounding gap is still open, and on these maps it is now the bus economics
+and nothing else.
