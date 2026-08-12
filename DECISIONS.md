@@ -26,7 +26,8 @@ no entry below. A number may appear under several topics.
 - **Save format, migrations & replays:** D-007, D-025, D-026, D-027, D-048,
   D-111, D-130, D-131, D-134, D-142, D-144, D-145, D-146, D-147, D-153, D-178,
   D-181, D-184, D-185, D-188, D-189, D-190, D-191, D-192, D-193, D-194,
-  D-197, D-198, D-200, D-207, D-213, D-231, D-232, D-233, D-236, D-238
+  D-197, D-198, D-200, D-207, D-213, D-231, D-232, D-233, D-236, D-238,
+  D-239
 - **Rail & track:** D-042, D-043, D-044, D-045, D-046, D-047, D-053, D-141,
   D-153, D-157, D-184, D-230
 - **Signals & reservations:** D-054, D-055, D-056, D-057, D-058, D-059, D-060,
@@ -38,16 +39,16 @@ no entry below. A number may appear under several topics.
   D-078, D-118, D-142, D-151, D-176, D-178, D-187, D-207, D-211, D-213,
   D-215, D-233, D-237
 - **Industry & production:** D-022, D-062, D-063, D-064, D-069, D-071, D-079,
-  D-085, D-086, D-174, D-201, D-202, D-205, D-225, D-232
+  D-085, D-086, D-174, D-201, D-202, D-205, D-225, D-232, D-239
 - **Towns, council & ownership:** D-101, D-102, D-103, D-104, D-205, D-207,
   D-206, D-213, D-216, D-217, D-231, D-232, D-233, D-234, D-235
 - **Economy, finance & emissions:** D-008, D-090, D-091, D-092, D-105, D-154,
-  D-180, D-193, D-196, D-228, D-229, D-236, D-237, D-238
+  D-180, D-193, D-196, D-228, D-229, D-236, D-237, D-238, D-239
 - **Balancing & scenarios:** D-038, D-039, D-040, D-041, D-066, D-087, D-088,
   D-116, D-151, D-152, D-156, D-158, D-159, D-187, D-190, D-194, D-195,
   D-196, D-197, D-198, D-199, D-200, D-203, D-204, D-207, D-211, D-213,
   D-215, D-216, D-220, D-221, D-222, D-224, D-225, D-226, D-228, D-229,
-  D-232, D-233, D-234, D-235, D-236, D-237, D-238
+  D-232, D-233, D-234, D-235, D-236, D-237, D-238, D-239
 - **Vehicles & fleet:** D-043, D-044, D-045, D-068, D-076, D-089, D-093,
   D-096, D-142, D-143, D-145, D-146, D-155, D-157, D-171, D-174, D-181, D-185,
   D-201, D-207
@@ -13934,3 +13935,144 @@ neue Faelle in `tests/unit/emissions.spec.ts` fuer das Foerdergeld.
 
 **Was M21 noch schuldet**: die Industrie-Events aus `streams.events`
 (Rekordernte, Streik) mit ihren `postOnce`-Meldungen.
+
+### D-239 Industrie-Events: die Rekordernte, der Streik - und der ruhende Monat, der nicht zur Schliessung zaehlt
+
+SPEC2 M21 Bundle 4, der letzte des Meilensteins. **Kein zweiter Z5-Bump:
+`SAVE_VERSION` bleibt 32**; die `v31_to_v32`-Migration ist zum dritten Mal an
+Ort und Stelle erweitert, wie Z5 es fuer die spaeteren Bundles eines
+Meilensteins vorsieht.
+
+**Was gebaut wurde.** Der letzte offene MUSS-Punkt von M21, woertlich:
+"Industrie-Events aus `streams.events`: Rekordernte (temporaerer
+Output-Multiplikator), Streik (ein ruhender Monat - Dormanz zaehlt per D-086
+nicht zur Schliessung); News via `postOnce`."
+
+`src/sim/industry/events.ts` ist die eine Stelle, an der die Regel wohnt. Ein
+Ereignis ist ein Datensatz mit Werk, Art, Anfangs- und Endtick; die Monatsrunde
+`reviewIndustryEvents` raeumt Abgelaufenes weg und wuerfelt neu, und drei
+Lesefunktionen sind alles, was der Rest der Simulation davon sieht.
+
+**Die Falle, die dieses Feature stellt - benannt, bevor sie zuschnappt.** Ein
+Streik ist ein Monat ohne Produktion. Abschnitt 7.3 zaehlt Monate ohne
+Abtransport auf die 24-Monats-Schliessungsuhr, und die Dormanz-Regel, die
+`reviewIndustries` bereits hat, greift **nicht**: sie prueft "nichts produziert
+UND nichts im Hof stehen", und ein bestreiktes Werk hat in aller Regel einen
+vollen Hof - es hat bis zum Vormonat gearbeitet. Ein naiv gebauter Streik haette
+also still einen der vierundzwanzig Monate verbraucht, die der Spieler hat, um
+eine Linie dorthin zu legen. Die Regel steht deshalb **ausdruecklich** im Review
+(`industryStruckMonthEnding`), und **gemessen wird sie gegen eine Kontrolle**:
+dieselbe Welt, dieselben Monate, mit und ohne Streik. Ohne Kontrolle waere die
+Behauptung wertlos, weil ein Bergwerk, von dem niemand abholt, diese Uhr ohnehin
+jeden Monat weiterstellt. Gemessen: Kontrolle **4**, bestreiktes Werk **3** nach
+denselben fuenf Monaten - genau der eine Monat, den es stillstand. Ebenso
+ausgenommen ist das Zwoelfmonatsfenster des Bedienungsgrads (`serviceMonths` 3
+gegen 4): ein Abtransportanteil von null, an dem der Spieler nichts aendern
+konnte, wuerde dem Werk ein Jahr Wachstum verbauen. Ein Abtransport, der
+**stattgefunden hat**, stellt die Uhr trotzdem zurueck - ein Streik legt das
+Werk still, nicht die Zuege.
+
+**Vier Entscheidungen, die keine Geschmacksfragen sind:**
+
+1. **Ein Zug je offenem Werk und Monat.** Wie viele Zahlen dieses Subsystem aus
+   seinem Strom nimmt, haengt an der Industrieliste und an nichts, was die
+   Zuege selbst gesagt haben (Z3, dasselbe Argument, fuer das `supply.ts` seine
+   Kandidatenliste ganz baut). Die Quote ist **1 zu 240 je Werk und Monat** und
+   damit per Konstruktion kartenskaliert: eine 300-Industrien-Karte sieht rund
+   1,25 Ereignisse im Monat, eine handgebaute Testwelt mit einem Werk eines in
+   zwanzig Spieljahren. Gewaehlt ist sie von der SPIELERSEITE her - wer ein
+   halbes Dutzend Industrien bedient, begegnet einem etwa alle drei Jahre.
+2. **Eine Rekordernte bekommt nur, wer erntet.** Ausschliesslich Industrien
+   ohne Inputs - Bergwerk, Forst, Hof, Bohrturm. Bei einem verarbeitenden Werk
+   ist der Ausstoss durch den gelieferten Input gedeckelt, ein Multiplikator
+   dort taete in den meisten Monaten **nichts**, und die Meldung im
+   Nachrichtenlog waere eine Luege ueber ein Ereignis, das nicht stattfand.
+   Bestreikt werden kann jedes Werk: ein Streik betrifft die Leute, nicht das
+   Rezept.
+3. **Der Multiplikator steht im SELBEN Produkt** wie die Saison (M18) und das
+   Jahrhundert (D-236), nicht daneben: ein gutes Jahr in einem Boom in einem
+   guten Sommer ist eine Zahl und nicht drei Regeln, die sich streiten. Der
+   Faktor ist **1,5** und bewusst in derselben Groessenordnung wie der eigene
+   Fuenfjahresschwung der Industrie (`INDUSTRY_FLUCTUATION_AMPLITUDE`, +-25 %)
+   statt eine Groessenordnung darueber - ein Ereignis, das den Rhythmus
+   erschlaegt, auf dem es sitzt, ist kein gutes Jahr mehr, sondern eine zweite
+   Oekonomie.
+4. **Die Tafel haengt an der Weltregel `economy`**, wie die beiden Tafeln aus
+   D-238 und aus demselben Grund: SPEC2 M21 nennt genau EINEN Balance-Anker
+   ("Konjunktur: aus pinnt alle Referenzlaeufe"), und eine zweite Regel waere
+   eine zweite Antwort auf eine Frage. `reviewIndustryEvents` kehrt ohne sie auf
+   seiner ersten Zeile zurueck - kein Strom, kein Zug, kein Datensatz
+   (Fehlerkatalog 34).
+
+**Kein Id, und das ist eine Entscheidung.** Ausschreibung, Liefervertrag und
+Subvention tragen eine, weil ein COMMAND sie benennt; hier gibt es kein Command.
+Ein Ereignis ist etwas, das die Welt einer Industrie antut.
+
+**Reihenfolge im Monatsblock, und warum sie genau dort steht.**
+`reviewIndustryEvents` laeuft **zwischen** `reviewIndustries` und
+`produceIndustryCargo`. Das Review oben ist der letzte Leser des Monats, der
+endet, und muss einen Streik sehen, der ihn abgedeckt hat - deshalb wird
+Abgelaufenes **nach** dem Review geraeumt und nie davor. Die Produktion unten
+ist das, was ein Streik oder eine Ernte veraendert. Das halboffene Fenster
+`[start, end)` liest sich an der Monatsgrenze eine Grenze spaeter als "der
+Monat, der endete, war bestreikt" - beides ist getestet.
+
+**Der eine Hash, der sich bewegt - und die ehrliche Buchung dafuer.** Das
+Ereignisbrett ist historischer Sim-Input und damit Save-Zustand (Z4): der Monat,
+den ein Werk im Streik verbrachte, ist genau das, was das Review des Folgemonats
+wissen muss, und ein beim Laden neu gebautes Brett gaebe einer geladenen Welt
+eine andere Schliessungsuhr. Es wird gehasht wie jede andere gespeicherte Zahl -
+**unbedingt**, wie die beiden Tafeln aus D-238, nicht bedingt wie die Kurve aus
+D-236. Der Unterschied ist argumentiert: D-236 durfte bedingt hashen, weil der
+Aus-Zustand dort eine ABWESENHEIT ist und jeder Leser exakt 1 zurueckgibt; hier
+waere ein bedingter Hash eine Zeile Sim-Verhalten (`industryOnStrike` liest die
+Liste in JEDER Welt), die der Digest nicht sieht - also genau das Loch, das der
+Kopplungstest `saveFieldCoupling.spec.ts` findet. Ein leeres Brett kostet den
+Digest eine Null, und es ist dieselbe Null fuer jede Welt ohne Jahrhundert.
+
+Neu aufgezeichnet nach dem D-137/D-130-Protokoll:
+
+* kanonischer Pin `5fc5168993e38191` -> **`29f227b0d3cf3db1`**
+* Soak `cc491b59f6bfc729` -> **`ff8eb61c2dec1669`** bei **unveraendert 35
+  Kommandos und 16 Checkpoints** - was der Beleg dafuer ist, dass sich nur der
+  Digest bewegt hat und kein Spielverlauf
+* Korpus-Manifest fuer alle elf Fixtures neu (`v22`-`v30` decodieren nach
+  `d8f5a8960661dc49`, `v31`/`v32` nach `77fa16c749945e51`);
+  `v32-played.ironsave` neu aufgezeichnet, weil der Parser das Feld jetzt
+  verlangt und Migrationen nur UNTER `SAVE_VERSION` laufen - v32 ist erst mit
+  dem Abschluss dieses Meilensteins ein eingefrorenes Versprechen
+* `SCENARIO_WORLD_CLAIMS` **unveraendert**, gelaufen statt behauptet: alle acht
+  Szenarien tragen `economy: false`, also hat keines je ein Ereignis
+
+**Kein Band bewegt, alles auf den Euro identisch mit D-238**, weil die Tafel an
+`economy` haengt: `npm run test:balance:full` gruen bei 101 - Szenario 5
+1.022.084 / 1.802.165 / 2.153.604 EUR, Punktzahl 5.889, Netzdesign 3,75, Harter
+Winter -4,36 %, aiGame-Sweep 7.293.303 EUR.
+
+**Budget.** Hauptbundle 972.824 -> **973.302 B (+478)**, davon **+353 B die
+zwei i18n-Schluessel in zwei Sprachen** (gemessen, indem genau diese vier Zeilen
+aus beiden Katalogen geloescht und neu gebaut wurde: 972.949 B) und die
+restlichen +125 B der neue Parser-Zweig; Budget **978.000 unveraendert**,
+Restluft 4.698 B. Null Snapshot-Byte - das Brett reist ueberhaupt nicht zur
+Oberflaeche, weil SPEC2 hier ausschliesslich News bestellt - und null
+Atlas-Zelle. Kein `npm run test:perf`-Lauf wird fuer diesen Bundle beansprucht:
+die Monatsrunde ist ein Zug je offenem Werk, und die drei Lesefunktionen kehren
+in jeder Welt ohne Jahrhundert auf ihrer ersten Schleifenzeile zurueck, weil die
+Liste leer ist.
+
+**Tests:** `tests/unit/industryEvents.spec.ts` (12 Faelle: die Tafel als
+Eigenschaft der Regel, Reproduzierbarkeit ueber zwei Welten, nie zwei Ereignisse
+auf einem Werk, der Streik stoppt genau seinen Monat, **die Schliessungsuhr
+gegen eine Kontrolle**, das Bedienungsfenster gegen dieselbe Kontrolle, das
+Grenzverhalten der beiden Praedikate, der Erntefaktor exakt gegen eine
+Kontrolle, keine Ernte fuer ein Werk mit Inputs, Identitaet 1 fuer alle anderen,
+die News in beiden Sprachen mit Ort und `postOnce`, und die Rundreise durch Save
+und Hash), plus ein Vertreter des Bretts im Kopplungstest
+`tests/unit/saveFieldCoupling.spec.ts`, damit jedes seiner Felder geloescht und
+verfaelscht wird.
+
+**Damit ist M21 vollstaendig.** Alle sechs MUSS-Punkte stehen: Genesis-Kurve
+(D-236), Container-Wiederbelebung (D-237), Liefervertraege, Subventions-Board,
+elftes Konto und Foerdergeld (D-238), Industrie-Events (hier) - und der
+Balance-Anker "Konjunktur: aus" ist ueber alle vier Bundles hinweg gehalten
+worden.

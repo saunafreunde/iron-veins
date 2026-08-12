@@ -651,6 +651,8 @@
   "ui.subsidies.won": "won by {company}",
   "news.supplyBreach": "{industry} has gone {months} months without the supply it was promised.",
   "news.subsidyWon": "{company} has taken the subsidised route ({rate} % of the rate).",
+  "news.recordHarvest": "{industry}: a record harvest – {percent} % more output for {months} months.",
+  "news.strike": "{industry}: a strike – production stops for {months} month.",
   "ai.personality.rail": "Rail focus",
   "ai.personality.road": "Road focus",
   "ai.personality.expansive": "Expansive",

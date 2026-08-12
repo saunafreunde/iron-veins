@@ -651,6 +651,8 @@
   "ui.subsidies.won": "vergeben an {company}",
   "news.supplyBreach": "{industry} steht seit {months} Monaten ohne die vereinbarte Lieferung da.",
   "news.subsidyWon": "{company} hat die subventionierte Strecke übernommen ({rate} % der Rate).",
+  "news.recordHarvest": "{industry}: Rekordernte – {months} Monate lang {percent} % mehr Ausstoß.",
+  "news.strike": "{industry}: Streik – die Produktion ruht {months} Monat.",
   "ai.personality.rail": "Schienenfokus",
   "ai.personality.road": "Straßenfokus",
   "ai.personality.expansive": "Expansiv",

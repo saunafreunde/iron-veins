@@ -1101,6 +1101,56 @@ export const SUBSIDY_ENDPOINT_RADIUS = 6;
  */
 export const SUBSIDY_RATING_BONUS = 5;
 
+// ------------------------------------------- industry events (SPEC2 M21)
+
+/**
+ * The named RNG stream the industry events draw from (Z3, D-106).
+ *
+ * SPEC2 M21 names it - "Industrie-Events aus `streams.events`" - and it is its
+ * own for the reason every other periodic subsystem's is: a draw taken from
+ * the gameplay stream moves every later breakdown roll in the game, which is
+ * the incident D-106 was written about.
+ */
+export const INDUSTRY_EVENT_STREAM_NAME = 'events';
+
+/**
+ * The odds that one open works has an event in one month: one in this many.
+ * [1]
+ *
+ * PER WORKS and per month rather than a map-wide count, which is what makes
+ * the rate scale with the map instead of with a constant: a 300-industry map
+ * sees about 1.25 events a month, a hand-built test world of one works sees
+ * one every twenty game years, and neither number had to be written down. It
+ * is chosen from the PLAYER'S side of that arithmetic - somebody serving half
+ * a dozen industries meets one about every three years, which is often enough
+ * to be a texture and rare enough not to be weather.
+ */
+export const INDUSTRY_EVENT_MONTHLY_ODDS = 240;
+
+/**
+ * What a record harvest multiplies a works' monthly output by. [1]
+ *
+ * Half as much again, and deliberately in the same order as the industry's own
+ * five-year swing (`INDUSTRY_FLUCTUATION_AMPLITUDE`, +-25 %) rather than an
+ * order above it: an event that dwarfs the rhythm it sits on top of stops
+ * being a good year and becomes a second economy.
+ */
+export const INDUSTRY_HARVEST_FACTOR = 1.5;
+
+/** How long a record harvest lasts. [months] */
+export const INDUSTRY_HARVEST_MONTHS_MIN = 2;
+export const INDUSTRY_HARVEST_MONTHS_MAX = 4;
+
+/**
+ * How long a strike lasts. [months]
+ *
+ * Exactly SPEC2 M21's own sentence - "Streik (ein ruhender Monat)" - and a
+ * constant rather than a literal because the month it rests for is the month
+ * that must not count towards the 24-month closure clock (D-086), and the
+ * predicate that spends it reads this number.
+ */
+export const INDUSTRY_STRIKE_MONTHS = 1;
+
 // -------------------------------------------------------- environment (14.3)
 
 /**

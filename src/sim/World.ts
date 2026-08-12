@@ -57,6 +57,7 @@ import { buildGoalStore, GoalStore } from './goals/GoalStore';
 import { updateGoals } from './goals/evaluate';
 import type { GoalSave } from './goals/types';
 import { assignStationIndustries } from './industry/catchment';
+import { reviewIndustryEvents, type IndustryEvent } from './industry/events';
 import { openNewIndustries } from './industry/lifecycle';
 import { SaveFormatError } from './save/format';
 import { moveOverseasContainers } from './station/containers';
@@ -157,6 +158,8 @@ export interface WorldStateData {
   /** The subsidised relations of SPEC2 M21, open and recently expired. */
   subsidies: Subsidy[];
   nextSubsidyId: number;
+  /** What is happening to the industries right now (SPEC2 M21). */
+  industryEvents: IndustryEvent[];
   /** The AI competitors and what they have built (section 15). */
   ai: AiState[];
 }
@@ -411,6 +414,17 @@ export class World {
    * Empty for ever in a world without a century, exactly like the board above.
    */
   subsidies: Subsidy[] = [];
+  /**
+   * What is happening to the industries of this world right now (SPEC2 M21):
+   * a record harvest, or a strike.
+   *
+   * Historical sim input and therefore save state (Z4): the month a works
+   * spent on strike is what next month's review has to know about, and a board
+   * rebuilt on load would hand a reloaded world a different closure clock.
+   * Empty for ever in a world whose `economy` rule is off, exactly like the
+   * two boards above it.
+   */
+  industryEvents: IndustryEvent[] = [];
   /**
    * One entry per AI competitor (section 15). Empty in a single company game,
    * which is what makes the whole subsystem cost nothing when it is not used.
@@ -702,6 +716,12 @@ export class World {
       // served for ever. Before growTowns, which owns the convention that the
       // monthly counters are reset by whoever read them.
       reviewIndustries(this);
+      // Between the two on purpose (SPEC2 M21, industry/events.ts): the review
+      // above is the last reader of the month that ended and has to see a
+      // strike that covered it, and the production below is what a strike or a
+      // record harvest changes. A world without a century returns from this on
+      // its first line.
+      reviewIndustryEvents(this);
       produceIndustryCargo(this);
       // Before growTowns, which clears the traffic counters the rating reads.
       reviewCouncils(this);
@@ -896,6 +916,7 @@ export class World {
       nextSupplyContractId: this.nextSupplyContractId,
       subsidies: this.subsidies.map((subsidy) => ({ ...subsidy })),
       nextSubsidyId: this.nextSubsidyId,
+      industryEvents: this.industryEvents.map((event) => ({ ...event })),
       ai: this.ai.map((state) => ({
         ...state,
         reviews: state.reviews.map((review) => ({ ...review })),
@@ -985,6 +1006,7 @@ export class World {
     world.nextSupplyContractId = data.nextSupplyContractId;
     world.subsidies = data.subsidies.map((subsidy) => ({ ...subsidy }));
     world.nextSubsidyId = data.nextSubsidyId;
+    world.industryEvents = data.industryEvents.map((event) => ({ ...event }));
     world.ai = data.ai.map((state) => ({
       ...state,
       reviews: state.reviews.map((review) => ({ ...review })),
@@ -1203,6 +1225,18 @@ function hashDynamicState(h: Fnv1a64, world: World): void {
     h.int(subsidy.claimedBy).f64(subsidy.deliveredUnits);
   }
   h.u32(world.nextSubsidyId);
+
+  // The industry events of SPEC2 M21, on exactly the terms of the two boards
+  // above: what a works is living through decides what it makes next month and
+  // whether the month that ended counted towards its closure clock, so it is
+  // hashed like every other saved figure (D-134, Z4). A world with the century
+  // off carries an empty list, which costs the digest one zero and is the same
+  // zero for every such world.
+  h.u32(world.industryEvents.length);
+  for (let i = 0; i < world.industryEvents.length; i++) {
+    const event = world.industryEvents[i]!;
+    h.int(event.industryId).u32(event.kind).u32(event.startTick).u32(event.endTick);
+  }
 
   // Every competitor's plan is state the simulation writes, so it is hashed
   // like any other. An AI left out of the digest is an AI the determinism

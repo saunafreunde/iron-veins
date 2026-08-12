@@ -24,6 +24,7 @@ import {
   WEATHER_RULE_COUNT,
   type WeatherRule,
 } from '../constants';
+import { INDUSTRY_EVENT_KIND_COUNT, type IndustryEvent } from '../industry/events';
 import { INDUSTRY_TYPE_COUNT, type Industry } from '../industry/types';
 import { isLegalMapSize, mapSizeRefusal } from '../map/size';
 import { TownSize, type Town } from '../town/types';
@@ -401,6 +402,31 @@ function parseSubsidies(value: unknown, path: string): Subsidy[] {
       expiresTick: asInt(raw['expiresTick'], `${path}[${i}].expiresTick`),
       claimedBy: asInt(raw['claimedBy'], `${path}[${i}].claimedBy`),
       deliveredUnits: asFinite(raw['deliveredUnits'], `${path}[${i}].deliveredUnits`),
+    };
+  });
+}
+
+/**
+ * The industry events of SPEC2 M21 - and the kind is CHECKED, exactly as an
+ * industry's type is a few functions down: a kind the simulation has never
+ * heard of would read as neither a harvest nor a strike and would sit in the
+ * world for ever, doing nothing and hashing.
+ */
+function parseIndustryEvents(value: unknown, path: string): IndustryEvent[] {
+  return asArray(value, path).map((entry, i) => {
+    const raw = asRecord(entry, `${path}[${i}]`);
+    const kind = asInt(raw['kind'], `${path}[${i}].kind`);
+    if (kind < 0 || kind >= INDUSTRY_EVENT_KIND_COUNT) {
+      throw new SaveFormatError(
+        `${path}[${i}].kind: ${kind} is not a known industry event`,
+        `${path}[${i}].kind`,
+      );
+    }
+    return {
+      industryId: asInt(raw['industryId'], `${path}[${i}].industryId`),
+      kind,
+      startTick: asInt(raw['startTick'], `${path}[${i}].startTick`),
+      endTick: asInt(raw['endTick'], `${path}[${i}].endTick`),
     };
   });
 }
@@ -1435,6 +1461,7 @@ export function parseWorldState(value: unknown, path: string): WorldStateData {
     nextSupplyContractId: asInt(stateRaw['nextSupplyContractId'], `${path}.nextSupplyContractId`),
     subsidies: parseSubsidies(stateRaw['subsidies'], `${path}.subsidies`),
     nextSubsidyId: asInt(stateRaw['nextSubsidyId'], `${path}.nextSubsidyId`),
+    industryEvents: parseIndustryEvents(stateRaw['industryEvents'], `${path}.industryEvents`),
     ai: parseAi(stateRaw['ai'], `${path}.ai`),
   };
 }

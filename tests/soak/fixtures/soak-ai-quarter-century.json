@@ -5,72 +5,72 @@
   "years": 25,
   "aiCompanies": 3,
   "finalTick": 1800000,
-  "finalHash": "cc491b59f6bfc729",
+  "finalHash": "ff8eb61c2dec1669",
   "commandCount": 35,
   "checkpoints": [
     {
       "tick": 0,
-      "hash": "e6b5ced07be4e265"
+      "hash": "5d609e481897a9a5"
     },
     {
       "tick": 792000,
-      "hash": "b28b8e9dd0511104"
+      "hash": "3545f5457f2d3464"
     },
     {
       "tick": 864000,
-      "hash": "1dd3fb2cc4de8f56"
+      "hash": "cc23e9fedbb27726"
     },
     {
       "tick": 936000,
-      "hash": "9761206a2320a527"
+      "hash": "ca7bfebf0ef1d897"
     },
     {
       "tick": 1008000,
-      "hash": "3341958ed3d45899"
+      "hash": "b993b948a12fbd99"
     },
     {
       "tick": 1080000,
-      "hash": "445aa9fdd2ebc89c"
+      "hash": "be3d9584cd3922dc"
     },
     {
       "tick": 1152000,
-      "hash": "ca449b0a082e8809"
+      "hash": "8ebfa2cd61ca4a29"
     },
     {
       "tick": 1224000,
-      "hash": "42e5418907767191"
+      "hash": "a0db4ca9d7b77801"
     },
     {
       "tick": 1296000,
-      "hash": "7c03f65cee4437ff"
+      "hash": "fe0e20f2e36b0aaf"
     },
     {
       "tick": 1368000,
-      "hash": "8a37598e95734f0e"
+      "hash": "255baf1ef863230e"
     },
     {
       "tick": 1440000,
-      "hash": "09b00462b9bd60c4"
+      "hash": "2c6c00690094b024"
     },
     {
       "tick": 1512000,
-      "hash": "a6787173bd2dbf87"
+      "hash": "f9250e3809f802c7"
     },
     {
       "tick": 1584000,
-      "hash": "45aef75208e13f2f"
+      "hash": "899f58afe3eb01cf"
     },
     {
       "tick": 1656000,
-      "hash": "330714a606f75f42"
+      "hash": "b4f30aa89f32dae2"
     },
     {
       "tick": 1728000,
-      "hash": "26d8be9ef3b0aa9b"
+      "hash": "5ea2b20617605dbb"
     },
     {
       "tick": 1800000,
-      "hash": "cc491b59f6bfc729"
+      "hash": "ff8eb61c2dec1669"
     }
   ],
   "recordedOn": {

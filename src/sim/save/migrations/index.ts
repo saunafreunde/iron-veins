@@ -1556,6 +1556,13 @@ const v30_to_v31: SaveMigration = (payload) => {
  *    offers up within a game month of a load - so a century world that is
  *    reloaded gets its boards back, and a world without a century never has
  *    them at all.
+ *
+ * **Bundle 4 EXTENDS it again, in the same place and for the same reason**
+ * (Z5): the INDUSTRY EVENT board, empty. A version 31 world had no strikes and
+ * no record harvests, and entering an empty list is the whole truth about it -
+ * an event is a thing that is HAPPENING, so a world that was not having one is
+ * a world with none, and the monthly roll starts offering them a game month
+ * after a century world is loaded.
  */
 const v31_to_v32: SaveMigration = (payload) => {
   const inner = state(payload);
@@ -1575,6 +1582,7 @@ const v31_to_v32: SaveMigration = (payload) => {
       nextSupplyContractId: inner['nextSupplyContractId'] ?? 0,
       subsidies: inner['subsidies'] ?? [],
       nextSubsidyId: inner['nextSubsidyId'] ?? 0,
+      industryEvents: inner['industryEvents'] ?? [],
       companies: companies.map((entry, index) =>
         widenAccounts(entry as Record<string, unknown>, index, ACCOUNT_COUNT_V20),
       ),

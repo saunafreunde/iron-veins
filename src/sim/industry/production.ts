@@ -12,6 +12,7 @@ import {
   INDUSTRY_STORE_FULL_SHARE,
 } from '../constants';
 import { economyOutputFactor } from '../economy/curve';
+import { industryEventOutputFactor, industryOnStrike, industryStruckMonthEnding } from './events';
 import { stationRating } from '../station/types';
 import { seasonalOutputAt } from '../weather/effects';
 import type { World } from '../World';
@@ -119,6 +120,12 @@ export function produceIndustryCargo(world: World): void {
   const cycle = economyOutputFactor(world.economyCurve, world.date.year);
   for (const industry of world.industries) {
     if (!industry.open) continue;
+    // The strike of SPEC2 M21: a month in which the works makes nothing at
+    // all. It leaves `producedThisMonth` at zero, and the review that judges
+    // this month next month has to be told about it EXPLICITLY - a struck
+    // works usually has a full yard, so the ordinary dormancy test would call
+    // it neglected and advance the closure clock (D-086; industry/events.ts).
+    if (industryOnStrike(world, industry.id)) continue;
     const spec = industrySpec(industry.type);
     const inputs = INDUSTRY_INPUT_PER_BATCH[industry.type]!;
     const outputs = INDUSTRY_OUTPUT_PER_BATCH[industry.type]!;
@@ -131,7 +138,11 @@ export function produceIndustryCargo(world: World): void {
     // weather rule is off.
     let target =
       ((industryBaseOutput(industry, world.tick, cycle) * industry.productionLevel) / 100) *
-      seasonalOutputAt(world, industry.type, industry.x, industry.y);
+      seasonalOutputAt(world, industry.type, industry.x, industry.y) *
+      // And the record harvest of SPEC2 M21, in the SAME product rather than
+      // beside it: a good year inside a boom inside a good summer is one
+      // number, and exactly 1 for every works that is not having one.
+      industryEventOutputFactor(world, industry.id);
     if (outputStoreFull(industry)) target *= INDUSTRY_FULL_STORE_RATE;
     if (target <= 0) continue;
 
@@ -233,6 +244,25 @@ export function reviewIndustries(world: World): void {
     if (!industry.open) {
       industry.producedThisMonth = 0;
       industry.collectedThisMonth = 0;
+      continue;
+    }
+
+    // The month the works spent on strike (SPEC2 M21) is a DORMANT month, and
+    // dormancy does not count towards the 24-month closure clock (D-086) -
+    // which is the whole reason this asks rather than leaving it to the test
+    // below: a works that was producing until last month has a full yard, the
+    // `idle` test would therefore be false, and a strike would quietly spend
+    // one of the twenty-four months the player has to get a line to it.
+    //
+    // Neither does it enter the twelve-month service average: a collected
+    // share of zero the player could not have changed would block the works'
+    // own growth for a year. A collection that DID happen still re-arms the
+    // clock, because it happened - a strike stops the works, not the trains.
+    if (industryStruckMonthEnding(world, industry.id)) {
+      if (industry.collectedThisMonth > 0) industry.monthsWithoutCollection = 0;
+      industry.producedThisMonth = 0;
+      industry.collectedThisMonth = 0;
+      industry.monthsSinceLevelChange++;
       continue;
     }
 

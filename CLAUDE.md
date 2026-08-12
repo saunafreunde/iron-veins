@@ -263,6 +263,12 @@ the rest is its own session with its own diff.
 - **Nothing shrinks an industry.** The level moves one way; neglect is punished
   by the closure clock (D-086). A decline rule drove every new line's industry
   to the floor before the line could prove itself.
+- **A month the works could not have served does not count towards that clock.**
+  The dormancy rule of 7.3 is one reading of it, and the strike of SPEC2 M21
+  (D-239) is the other: it is asserted separately BECAUSE a struck works has a
+  full yard and the dormancy test would therefore call it neglected. Anything
+  later that stops a works for a month has to answer the same question, and
+  answer it with a control run rather than with a counter that looks right.
 
 ## Milestone status
 
@@ -2936,8 +2942,9 @@ bundle extends `v31_to_v32` in place.
   chain. The old budget had 63 bytes of headroom, which is a coincidence and
   not headroom, so it is raised to 972,000 with the measurement beside it.
 
-**Still owed by M21** (after bundle 3 below): the industry events from
-`streams.events` - a record harvest and a strike, with their `postOnce` news.
+**M21 owes nothing.** All six MUSS points stand: the genesis curve (here), the
+container revival (D-237), supply contracts, the subsidy board, the eleventh
+account and the clean-vehicle grant (D-238), and the industry events (D-239).
 
 ## M21 bundle 2 - the dead cargo type lives (D-237)
 
@@ -3079,3 +3086,66 @@ Main bundle 968,190 -> **972,824 B**, budget raised to 978,000 with the
 measurement (+1,979 B of it the nineteen i18n keys in two languages, measured by
 deleting exactly those lines and rebuilding). Zero snapshot bytes - both boards
 ride the monthly `contractsChanged` message - and zero atlas cells.
+
+## M21 bundle 4 - the record harvest, the strike, and the month that does not count (D-239)
+
+The milestone's last MUSS point and its last bundle. Two things happen to a
+works that nobody decided - a very good few months, or a month in which its
+people stop working - drawn from `streams.events`, read by the industry clock of
+7.3 that was already there, reported through `postOnce`. `SAVE_VERSION` stays
+**32**, the `v31_to_v32` migration extended in place for the third time (Z5).
+
+- **The trap this feature walks into, and it was named before it sprang**
+  (D-239). A strike is a month with no production, and 7.3 counts months without
+  collection towards the 24-month closure clock - and **the dormancy rule
+  already in `reviewIndustries` does not cover it**: that test is "produced
+  nothing AND nothing standing in the yard", and a struck works usually has a
+  full yard, because it was working until last month. So a naive strike would
+  quietly spend one of the twenty-four months a player has to reach it. The rule
+  is asserted EXPLICITLY (`industryStruckMonthEnding`) and **measured against a
+  CONTROL** - the same world, the same months, with and without the strike -
+  because a mine nobody collects from advances that clock every month anyway, so
+  a reading of the counter alone would prove nothing. Measured: control **4**,
+  struck works **3** over the same five months. The twelve-month service window
+  is skipped for the same reason (`serviceMonths` 3 against 4): a collected
+  share of zero the player could not have changed would block the works' own
+  growth for a year. A collection that DID happen still re-arms the clock - a
+  strike stops the works, not the trains.
+- **One draw per open works per month.** How many numbers the subsystem takes
+  out of its stream depends on the industry LIST and on nothing the draws
+  themselves said (Z3, the argument `supply.ts` builds its candidate list whole
+  for). The odds are **1 in 240 per works-month**, which scales with the map by
+  construction: a 300-industry map sees about 1.25 events a month, a hand-built
+  test world of one works one every twenty game years. Chosen from the PLAYER'S
+  side of that arithmetic - somebody serving half a dozen industries meets one
+  about every three years.
+- **A record harvest is only for a works that HARVESTS**, and the multiplier
+  sits in the SAME product as the season and the century. A factory's output is
+  capped by the input delivered to it, so a multiplier there would do nothing
+  most months and the news line would be a lie about an event that did not
+  happen; a strike can hit anything, because it is about the people and not the
+  recipe. The factor is **1.5**, deliberately the same order as the industry's
+  own five-year swing (+-25 %) rather than an order above it.
+- **No id, and that is a decision.** A tender, a supply order and a subsidy all
+  carry one because a COMMAND names them; there is no command here. An event is
+  something the world does to an industry.
+- **The hash moves, and the reason it is unconditional is argued.** The board is
+  historical sim input and therefore save state (Z4). D-236 was allowed to hash
+  the century CONDITIONALLY because its off state is an ABSENCE and every reader
+  returns exactly 1; here a conditional hash would be a line of sim behaviour
+  (`industryOnStrike` reads the list in EVERY world) that the digest cannot see
+  - the hole `saveFieldCoupling.spec.ts` exists to find. Re-recorded under
+  D-137: canonical `5fc5168993e38191` -> **`29f227b0d3cf3db1`**, soak
+  `cc491b59f6bfc729` -> **`ff8eb61c2dec1669`** at **unchanged 35 commands and 16
+  checkpoints** (which is the evidence that only the digest moved and no game
+  did), corpus manifest re-recorded for all eleven fixtures, `v32-played`
+  re-recorded because the parser now requires the field.
+  `SCENARIO_WORLD_CLAIMS` unchanged, RUN rather than assumed.
+- **Every band identical to D-238 to the euro**, because the board hangs off the
+  same `economy` world rule the two boards of D-238 do - `npm run
+  test:balance:full` green at 101 (scenario 5 1,022,084 / 1,802,165 / 2,153,604
+  EUR, score 5,889, Netzdesign 3.75, hard winter -4.36 %, aiGame sweep 7,293,303
+  EUR). Main bundle 972,824 -> **973,302 B (+478)**, of which +353 B are the two
+  i18n keys in two languages; budget 978,000 unchanged. Zero snapshot bytes -
+  the board never reaches the interface at all, because SPEC2 orders news here
+  and nothing else - and zero atlas cells.

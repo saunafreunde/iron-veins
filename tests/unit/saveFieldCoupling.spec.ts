@@ -1,5 +1,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
+import { TICKS_PER_MONTH } from '../../src/sim/constants';
 import { GoalKind, GoalMedal, GoalStatus } from '../../src/sim/goals/types';
+import { IndustryEventKind } from '../../src/sim/industry/events';
 import { parseSaveFile, SAVE_MAGIC, SAVE_VERSION } from '../../src/sim/save/format';
 import { scheduleDigest } from '../../src/sim/save/schedule';
 import { hashWorld, World } from '../../src/sim/World';
@@ -319,6 +321,18 @@ beforeAll(() => {
       completedBy: -1,
     });
     state.nextContractId += 1;
+  }
+  if (state.industryEvents.length === 0) {
+    // The event board of SPEC2 M21 bundle 4. The recorded fixture has no
+    // century, so nothing was ever offered on it - and a section with no
+    // representative is a section this audit does not walk. One record
+    // harvest, so every leaf of the record is deleted and perturbed.
+    state.industryEvents.push({
+      industryId: 0,
+      kind: IndustryEventKind.RecordHarvest,
+      startTick: AUDIT_TICKS - TICKS_PER_MONTH,
+      endTick: AUDIT_TICKS + TICKS_PER_MONTH,
+    });
   }
   if (state.ai.length === 0) {
     state.ai.push({
