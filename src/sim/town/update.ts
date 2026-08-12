@@ -4,6 +4,7 @@ import {
   PASSENGERS_PER_INHABITANT_PER_MONTH,
   STATION_CATCHMENT_SCAN_RADIUS,
   TOWN_BUILDING_MATERIAL_RADIUS,
+  TOWN_ELECTRONICS_MIN_POPULATION,
   TOWN_GROWTH_BASE_RATE,
   TOWN_GROWTH_BUILDING_WEIGHT,
   TOWN_GROWTH_FOOD_WEIGHT,
@@ -185,11 +186,16 @@ export function produceTownCargo(world: World): void {
  *
  * Three decisions, and each of them is a refusal of something easier:
  *
- *  - **it counts what was DELIVERED, not what the yard consumed.** The formula
- *    says `geliefert.zement+baustoffe`, and a merchant burns its stock at a
- *    flat 200 t a month whatever arrives - metering the consumption would make
- *    a town's building supply a property of the yard's stock level rather than
- *    of the line that serves it;
+ *  - **it counts what the yard ACCEPTED off the vehicle, not what the yard
+ *    later consumes.** The formula says `geliefert.zement+baustoffe`, and a
+ *    merchant burns its stock at a flat 200 t a month whatever arrives -
+ *    metering the consumption would make a town's building supply a property of
+ *    the yard's stock level rather than of the line that serves it. The caller
+ *    books `deliverToIndustry`'s return value, so a FULL yard credits nothing:
+ *    "accepted" and "delivered to the station" are the same number until the
+ *    stock cap bites, and they part company exactly there. That is deliberate -
+ *    a lorry tipping cement onto a yard that has nowhere to put it has not
+ *    supplied the town with anything;
  *  - **the cargo is whatever the merchant accepts, never a list written here.**
  *    A `BuildersMerchant` takes cement today and this term widens the day its
  *    recipe does, because the caller books what `deliverToIndustry` actually
@@ -259,6 +265,29 @@ export function servingCompanyRating(world: World, town: Town): number {
     if (rating > best) best = rating;
   }
   return best < 0 ? 0 : best;
+}
+
+/**
+ * SPEC.md 13.2's `bedarf.elektronik`, verbatim. [tonnes per month]
+ *
+ * ```
+ * bedarf.elektronik = max(0, (einwohner-3000)) / 2500
+ * ```
+ *
+ * The third of the section's three demand scalings, and the one that was
+ * missing: until D-235 the code wanted `einwohner / 1800` with no threshold,
+ * a formula that is nowhere in SPEC.md and had no entry saying why not. The
+ * threshold is the interesting half - a town under three thousand demands
+ * nothing at all, so a village is never marked down for radios it has no shop
+ * to sell.
+ *
+ * Pure and exported for the same reason {@link townGrowthRate} is: the
+ * milestone's "Formel-Test gegen Handrechnung" checks a term against the
+ * specification's own arithmetic rather than against a played world.
+ */
+export function electronicsWantedFor(population: number): number {
+  const above = population - TOWN_ELECTRONICS_MIN_POPULATION;
+  return above <= 0 ? 0 : above / TOWN_INHABITANTS_PER_ELECTRONICS;
 }
 
 /**
@@ -380,9 +409,16 @@ export function growTowns(world: World): void {
     // side - 13.2 has four supply terms and not five, and a town has counted
     // radios as goods since M5 - so what the commercial zone adds is the other
     // half of that basket: a town with shops wants them.
+    //
+    // All three scalings are 13.2's own since D-235, the electronics one
+    // included: `max(0, (einwohner-3000)) / 2500`, which until then was a plain
+    // `einwohner / 1800` that appeared nowhere in the specification. The ONE
+    // thing here that 13.2 does not say is the commercial SHARE in front of it,
+    // and that is SPEC2 M20's zone rule rather than an invention - the entry
+    // says so instead of the code implying the specification asked for it.
     const goodsWanted =
       town.population / TOWN_INHABITANTS_PER_GOODS +
-      (town.population * commercialShare) / TOWN_INHABITANTS_PER_ELECTRONICS;
+      commercialShare * electronicsWantedFor(town.population);
     const foodWanted = (town.population * residentialShare) / TOWN_INHABITANTS_PER_FOOD;
     const buildingWanted = town.population / TOWN_INHABITANTS_PER_BUILDING_MATERIAL;
     const goodsDelivered = town.goodsDeliveredThisMonth + town.electronicsDeliveredThisMonth;

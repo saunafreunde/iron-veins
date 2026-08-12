@@ -40,14 +40,14 @@ no entry below. A number may appear under several topics.
 - **Industry & production:** D-022, D-062, D-063, D-064, D-069, D-071, D-079,
   D-085, D-086, D-174, D-201, D-202, D-205, D-225, D-232
 - **Towns, council & ownership:** D-101, D-102, D-103, D-104, D-205, D-207,
-  D-206, D-213, D-216, D-217, D-231, D-232, D-233, D-234
+  D-206, D-213, D-216, D-217, D-231, D-232, D-233, D-234, D-235
 - **Economy, finance & emissions:** D-008, D-090, D-091, D-092, D-105, D-154,
   D-180, D-193, D-196, D-228, D-229
 - **Balancing & scenarios:** D-038, D-039, D-040, D-041, D-066, D-087, D-088,
   D-116, D-151, D-152, D-156, D-158, D-159, D-187, D-190, D-194, D-195,
   D-196, D-197, D-198, D-199, D-200, D-203, D-204, D-207, D-211, D-213,
   D-215, D-216, D-220, D-221, D-222, D-224, D-225, D-226, D-228, D-229,
-  D-232, D-233, D-234
+  D-232, D-233, D-234, D-235
 - **Vehicles & fleet:** D-043, D-044, D-045, D-068, D-076, D-089, D-093,
   D-096, D-142, D-143, D-145, D-146, D-155, D-157, D-171, D-174, D-181, D-185,
   D-201, D-207
@@ -67,7 +67,7 @@ no entry below. A number may appear under several topics.
 - **Performance & measurement:** D-002, D-120, D-135, D-136, D-161, D-162,
   D-163, D-164, D-167, D-170, D-171, D-172, D-173, D-174, D-176, D-177, D-184,
   D-185, D-186, D-187, D-191, D-192, D-193, D-196, D-200, D-201, D-202, D-205,
-  D-206, D-209, D-214, D-231, D-234
+  D-206, D-209, D-214, D-231, D-234, D-235
 - **Platform, tooling & build:** D-012, D-014, D-015, D-016, D-017, D-029,
   D-030, D-031, D-160, D-168, D-169, D-170, D-172, D-175, D-192, D-206, D-208,
   D-227
@@ -77,10 +77,10 @@ no entry below. A number may appear under several topics.
   D-195, D-196, D-197, D-198, D-199, D-200, D-201, D-202, D-203, D-204,
   D-205, D-207, D-206, D-208, D-209, D-210, D-212, D-213, D-215, D-216,
   D-217, D-219, D-220, D-221, D-222, D-228, D-229, D-230, D-231, D-233,
-  D-234
+  D-234, D-235
 - **Process & specification:** D-070, D-123, D-129, D-133, D-138, D-140,
   D-185, D-191, D-197, D-198, D-199, D-203, D-204, D-205, D-206, D-215,
-  D-222, D-225, D-226, D-227, D-228, D-229
+  D-222, D-225, D-226, D-227, D-228, D-229, D-235
 
 ---
 
@@ -12642,6 +12642,14 @@ stops when its streets reach the ground it claimed. On a GENERATED world - seed
 69,772: the growth keeps pace with what the population asks for, which is what
 an unserved world should look like.
 
+> **Corrected by D-235 (2026-08-12).** Those three figures were true of bundle 1
+> and of nothing after it: bundle 2 (D-232) gave a town nobody supplies the
+> -0.03 %/month branch, so that world now SHRINKS. Re-measured on the final M20
+> tree: **661 -> 642 buildings, 872 -> 869 street tiles, population 66,100 ->
+> 63,820**. The claim is a test since D-235 (`townShrinkage.spec.ts`, "a
+> generated world nobody serves"), which asserts the direction and prints the
+> figures, so the next bundle cannot invalidate it in silence.
+
 **Cost.** The pass allocates **0.990 B per game day** over 50,000 days against
 an allocating control at 1,621 B (law #7), and costs **0.75 us per game day** on
 a 512 map of 40 towns, i.e. **0.023 ms per game month** - the whole monthly bill
@@ -13250,4 +13258,186 @@ zero new files under `src/`. `npm run typecheck` and `npm run lint` clean; unit
 **120 files / 1,551 tests** (+2 cases); determinism 33, corpus 5, soak 4,
 balance:full 101 - all green. `npm run format:check` stays red on the files
 D-227 names; the two files this bundle touched were formatted before they were
+committed.
+
+### D-235 M20 closed honestly: the perf clause given ONE reading, SPEC.md 13.2's third demand implemented, and three documentation claims made true or made tests
+
+**SPEC2 M20 bundle 5, and it exists because an independent verifier read the
+milestone back and found five things that were true of the prose rather than of
+the code.** Four of the five Fertig-wenn criteria it confirmed with its own
+fixtures; none of the five findings is a broken feature. **No save bump (v31
+stands), no migration edit, no hashed byte, no RNG draw, no i18n string, no
+atlas cell, no snapshot byte.** All three pins are where D-233 left them:
+canonical `5f4c022bef5b94d1`, soak `9aac5ef0864d5c69` at unchanged 35 commands,
+corpus manifest unchanged. `SAVE_VERSION` **31**.
+
+---
+
+**1. The perf clause had two readings and the measurements straddled the line -
+so the SENTENCE now says which one it is.**
+
+"der Monats-Tick p99 waechst um < 0,15 ms gegenueber der Grundlinie" can mean
+the tick p99 over a window that CONTAINS the month boundary, or the isolated
+month-boundary tick. D-234 measured both and left the ambiguity standing:
+reading A is met with room (**-0.333 / -0.490 / -0.555 ms** on three clean
+`test:perf` runs against the M10 baseline of 1.45 / 3.26), reading B is
+**+0.161 ms** scaled to the 120 towns the clause names, i.e. **0.011 ms over**.
+A specification and a measurement that can disagree is not a closed milestone,
+so SPEC2 M20's Fertig-wenn carries a bracketed note now and 6.1.1's M20 row
+points at it.
+
+**Reading A is binding, and the argument is what the budget protects.** The
+number it defends is SPEC.md 21's own row - "Sim-Tick bei 1.500 Fahrzeugen
+<= 8 ms p99" - and Z6 names the instrument in the same breath: every
+tick-millisecond promise in SPEC2 is measured against the 1500-vehicle fixture.
+Ledger 6.1's column is headed "Tick-Budget Delta p99 (1500 Fzg., Z6)" and M20's
+cell in it is +0,10 ms, so the Fertig-wenn's 0,15 is that same quantity with
+headroom rather than a second, stricter promise about a different one. The
+isolated month tick was never bound by SPEC.md 21 and could not be: M10's own
+ledger row records it at **39.4 ms** against a budget of 8, because one outlier
+in 6,000 ticks is by construction outside a p99. Read against 39.4 ms, 0.15 ms
+is a **0.4 %** tolerance; read against 3.26 ms it is **4.6 %**. Only the second
+is an engineering budget - the first would be a number nobody could have chosen
+deliberately. The frame the player would feel says the same thing: one 39 ms
+tick a game month is a single frame inside the 50 ms the 20 Hz clock allows,
+and 0.15 ms of it is not what makes it visible or not.
+
+**The other reading stays measured and is not smoothed.** +0.188 ms at 140
+towns on a quiet generated 1024 world, +0.161 ms scaled to 120, **0.011 ms over
+0.15 - seven per cent, on one tick in 6,000, and inside the +-0.12 ms spread of
+the measurement pairs themselves.** That is a real number and a small one, and
+this entry stands behind it rather than banding it away.
+
+**D-233's refusal was re-examined rather than cited.** The only remaining cure
+under reading B is CARRYING the zone census instead of walking it, which D-233
+refused because a carried count must be kept in step with every writer of the
+building layer. The reason holds, and it is counted here rather than asserted: a
+source walk finds **three** writers of `map.buildingKind` under `src/sim` -
+`mapgen/towns.ts`'s placement (which genesis AND the growth call),
+`commands/build.ts`'s `DemolishBuilding`, and `town/growth.ts`'s removal - and
+nothing since D-233 has reduced that number. A carried census is also save state
+under Z4, so it is a migration and a re-recorded pin: a bundle of its own, and
+not a line in a closing one.
+
+---
+
+**2. SPEC.md 13.2 specifies THREE demand scalings and the code implemented two -
+so the third is implemented, and the one departure that remains has this entry.**
+
+The section writes `bedarf.elektronik = max(0, (einwohner-3000)) / 2500`. That
+formula appeared nowhere in `src/` and nowhere in `DECISIONS.md`: D-233 had
+introduced `TOWN_INHABITANTS_PER_ELECTRONICS = 1_800` over a plain `einwohner`
+with no threshold, and two comments made it worse by stating that 13.2 "scales
+only the OTHER two demands" and that goods and food were "the two demand ratios
+13.2 writes out". The project's own rule is that a departure without an entry is
+a defect and not a decision, so this one is closed the way the rule prefers:
+**the specification's arithmetic is implemented.**
+`electronicsWantedFor(population)` is `max(0, population - 3000) / 2500`, pure
+and exported, hand-checked against the specification's own numerals at ten
+population scales in `townFormula.spec.ts`.
+
+**The one thing 13.2 does not say is the commercial SHARE in front of the term,
+and that is SPEC2 M20's own MUSS** ("Gewerbe ... verbraucht Waren+Elektronik").
+Both are kept, because they are the same idea measured twice - the threshold is
+SPEC.md's population proxy for "big enough to have a shopping street", the share
+is what a zoned map can actually answer - and this paragraph is the entry that
+makes the survivor a decision instead of a silence. The same gate sits on food
+(`residentialShare`) for the same MUSS and is covered here with it.
+
+**What it changes, measured rather than assumed.** The demand is smaller and
+starts later: a city of 8,000 a third of whose buildings are commercial wants
+**0.67 t a month** where it wanted 1.48, and a town under 3,000 wants **nothing
+at all** where it used to want radios in proportion to its shops. On the
+generated 256 world the mean town is 1,652 inhabitants, so the threshold is
+doing real work there rather than being decorative in the other direction.
+**Not one pinned hash moved** - canonical and soak both replay to the recorded
+value, all nine corpus fixtures decode as before - and not one balance band
+moved, which is the D-201 device again: every hand-built world of section 19.4
+is all-residential, so the term is multiplied by zero there whatever its scale.
+`zoneEconomy.spec.ts`'s electronics test needed a CITY to stay non-vacuous and
+now says so in the fixture: at 4,000 inhabitants the specification's own demand
+is 0.4 t against a goods basket of 4.4, and the integer population rounds the
+difference away.
+
+---
+
+**3. A stale measurement presented as current, in two files.**
+
+`CLAUDE.md` and D-231 both carried "661 -> 695 buildings, 872 -> 881 street
+tiles, population 66,100 -> 69,772" for a generated 256 world with nobody
+serving anything, and called it "what an unserved world should look like".
+Bundle 2 (D-232) gave exactly that world the -0.03 %/month branch, so every
+arrow in the sentence is backwards, and it survived two further bundles because
+nothing red read it. **Re-measured on the final tree: 661 -> 642 buildings,
+872 -> 869 street tiles, population 66,100 -> 63,820.** Both places are
+corrected, D-231's paragraph keeps its original figures under a dated correction
+note rather than being quietly rewritten, and the claim is a TEST now -
+`townShrinkage.spec.ts`, "a generated world nobody serves" - which asserts the
+direction, prints the figures for the next digest to copy, and costs 0.4 s.
+
+---
+
+**4. Two comments described `versorgungBau` differently.**
+
+`town/update.ts` said the term "counts what was DELIVERED, not what the yard
+consumed"; the call site in `vehicles/update.ts` said it is "booked on what the
+yard ACCEPTED". Both were reaching for the same contrast against the yard's flat
+200 t a month of consumption, and neither said what separates them: the caller
+books `deliverToIndustry`'s RETURN value, so a merchant whose input stock is at
+its cap credits the town with less than the lorry brought, and a closed one
+credits nothing. The town-side comment says that now, with the reason - a lorry
+tipping cement onto a yard with nowhere to put it has not supplied the town with
+anything - so the two ends agree with each other and with the code.
+
+---
+
+**5. A stated total order, and what runs when the guard bites.**
+
+`town/growth.ts` documented removal as "the candidate FARTHEST from the centre
+goes first and ties break on the HIGHEST tile index - a total order no two
+candidates tie on" and stopped there, which reads as an unconditional winner.
+What executes is that order FILTERED by `mayRemoveBuilding`, and the two name
+different tiles whenever the guard refuses the leader.
+
+**Measured before it was written up.** On a fixture where the town's stop sits
+out at the edge of its claim - built through the player's own commands, road and
+stop, because that is the only geometry in which the guard can refuse the leader
+while permitting a nearer candidate - a town cut to 400 inhabitants performs 24
+removals: **the guard refused the winner of the order on 9 of them, the
+tie-break on the highest tile index decided 22, and the executed tile agreed
+with the documented order on 24 of 24.** So the CODE was right and the COMMENT
+was short: the guard is a filter over the candidate set and never a reordering
+of it, which is also why the walk may test it lazily - only for a candidate that
+already beats the best so far - and still answer the same tile. The comment says
+all of that now, including that the walk visits tiles in ascending index, so the
+tie-break can only ever keep the last tie seen. `townShrinkage.spec.ts` pins it
+against an implementation of the order written from the SENTENCE rather than
+from the code, and asserts its own non-vacuity in both directions: the guard was
+selective, and the tie-break was load bearing.
+
+---
+
+**Cost and verification.** Two `src/` files changed behaviour-bearing lines
+(`sim/constants.ts`, `sim/town/update.ts`), one changed only comments
+(`sim/town/growth.ts`), and the comment in `sim/vehicles/update.ts` was the
+correct one and is untouched. `npm run typecheck` and `npm run lint` clean; unit
+**120 files / 1,557 tests** (+6 cases: four for the electronics demand, one for
+the removal order, one for the generated world); `tests/determinism` +
+`tests/corpus`
+**38** green at unchanged pins; `npm run test:soak` **4** green at
+`9aac5ef0864d5c69`; `npm run test:balance:full` **12 files / 101 tests** green.
+**Every band is where D-234 left it, to the digit and not by quotation** - the
+suite was re-run with its whole output kept: scenario 1 payback **year 3**
+(485,735 / 493,316 / 501,669 / 509,938 / 518,793 / 521,260 EUR), scenario 2
+investment 249,980 EUR and payback **year 6**, scenario 3 **159,516 EUR/yr**,
+scenario 4 bankrupt in **year 9**, scenario 6 closure in **month 25**,
+Netzdesign **3.75** (alignment 2.01x, capacity 1.87x), Takt **-8.3 %** with the
+delivery-variance ratio **0.57**, Harter Winter **-4.36 %** over six seeds,
+Punktzahl **5,889** (36/26/24/13, dogleg control 7.8 % against 19.8 %),
+scenario 5 **1,022,084 / 1,802,165 / 2,153,604 EUR**, and the `aiGame` sweep 12
+competitors over 4 seeds, 0 wound up, 4 took the field, 3 own a vehicle, total
+value 7,293,303 EUR, with the refusal profile printing. **No `test:perf` run is claimed for
+this bundle**: it touches no hot path, and the acceptance numbers of the
+milestone are D-234's three runs. `npm run format:check` stays red on the files
+D-227 names; the files this bundle touched were formatted before they were
 committed.

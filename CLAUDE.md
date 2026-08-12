@@ -2543,7 +2543,11 @@ council elections are those later bundles.
   twelve-month window and the company rating into the formula - re-measured in
   D-234, where the bisect is), with the three-a-month cap BINDING. A
   generated 256 world (seed 4,711, 40 towns, nobody serving anything) moves
-  **661 -> 695 buildings, 872 -> 881 street tiles** over ten years. Cost:
+  **661 -> 642 buildings, 872 -> 869 street tiles, population 66,100 ->
+  63,820** over ten years - it SHRINKS, because bundle 2 gave an unserved town
+  the -0.03 %/month branch. (This bundle-1 line said "661 -> 695, 872 -> 881,
+  66,100 -> 69,772" for three bundles after that stopped being true; D-235
+  re-measured it and made it a test, `townShrinkage.spec.ts`.) Cost:
   **0.990 B per game day** (control 1,621 B) and **0.75 us per game day**, i.e.
   0.023 ms a game month against the ledger's +0.10 ms.
 - **Pins**: every world hash moves because every town hashes one integer more.
@@ -2632,7 +2636,9 @@ fields joined the digest.
 - **Electronics gets a counter, not a fifth term.** 13.2 has four supply terms,
   so radios still count as goods where the formula reads them; what the
   commercial zone adds is DEMAND (`TOWN_INHABITANTS_PER_ELECTRONICS` times the
-  commercial share). Food is the houses' demand, scaled by the residential
+  commercial share - **the scaling was this bundle's own invention and became
+  SPEC.md 13.2's `max(0, (einwohner-3000)) / 2500` in bundle 5, D-235**). Food
+  is the houses' demand, scaled by the residential
   share. **Acceptance is deliberately untouched** - a stop covering houses still
   takes radios wherever there is no commercial zone, or D-118's dead end
   reopens. The zone census is a MONTHLY walk into a preallocated four-slot
@@ -2765,6 +2771,51 @@ every scenario figure is bit-identical across it.
   bisect**: Netzdesign 3.73 -> 3.75 (capacity 1.86x -> 1.87x) and D-231's
   "8,000 -> 10,538 at 96.5 %" -> 10,355 at 120.1 %. Both moved in bundle 2, not
   in this one - the pre-M20 commit still measures D-215's figures to the digit.
+
+## M20 bundle 5 - the five honesty defects an independent verifier found (D-235)
+
+**Five findings, none of them a broken feature, all of them the documentation
+being ahead of the code.** No save bump (**v31 stands**), no migration edit, no
+hashed byte, no RNG draw, no i18n string, no atlas cell, no snapshot byte; all
+three pins unchanged, every balance band re-run and identical to the digit.
+
+- **The Fertig-wenn's perf clause had two readings and the measurements
+  straddled the line - so the SENTENCE was amended.** SPEC2 M20 now carries a
+  bracketed note: **the binding reading is the tick p99 over a window that
+  contains the month hooks**, measured on the 1500-vehicle fixture, because that
+  is what Z6 prescribes, what ledger 6.1's column is headed with, and what
+  SPEC.md 21's 8 ms row is about. The isolated month tick was never bound by
+  that row and could not be - M10 records it at **39.4 ms** against a budget of
+  8, one outlier in 6,000 being outside a p99 by construction - and 0.15 ms
+  against 39.4 is a 0.4 % tolerance where against 3.26 it is 4.6 %. Both numbers
+  stay recorded: reading A **-0.333 / -0.490 / -0.555 ms**, reading B
+  **+0.161 ms, i.e. 0.011 ms over**, named and not banded away. D-233's refusal
+  to CARRY the census was re-examined and holds - three writers of
+  `map.buildingKind` under `src/sim` today, and it is Z4 save state.
+- **SPEC.md 13.2 has THREE demand scalings and the code had two.**
+  `bedarf.elektronik = max(0, (einwohner-3000)) / 2500` was in no file and in no
+  entry; `electronicsWantedFor` is that formula now, hand-checked against the
+  specification at ten population scales. The ONE surviving departure is SPEC2
+  M20's own zone rule - the commercial SHARE in front of the term, and the
+  residential share in front of food - and D-235 is the entry it needed. A city
+  of 8,000 a third commercial wants **0.67 t/month** where it wanted 1.48; a
+  town under 3,000 wants none. **No pin and no band moved**, for bundle 3's own
+  reason: nothing in those worlds delivers goods, food or electronics into a
+  town, and every hand-built 19.4 world is all-residential.
+- **`versorgungBau`'s two comments disagreed.** The call site books
+  `deliverToIndustry`'s RETURN value, so a full yard credits less than the lorry
+  brought and a closed one credits nothing; "delivered" and "accepted" are the
+  same number until the stock cap bites. Both ends say that now.
+- **The removal order's comment was short, not wrong.** `growth.ts` documented
+  "farthest first, ties on the highest tile index" without saying the guard
+  filters the candidate set. Measured on a fixture with the stop at the edge of
+  the claim: 24 removals, **the guard refused the leader on 9, the tie-break
+  decided 22, and the executed tile matched the documented order on 24 of 24**.
+  Comment corrected, and `townShrinkage.spec.ts` pins the order against an
+  implementation written from the sentence rather than from the code.
+- **The stale generated-world figure is corrected in both files and is a test
+  now** (see the bundle 1 digest above): that world SHRINKS since bundle 2 -
+  661 -> 642 buildings, 872 -> 869 street tiles, 66,100 -> 63,820 inhabitants.
 
 ## Still outstanding
 

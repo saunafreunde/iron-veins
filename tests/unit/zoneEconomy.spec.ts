@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { Cargo } from '../../src/sim/cargo/types';
 import {
   MAIL_PER_INHABITANT_PER_MONTH,
-  TOWN_INHABITANTS_PER_ELECTRONICS,
   TOWN_INHABITANTS_PER_FOOD,
   TOWN_INHABITANTS_PER_GOODS,
   TOWN_MAIL_COMMERCIAL_WEIGHT,
@@ -15,7 +14,7 @@ import {
   TOWN_CARGO,
 } from '../../src/sim/industry/catchment';
 import { ModuleKind } from '../../src/sim/station/types';
-import { growTowns, produceTownCargo } from '../../src/sim/town/update';
+import { electronicsWantedFor, growTowns, produceTownCargo } from '../../src/sim/town/update';
 import { BuildingKind } from '../../src/sim/town/types';
 import { apply, flatScenario, makeTown, type Scenario } from '../balance/scenario';
 
@@ -27,11 +26,12 @@ import { apply, flatScenario, makeTown, type Scenario } from '../balance/scenari
  * residential produces commuters and consumes goods and food, commercial
  * produces mail and business travellers and consumes goods and electronics.
  *
- * **Which assertions are evidence and which are the no-op proof.** The two
- * constants this bundle adds - `TOWN_MAIL_COMMERCIAL_WEIGHT` and
- * `TOWN_INHABITANTS_PER_ELECTRONICS` - were chosen for the ratios they state,
- * so a test that measured them back would be checking its own arithmetic. What
- * is independent of them:
+ * **Which assertions are evidence and which are the no-op proof.**
+ * `TOWN_MAIL_COMMERCIAL_WEIGHT` was chosen for the ratio it states, so a test
+ * that measured it back would be checking its own arithmetic; the electronics
+ * demand is SPEC.md 13.2's own `max(0, (einwohner-3000)) / 2500` since D-235
+ * and is hand-checked against the specification in `townFormula.spec.ts`. What
+ * is independent of both:
  *
  *  - the town's mail TOTAL is invariant under any zoning, which follows from
  *    the weights being normalised and from no number in the table;
@@ -214,13 +214,21 @@ describe('what a town wants is a property of its zones', () => {
   it('wants electronics only where it has shops', () => {
     const scenario = townScenario();
     const town = scenario.world.towns[0]!;
-    const goodsWanted = POPULATION / TOWN_INHABITANTS_PER_GOODS;
-    const foodWanted = POPULATION / TOWN_INHABITANTS_PER_FOOD;
+    // SPEC.md 13.2's electronics demand is `max(0, (einwohner-3000)) / 2500`
+    // (D-235), so it is a CITY's demand by construction: at this fixture's
+    // 4,000 inhabitants it is 0.4 t a month against a goods basket of 4.4, and
+    // the integer population rounds the difference away. The town is therefore
+    // given a city's population for this one test. The MAP is untouched, so
+    // the zoning below is the same third of the same buildings.
+    const CITY = 120_000;
+    town.population = CITY;
+    const goodsWanted = CITY / TOWN_INHABITANTS_PER_GOODS;
+    const foodWanted = CITY / TOWN_INHABITANTS_PER_FOOD;
 
     // Fully supplied with goods and food, all residential: the two terms are
     // at their cap.
     const residential = deliverAndGrow(scenario, goodsWanted, foodWanted, 0);
-    town.population = POPULATION;
+    town.population = CITY;
 
     // Zone a third of the town commercial and deliver exactly the same. The
     // goods basket is now short of what the shops want, so the town grows less
@@ -228,12 +236,12 @@ describe('what a town wants is a property of its zones', () => {
     zoneCommercial(scenario, TOWN_X - 10, TOWN_X + 10);
     const zoned = deliverAndGrow(scenario, goodsWanted, foodWanted, 0);
     expect(zoned).toBeLessThan(residential);
-    town.population = POPULATION;
+    town.population = CITY;
 
     // And the shortfall is closed by ELECTRONICS, which is what those shops
-    // wanted: the same haul plus the electronics demand reaches the cap again.
-    const wantedElectronics = (POPULATION * 1) / TOWN_INHABITANTS_PER_ELECTRONICS;
-    const supplied = deliverAndGrow(scenario, goodsWanted, foodWanted, wantedElectronics);
+    // wanted: the same haul plus the specification's own electronics demand
+    // reaches the cap again.
+    const supplied = deliverAndGrow(scenario, goodsWanted, foodWanted, electronicsWantedFor(CITY));
     expect(supplied).toBe(residential);
   });
 

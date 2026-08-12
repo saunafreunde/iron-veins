@@ -1459,28 +1459,46 @@ export const TOWN_INHABITANTS_PER_GOODS = 900;
 export const TOWN_INHABITANTS_PER_FOOD = 700;
 
 /**
- * Inhabitants per tonne of electronics demanded per month, counted over the
- * COMMERCIAL zone alone. [inhabitants/tonne/month]
+ * Inhabitants above {@link TOWN_ELECTRONICS_MIN_POPULATION} per tonne of
+ * electronics demanded per month. [inhabitants/tonne/month]
  *
- * SPEC2 M20's zone economy: "Gewerbe ... verbraucht Waren+Elektronik". Goods
- * and food are demanded by the whole town (both zones eat and both zones buy
- * manufactured articles); electronics is the one demand that exists only where
- * a town has shops, so the figure below is multiplied by the commercial SHARE
- * of the town's buildings before it becomes a demand.
+ * **SPEC.md 13.2, verbatim:** `bedarf.elektronik = max(0, (einwohner-3000)) /
+ * 2500`. It is the third of the section's three demand scalings and the only
+ * one no code read until D-235 - the figure stood at 1,800 over a plain
+ * `einwohner` with no threshold at all, which was a departure from the
+ * specification that no `DECISIONS.md` entry covered.
  *
- * One step out from goods on the same scale, for the same reason
- * {@link TOWN_INHABITANTS_PER_BUILDING_MATERIAL} is: a head buys fewer radios
- * a month than tonnes of general goods. At 1,800, a city of 8,000 whose
- * buildings are a third commercial wants 1.48 t a month against one
- * ElectronicsWorks' monthly output, so a single works supplies several towns -
- * which is what keeps the term reachable rather than decorative.
+ * What the game keeps on top of the specification's own scaling is SPEC2 M20's
+ * zone rule ("Gewerbe ... verbraucht Waren+Elektronik"): the tonnage below is
+ * multiplied by the commercial SHARE of the town's buildings, because the
+ * expansion asks for the shops to be the consumer and the game has zones to
+ * say where they are. The two are the same idea measured twice - the threshold
+ * is SPEC.md's population proxy for "big enough to have a shopping street",
+ * the share is the map's own answer to the same question - and D-235 carries
+ * that as this term's ONE remaining departure.
+ *
+ * Reachable rather than decorative, on the same test the old figure was chosen
+ * against: a city of 8,000 a third of whose buildings are commercial wants
+ * 0.67 t a month against one ElectronicsWorks' monthly output, so a single
+ * works supplies several towns.
  *
  * The electronics DELIVERED into a town have counted towards its goods supply
  * since M5 and still do (`versorgungWaren` is one basket, because SPEC.md 13.2
  * has four supply terms and not five). What this constant adds is the other
  * side of that basket: a town with shops WANTS them.
  */
-export const TOWN_INHABITANTS_PER_ELECTRONICS = 1_800;
+export const TOWN_INHABITANTS_PER_ELECTRONICS = 2_500;
+
+/**
+ * Inhabitants a town needs before it wants electronics at all. [inhabitants]
+ *
+ * The `max(0, einwohner - 3000)` of SPEC.md 13.2's `bedarf.elektronik`: below
+ * it the demand is exactly zero, so a village is never judged on radios it
+ * would have nowhere to sell. Paired with
+ * {@link TOWN_INHABITANTS_PER_ELECTRONICS}; both figures are the
+ * specification's own and neither was chosen here.
+ */
+export const TOWN_ELECTRONICS_MIN_POPULATION = 3_000;
 
 /**
  * How much more mail a fully commercial catchment offers than a fully
@@ -1509,10 +1527,11 @@ export const TOWN_MAIL_COMMERCIAL_WEIGHT = 2;
  * [inhabitants/tonne/month]
  *
  * SPEC.md 13.2 writes `versorgungBau = clamp(geliefert.zement+baustoffe /
- * bedarf, 0, 1)` and then scales only the OTHER two demands
- * (`bedarf.waren = einwohner / 900`, `bedarf.lebensmittel = einwohner / 700`).
- * The building demand is the one the specification leaves open, so the figure
- * is chosen here and this is what pins it.
+ * bedarf, 0, 1)` and then scales the other three demands and not this one
+ * (`bedarf.waren = einwohner / 900`, `bedarf.lebensmittel = einwohner / 700`,
+ * `bedarf.elektronik = max(0, (einwohner-3000)) / 2500`). The building demand
+ * is the ONE the specification leaves open, so the figure is chosen here and
+ * this is what pins it.
  *
  * A town does not eat cement, it builds with it, so a head wants less of it per
  * month than of food or of manufactured goods - one step out on the same scale.

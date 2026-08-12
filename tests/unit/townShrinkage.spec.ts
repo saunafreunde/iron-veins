@@ -263,6 +263,207 @@ describe('shrinkage against the station catchments', () => {
   });
 });
 
+// --------------------------------------- a whole generated world, unserved
+
+/**
+ * The figure D-231 published and later bundles invalidated (D-235).
+ *
+ * Bundle 1 measured a generated 256 world, seed 4,711, forty towns, nobody
+ * serving anything, and recorded "661 -> 695 buildings, 872 -> 881 street
+ * tiles, population 66,100 -> 69,772 ... which is what an unserved world should
+ * look like". Bundle 2 then made an unserved town SHRINK, which turns every one
+ * of those arrows round - and the sentence stayed in `CLAUDE.md` and in
+ * `DECISIONS.md` for two more bundles because nothing red read it.
+ *
+ * So it is a test now rather than a paragraph. It asserts the DIRECTION, which
+ * is the claim, and prints the figures for whoever writes the next digest.
+ */
+describe('a generated world nobody serves', () => {
+  it('loses houses, streets and people over ten years', async () => {
+    const { World } = await import('../../src/sim/World');
+    const { CommandQueue } = await import('../../src/sim/commands/queue');
+    const { Difficulty, MapClimate } = await import('../../src/sim/constants');
+
+    const world = World.create({
+      seed: 4_711,
+      difficulty: Difficulty.Normal,
+      climate: MapClimate.Temperate,
+      mapSize: 256,
+      companyName: 'Wachstum',
+      companyColorIndex: 1,
+    });
+    const map = world.map;
+    const count = (): { buildings: number; roads: number; people: number } => {
+      let buildings = 0;
+      let roads = 0;
+      for (let i = 0; i < map.tileCount; i++) {
+        if (map.buildingKind[i] !== BuildingKind.None) buildings++;
+        if (map.roadBits[i] !== 0) roads++;
+      }
+      let people = 0;
+      for (const town of world.towns) people += town.population;
+      return { buildings, roads, people };
+    };
+
+    const before = count();
+    const queue = new CommandQueue();
+    for (let tick = 0; tick < 10 * TICKS_PER_YEAR; tick++) world.step(queue, null);
+    const after = count();
+
+    console.log(
+      `a generated 256 world of ${world.towns.length} towns, nobody serving anything, over ` +
+        `ten game years: ${before.buildings} -> ${after.buildings} buildings, ${before.roads} -> ` +
+        `${after.roads} street tiles, population ${before.people} -> ${after.people}`,
+    );
+    expect(world.towns.length).toBeGreaterThan(10);
+    expect(after.people).toBeLessThan(before.people);
+    expect(after.buildings).toBeLessThan(before.buildings);
+    expect(after.roads).toBeLessThan(before.roads);
+  });
+});
+
+// ------------------------------------------------ which house comes down
+
+/**
+ * The removal order of `town/growth.ts`, re-implemented from the sentence that
+ * documents it rather than from the code that executes it (D-235).
+ *
+ * The comment there had said "farthest from the centre first, ties on the
+ * HIGHEST tile index" and stopped, which reads as an unconditional winner; what
+ * runs is that order FILTERED by `mayRemoveBuilding`, and on the fixture below
+ * the two differ on a third of the removals. Nothing about the executed choice
+ * was wrong - this test is what makes the corrected sentence checkable, and
+ * what stops either half drifting from the other.
+ */
+function orderedCandidates(world: Scenario['world'], town: Town): number[] {
+  const map = world.map;
+  const out: number[] = [];
+  for (let dy = -town.radius; dy <= town.radius; dy++) {
+    for (let dx = -town.radius; dx <= town.radius; dx++) {
+      const x = town.x + dx;
+      const y = town.y + dy;
+      if (!map.contains(x, y)) continue;
+      const index = map.tileIndex(x, y);
+      if (map.townId[index] !== town.id) continue;
+      if (map.buildingKind[index] === BuildingKind.None) continue;
+      out.push(index);
+    }
+  }
+  const distanceSq = (index: number): number => {
+    const dx = (index % map.size) - town.x;
+    const dy = ((index / map.size) | 0) - town.y;
+    return dx * dx + dy * dy;
+  };
+  // The documented total order, as a comparator: farthest first, then highest
+  // tile index. No two candidates tie on both, so it is total.
+  out.sort((a, b) => distanceSq(b) - distanceSq(a) || b - a);
+  return out;
+}
+
+/** `mayRemoveBuilding`'s rule, counted live off the map (the guard). */
+function guardPermits(world: Scenario['world'], town: Town, index: number): boolean {
+  const map = world.map;
+  const x = index % map.size;
+  const y = (index / map.size) | 0;
+  for (const station of world.stations) {
+    if (station.townId !== town.id) continue;
+    let covered = 0;
+    for (let dy = -12; dy <= 12; dy++) {
+      for (let dx = -12; dx <= 12; dx++) {
+        const tx = station.x + dx;
+        const ty = station.y + dy;
+        if (!map.contains(tx, ty)) continue;
+        if (!inCatchment(station, tx, ty)) continue;
+        const tile = map.tileIndex(tx, ty);
+        if (map.townId[tile] !== town.id) continue;
+        if (map.buildingKind[tile] !== BuildingKind.None) covered++;
+      }
+    }
+    if (covered > 1) continue;
+    if (inCatchment(station, x, y)) return false;
+  }
+  return true;
+}
+
+describe('the house a shrinking town takes down', () => {
+  it('is the first in the documented total order that the catchment guard permits', () => {
+    const scenario = stoppedLine();
+    const world = scenario.world;
+    const town = scenario.townA;
+
+    // A stop out at the edge of the town, reached by its own road, so the
+    // buildings it covers are the FARTHEST from the centre - the only geometry
+    // in which the guard can refuse the winner of the order while permitting a
+    // nearer candidate. Without it the guard is never selective and this test
+    // would pass on a fixture that cannot tell the two rules apart.
+    apply(scenario, {
+      kind: CommandKind.BuildRoad,
+      x1: town.x,
+      y1: town.y - 1,
+      x2: town.x,
+      y2: town.y - 6,
+    });
+    apply(scenario, {
+      kind: CommandKind.BuildRoadStop,
+      x: town.x,
+      y: town.y - 6,
+      moduleKind: ModuleKind.BusStop,
+    });
+    const edgeStop = world.stations.find(
+      (station) => station.x === town.x && station.y === town.y - 6,
+    );
+    expect(edgeStop?.townId).toBe(town.id);
+
+    town.population = 400;
+    const map = world.map;
+    let removals = 0;
+    let guardBit = 0;
+    let tieDecided = 0;
+
+    for (let day = 0; day < 200; day++) {
+      const before = map.buildingKind.slice();
+      const order = orderedCandidates(world, town);
+      const permitted = order.filter((index) => guardPermits(world, town, index));
+      const expected = permitted[0] ?? -1;
+      for (let tick = 0; tick < TICKS_PER_DAY; tick++) world.step(scenario.queue, null);
+
+      let removed = -1;
+      for (let i = 0; i < map.tileCount; i++) {
+        if (before[i] !== BuildingKind.None && map.buildingKind[i] === BuildingKind.None) {
+          removed = i;
+          break;
+        }
+      }
+      if (removed === -1) continue;
+      removals++;
+      expect(removed, `day ${day}`).toBe(expected);
+      // The guard was selective on this removal: the winner of the order alone
+      // is not the tile that went.
+      if (order[0] !== expected) guardBit++;
+      // And the tie-break decided it: another permitted candidate stood at the
+      // same distance from the centre.
+      const dx = (expected % map.size) - town.x;
+      const dy = ((expected / map.size) | 0) - town.y;
+      const tied = permitted.filter((index) => {
+        const ix = (index % map.size) - town.x;
+        const iy = ((index / map.size) | 0) - town.y;
+        return ix * ix + iy * iy === dx * dx + dy * dy;
+      });
+      if (tied.length > 1) tieDecided++;
+    }
+
+    console.log(
+      `removals ${removals}: the guard refused the winner of the order on ${guardBit} of them, ` +
+        `the tie-break on the highest tile index decided ${tieDecided}`,
+    );
+    // Non-vacuous in both directions: houses really came down, the guard really
+    // was selective, and the tie-break really was load bearing.
+    expect(removals).toBeGreaterThan(5);
+    expect(guardBit).toBeGreaterThan(0);
+    expect(tieDecided).toBeGreaterThan(0);
+  });
+});
+
 // ------------------------------------------- D-216's invariant, both ways
 
 /**

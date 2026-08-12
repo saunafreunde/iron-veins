@@ -12,21 +12,25 @@ import {
   TOWN_GROWTH_PASSENGER_WEIGHT,
   TOWN_GROWTH_RATING_FLOOR,
   TOWN_GROWTH_RATING_SPAN,
+  TOWN_ELECTRONICS_MIN_POPULATION,
   TOWN_INHABITANTS_PER_BUILDING_MATERIAL,
+  TOWN_INHABITANTS_PER_ELECTRONICS,
   TOWN_INHABITANTS_PER_FOOD,
   TOWN_INHABITANTS_PER_GOODS,
   TOWN_SHRINK_RATE_PER_MONTH,
   TOWN_SUPPLY_WINDOW_MONTHS,
 } from '../../src/sim/constants';
 import { IndustryType, newIndustry, type Industry } from '../../src/sim/industry/types';
+import { countTownZones } from '../../src/sim/mapgen/towns';
 import { ModuleKind } from '../../src/sim/station/types';
 import {
+  electronicsWantedFor,
   growTowns,
   noteBuildingMaterial,
   servingCompanyRating,
   townGrowthRate,
 } from '../../src/sim/town/update';
-import type { Town } from '../../src/sim/town/types';
+import { BuildingKind, type Town } from '../../src/sim/town/types';
 import { apply, flatScenario, makeTown, type Scenario } from '../balance/scenario';
 
 /**
@@ -66,10 +70,109 @@ describe('the numbers of SPEC.md 13.2', () => {
     expect(TOWN_GROWTH_RATING_SPAN).toBe(0.5);
     expect(TOWN_SHRINK_RATE_PER_MONTH).toBe(0.0003);
     expect(TOWN_SUPPLY_WINDOW_MONTHS).toBe(12);
-    // The two demand ratios 13.2 writes out, and the third it leaves open.
+    // The THREE demand ratios 13.2 writes out, and the fourth it leaves open.
+    // The electronics pair was the departure D-235 closed: the specification
+    // says `max(0, (einwohner-3000)) / 2500` and the code said `/ 1800` with
+    // no threshold, with nothing in DECISIONS.md covering it.
     expect(TOWN_INHABITANTS_PER_GOODS).toBe(900);
     expect(TOWN_INHABITANTS_PER_FOOD).toBe(700);
+    expect(TOWN_INHABITANTS_PER_ELECTRONICS).toBe(2_500);
+    expect(TOWN_ELECTRONICS_MIN_POPULATION).toBe(3_000);
     expect(TOWN_INHABITANTS_PER_BUILDING_MATERIAL).toBe(1_200);
+  });
+});
+
+// -------------------------------------------- bedarf.elektronik (SPEC 13.2)
+
+describe('the electronics demand of SPEC.md 13.2 (D-235)', () => {
+  /** `max(0, (einwohner-3000)) / 2500`, written from the specification. */
+  function byHand(population: number): number {
+    return Math.max(0, population - 3_000) / 2_500;
+  }
+
+  it('is the specification arithmetic at every scale of town', () => {
+    for (const population of [0, 1, 500, 1_200, 2_999, 3_000, 3_001, 8_000, 40_000, 250_000]) {
+      expect(electronicsWantedFor(population), `population ${population}`).toBe(byHand(population));
+    }
+  });
+
+  it('is exactly zero below the threshold - a village wants no radios', () => {
+    expect(electronicsWantedFor(2_999)).toBe(0);
+    expect(electronicsWantedFor(3_000)).toBe(0);
+    // Non-vacuous: it is not zero everywhere.
+    expect(electronicsWantedFor(3_001)).toBeGreaterThan(0);
+  });
+
+  /**
+   * A town of 80,000 with half its buildings zoned commercial, and the goods
+   * basket it asks for written from the specification's own numerals.
+   *
+   * The size is chosen so the two hand figures below are four inhabitants
+   * apart rather than one: at 8,000 the integer rounding of the population
+   * would carry the whole difference.
+   */
+  const CITY = 80_000;
+  const CITY_SIZE = 64;
+
+  function halfCommercialCity(): { scenario: Scenario; town: Town; commercialShare: number } {
+    const scenario = flatScenario(CITY_SIZE, [makeTown(0, 40, 40, CITY, 'Westheim')], []);
+    const town = scenario.world.towns[0]!;
+    const map = scenario.world.map;
+
+    let seen = 0;
+    for (let dy = -town.radius; dy <= town.radius; dy++) {
+      for (let dx = -town.radius; dx <= town.radius; dx++) {
+        const x = town.x + dx;
+        const y = town.y + dy;
+        if (!map.contains(x, y)) continue;
+        const index = map.tileIndex(x, y);
+        if (map.townId[index] !== town.id) continue;
+        if (map.buildingKind[index] === BuildingKind.None) continue;
+        if (seen++ % 2 === 0) map.buildingKind[index] = BuildingKind.Commercial;
+        else map.buildingKind[index] = BuildingKind.Residential;
+      }
+    }
+    expect(seen).toBeGreaterThan(3);
+
+    const zones = new Int32Array(8);
+    countTownZones(map, town, town.radius, zones);
+    const zoned = zones[BuildingKind.Residential]! + zones[BuildingKind.Commercial]!;
+    return { scenario, town, commercialShare: zones[BuildingKind.Commercial]! / zoned };
+  }
+
+  /** The growth 13.2 gives an unserved-but-fed town, by hand. */
+  function grownBy(supplyGoods: number): number {
+    const rate = 0.0015 * (1 + 0.45 * supplyGoods) * 1.0 * (0.5 + (0.5 * 0) / 100);
+    return Math.round(CITY * (1 + rate));
+  }
+
+  it('is part of the goods basket, weighted by the commercial share', () => {
+    const full = halfCommercialCity();
+    const wanted = CITY / 900 + full.commercialShare * (Math.max(0, CITY - 3_000) / 2_500);
+    full.town.goodsDeliveredThisMonth = wanted;
+    growTowns(full.scenario.world);
+    expect(full.town.population).toBe(grownBy(1));
+
+    // The same delivery WITHOUT the electronics half of the basket is short by
+    // exactly the share the term contributes - which is what proves the term
+    // is in the denominator rather than being asserted to be.
+    const partial = halfCommercialCity();
+    partial.town.goodsDeliveredThisMonth = CITY / 900;
+    growTowns(partial.scenario.world);
+    expect(partial.town.population).toBe(grownBy(CITY / 900 / wanted));
+    expect(partial.town.population).toBeLessThan(full.town.population);
+  });
+
+  it('is absent from a town with no shops, which is every 19.4 world', () => {
+    // SPEC2 M20's "Gewerbe verbraucht Waren+Elektronik" is what puts the
+    // commercial share in front of the term, and it is why the hand-built
+    // balancing worlds take the pre-M20 arithmetic to the digit: they are all
+    // residential, so the term is multiplied by zero.
+    const scenario = flatScenario(CITY_SIZE, [makeTown(0, 40, 40, CITY, 'Westheim')], []);
+    const town = scenario.world.towns[0]!;
+    town.goodsDeliveredThisMonth = CITY / 900;
+    growTowns(scenario.world);
+    expect(town.population).toBe(grownBy(1));
   });
 });
 

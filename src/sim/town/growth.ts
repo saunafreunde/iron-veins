@@ -218,10 +218,26 @@ function mayRemoveBuilding(world: World, town: Town, x: number, y: number): bool
  * Take ONE house down, from the edge inwards, and answer whether one went.
  *
  * The mirror image of `placeBuildings`, which fills ring by ring from the
- * centre out: a town shrinks where it grew last, so the candidate FARTHEST from
- * the centre goes first and ties break on the HIGHEST tile index - a total
+ * centre out: a town shrinks where it grew last, so the candidates are ranked
+ * FARTHEST from the centre first with ties on the HIGHEST tile index - a total
  * order no two candidates tie on, decided before the walk and never by it
  * (law #3).
+ *
+ * **What goes is the first candidate in that order that
+ * {@link mayRemoveBuilding} PERMITS**, and the distinction is not pedantry: on
+ * a town whose stop sits out at the edge of its claim the guard refuses the
+ * winner on four removals in five, and a reader of the sentence above alone
+ * would expect the house nearest the stop to come down. The guard is a filter
+ * over the candidate set, never a reordering of it - which is why the walk may
+ * test it lazily, only for a candidate that already beats the best so far, and
+ * still answer the same tile. `townShrinkage.spec.ts` pins exactly that against
+ * an independent implementation of the order, on a fixture where the guard is
+ * measured to bite.
+ *
+ * The walk visits tiles in ascending index, so the tie-break can only ever
+ * keep the LAST tie seen; the comparison is written out in full anyway,
+ * because it is what makes the order a property of the code rather than of the
+ * loop bounds.
  *
  * One a day rather than the whole surplus at once. The surplus of a shrinking
  * town is one house every three or four game years, so the pass converges long
