@@ -59,6 +59,7 @@ import type { GoalSave } from './goals/types';
 import { assignStationIndustries } from './industry/catchment';
 import { openNewIndustries } from './industry/lifecycle';
 import { SaveFormatError } from './save/format';
+import { moveOverseasContainers } from './station/containers';
 import { rollStationHistories } from './station/history';
 import { generateReturnJourneys, rollStationReturns } from './station/returns';
 import type { Station } from './station/types';
@@ -629,6 +630,13 @@ export class World {
       // output appearing on the platform in one tick would sit there ageing
       // for four weeks; the yard hands it over a day at a time instead.
       collectIndustryOutput(this);
+      // The overseas box trade of SPEC2 M21 bundle 2, at the same daily cadence
+      // and immediately after the land economy's own collection: a harbour
+      // container terminal is a source like a mine, and a month of boxes
+      // arriving in one tick would sit at the quay ageing for four weeks. It
+      // returns on its first line in every world without a century, which is
+      // every world any pin in this repository was measured on.
+      moveOverseasContainers(this);
       rollBreakdowns(this);
       expireStaleCargo(this);
       // The goal machine of SPEC2 M17, judged on the day that has just been

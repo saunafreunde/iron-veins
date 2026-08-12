@@ -120,6 +120,38 @@ export function isRailModule(kind: number): boolean {
   return kind === ModuleKind.RailPlatform || kind === ModuleKind.RailDepot;
 }
 
+/**
+ * Is this a HARBOUR CONTAINER TERMINAL - a berth with a crane behind it?
+ *
+ * THE definition of a container port (SPEC2 M21 bundle 2), read by the
+ * acceptance mask in `industry/catchment.ts`, by the daily overseas hook in
+ * `station/containers.ts` and by the station panel, so that what the interface
+ * calls a container port and what actually handles boxes cannot come apart.
+ *
+ * It is a PAIR of modules the game already has rather than a fourteenth
+ * `ModuleKind`, and that is a decision rather than a shortcut. A crane and ramp
+ * standing on the quayside IS the terminal E-09 asks for; a new kind would have
+ * cost a save-format number, a build command, a reject reason, an atlas cell and
+ * a fourteenth entry in every module table, for a building the player can
+ * already put there. What it buys instead is that the trade arrives at the ports
+ * players have been building since M7: from 1970 the harbour with a crane on it
+ * starts handling boxes.
+ *
+ * Indexed loops rather than `some`: the daily hook asks this of every station
+ * (law #7), and `hasModule` is indexed for the same reason.
+ */
+export function isContainerPort(modules: readonly ModulePlace[]): boolean {
+  let quay = false;
+  let crane = false;
+  for (let i = 0; i < modules.length; i++) {
+    const kind = modules[i]!.kind;
+    if (kind === ModuleKind.Quay) quay = true;
+    else if (kind === ModuleKind.FreightTerminal) crane = true;
+    if (quay && crane) return true;
+  }
+  return false;
+}
+
 export interface StationModule {
   readonly kind: ModuleKind;
   /** Tile the module occupies. */

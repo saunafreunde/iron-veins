@@ -2,7 +2,11 @@ import { describe, expect, it } from 'vitest';
 import de from '../../src/i18n/de.json';
 import type { IndustryMarker, StationMarker, TownMarker } from '../../src/shared/protocol';
 import { Cargo, cargoSpec } from '../../src/sim/cargo/types';
-import { STATION_ALWAYS_ACCEPTED, TOWN_CARGO } from '../../src/sim/industry/catchment';
+import {
+  PORT_OVERSEAS_CARGO,
+  STATION_ALWAYS_ACCEPTED,
+  TOWN_CARGO,
+} from '../../src/sim/industry/catchment';
 import { IndustryType, INDUSTRY_SPECS } from '../../src/sim/industry/types';
 import { TOWN_OUTPUTS } from '../../src/sim/town/update';
 import { capacityFor, VEHICLE_SPECS } from '../../src/sim/vehicles/catalog';
@@ -140,6 +144,23 @@ describe('where the supply of a works could come from', () => {
   });
 });
 
+/**
+ * Everything on the map that will take a cargo IN, in one place.
+ *
+ * Three tables since SPEC2 M21: an industry's recipe, a town's demand, and a
+ * harbour container terminal's quay wall. The D-118 walk below asks this
+ * question of every producer in the game, and a fourth acceptor added without
+ * a line here would let the next dead end through.
+ */
+function hasAcceptor(cargo: number): boolean {
+  return (
+    INDUSTRY_SPECS.some((spec) => spec.inputs.includes(cargo as Cargo)) ||
+    TOWN_CARGO.includes(cargo as Cargo) ||
+    STATION_ALWAYS_ACCEPTED.includes(cargo as Cargo) ||
+    PORT_OVERSEAS_CARGO.includes(cargo as Cargo)
+  );
+}
+
 describe('the chains it names are the chains the simulation runs', () => {
   it('finds a taker in the spec table for every cargo any works produces', () => {
     const catalogue = de as Record<string, string>;
@@ -148,11 +169,13 @@ describe('the chains it names are the chains the simulation runs', () => {
       expect(spec.nameKey in catalogue, spec.nameKey).toBe(true);
 
       for (const cargo of spec.outputs) {
-        const takenByIndustry = INDUSTRY_SPECS.some((other) => other.inputs.includes(cargo));
-        const takenByTown = TOWN_CARGO.includes(cargo);
         // A cargo nothing anywhere accepts is a dead end in the economy, not a
         // display problem - and this is the cheapest place to notice one.
-        expect(takenByIndustry || takenByTown, `nobody takes cargo ${cargo}`).toBe(true);
+        // Since SPEC2 M21 the acceptors are THREE tables, not two: a harbour
+        // container terminal is the third (D-237), and it is named here rather
+        // than left out, so that an industry which one day makes containers
+        // finds its acceptor instead of failing this walk.
+        expect(hasAcceptor(cargo), `nobody takes cargo ${cargo}`).toBe(true);
       }
     }
   });
@@ -185,6 +208,38 @@ describe('the chains it names are the chains the simulation runs', () => {
     // rewrote every parcel that ever carried it.
     expect(TOWN_OUTPUTS.includes(Cargo.Passengers)).toBe(false);
     expect(INDUSTRY_SPECS.some((spec) => spec.outputs.includes(Cargo.Passengers))).toBe(false);
+  });
+
+  /**
+   * The third arm of the D-118 walk (SPEC2 M21 bundle 2, D-237).
+   *
+   * A STATION MODULE is a producer now: a harbour container terminal offers
+   * `Cargo.Containers` from 1970 on, and until this bundle nothing on the map
+   * produced that cargo at all - it had a rate, a tonnage, a decay curve and
+   * eight vehicles, and it was a dead end from the other side. The walk asks
+   * the same question of it that the two arms above ask of an industry and of
+   * a town, plus the two that make containers a CLOSED meta-cargo: exactly one
+   * kind of place makes them and exactly the same kind of place takes them.
+   */
+  it('finds an acceptor for the overseas cargo, and no producer but the port', () => {
+    const catalogue = de as Record<string, string>;
+
+    for (const cargo of PORT_OVERSEAS_CARGO) {
+      expect(cargoSpec(cargo).nameKey in catalogue, cargoSpec(cargo).nameKey).toBe(true);
+      expect(hasAcceptor(cargo), `nobody takes cargo ${cargo}`).toBe(true);
+
+      // Closed at both ends. No industry recipe makes one and no town offers
+      // one, so the terminal is the only producer; and neither a town's demand
+      // nor the "every station takes it" rule takes one, so the terminal is the
+      // only acceptor. A box therefore never enters the land economy, which is
+      // what makes the conservation rule in `station/containers.ts` a rule
+      // rather than a hope.
+      expect(INDUSTRY_SPECS.some((spec) => spec.outputs.includes(cargo))).toBe(false);
+      expect(TOWN_OUTPUTS.includes(cargo)).toBe(false);
+      expect(INDUSTRY_SPECS.some((spec) => spec.inputs.includes(cargo))).toBe(false);
+      expect(TOWN_CARGO.includes(cargo)).toBe(false);
+      expect(STATION_ALWAYS_ACCEPTED.includes(cargo)).toBe(false);
+    }
   });
 
   it('keeps the commuter fare exactly where the retired passenger fare was', () => {

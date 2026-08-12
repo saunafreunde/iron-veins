@@ -160,6 +160,15 @@ export const HANDBOOK: readonly HandbookEntry[] = [
     bodyKey: 'ui.handbook.transfer.body',
     diagram: '',
   },
+  {
+    id: 'containerPort',
+    titleKey: 'ui.handbook.containerPort.title',
+    bodyKey: 'ui.handbook.containerPort.body',
+    diagram: [
+      '  overseas ~~> [ quay + crane ] --containers--> [ quay + crane ] ~~> overseas',
+      '                 port A                            port B',
+    ].join('\n'),
+  },
 
   // ------------------------------------------------------------------- money
   {
@@ -190,5 +199,5 @@ export const HANDBOOK: readonly HandbookEntry[] = [
 
 /** Which chapter each entry belongs to, by index into HANDBOOK_CHAPTERS. */
 export const HANDBOOK_CHAPTER_OF: readonly number[] = [
-  0, 0, 0, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4,
+  0, 0, 0, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 3, 4, 4, 4, 4,
 ];

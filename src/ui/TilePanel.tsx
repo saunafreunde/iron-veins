@@ -11,6 +11,7 @@ import {
   SHIP_DEPOT_COST_CT,
   INDUSTRY_WARNING_MONTHS,
   COLD_STORE_COST_CT,
+  ECONOMY_CONTAINER_BOOM_FROM_YEAR,
   FREIGHT_TERMINAL_COST_CT,
   RAIL_DEPOT_COST_CT,
   RAIL_PLATFORM_COST_CT,
@@ -34,7 +35,12 @@ import {
 import { WAYPOINT_KIND_KEYS } from '../sim/map/waypoints';
 import { TERRAIN_NAME_KEYS } from '../sim/map/terrain';
 import { SCREEN_ARROWS } from './signalCycle';
-import { platformLength, type ModuleKind, type Station } from '../sim/station/types';
+import {
+  isContainerPort,
+  platformLength,
+  type ModuleKind,
+  type Station,
+} from '../sim/station/types';
 import { RAIL_TYPE_COST_CT, RailType } from '../sim/map/track';
 import { ConnectPanel } from './ConnectPanel';
 import { CouncilPanel } from './CouncilPanel';
@@ -375,6 +381,22 @@ export function TilePanel({ client }: { readonly client: SimClient }): ReactElem
               />{' '}
               {t('ui.station.transferNode')}
             </label>
+          )}
+          {/* The container revival of SPEC2 M21: a quay with a crane behind it
+              is a harbour container terminal. The sentence is shown only where
+              the century exists at all - without the economy rule there is no
+              overseas trade, and a port that promised one would be lying. The
+              PORT test is the simulation's own `isContainerPort`, so the panel
+              and the hook cannot disagree about what a container port is. */}
+          {economyCurve.active && isContainerPort(station.modules) && (
+            <p className="panel__hint">
+              {t(
+                year >= ECONOMY_CONTAINER_BOOM_FROM_YEAR
+                  ? 'ui.station.containerPort'
+                  : 'ui.station.containerPortWaiting',
+                { year: String(ECONOMY_CONTAINER_BOOM_FROM_YEAR) },
+              )}
+            </p>
           )}
           {/* The x-ray of SPEC2 M14: five terms, the dominant loss named,
               waiting per cargo, and the twelve-month history ring. */}

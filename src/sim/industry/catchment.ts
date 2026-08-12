@@ -1,7 +1,7 @@
 import { Cargo, CARGO_COUNT } from '../cargo/types';
 import { STATION_CATCHMENT_SCAN_RADIUS } from '../constants';
 import type { TileMap } from '../map/TileMap';
-import { inCatchment, type Station } from '../station/types';
+import { inCatchment, isContainerPort, type Station } from '../station/types';
 import { BuildingKind } from '../town/types';
 import type { World } from '../World';
 import { industrySpec, type Industry } from './types';
@@ -67,6 +67,40 @@ export const STATION_ALWAYS_ACCEPTED: readonly Cargo[] = [
  * 13.2 makes.
  */
 export const TOWN_CARGO: readonly Cargo[] = [Cargo.Goods, Cargo.Food, Cargo.Electronics];
+
+/**
+ * What crosses a harbour container terminal's quay wall in BOTH directions -
+ * the overseas meta-cargo of SPEC2 M21 (E-09).
+ *
+ * The third acceptance list, beside the two above, and the only one that is
+ * also a PRODUCTION list: `station/containers.ts` offers exactly this and
+ * `assignStationIndustries` accepts exactly this, so a container port is by
+ * construction the acceptor of what a container port makes. That is the D-118
+ * dead end closed at the definition rather than at the test - a cargo whose
+ * producer and consumer are two copies of one list cannot drift apart, and
+ * `tests/unit/deliveries.spec.ts` walks it in both directions to say so.
+ *
+ * Acceptance is deliberately NOT gated on the year the trade opens. The mask is
+ * derived and recomputed only when a station changes or a save is loaded, so a
+ * calendar term in it would be stale for as long as nobody touched the port -
+ * the same trap `commercialShare` documents one function down. A port that
+ * takes boxes in 1951 costs nothing, because in 1951 nothing makes one.
+ */
+export const PORT_OVERSEAS_CARGO: readonly Cargo[] = [Cargo.Containers];
+
+/**
+ * True for the meta-cargo that lives only between quay walls.
+ *
+ * It is what `deliverCargo` asks before it looks for an industry or a town: a
+ * delivered container has gone overseas and leaves the game there (D-065's rule
+ * carried to a cargo that has neither a stock nor a demand behind it).
+ */
+export function isOverseasCargo(cargo: number): boolean {
+  for (let i = 0; i < PORT_OVERSEAS_CARGO.length; i++) {
+    if (PORT_OVERSEAS_CARGO[i] === cargo) return true;
+  }
+  return false;
+}
 
 /**
  * Recompute the zone mix of SPEC2 M19 from the map.
@@ -152,6 +186,11 @@ export function assignStationIndustries(world: World, station: Station): void {
   }
   if (station.buildingsCovered > 0) {
     for (const cargo of TOWN_CARGO) accepted |= 1 << cargo;
+  }
+  // A berth with a crane behind it is a container terminal, and it takes back
+  // exactly what it hands out (SPEC2 M21 bundle 2).
+  if (isContainerPort(station.modules)) {
+    for (const cargo of PORT_OVERSEAS_CARGO) accepted |= 1 << cargo;
   }
   station.acceptedCargo = accepted;
 }

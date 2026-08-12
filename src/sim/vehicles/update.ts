@@ -58,6 +58,7 @@ import { serviceVehicle } from './lifecycle';
 import { recordStationCargo, StationHistoryField } from '../station/history';
 import { creditPassengerArrival } from '../station/returns';
 import { deliverToIndustry } from '../industry/production';
+import { isOverseasCargo } from '../industry/catchment';
 import { IndustryType } from '../industry/types';
 import { noteBuildingMaterial } from '../town/update';
 import { isOneWay, signalDirection, signalKind, SignalKind } from '../map/signals';
@@ -979,6 +980,14 @@ function deliverCargo(world: World, station: Station, cargo: Cargo, amount: numb
   // one event that says somebody is now HERE who was not before, which is
   // what a way home is owed against. Freight returns on its first line.
   creditPassengerArrival(station, cargo, amount);
+  // The overseas meta-cargo of SPEC2 M21: a container delivered to a harbour
+  // terminal has gone to sea, and there is nothing on this side of the quay
+  // wall for it to become. It is D-065's rule for a cargo that has neither an
+  // industry stock nor a town demand behind it - counted as delivered, then
+  // OUT of the world - and it returns before the two loops below so that no
+  // future recipe can quietly turn a box into an industry input and leak
+  // fourteen tonnes of nothing into the land economy.
+  if (isOverseasCargo(cargo)) return;
   let left = amount;
 
   for (const industryId of station.servedIndustries) {

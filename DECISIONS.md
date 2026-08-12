@@ -33,25 +33,25 @@ no entry below. A number may appear under several topics.
   D-061, D-073, D-080, D-081, D-082, D-083, D-157, D-173, D-184, D-185, D-186,
   D-232
 - **Stations & catchment:** D-049, D-080, D-095, D-150, D-159, D-178, D-179,
-  D-208, D-210, D-230, D-231
+  D-208, D-210, D-230, D-231, D-237
 - **Cargo, payment & routing:** D-036, D-037, D-065, D-067, D-075, D-077,
   D-078, D-118, D-142, D-151, D-176, D-178, D-187, D-207, D-211, D-213,
-  D-215, D-233
+  D-215, D-233, D-237
 - **Industry & production:** D-022, D-062, D-063, D-064, D-069, D-071, D-079,
   D-085, D-086, D-174, D-201, D-202, D-205, D-225, D-232
 - **Towns, council & ownership:** D-101, D-102, D-103, D-104, D-205, D-207,
   D-206, D-213, D-216, D-217, D-231, D-232, D-233, D-234, D-235
 - **Economy, finance & emissions:** D-008, D-090, D-091, D-092, D-105, D-154,
-  D-180, D-193, D-196, D-228, D-229, D-236
+  D-180, D-193, D-196, D-228, D-229, D-236, D-237
 - **Balancing & scenarios:** D-038, D-039, D-040, D-041, D-066, D-087, D-088,
   D-116, D-151, D-152, D-156, D-158, D-159, D-187, D-190, D-194, D-195,
   D-196, D-197, D-198, D-199, D-200, D-203, D-204, D-207, D-211, D-213,
   D-215, D-216, D-220, D-221, D-222, D-224, D-225, D-226, D-228, D-229,
-  D-232, D-233, D-234, D-235, D-236
+  D-232, D-233, D-234, D-235, D-236, D-237
 - **Vehicles & fleet:** D-043, D-044, D-045, D-068, D-076, D-089, D-093,
   D-096, D-142, D-143, D-145, D-146, D-155, D-157, D-171, D-174, D-181, D-185,
   D-201, D-207
-- **Water & air:** D-094, D-095, D-096, D-097, D-098, D-099
+- **Water & air:** D-094, D-095, D-096, D-097, D-098, D-099, D-237
 - **Competitors, AI & tenders:** D-107, D-108, D-109, D-115, D-116, D-121,
   D-122, D-147, D-152, D-153, D-154, D-155, D-156, D-158, D-216, D-218,
   D-219, D-220, D-221, D-222, D-223, D-224, D-225, D-226, D-228, D-229,
@@ -13552,3 +13552,195 @@ Trends ueber vier Seeds, die Regel-aus-Identitaet (jede Naht exakt 1, `costCt`
 exakt die Prae-M21-Formel, ein untergeschobenes Jahrhundert bewegt den Digest
 nicht), die vier Naehte, die Tabelle selbst und die Save-Kette (Rundlauf,
 Regel/Tabelle-Widerspruch, Band-Verletzung, fehlende Regel, Migration).
+
+### D-237 Der tote Frachttyp lebt: das Hafen-Terminal als Erzeuger UND Abnehmer, und ein Save-Bump, den dieser Bundle nicht braucht
+
+SPEC2 M21 Bundle 2, E-09. **Kein zweiter Z5-Bump: `SAVE_VERSION` bleibt 32.**
+Dieser Bundle legt kein Save-Feld an, also gibt es an der `v31_to_v32`-Migration
+nichts zu erweitern - und das ist ein Befund, keine Sparmassnahme (siehe unten).
+
+**Was gebaut wurde.** `Cargo.Containers` hatte seit M5 eine Rate, ein
+Tonnengewicht, eine Verfallskurve und acht Fahrzeuge - und **nichts auf der
+Karte hat je eine Kiste erzeugt**. Ein Hafen-Container-Terminal ist jetzt beides:
+Quelle und Senke einer **Uebersee-Metafracht**. Kisten kommen von jenseits der
+Karte an einem Hafen an Land und gehen an einem ANDEREN wieder in See; was der
+Spieler faehrt, ist die Strecke dazwischen.
+
+**Ein Terminal ist ein PAAR bestehender Module, kein vierzehnter `ModuleKind`.**
+`isContainerPort` (in `station/types.ts`, neben `isWaterModule` und
+`isSupportModule`) sagt: ein `Quay` UND ein `FreightTerminal` an derselben
+Station. Ein eigener Modultyp haette eine Save-Format-Nummer, ein
+Build-Kommando, einen Reject-Grund, eine Atlas-Zelle und einen vierzehnten
+Eintrag in jeder Modultabelle gekostet - fuer ein Gebaeude, das der Spieler dort
+schon hinstellen kann. Was die Paar-Regel stattdessen kauft: **der Handel kommt
+an den Haefen an, die seit M7 gebaut werden.** Ab 1970 schlaegt der Hafen mit dem
+Kran Container um, ohne dass irgendjemand etwas Neues lernen muss. Die Funktion
+ist die EINE Definition - die Akzeptanzmaske, der Tageshook und die Oberflaeche
+lesen sie, also koennen "was die Oberflaeche Containerhafen nennt" und "was
+Kisten umschlaegt" nicht auseinanderlaufen.
+
+**Die fuenfte Naht - und D-236 sagte "vier Naehte, und keine fuenfte".** Das
+wird hier ausdruecklich korrigiert statt still gebrochen:
+`economyContainerFactor` ist ein fuenfter Leser der Genesis-Kurve. Die
+Invariante, die D-236s Satz schuetzt, ist, dass **jeder Leser in
+`economy/curve.ts` lebt**, und die gilt unveraendert. Zwei Dinge sind an dieser
+Naht anders als an den vier davor, und beide sind der Grund, warum Container tot
+waren:
+
+* **Ihre Identitaet ist NULL, nicht Eins.** Die vier alten Naehte skalieren
+  etwas, das es auch ohne Jahrhundert gibt; diese hier entscheidet, ob es die
+  Groesse ueberhaupt gibt. Eine Welt ohne Kurve hat gar keinen
+  Uebersee-Handel - also exakt die Prae-M21-Welt, in der nie eine Kiste
+  entstand. Der Balance-Anker aus Fehlerkatalog 34 ("Konjunktur: aus") ist damit
+  **per Konstruktion** unberuehrt, nicht per Glueck.
+* **Sie ist hart auf `ECONOMY_CONTAINER_BOOM_FROM_YEAR` gegattert.** Die
+  Container-Zeile der Kurve traegt schon ab 1950 `ECONOMY_CONTAINER_BEFORE`
+  (0,35) - eine Kiste, die trotzdem gefahren WIRD, ist etwas wert -, aber
+  **erzeugen** darf sie niemand. E-09 sagt "boomt ab ~1970"; ein Hafen, der 1951
+  still Kisten umschlaegt, machte diesen Satz zur Dekoration.
+
+**Die fuenf Regeln, ausgeschrieben statt entdeckbar** (`station/containers.ts`
+traegt sie im Kopfkommentar, `tests/unit/containerPort.spec.ts` haelt jede):
+
+1. **Erzeugung.** Nur im Tageshook, nur an einem Containerhafen, nur ab 1970,
+   nur mit Weltregel `economy`. Keine Industrie und keine Stadt erzeugt sie.
+2. **Ziel.** Ein Containerhafen ist das EINZIGE auf der Karte, das einen
+   Container annimmt (`PORT_OVERSEAS_CARGO`, in `assignStationIndustries`
+   gewaehrt), also kann das gewoehnliche M5-Routing eine Kiste nur zu einem
+   anderen Hafen schicken. Es gibt kein container-eigenes Routing.
+3. **Verweigerung.** Ein Hafen ohne erreichbaren Partner erzeugt **gar nichts**
+   (`depositRoutedAtStation`, das `depositReturns`-Muster aus M19). Kohle ohne
+   Linie ist eine echte Beschwerde und wartet, weil die Kohle auch ohne Linie
+   existiert; ein Container ohne Gegenhafen ist ein Schiff, das nie ablegt. Ihn
+   zu erfinden hiesse, jedem Hafen der Karte ab 1970 einen
+   Ueberfuellungs-Malus zu schenken.
+4. **Ueberlauf.** Das Angebot laeuft durch dasselbe `placeDeposit` wie jede
+   andere Produktion: Kisten zaehlen gegen `STATION_CARGO_CAPACITY` mit allem
+   anderen, werden an der vollen Tuer abgewiesen, und diese Abweisung wird als
+   `overflowUnits` und als `Expired` im Ring gebucht. Kein reservierter Platz
+   fuer Container.
+5. **Zustellung und Erhaltung (D-065).** Ein zugestellter Container ist nach
+   Uebersee gegangen: `deliverCargo` bucht ihn und kehrt zurueck - **vor** der
+   Industrie- und der Stadtschleife, damit kein kuenftiges Rezept eine Kiste
+   still in einen Industrie-Input verwandelt. Er landet nie in einem Lager, nie
+   an einem Stadtzaehler und nie - die Regel, um die es D-065 wirklich geht - in
+   `station.waiting`.
+
+**Erhaltung ist gemessen, nicht behauptet.** Der Test summiert alle vier Toepfe
+(wartend + an Bord + zugestellt + verfallen) **tickweise** ueber einen Spielmonat
+mit zwei Haefen und einem Schiff: auf jedem Tick, der kein Tagesgrenz-Tick ist,
+ist die Summe **exakt** konstant (Toleranz 1e-9 auf Float-Rundung) - Laden,
+Loeschen, Zustellen, Umsetzen und Verfallen VERSCHIEBEN nur zwischen den
+Toepfen -, und auf Tagesgrenzen darf sie steigen und nie fallen. Eine Kiste, die
+aus der Welt faellt, ist genau ein negatives Delta auf einem Tick, der nichts
+erzeugt. Bewusst innerhalb EINES Spielmonats: der Historien-Ring rundet beim
+Monatswechsel auf Int32, und eine Erhaltungsaussage, die eine Toleranz braucht,
+um die eigene Buchhaltung zu ueberleben, ist keine.
+
+**Der D-118-Kettentest kennt den Abnehmer.** Der Gang durch die Kettentabelle
+fragt jetzt drei Akzeptanztabellen statt zwei (`hasAcceptor`: Industrie-Rezept,
+Stadt-Nachfrage, Kaimauer) - eine Industrie, die eines Tages Container
+ausstoesst, findet ihren Abnehmer statt durchzufallen. Dazu ein dritter Arm, der
+Container als **geschlossene** Metafracht festnagelt: kein Industrie-Output und
+kein `TOWN_OUTPUTS` erzeugt sie, und weder ein Industrie-Input noch `TOWN_CARGO`
+noch `STATION_ALWAYS_ACCEPTED` nimmt sie - das Terminal ist der einzige Erzeuger
+und der einzige Abnehmer. **Erzeuger- und Akzeptanzliste sind physisch DIESELBE
+Konstante** (`PORT_OVERSEAS_CARGO` in `industry/catchment.ts`, neben ihren zwei
+Geschwistern), also kann die Sackgasse nicht durch Drift entstehen.
+
+**Akzeptanz ist absichtlich NICHT auf das Jahr gegattert.** `acceptedCargo` ist
+derived und wird nur neu berechnet, wenn sich eine Station aendert oder ein Save
+geladen wird - ein Kalenderterm darin waere so lange schal, wie niemand den
+Hafen anfasst (dieselbe Falle, die `refreshCommercialShare` eine Funktion weiter
+dokumentiert). Ein Hafen, der 1951 Kisten annaehme, kostet nichts, weil 1951
+keine entsteht.
+
+**Warum kein Save-Feld - und warum das geprueft und nicht angenommen ist.**
+Alles, woraus der Handel besteht, steht schon im Save: die Module, die Kurve
+(D-236) und die wartende Fracht. Z4-Historie gibt es keine - das Angebot ist
+eine Funktion des HEUTIGEN Ratings und des HEUTIGEN Jahres, der Hook ist
+zwischen zwei Tagen zustandslos. Damit bewegt sich kein gehashtes Byte, und das
+ist gemessen: kanonischer Pin `5f4c022bef5b94d1` **unveraendert**, Soak
+`9aac5ef0864d5c69` **unveraendert** bei 35 Kommandos und 16 byte-identischen
+Checkpoints, Korpus-Manifest unberuehrt, `SCENARIO_WORLD_CLAIMS` unveraendert
+(alle acht Szenarien tragen `economy: false`, und keines hat einen Kai mit Kran).
+**Alle Baender aufs Euro identisch mit D-236**: Szenario 1 Payback Jahr 3
+(485.735 / 493.316 / 501.669 / 509.938 / 518.793 / 521.260 EUR), Szenario 2
+Investition 249.980 EUR und Payback Jahr 6, Szenario 3 **159.516 EUR/Jahr**,
+Szenario 4 Bankrott Jahr 9 bei 304.400 EUR investiert, Szenario 6 Schliessung
+Monat 25, Netzdesign **3,75** (Alignment 2,01x, Kapazitaet 1,87x), Takt -8,3 %
+bei Varianz-Verhaeltnis **0,57**, Harter Winter **-4,36 %** ueber sechs Seeds,
+Punktzahl **5.889** (36/26/24/13, Dogleg 7,8 % gegen 19,8 %), Szenario 5
+**1.022.084 / 1.802.165 / 2.153.604 EUR**, aiGame-Sweep 12 Gegner ueber 4 Seeds,
+0 abgewickelt, 4 im Feld, 3 mit Fahrzeug, Gesamtwert 7.293.303 EUR.
+
+**Die eine neue Konstante und wer sie besitzt.**
+`PORT_CONTAINER_TEU_PER_MONTH = 30` ist die ANGEBOTS-Seite des Handels, den
+D-236 bepreist hat, und sie ist gegen den eigenen Referenz-Erzeuger des Spiels
+gewaehlt statt erfunden: bei 14 t je Box sind dreissig TEU **420 t im Monat**
+gegen die 300 t einer Kohlemine, und zu den beiden Grundraten **36.000 EUR**
+Brutto-Angebot ueber `PAYMENT_DISTANCE_TILES` gegen die 25.200 der Mine. Ein
+Hafen ist eine groessere Quelle als eine Grube und keine andere
+Groessenordnung - das ist es, was den neuen Handel davon abhaelt, jede andere
+Linie sinnlos zu machen. Sie ist **je HAFEN und nicht je Kai oder je Kran**: wer
+sechs Liegeplaetze anlegt, wird dafuer bereits ueber den Ausstattungsterm des
+Ratings und den Einzugsradius bezahlt, und dieselben Module zweimal zu bezahlen
+machte den Box-Handel zum Spam-Ziel statt zur Linie. Das Rating multipliziert
+das Angebot - die Regel, die CLAUDE.md fuer eine Stadt und D-063 fuer eine
+Industrie festhaelt, auf einen Hafen angewandt: ein Liegeplatz, an dem niemand
+anlegt, ist einer, den die Reederei nicht mehr anfaehrt.
+
+**Kein Abschnitt 19.4 besitzt diese Zahl, also besitzt sie das Band im Test.**
+Gemessen wird ein volles Spieljahr auf zwei Haefen an einer elf Kacheln breiten
+Meerenge mit einem Containerschiff: **186 TEU zugestellt, 17.676 EUR** bis 1971,
+gegen ein Angebots-Dach von 2 x 12 x 30 = 720 TEU. Das Band ist
+`2 x PORT_CONTAINER_TEU_PER_MONTH < TEU < 2 x 12 x PORT_CONTAINER_TEU_PER_MONTH`
+und es bandiert die VERSORGUNG. **Es ist ausdruecklich keine
+Rentabilitaetsmessung** - ein 320-TEU-Schiff auf elf Kacheln ist keine Linie, die
+irgendwer bauen wuerde, und die gedruckte Zahl sagt das. Was die Strecke wert
+ist, fuer die es gedacht ist, ist die Rechnung ueber 100 Kacheln nach 2000: rund
+864 TEU im Jahr ueber beide Haefen, brutto etwa 1,04 Mio. EUR vor dem
+Zeitfaktor, der bei einem Schiff auf dieser Strecke tief in den Verfall laeuft -
+eine Linie, die sich in wenigen Jahren traegt, und keine, die alles andere
+ueberholt. Ein eigenes 19.4-Szenario dafuer ist nicht bestellt und wird nicht
+erfunden.
+
+**Bundle-Buchung.** 965.937 -> **968.190 B, +2.253 B**, gemessen als drei Builds
+desselben Baums (Arbeitsbaum; Arbeitsbaum mit auf HEAD zurueckgesetzten
+i18n-Katalogen; `git stash -u` auf HEAD). Aufteilung: **+1.422 B sind die vier
+i18n-Schluessel in zwei Sprachen** (zwei Stationssaetze und der
+Handbuch-Eintrag), die restlichen **+831 B** sind `station/containers.ts`, die
+Akzeptanzliste, `isContainerPort`, die Kurven-Naht und die Panel-Zeile. Budget
+**972.000 unveraendert**, Restluft 3.810 B. Keine neue statische
+`src/sim`-Importkette in die Oberflaeche: `TilePanel` importierte
+`station/types` und `constants` bereits.
+
+**Tick.** Ein zusaetzlicher Tageshook, der in jeder Welt ohne Jahrhundert auf
+seiner ersten Zeile zurueckkehrt - also in jeder Welt, an der ein Pin dieses
+Repositoriums je gemessen wurde. Mit Kurve ist es ein `isContainerPort`-Scan je
+Station und Spieltag (indizierte Schleife, kein Iterator, Gesetz 7).
+`npm run test:perf` auf dem Referenz-Fixture: Tick **p50 1,532 / p99 2,823 ms**
+gegen die M10-Grundlinie 1,45 / 3,26 - der p99 DARUNTER. Die Ledger-Zeile
+(+0,05 ms fuer M21) ist damit eingehalten; die Zahl wird als "im Rauschen dieser
+Maschine" berichtet und nicht als Abnahmezahl beansprucht (D-167/D-215-Haltung).
+
+**Oberflaeche.** Die Stationszeile im Kachel-Panel nennt einen Containerhafen
+und das Jahr, ab dem er umschlaegt - **nur wenn die Welt ueberhaupt ein
+Jahrhundert hat**, denn ohne die Regel gibt es den Handel nicht und ein Hafen,
+der ihn verspraeche, luege. Sie fragt die Sim-eigene `isContainerPort`, nicht
+eine Kopie der Regel. Dazu ein Handbuch-Eintrag im Frachtkapitel mit dem
+ASCII-Diagramm der beiden Kaimauern (`HANDBOOK_CHAPTER_OF` mitgewachsen, was
+`settings.spec.ts` erzwingt).
+
+**Was M21 noch schuldet**: die Liefervertraege mit `Account.ContractPenalties`,
+das Subventions-Board, die Foerdergelder fuer emissionsarme Kaeufe und die
+Industrie-Events aus `streams.events`.
+
+**Tests:** `tests/unit/containerPort.spec.ts`, 16 Faelle in sechs Gruppen - was
+ein Containerhafen IST (Paar-Regel, Akzeptanz, Jahres-Ungattertheit), nichts vor
+1970 (kein Jahrhundert, jedes Jahr davor, ein voller Monat durch `World.step`),
+die Verweigerung ohne Partner (und ihr Anspringen, sobald einer existiert), das
+Angebot selbst (Formel, Tageshook, Ueberlauf an der vollen Tuer), der Fluss
+zwischen zwei Haefen mit der Preisprobe gegen `deliveryRevenueCt` und dem
+gemessenen Jahr, sowie Erhaltung und D-065. Dazu der dritte Arm in
+`tests/unit/deliveries.spec.ts`.

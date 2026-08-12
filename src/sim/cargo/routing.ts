@@ -440,6 +440,34 @@ export function depositAtStation(
 }
 
 /**
+ * Deposit only if the network offers somewhere for it to go; produce NOTHING
+ * otherwise.
+ *
+ * The `depositReturns` posture (SPEC2 M19) for a cargo that is created rather
+ * than harvested: a mine's coal with nowhere to go is a real grievance and
+ * waits at the platform until it is written off, because the coal exists
+ * whether or not a line does. A container that no other port can be reached
+ * from is a ship that never sailed - inventing it would rot at the quay,
+ * charge the port's own rating for the overflow and make "the trade opened in
+ * 1970" mean "every harbour on the map now loses rating".
+ *
+ * The refusal is total: nothing is placed, nothing is counted as overflow and
+ * nothing is written off, so a port with no partner is exactly a port with no
+ * container business.
+ */
+export function depositRoutedAtStation(
+  world: World,
+  station: Station,
+  cargo: Cargo,
+  amount: number,
+): number {
+  if (amount <= 0) return 0;
+  const found = chooseDestinations(world, station, cargo);
+  if (found === 0) return 0;
+  return placeDeposit(world, station, cargo, amount, found);
+}
+
+/**
  * Deposit BOTH passenger classes on ONE destination search (SPEC2 M19, D-207).
  *
  * The single search is provable rather than convenient: `chooseDestinations`

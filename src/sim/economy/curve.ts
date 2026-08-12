@@ -181,6 +181,35 @@ export function economyEnergyFactor(curve: EconomyCurve, year: number): number {
 }
 
 /**
+ * The overseas seam: how much box traffic a harbour container terminal is
+ * offered this year, relative to `PORT_CONTAINER_TEU_PER_MONTH`.
+ *
+ * The FIFTH reader, and the first that does not scale a quantity the game
+ * already had - it decides whether a quantity exists at all. D-236 said "four
+ * seams and no fifth" about the bundle that drew the century; the invariant
+ * that sentence protects is that every reader of the curve lives in THIS file,
+ * and it still does. Two things are deliberately different from the four
+ * above, and both are the reason containers were a dead cargo type:
+ *
+ *  - **Its identity is ZERO, not one.** The other four multiply something that
+ *    exists without a century; this one is a source. A world with no curve has
+ *    no overseas trade at all, which is exactly the pre-M21 world in which
+ *    nothing ever produced a container - so the balance anchor of Fehlerkatalog
+ *    34 ("Konjunktur: aus") is untouched by construction rather than by luck.
+ *  - **It is hard-gated at {@link ECONOMY_CONTAINER_BOOM_FROM_YEAR}.** The
+ *    curve's own container row is worth `ECONOMY_CONTAINER_BEFORE` from 1950
+ *    on, because a box that IS carried before the trade exists is still worth
+ *    something to carry; but nothing may PRODUCE one. E-09 says the trade
+ *    booms "ab ~1970", and a port quietly handling boxes in 1951 would make
+ *    that sentence decoration.
+ */
+export function economyContainerFactor(curve: EconomyCurve, year: number): number {
+  if (curve.rows.length === 0) return 0;
+  if (year < ECONOMY_CONTAINER_BOOM_FROM_YEAR) return 0;
+  return economyRowFactor(curve, EconomyGroup.Containers, year);
+}
+
+/**
  * One row as a series of `[year, factor]` for a chart, oldest first.
  *
  * Pure, allocating, and never called from the simulation: this is what the

@@ -2936,7 +2936,70 @@ bundle extends `v31_to_v32` in place.
   chain. The old budget had 63 bytes of headroom, which is a coincidence and
   not headroom, so it is raised to 972,000 with the measurement beside it.
 
-**Still owed by M21**: the container revival at the harbour terminal (the
-curve's boom from 1970 exists, the consumer does not), the delivery contracts
-with `Account.ContractPenalties`, the subsidy board, the low-emission purchase
-grants and the industry events from `streams.events`.
+**Still owed by M21** (after bundle 2 below): the delivery contracts with
+`Account.ContractPenalties`, the subsidy board, the low-emission purchase grants
+and the industry events from `streams.events`.
+
+## M21 bundle 2 - the dead cargo type lives (D-237)
+
+`Cargo.Containers` had a rate, a tonnage, a decay curve and eight vehicles for
+six milestones, and **nothing on the map ever made one**. A harbour container
+terminal is now both ends of an OVERSEAS meta-cargo: boxes come ashore from
+beyond the map at one port and put back out to sea at another, and what the
+player runs is the leg between them. **No second save bump - `SAVE_VERSION`
+stays 32 and there was nothing to extend**, which is a finding rather than a
+saving: everything the trade is made of is already saved.
+
+- **A terminal is a PAIR of modules, not a fourteenth `ModuleKind`** (D-237).
+  `isContainerPort` = a `Quay` AND a `FreightTerminal` at one station. A new
+  kind would have cost a save-format number, a build command, a reject reason,
+  an atlas cell and a fourteenth row in every module table, for a building the
+  player can already put there - and the pair rule makes the trade arrive at
+  the ports people have been building since M7. The function is THE definition:
+  the acceptance mask, the daily hook and the panel all read it.
+- **The century's FIFTH seam, and its identity is ZERO** - D-236 said "four
+  seams and no fifth", and the invariant that sentence protects (every reader
+  lives in `economy/curve.ts`) is untouched. The other four scale something that
+  exists without a century; `economyContainerFactor` decides whether the
+  quantity exists at all, so a world with the `economy` rule off has no overseas
+  trade - which IS the pre-M21 world where nothing ever made a box.
+  Fehlerkatalog 34's off-anchor holds by construction, not by luck. It is hard
+  gated at `ECONOMY_CONTAINER_BOOM_FROM_YEAR`: the curve's container row is
+  worth 0.35 from 1950 (a box that IS carried is worth carrying) but nobody may
+  MAKE one before 1970.
+- **Five rules, written down rather than discoverable** (the head of
+  `station/containers.ts`): creation only in the daily hook at a container port
+  from 1970 with the rule on; destination always another port, because nothing
+  else accepts one; **refusal** - a port with no reachable partner produces
+  nothing at all (`depositRoutedAtStation`, the `depositReturns` posture), since
+  inventing a box would hand every harbour on the map an overflow malus;
+  overflow through the ordinary `placeDeposit`, so boxes count against
+  `STATION_CARGO_CAPACITY` with everything else; and delivery **overseas** -
+  `deliverCargo` books it and returns BEFORE the industry and town loops, so it
+  never reaches a stock, a demand counter or `station.waiting` (D-065).
+- **Conservation is measured tick by tick.** Waiting + aboard + delivered +
+  expired is EXACTLY constant on every tick that is not a day boundary (loading,
+  unloading, delivering, transferring and expiring only MOVE boxes between the
+  four buckets) and may rise but never fall on day boundaries. Deliberately
+  inside one game month: the history ring rounds to Int32 when a month closes,
+  and a conservation claim that needs a tolerance to survive its own bookkeeping
+  is not one.
+- **The D-118 walk knows the acceptor.** It asks three acceptance tables now -
+  industry recipe, town demand, quay wall - and a third arm pins containers as a
+  CLOSED meta-cargo: no industry output and no `TOWN_OUTPUTS` makes one, and no
+  industry input, no `TOWN_CARGO` and no `STATION_ALWAYS_ACCEPTED` takes one.
+  Producer list and acceptance list are physically the same constant
+  (`PORT_OVERSEAS_CARGO`), so the dead end cannot come back through drift.
+- **`PORT_CONTAINER_TEU_PER_MONTH` = 30, per PORT and not per berth**, chosen
+  against the game's own reference producer: 420 t a month against a coal mine's
+  300, and 36,000 EUR of gross offer over 100 tiles against its 25,200. The
+  rating multiplies it (the town rule and D-063 applied to a harbour). No 19.4
+  scenario owns it, so the test's band does: a measured game year on two ports
+  across an eleven-tile strait delivers **186 TEU / 17,676 EUR**, and the entry
+  says plainly that this is a SUPPLY band and not a profitability measurement.
+- **Nothing moved**: canonical pin `5f4c022bef5b94d1`, soak `9aac5ef0864d5c69`
+  at 35 commands and 16 byte-identical checkpoints, corpus manifest untouched,
+  `SCENARIO_WORLD_CLAIMS` unchanged, every band identical to D-236 to the euro.
+  Tick p50 1.532 / p99 2.823 ms against the M10 baseline 1.45 / 3.26 - the p99
+  UNDER it. Main bundle 965,937 -> **968,190 B (+2,253)**, of which +1,422 B are
+  the four i18n keys in two languages; budget 972,000 unchanged.

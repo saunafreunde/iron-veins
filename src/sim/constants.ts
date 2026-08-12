@@ -1570,6 +1570,31 @@ export const ECONOMY_CONTAINER_AFTER = 1.6;
  */
 export const ECONOMY_COST_SENSITIVITY = 0.5;
 
+/**
+ * What a harbour container terminal turns over in a month, at a station rating
+ * of 100 and a curve factor of 1. [TEU/month]
+ *
+ * The SUPPLY side of the trade the curve above prices (SPEC2 M21 bundle 2). It
+ * is per PORT and not per quay or per crane: how many boxes cross a quay wall
+ * is decided by the overseas trade and by how well the port is served, and a
+ * player who moors six berths is already paid for them through the rating's
+ * equipment term and the catchment radius - charging the same modules twice
+ * would make the box trade a spam target rather than a line to run.
+ *
+ * Thirty is chosen against the game's own reference producer rather than
+ * invented: at `CARGO_TONNES_PER_UNIT` = 14 t a box, thirty TEU is 420 t a
+ * month against a coal mine's 300 (`INDUSTRY_BASE_OUTPUT_PER_MONTH[0]`), and
+ * at the two base rates it is 36,000 EUR of gross offer over
+ * `PAYMENT_DISTANCE_TILES` against the mine's 25,200. A harbour is a bigger
+ * source than a pit and not a different order of magnitude - which is what
+ * keeps the century's new trade from making every other line pointless.
+ *
+ * Nothing in section 19.4 owns this number yet; `tests/unit/containerPort.spec.ts`
+ * measures a two-port year and bands it, and that band is what owns it until a
+ * scenario does.
+ */
+export const PORT_CONTAINER_TEU_PER_MONTH = 30;
+
 // ----------------------------------------------------------------- stations
 
 /** Catchment radius of a bare station, before any modules. [tiles] */
