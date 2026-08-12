@@ -13,7 +13,7 @@ no entry below. A number may appear under several topics.
 - **Determinism, RNG & hashing:** D-001, D-002, D-003, D-004, D-009, D-010,
   D-024, D-093, D-106, D-128, D-137, D-142, D-145, D-146, D-149, D-153, D-178,
   D-181, D-184, D-185, D-188, D-189, D-190, D-191, D-193, D-194, D-195,
-  D-196, D-200, D-201, D-202, D-204, D-232, D-233
+  D-196, D-200, D-201, D-202, D-204, D-232, D-233, D-236
 - **Commands, snapshot & worker boundary:** D-004, D-005, D-006, D-011, D-032,
   D-100, D-111, D-145, D-146, D-148, D-162, D-174, D-176, D-179, D-187, D-189,
   D-192, D-193, D-196, D-200, D-202, D-218
@@ -26,7 +26,7 @@ no entry below. A number may appear under several topics.
 - **Save format, migrations & replays:** D-007, D-025, D-026, D-027, D-048,
   D-111, D-130, D-131, D-134, D-142, D-144, D-145, D-146, D-147, D-153, D-178,
   D-181, D-184, D-185, D-188, D-189, D-190, D-191, D-192, D-193, D-194,
-  D-197, D-198, D-200, D-207, D-213, D-231, D-232, D-233
+  D-197, D-198, D-200, D-207, D-213, D-231, D-232, D-233, D-236
 - **Rail & track:** D-042, D-043, D-044, D-045, D-046, D-047, D-053, D-141,
   D-153, D-157, D-184, D-230
 - **Signals & reservations:** D-054, D-055, D-056, D-057, D-058, D-059, D-060,
@@ -42,12 +42,12 @@ no entry below. A number may appear under several topics.
 - **Towns, council & ownership:** D-101, D-102, D-103, D-104, D-205, D-207,
   D-206, D-213, D-216, D-217, D-231, D-232, D-233, D-234, D-235
 - **Economy, finance & emissions:** D-008, D-090, D-091, D-092, D-105, D-154,
-  D-180, D-193, D-196, D-228, D-229
+  D-180, D-193, D-196, D-228, D-229, D-236
 - **Balancing & scenarios:** D-038, D-039, D-040, D-041, D-066, D-087, D-088,
   D-116, D-151, D-152, D-156, D-158, D-159, D-187, D-190, D-194, D-195,
   D-196, D-197, D-198, D-199, D-200, D-203, D-204, D-207, D-211, D-213,
   D-215, D-216, D-220, D-221, D-222, D-224, D-225, D-226, D-228, D-229,
-  D-232, D-233, D-234, D-235
+  D-232, D-233, D-234, D-235, D-236
 - **Vehicles & fleet:** D-043, D-044, D-045, D-068, D-076, D-089, D-093,
   D-096, D-142, D-143, D-145, D-146, D-155, D-157, D-171, D-174, D-181, D-185,
   D-201, D-207
@@ -77,7 +77,7 @@ no entry below. A number may appear under several topics.
   D-195, D-196, D-197, D-198, D-199, D-200, D-201, D-202, D-203, D-204,
   D-205, D-207, D-206, D-208, D-209, D-210, D-212, D-213, D-215, D-216,
   D-217, D-219, D-220, D-221, D-222, D-228, D-229, D-230, D-231, D-233,
-  D-234, D-235
+  D-234, D-235, D-236
 - **Process & specification:** D-070, D-123, D-129, D-133, D-138, D-140,
   D-185, D-191, D-197, D-198, D-199, D-203, D-204, D-205, D-206, D-215,
   D-222, D-225, D-226, D-227, D-228, D-229, D-235
@@ -13441,3 +13441,114 @@ this bundle**: it touches no hot path, and the acceptance numbers of the
 milestone are D-234's three runs. `npm run format:check` stays red on the files
 D-227 names; the files this bundle touched were formatted before they were
 committed.
+
+### D-236 Das Konjunktur-Jahrhundert: einmal bei der Genese gewuerfelt, viermal gelesen - und ein Save-Bump, der keinen einzigen Hash bewegt
+
+SPEC2 M21 Bundle 1, E-09. **Der EINE Z5-Bump des Meilensteins: SAVE_VERSION 31 -> 32.**
+
+**Was gebaut wurde.** Eine Jahrhundert-Kurve pro Frachtart-Gruppe, bei der
+Weltgenese vollstaendig aus `streams.economy` gezogen, gespeichert und gehasht;
+die Monats-Hooks LESEN sie nur. Sieben Zeilen a 101 Jahre = **707 Ints** in
+Promille (E-09s "einige hundert Ints"): fuenf Frachtgruppen (Personen & Post,
+Kohle, Rohstoffe, Fertigwaren, Container), die weltweite Konjunktur und der
+Energiepreis. Vier Naehte, und keine fuenfte:
+
+| Naht | Wo | Was |
+| --- | --- | --- |
+| Tarif | `deliveryRevenueCt(input.rateFactor)` | Gruppen-Zeile des Jahres |
+| `costCt` | `World.costCt` -> `economyCostCt` | Konjunktur, gedaempft auf 0,5 |
+| Industrie | `industryBaseOutput(..., cycle)` | Konjunktur, multipliziert IN den 7.3-Sinus |
+| Energie | `bookMonthlyEnergy` | Energiepreis-Zeile des Jahres |
+
+Kohle sinkt nach 2000 und Container boomen ab 1970 als **strukturelle Trends,
+nicht als Wuerfelwurf**: eine Kurve, in der Kohle vielleicht nicht sinkt, macht
+den Abnahme-Satz des Meilensteins zum Muenzwurf. Gezogen wird alles darum herum
+- drei Konjunkturwellen mit gezogenen Phasen, eine eigene Welle je Gruppe, ein
+Energieschock je Zwanzig-Jahres-Aera an gezogenem Jahr und gezogener Groesse,
+plus +-4 % Jahres-Jitter. Gemessen ueber vier Seeds: Kohle **1,00 -> 0,69**
+(letztes Jahrzehnt 0,46), Container **0,34 -> 1,63**, Konjunktur 0,75-1,26,
+Energie 0,96-1,65.
+
+**Warum die Kurve gespeichert wird, obwohl sie aus dem Seed folgt.** Weil sie
+GEZOGEN ist. Eine beim Laden neu erzeugte Kurve waere eine zweite Stelle, an der
+das Jahrhundert entschieden wird, und an dem Tag, an dem der Generator sich
+bewegt, wuerde jeder existierende Spielstand still ein anderes Jahrhundert
+spielen. `World.born` ist die EINE Tuer, die zieht (`create` und `fromGenerated`
+gehen durch sie), `fromData` uebernimmt, was die Datei traegt, und zieht nie -
+instrumentiert, nicht behauptet: `tests/unit/economyCurve.spec.ts` spioniert
+`World.streamFor` und zaehlt ueber Genese + 13 Monats-Hooks + 1 Jahres-Hook
+genau **einen** Aufruf mit dem `economy`-Salt, ueber ein Laden **null**.
+
+**Die eine begruendete Abweichung: der Hash ist BEDINGT.** Die drei Weltregeln
+ueber ihr (`occupancyPenalty`, `weather`, `elections`) hashen ihren Aus-Wert
+mit, und das hat jedes Pin dieses Spiels je einmal bewegt. Hier ist der
+Aus-Zustand kein WERT, sondern eine ABWESENHEIT: eine Welt ohne die Regel hat
+gar keine Kurve, jeder Leser in `economy/curve.ts` gibt auf seiner ersten Zeile
+exakt 1 zurueck, und `x * 1 === x` ist in IEEE-754 exakt - sie ist also nicht
+aehnlich einer Prae-M21-Welt, sie ist arithmetisch dieselbe. Also hasht
+`hashWorld` fuer sie nichts, und die Injektivitaet, die Z2 wirklich verlangt,
+bleibt unberuehrt: die einzigen Welten, die wie eine Prae-M21-Welt
+fingerabdrucken, sind Welten mit ausgeschalteter Regel. Der Parser haelt das
+Paar zusammen - Regel aus => Tabelle leer, Regel an => 707 Eintraege im Band -,
+sodass es keine Welt gibt, die beides gleichzeitig behauptet. Die Kurve steht
+ausserdem nur im VOLLEN Digest, nicht im Live-Digest: sie ist nach der Genese
+konstant, und 707 Woerter pro Spieltag kauften der F3-Anzeige nichts, was sie
+sich je aendern sehen koennte (D-178s Argument, ein Instrument weiter).
+
+**Was das gekostet hat: nichts, und das ist gemessen.** Der kanonische Pin
+`5f4c022bef5b94d1` ist unveraendert (nur der `saveVersion`-Stempel 31 -> 32
+wurde nach D-137-Protokoll neu geschrieben). Der Soak-Hash `9aac5ef0864d5c69`
+ist unveraendert, **alle 16 Checkpoints byte-identisch**, 35 Kommandos. Das
+Korpus-Manifest ist rein ADDITIV: alle zehn Alt-Hashes stehen, `v32-played`
+dekodiert auf `63ea4f0ca2506741` - denselben Hash wie `v31-played`.
+`SCENARIO_WORLD_CLAIMS` unveraendert (alle acht Szenarien tragen
+`economy: false`), die Briefing-Waechter unberuehrt. **Alle Baender auf den Euro
+identisch mit D-235**: Szenario 1 Payback Jahr 3 (485.735 / 493.316 / 501.669 /
+509.938 / 518.793 / 521.260 EUR), Szenario 2 Investition 249.980 EUR und
+Payback Jahr 6, Szenario 3 **159.516 EUR/Jahr**, Szenario 4 Bankrott Jahr 9,
+Szenario 6 Schliessung Monat 25, Netzdesign **3,75** (Alignment 2,01x,
+Kapazitaet 1,87x), Takt -8,3 % bei Varianz-Verhaeltnis **0,57** (22,9 -> 27,4
+Tage), Harter Winter **-4,36 %** ueber sechs Seeds, Punktzahl **5.889**
+(36/26/24/13, Dogleg-Kontrolle 7,8 % gegen 19,8 %), Szenario 5 **1.022.084 /
+1.802.165 / 2.153.604 EUR**, aiGame-Sweep 12 Gegner ueber 4 Seeds, 0
+abgewickelt, 4 im Feld, 3 mit Fahrzeug, Gesamtwert 7.293.303 EUR.
+
+**Vorschau und Rechnung gehen durch DIESELBE Funktion.** `economyCostCt` ist
+die Formel, die `World.costCt` bucht, und die vier Bau-Vorschauen der
+Oberflaeche (`connect.ts`, `MapCanvas`, `TilePanel`, `FleetPanel`) rufen sie
+jetzt statt `inflatedCostCt` - zwei Formeln, die heute uebereinstimmen, sind
+genau, wie Vorschau und Rechnung ab Spieljahr zwei auseinanderlaufen (D-092).
+Die Kurve reist dafuer im `ready`-Signal neben der Karte: ein
+Genesis-Konstantes in einem 20-Hz-Stride waere das Stride-Wachstum, das
+Fehlerkatalog 37 verbietet, und die Ledger-Zeile bucht M21 auf null
+Layout-Aenderung.
+
+**Die Oberflaeche kann die Kurve zeigen** (E-09s "inspizierbar"): sieben Linien
+ueber das ganze Jahrhundert im Statistik-Zentrum, Marke auf dem gespielten
+Jahr, darunter jede Zeile mit ihrem heutigen Wert. Sie liest `economySeries`
+aus demselben Modul, aus dem der Tarif multipliziert wird - eine Tafel mit
+eigener Arithmetik waere eine zweite Meinung darueber, was 1997 wert war.
+
+**Bundle-Buchung** (Fehlerkatalog 40 in anderer Waehrung): 959.545 ->
+**965.937 B, +6.392 B**, gemessen als zwei Builds desselben Baums (Worktree am
+Eltern-Commit gegen den Arbeitsbaum). Aufgeteilt durch Kopieren NUR der beiden
+Kataloge in den Baseline-Worktree: **+1.505 B sind die elf i18n-Schluessel in
+zwei Sprachen**, die restlichen **+4.887 B sind Oberflaeche und
+`economy/curve.ts` darunter**. Keine neue statische `src/sim`-Importkette, die
+eine Welt dekodiert, serialisiert oder schrittet. Das Budget stand bei 966.000
+- **63 Byte Luft, was keine Luft ist, sondern ein Zufall** -, also ist es mit
+der Messung daneben auf 972.000 gehoben.
+
+**Was dieses Bundle NICHT liefert** und was M21 noch schuldet: die
+Container-Wiederbelebung am Hafen-Terminal (der Kurven-Boom ab 1970 existiert,
+der Abnehmer noch nicht), die Liefervertraege mit `Account.ContractPenalties`,
+das Subventions-Board, die Foerdergelder fuer emissionsarme Kaeufe und die
+Industrie-Events aus `streams.events`. Alle fuenf erweitern die
+`v31_to_v32`-Migration IN PLACE (Z5) und legen keine neue Nummer an.
+
+**Tests:** `tests/unit/economyCurve.spec.ts`, 29 Faelle in sechs Gruppen -
+einmal-bei-der-Genese (instrumentiert), Seed-Determinismus und die beiden
+Trends ueber vier Seeds, die Regel-aus-Identitaet (jede Naht exakt 1, `costCt`
+exakt die Prae-M21-Formel, ein untergeschobenes Jahrhundert bewegt den Digest
+nicht), die vier Naehte, die Tabelle selbst und die Save-Kette (Rundlauf,
+Regel/Tabelle-Widerspruch, Band-Verletzung, fehlende Regel, Migration).

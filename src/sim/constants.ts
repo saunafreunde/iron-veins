@@ -1382,6 +1382,194 @@ export const INDUSTRY_NEW_PER_YEAR = 1;
 /** Attempts spent looking for a spot for one of them before giving up. */
 export const INDUSTRY_OPENING_ATTEMPTS = 400;
 
+// ------------------------------------------ the century curve (SPEC2 M21, E-09)
+
+/**
+ * Name of the RNG stream the century curve is drawn from (Z3, D-106).
+ *
+ * A string salt, because the curve is seeded ONCE for the whole world rather
+ * than per invocation - `World.streamFor` folds a name exactly as it folds the
+ * tender review's tick, and the curve never asks for a second one (E-09: the
+ * monthly hooks LOOK the curve up, they never draw).
+ */
+export const ECONOMY_STREAM_NAME = 'economy';
+
+/**
+ * The cargo groups a century curve is drawn per (SPEC2 M21).
+ *
+ * Five rather than twenty, because a curve per cargo would be twenty
+ * independent stories nobody can read and four times the state for no decision:
+ * what the century is about is that COAL declines and CONTAINERS arrive, that
+ * the town trade is steadier than industry, and that raw material and finished
+ * goods do not swing together. Each of those is a group, and coal and
+ * containers have one to themselves precisely because they carry the two
+ * structural trends E-09 names.
+ */
+export const EconomyGroup = {
+  /** Passengers and mail - the town trade. */
+  Town: 0,
+  /** Coal alone: the fuel whose century ends (paired with D-105). */
+  Coal: 1,
+  /** Ore, timber, grain, livestock, oil, gravel - what comes out of the ground. */
+  Raw: 2,
+  /** Steel, planks, food, goods, chemicals, plastics, electronics, cement. */
+  Manufactured: 3,
+  /** Containers alone: the trade that does not exist until about 1970. */
+  Containers: 4,
+} as const;
+export type EconomyGroup = (typeof EconomyGroup)[keyof typeof EconomyGroup];
+
+/** How many cargo groups there are. */
+export const ECONOMY_GROUP_COUNT = 5;
+
+/**
+ * Which group each {@link Cargo} belongs to, indexed by cargo id.
+ *
+ * Length is `CARGO_COUNT` and `tests/unit/economyCurve.spec.ts` holds it there:
+ * a cargo added without a group would read past the table and take the town
+ * trade's curve by accident.
+ */
+export const ECONOMY_GROUP_OF_CARGO: readonly number[] = [
+  EconomyGroup.Town, // 0 Passengers (retired, D-207)
+  EconomyGroup.Town, // 1 Mail
+  EconomyGroup.Coal, // 2 Coal
+  EconomyGroup.Raw, // 3 IronOre
+  EconomyGroup.Manufactured, // 4 Steel
+  EconomyGroup.Raw, // 5 Wood
+  EconomyGroup.Manufactured, // 6 Planks
+  EconomyGroup.Raw, // 7 Grain
+  EconomyGroup.Raw, // 8 Livestock
+  EconomyGroup.Manufactured, // 9 Food
+  EconomyGroup.Manufactured, // 10 Goods
+  EconomyGroup.Raw, // 11 Oil
+  EconomyGroup.Manufactured, // 12 Chemicals
+  EconomyGroup.Manufactured, // 13 Plastics
+  EconomyGroup.Manufactured, // 14 Electronics
+  EconomyGroup.Raw, // 15 Gravel
+  EconomyGroup.Manufactured, // 16 Cement
+  EconomyGroup.Containers, // 17 Containers
+  EconomyGroup.Town, // 18 CommuterPax
+  EconomyGroup.Town, // 19 BusinessPax
+];
+
+/**
+ * Row of the worldwide business cycle in the curve table.
+ *
+ * It is a row rather than a sixth group because it is not about a cargo: it is
+ * the recession and boom window E-09 asks for, and it is read at the `costCt`
+ * seam and by the `INDUSTRY_FLUCTUATION_*` sine. The group rows already carry
+ * it multiplied in, so a slump shows in what a delivery pays as well.
+ */
+export const ECONOMY_ROW_CYCLE = ECONOMY_GROUP_COUNT;
+
+/** Row of the energy price, which the monthly energy bill scales by. */
+export const ECONOMY_ROW_ENERGY = ECONOMY_GROUP_COUNT + 1;
+
+/** Rows of the curve table: the five groups, the cycle and the energy price. */
+export const ECONOMY_ROW_COUNT = ECONOMY_GROUP_COUNT + 2;
+
+/** Years the curve covers: the whole playable span, inclusive. [years] */
+export const ECONOMY_CURVE_YEARS = END_YEAR - START_YEAR + 1; // 101
+
+/** Entries of the whole table - E-09's "einige hundert Ints". [entries] */
+export const ECONOMY_CURVE_LENGTH = ECONOMY_ROW_COUNT * ECONOMY_CURVE_YEARS; // 707
+
+/**
+ * The neutral multiplier, as the curve stores it. [per mille]
+ *
+ * Integers rather than floats, because the curve is hashed and saved: a
+ * per-mille integer says exactly the same thing on every machine, and a
+ * Float64Array of 707 entries would put engine-dependent rounding into the
+ * world digest for three decimal places nobody can see.
+ */
+export const ECONOMY_PERMILLE_ONE = 1000;
+
+/** Lowest and highest multiplier the curve may reach. [per mille] */
+export const ECONOMY_FACTOR_MIN_PERMILLE = 250;
+export const ECONOMY_FACTOR_MAX_PERMILLE = 2500;
+
+/**
+ * Periods of the three waves the business cycle is built from. [years]
+ *
+ * Three coprime lengths, so the sum does not repeat inside a century: a short
+ * inventory cycle, the classic seven-to-eleven-year one, and a long swing. The
+ * phases are drawn, the periods are not - a century whose recessions can land
+ * anywhere is enough variety, and a drawn period would make one seed's
+ * "recession" three years long and another's twenty.
+ */
+export const ECONOMY_CYCLE_PERIOD_YEARS: readonly number[] = [7, 11, 23];
+
+/** Amplitude of each of those waves, as a share of the neutral level. [1] */
+export const ECONOMY_CYCLE_AMPLITUDE: readonly number[] = [0.05, 0.11, 0.08];
+
+/**
+ * Period and amplitude of a GROUP's own wave, on top of the shared cycle. [1]
+ *
+ * One period per group, so ore and finished goods do not peak in the same year
+ * as each other or as the world. Coprime with the cycle periods above for the
+ * same reason they are coprime with one another.
+ */
+export const ECONOMY_GROUP_PERIOD_YEARS: readonly number[] = [17, 13, 9, 19, 29];
+export const ECONOMY_GROUP_AMPLITUDE: readonly number[] = [0.04, 0.09, 0.08, 0.06, 0.07];
+
+/**
+ * Random walk on top of every row, per year. [1]
+ *
+ * Small on purpose: the curve is meant to be a century a player can read off a
+ * chart, not noise. Four per cent is about a third of the shared cycle's
+ * leading wave, which is enough that two seeds are told apart at a glance and
+ * little enough that the trends stay legible.
+ */
+export const ECONOMY_YEAR_JITTER = 0.04;
+
+/**
+ * Length of an energy-price era and the shape of the shock inside it. [years]
+ *
+ * One shock per era, at a drawn year and a drawn size, ramping in and out over
+ * `SPAN` years - the 1973 shape rather than a step, because a step would double
+ * an electric railway's bill between one December and one January.
+ */
+export const ECONOMY_ENERGY_ERA_YEARS = 20;
+export const ECONOMY_ENERGY_SHOCK_SPAN_YEARS = 5;
+
+/** Largest an energy shock may be, as a share of the base price. [1] */
+export const ECONOMY_ENERGY_SHOCK_MAX = 0.8;
+
+/**
+ * The year coal starts to lose, and where it ends up (SPEC2 M21).
+ *
+ * The pair to the carbon levy of D-105, which starts charging in the same part
+ * of the century: the levy makes burning coal expensive and the curve makes
+ * hauling it worth less, so a coal railway built in 1960 is a coal railway that
+ * has to become something else.
+ */
+export const ECONOMY_COAL_DECLINE_FROM_YEAR = 2000;
+export const ECONOMY_COAL_FLOOR = 0.4;
+
+/**
+ * The year the container trade arrives, how long its boom takes and what it is
+ * worth on either side of it (SPEC2 M21).
+ *
+ * Before it the multiplier is a third: containers exist in the catalogue from
+ * the start and are worth almost nothing to carry, which is the honest reading
+ * of a cargo whose ports have not been built. The boom is a ramp over thirty
+ * years rather than a step, for the reason the energy shock is one.
+ */
+export const ECONOMY_CONTAINER_BOOM_FROM_YEAR = 1970;
+export const ECONOMY_CONTAINER_BOOM_SPAN_YEARS = 30;
+export const ECONOMY_CONTAINER_BEFORE = 0.35;
+export const ECONOMY_CONTAINER_AFTER = 1.6;
+
+/**
+ * How much of the business cycle reaches what building something costs. [1]
+ *
+ * Half. A boom raises wages and materials, but a construction bill does not
+ * swing as far as a freight rate does - and the asymmetry is the point: the
+ * cheap time to build is the slump, which is the decision E-09's cost seam
+ * exists to create.
+ */
+export const ECONOMY_COST_SENSITIVITY = 0.5;
+
 // ----------------------------------------------------------------- stations
 
 /** Catchment radius of a bare station, before any modules. [tiles] */

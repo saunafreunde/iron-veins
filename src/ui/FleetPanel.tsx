@@ -1,7 +1,7 @@
 import type { ReactElement } from 'react';
 import { formatMoney, t } from '../i18n';
 import type { VehicleMarker } from '../shared/protocol';
-import { inflatedCostCt } from '../sim/cargo/payment';
+import { economyCostCt, type EconomyCurve } from '../sim/economy/curve';
 import { cargoSpec } from '../sim/cargo/types';
 import { CommandKind } from '../sim/commands/types';
 import {
@@ -174,6 +174,7 @@ export function FleetPanel({ client }: { readonly client: SimClient }): ReactEle
   const selectedVehicleId = useSimStore((s) => s.selectedVehicleId);
   const setSelectedVehicle = useSimStore((s) => s.setSelectedVehicle);
   const year = useSimStore((s) => s.year);
+  const economyCurve = useSimStore((s) => s.economyCurve);
   const mapSize = useSimStore((s) => s.mapSize);
 
   const station =
@@ -382,7 +383,13 @@ export function FleetPanel({ client }: { readonly client: SimClient }): ReactEle
             </button>
           </div>
 
-          <RefitRow client={client} vehicle={selected} mapSize={mapSize} year={year} />
+          <RefitRow
+            client={client}
+            vehicle={selected}
+            mapSize={mapSize}
+            year={year}
+            curve={economyCurve}
+          />
         </>
       )}
     </section>
@@ -407,9 +414,7 @@ function LineMembership({
 
   return (
     <div className="button-row">
-      <span className="panel__hint">
-        {t('ui.fleet.onLine', { line: vehicle.lineId + 1 })}
-      </span>
+      <span className="panel__hint">{t('ui.fleet.onLine', { line: vehicle.lineId + 1 })}</span>
       <button
         type="button"
         className="button"
@@ -478,11 +483,14 @@ function RefitRow({
   vehicle,
   mapSize,
   year,
+  curve,
 }: {
   readonly client: SimClient;
   readonly vehicle: VehicleMarker;
   readonly mapSize: number;
   readonly year: number;
+  /** The century of SPEC2 M21, so the hint and the bill charge alike. */
+  readonly curve: EconomyCurve;
 }): ReactElement | null {
   const stations = useSimStore((s) => s.stations);
   if (!standsInDepot(vehicle, stations, mapSize)) return null;
@@ -497,7 +505,7 @@ function RefitRow({
     vehicle.consist.length > 0
       ? aggregateConsist(vehicle.consist).priceCt
       : vehicleSpec(vehicle.specId).priceCt;
-  const refitCt = inflatedCostCt(Math.round(priceCt * REFIT_COST_SHARE), year, true);
+  const refitCt = economyCostCt(Math.round(priceCt * REFIT_COST_SHARE), year, true, curve);
 
   return (
     <>

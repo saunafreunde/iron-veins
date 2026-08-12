@@ -1,5 +1,5 @@
 import type { StationMarker } from '../shared/protocol';
-import { inflatedCostCt } from '../sim/cargo/payment';
+import { EconomyCurve, economyCostCt } from '../sim/economy/curve';
 import { AI_PLATFORM_TILES, RAIL_PLATFORM_COST_CT } from '../sim/constants';
 import type { TileMap } from '../sim/map/TileMap';
 import { RailType } from '../sim/map/track';
@@ -97,7 +97,11 @@ function anchorFor(
     const d = dx * dx + dy * dy;
     // A total order: distance, then position, so the same world plans the same
     // line every time it is asked.
-    if (d < bestDistance || (d === bestDistance && (candidate.x < best.x || (candidate.x === best.x && candidate.y < best.y)))) {
+    if (
+      d < bestDistance ||
+      (d === bestDistance &&
+        (candidate.x < best.x || (candidate.x === best.x && candidate.y < best.y)))
+    ) {
       bestDistance = d;
       best = candidate;
     }
@@ -112,6 +116,12 @@ export function planConnection(
   to: StationMarker,
   year: number,
   assistant: boolean,
+  /**
+   * The century of SPEC2 M21 (E-09), or none - which is what a world without
+   * the economy rule has and what a test that is not about the century passes
+   * by leaving the argument out.
+   */
+  curve: EconomyCurve = new EconomyCurve(),
 ): ConnectResult {
   if (from.id === to.id) return { ok: false, reasonKey: 'ui.connect.sameStation' };
 
@@ -144,10 +154,12 @@ export function planConnection(
     else if (structure === STRUCTURE_TUNNEL) tunnels++;
   }
 
-  // Every figure goes through the same inflation the simulation charges at, or
-  // the preview and the bill part company from game year two.
-  const trackCostCt = inflatedCostCt(route.costCt, year, true);
-  const platformCostCt = inflatedCostCt(RAIL_PLATFORM_COST_CT * platforms.length, year, true);
+  // Every figure goes through the same inflation AND the same century the
+  // simulation charges at, or the preview and the bill part company from game
+  // year two (D-092) - `economyCostCt` is literally the function `World.costCt`
+  // calls, so there is one formula rather than two that agree today.
+  const trackCostCt = economyCostCt(route.costCt, year, true, curve);
+  const platformCostCt = economyCostCt(RAIL_PLATFORM_COST_CT * platforms.length, year, true, curve);
 
   return {
     ok: true,

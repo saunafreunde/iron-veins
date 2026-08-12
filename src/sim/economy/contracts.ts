@@ -14,6 +14,7 @@ import {
 } from '../constants';
 import { Cargo } from '../cargo/types';
 import { deliveryRevenueCt } from '../cargo/payment';
+import { economyRateFactor } from './curve';
 import { NewsCategory, NewsSeverity } from '../news/log';
 import type { Rng } from '../rng';
 import { addGoodwill } from '../town/council';
@@ -210,8 +211,7 @@ function offer(world: World, rng: Rng): Contract {
 
   const steps = (CONTRACT_MAX_AMOUNT - CONTRACT_MIN_AMOUNT) / CONTRACT_AMOUNT_STEP;
   const amountUnits = CONTRACT_MIN_AMOUNT + rng.nextInt(steps + 1) * CONTRACT_AMOUNT_STEP;
-  const months =
-    CONTRACT_MONTHS_MIN + rng.nextInt(CONTRACT_MONTHS_MAX - CONTRACT_MONTHS_MIN + 1);
+  const months = CONTRACT_MONTHS_MIN + rng.nextInt(CONTRACT_MONTHS_MAX - CONTRACT_MONTHS_MIN + 1);
 
   return {
     id: world.nextContractId++,
@@ -242,6 +242,11 @@ export function bonusCtFor(world: World, cargo: number, amountUnits: number): nu
     ticksInTransit: 0,
     hasCooling: false,
     year: world.date.year,
+    // A tender is priced off the ordinary tariff, so it is priced off the
+    // century too (SPEC2 M21): a bonus for hauling coal in 2040 that ignored
+    // what coal is worth in 2040 would be the one contract in the game that
+    // pays a company to move something nobody wants.
+    rateFactor: economyRateFactor(world.economyCurve, cargo, world.date.year),
   });
   return Math.round(ordinary * CONTRACT_BONUS_FACTOR);
 }

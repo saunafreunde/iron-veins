@@ -1,5 +1,6 @@
 import { Cargo, isPassengerClass } from '../cargo/types';
 import { deliveryRevenueCt, timeFactor } from '../cargo/payment';
+import { economyOutputFactor, economyRateFactor } from '../economy/curve';
 import {
   AI_DRAIN_MARGIN,
   AI_LIFT_REAL_SHARE,
@@ -118,7 +119,15 @@ function servedByAnyone(world: World, x: number, y: number): boolean {
  * on it - and the number the estimate was missing.
  */
 function expectedOutput(world: World, industry: Industry): number {
-  return (industryBaseOutput(industry, world.tick) * industry.productionLevel) / 100;
+  return (
+    (industryBaseOutput(
+      industry,
+      world.tick,
+      economyOutputFactor(world.economyCurve, world.date.year),
+    ) *
+      industry.productionLevel) /
+    100
+  );
 }
 
 /**
@@ -594,6 +603,10 @@ function rate(
     ticksInTransit: 0,
     hasCooling: false,
     year: world.date.year,
+    // The century (SPEC2 M21): a competitor that ranked a coal line in 2035
+    // by 1950's coal price would build the one line the world has stopped
+    // paying for. Exactly 1 in a world without the rule.
+    rateFactor: economyRateFactor(world.economyCurve, cargo, world.date.year),
   });
 
   /*
@@ -794,6 +807,8 @@ export function projectLine(
     ticksInTransit: oneWayTicks,
     hasCooling: false,
     year: world.date.year,
+    // The century, at the second of this file's two payment estimates.
+    rateFactor: economyRateFactor(world.economyCurve, opportunity.cargo, world.date.year),
   });
 
   const modulesCt = opportunity.rail

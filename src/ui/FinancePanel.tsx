@@ -10,6 +10,9 @@ import {
   LOAN_STEP_CT,
   MONTHS_PER_YEAR,
 } from '../sim/constants';
+import { COMPANY_COLORS } from '../shared/palette';
+import { ECONOMY_CURVE_YEARS, ECONOMY_ROW_COUNT } from '../sim/constants';
+import { economySeries, economySeriesYear } from '../sim/economy/curve';
 import { niceScale, seriesPoints, valueToY } from './chart';
 import type { SimClient } from './SimClient';
 import { useSimStore } from './store';
@@ -96,6 +99,7 @@ export function FinancePanel({ client }: { readonly client: SimClient }): ReactE
       {/* Auto-renewal moved to the line detail panel with M11: the switch is
           per LINE now (section 11.3), so the books no longer carry it. */}
       {finances !== null && <Books report={finances} />}
+      <EconomyCentury />
     </section>
   );
 }
@@ -333,4 +337,153 @@ function ValueGraph({ report }: { readonly report: FinanceReport }): ReactElemen
       </svg>
     </>
   );
+}
+
+/** Plot of the century chart. [px in the SVG's own space] */
+const CENTURY_PLOT_W = 240;
+const CENTURY_PLOT_H = 84;
+const CENTURY_MARGIN_LEFT = 26;
+const CENTURY_MARGIN_BOTTOM = 14;
+
+/**
+ * The name of each row of the curve, in row order.
+ *
+ * Row order is the constants' own (`ECONOMY_ROW_CYCLE`, `ECONOMY_ROW_ENERGY`
+ * are defined as offsets past the groups), so this list cannot drift out of
+ * step with the table it labels without the length assertion below firing.
+ */
+const CENTURY_ROW_KEYS: readonly string[] = [
+  'ui.finance.economyGroup.town',
+  'ui.finance.economyGroup.coal',
+  'ui.finance.economyGroup.raw',
+  'ui.finance.economyGroup.manufactured',
+  'ui.finance.economyGroup.containers',
+  'ui.finance.economyRow.cycle',
+  'ui.finance.economyRow.energy',
+];
+
+/** One hue per row, from the deficiency-safe company palette (16.3). */
+function centuryColor(row: number): string {
+  return COMPANY_COLORS[(row % (COMPANY_COLORS.length - 1)) + 1]!;
+}
+
+/**
+ * The century of SPEC2 M21, drawn (E-09: "UI kann die Kurve zeigen").
+ *
+ * Seven polylines over the whole playable span with a marker on the year being
+ * played, and the current value of every row printed beside it - because a
+ * chart says what the shape is and a number says what is being charged. The
+ * series come from `sim/economy/curve.ts`, which is the same module the tariff,
+ * the build bill, the industry swing and the energy meter read: a panel that
+ * did its own arithmetic over the raw table would be a second opinion about
+ * what 1997 was worth.
+ *
+ * A world whose economy rule is off has an EMPTY curve and this renders
+ * nothing at all - not an empty frame, not a flat line at 1.00, because a world
+ * without a century has no century to show.
+ */
+function EconomyCentury(): ReactElement | null {
+  useSimStore((s) => s.locale);
+  const curve = useSimStore((s) => s.economyCurve);
+  const year = useSimStore((s) => s.year);
+  if (!curve.active) return null;
+
+  const rows: number[][] = [];
+  for (let row = 0; row < ECONOMY_ROW_COUNT; row++) rows.push(economySeries(curve, row));
+
+  let lowest = 1;
+  let highest = 1;
+  for (const series of rows) {
+    for (const value of series) {
+      if (value < lowest) lowest = value;
+      if (value > highest) highest = value;
+    }
+  }
+  const scale = niceScale(lowest, highest, 4);
+
+  // Where "now" sits along the x axis, clamped into the span the table covers -
+  // the same clamp `economyRowFactor` applies, so the marker stands on the
+  // value that is actually being charged (E-15's endless years included).
+  let nowIndex = year - economySeriesYear(0);
+  if (nowIndex < 0) nowIndex = 0;
+  else if (nowIndex >= ECONOMY_CURVE_YEARS) nowIndex = ECONOMY_CURVE_YEARS - 1;
+  const nowX = (nowIndex / (ECONOMY_CURVE_YEARS - 1)) * CENTURY_PLOT_W;
+
+  return (
+    <>
+      <span className="field__label field__label--spaced">{t('ui.finance.economy')}</span>
+      <svg
+        className="valuechart"
+        viewBox={`0 0 ${CENTURY_MARGIN_LEFT + CENTURY_PLOT_W} ${
+          CENTURY_PLOT_H + CENTURY_MARGIN_BOTTOM
+        }`}
+        role="img"
+        aria-label={t('ui.finance.economy')}
+      >
+        <g transform={`translate(${CENTURY_MARGIN_LEFT}, 0)`}>
+          {scale.ticks.map((tick) => (
+            <g key={tick}>
+              <line
+                x1={0}
+                x2={CENTURY_PLOT_W}
+                y1={valueToY(tick, CENTURY_PLOT_H, scale)}
+                y2={valueToY(tick, CENTURY_PLOT_H, scale)}
+                className="valuechart__grid"
+              />
+              <text
+                x={-4}
+                y={valueToY(tick, CENTURY_PLOT_H, scale)}
+                className="valuechart__label valuechart__label--y"
+              >
+                {tick.toFixed(1)}
+              </text>
+            </g>
+          ))}
+          {rows.map((series, row) => (
+            <path
+              key={row}
+              d={seriesPoints(series, CENTURY_PLOT_W, CENTURY_PLOT_H, scale)
+                .map(
+                  (point, index) =>
+                    `${index === 0 ? 'M' : 'L'}${point.x.toFixed(1)},${point.y.toFixed(1)}`,
+                )
+                .join(' ')}
+              className="valuechart__line"
+              style={{ stroke: centuryColor(row) }}
+            />
+          ))}
+          <line x1={nowX} x2={nowX} y1={0} y2={CENTURY_PLOT_H} className="valuechart__zero" />
+          <text x={0} y={CENTURY_PLOT_H + 10} className="valuechart__label">
+            {economySeriesYear(0)}
+          </text>
+          <text
+            x={CENTURY_PLOT_W}
+            y={CENTURY_PLOT_H + 10}
+            className="valuechart__label valuechart__label--end"
+          >
+            {economySeriesYear(ECONOMY_CURVE_YEARS - 1)}
+          </text>
+        </g>
+      </svg>
+      <dl className="readout">
+        {rows.map((series, row) => (
+          <div key={row}>
+            <dt style={{ color: centuryColor(row) }}>{t(CENTURY_ROW_KEYS[row] ?? '')}</dt>
+            <dd className="value value--mono">
+              {t('ui.finance.economyNow', {
+                year,
+                value: (series[nowIndex] ?? 1).toFixed(2),
+              })}
+            </dd>
+          </div>
+        ))}
+      </dl>
+      <p className="panel__hint">{t('ui.finance.economyHint')}</p>
+    </>
+  );
+}
+
+/** The labels and the table cannot disagree about how many rows there are. */
+if (CENTURY_ROW_KEYS.length !== ECONOMY_ROW_COUNT) {
+  throw new Error('FinancePanel: the century row labels do not match ECONOMY_ROW_COUNT');
 }

@@ -84,8 +84,27 @@ const DIST = join(REPO_ROOT, 'dist');
  * takes `COUNCIL_PROFILE_KEYS` from the same module, and `town/elections.ts` is
  * reached only from `SimWorker.ts`, which is its own chunk. 966,000 is the new
  * measurement plus ~0.7 %.
+ *
+ * **Raised again for SPEC2 M21 bundle 1** (the century curve), with the
+ * measurement and the same rule - and it HAD to be booked: the tree came in at
+ * 965,937 B, sixty-three bytes under the old number, which is not headroom, it
+ * is a coincidence. The A/B is two builds of the same tree, a worktree at the
+ * bundle's parent commit against the working tree: **959,545 B -> 965,937 B,
+ * +6,392 B**. Split by copying ONLY the two catalogues into the baseline
+ * worktree and rebuilding: **+1,505 B are the eleven new i18n keys in two
+ * languages** (the century's seven row names, its two captions, its readout
+ * template and the new-game rule's own paragraph), and the remaining
+ * **+4,887 B are the interface and `sim/economy/curve.ts` under it** - the
+ * century chart in the finance panel, the new-game checkbox, and the four
+ * build-preview sites moved from `inflatedCostCt` onto `economyCostCt` so the
+ * preview and the bill go through one formula (D-092). **No new static
+ * `src/sim` import chain that decodes, serialises or steps a world**, which is
+ * what this budget exists to catch: `economy/curve.ts` imports `constants.ts`,
+ * `math.ts` and `cargo/payment.ts`, all three of which the interface already
+ * pulled in, plus a TYPE-only `rng.ts` that erases. 972,000 is the new
+ * measurement plus ~0.6 %.
  */
-const MAIN_CHUNK_BUDGET_BYTES = 966_000;
+const MAIN_CHUNK_BUDGET_BYTES = 972_000;
 
 /** The verdict, separated from the measuring so a planted size can be judged. */
 interface BudgetVerdict {

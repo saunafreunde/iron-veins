@@ -11,6 +11,7 @@ import {
   INDUSTRY_SERVICE_WINDOW_MONTHS,
   INDUSTRY_STORE_FULL_SHARE,
 } from '../constants';
+import { economyOutputFactor } from '../economy/curve';
 import { stationRating } from '../station/types';
 import { seasonalOutputAt } from '../weather/effects';
 import type { World } from '../World';
@@ -106,6 +107,10 @@ export function outputStoreFull(industry: Industry): boolean {
  * apart.
  */
 export function produceIndustryCargo(world: World): void {
+  // The century of SPEC2 M21 (E-09), looked up ONCE for the whole monthly
+  // pass: it is a property of the year, not of an industry, and this hook is
+  // the reader - it never draws (Z3). Exactly 1 without the economy rule.
+  const cycle = economyOutputFactor(world.economyCurve, world.date.year);
   for (const industry of world.industries) {
     if (!industry.open) continue;
     const spec = industrySpec(industry.type);
@@ -119,7 +124,7 @@ export function produceIndustryCargo(world: World): void {
     // every industry but a farm and a forestry, and for every world whose
     // weather rule is off.
     let target =
-      ((industryBaseOutput(industry, world.tick) * industry.productionLevel) / 100) *
+      ((industryBaseOutput(industry, world.tick, cycle) * industry.productionLevel) / 100) *
       seasonalOutputAt(world, industry.type, industry.x, industry.y);
     if (outputStoreFull(industry)) target *= INDUSTRY_FULL_STORE_RATE;
     if (target <= 0) continue;

@@ -386,15 +386,24 @@ export function industryStockCap(type: IndustryType): number {
  * years. The phase comes from the id so a region does not boom in unison, and
  * the sine comes from the lookup table because Math.sin is not bit exact across
  * engines (architecture law #4).
+ *
+ * `cycle` is the worldwide recession/boom window of SPEC2 M21 (E-09), and 1 in
+ * a world without the economy rule. It multiplies the swing rather than adding
+ * a second one - E-09 asks for the century to MODULATE this sine, not to sit
+ * beside it - so the mine keeps its own five-year rhythm and the century
+ * decides how much the world is buying. It reaches only the industries that
+ * swing at all, which is where the sine is: a works with inputs runs on what
+ * was delivered to it, and a century that changed that would be pricing the
+ * same slump twice, once at the mine and once at the mill it feeds.
  */
-export function industryBaseOutput(industry: Industry, tick: number): number {
+export function industryBaseOutput(industry: Industry, tick: number, cycle = 1): number {
   const base = INDUSTRY_BASE_OUTPUT_PER_MONTH[industry.type] ?? 0;
   if (industrySpec(industry.type).inputs.length > 0) return base;
 
   const period = INDUSTRY_FLUCTUATION_PERIOD_YEARS * TICKS_PER_YEAR;
   const phase = (industry.id * PHASE_STRIDE) / TRIG_TABLE_SIZE;
   const turns = tick / period + phase;
-  return base * (1 + INDUSTRY_FLUCTUATION_AMPLITUDE * sinTurns(turns));
+  return base * (1 + INDUSTRY_FLUCTUATION_AMPLITUDE * sinTurns(turns)) * cycle;
 }
 
 /**

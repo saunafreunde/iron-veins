@@ -2871,3 +2871,72 @@ three pins unchanged, every balance band re-run and identical to the digit.
 - **The connect tool asks before it charges** (D-119) - the only build in the
   game that does. It plans with the same `planTrack` the command runs, so the
   price on screen and the price on the bill cannot disagree.
+
+## M21 bundle 1 - the century curve (D-236)
+
+The economy gets a hundred years. One curve per cargo group, **drawn once at
+world genesis** from `world.streamFor('economy')`, saved and hashed; the monthly
+hooks look it up and never draw (E-09, Z3). Seven rows of 101 years = **707
+per-mille integers**: five cargo groups (town trade, coal, raw, manufactured,
+containers), the worldwide business cycle and the energy price. **This bundle
+owns the milestone's one Z5 bump: SAVE_VERSION 31 -> 32**, and every later M21
+bundle extends `v31_to_v32` in place.
+
+- **Four seams, and no fifth.** The tariff (`deliveryRevenueCt(rateFactor)`,
+  the group's row), `World.costCt` (the cycle, damped to half - the slump is
+  the cheap time to build), the 7.3 industry sine (the cycle multiplied INTO
+  it, so a mine keeps its own five-year rhythm and the century decides how much
+  the world is buying) and the monthly energy bill (the energy row, so the
+  ratios between the five power sources are untouched and the level under them
+  moves). Every reader lives in `src/sim/economy/curve.ts`, which is the ONE
+  gate on the rule.
+- **Coal declining after 2000 and containers booming from 1970 are structural,
+  not drawn** - a century in which coal might not decline makes the milestone's
+  own acceptance sentence a coin toss. What IS drawn is everything around them:
+  three cycle waves with drawn phases, a wave per group, one energy shock per
+  twenty-year era at a drawn year and size, plus 4 % of yearly jitter. Measured
+  over four seeds: coal **1.00 -> 0.69** (last decade 0.46), containers
+  **0.34 -> 1.63**, cycle 0.75-1.26, energy 0.96-1.65.
+- **The curve is SAVED because it is DRAWN** (Z4). A curve rebuilt on load
+  would be a second place the century is decided, and the day the generator
+  moved every existing save would quietly start playing a different hundred
+  years. `World.born` is the one door that draws - `create` and `fromGenerated`
+  go through it - and `fromData` adopts what the file carries. Instrumented
+  rather than asserted: the spec spies on `streamFor` and counts exactly ONE
+  economy call over genesis plus thirteen month hooks and a year hook, and ZERO
+  over a load.
+- **The world rule `economy` is OFF by default and its off state is an
+  ABSENCE** - no curve at all, every reader returning the exact identity. So
+  `hashWorld` hashes NOTHING for it, which is the one argued departure from the
+  three rules above it (they hash their `false`, and doing so moved every pin
+  in this game once). Injectivity is unharmed - the only worlds that fingerprint
+  like a pre-M21 world are worlds with the rule off - and the parser keeps the
+  pair honest: rule off means an empty table, rule on means 707 entries inside
+  the band. **The consequence is measured, not hoped**: the canonical pin
+  `5f4c022bef5b94d1` and the soak hash `9aac5ef0864d5c69` are unchanged (16
+  byte-identical checkpoints), the corpus manifest is purely additive
+  (`v32-played` decodes to `63ea4f0ca2506741`, the same world `v31-played`
+  does), `SCENARIO_WORLD_CLAIMS` never moved, and every balance band is
+  identical to D-235 to the euro.
+- **Preview and bill go through the SAME function.** `economyCostCt` is the
+  formula `World.costCt` charges, and the four build previews
+  (`connect.ts`, `MapCanvas`, `TilePanel`, `FleetPanel`) call it instead of
+  `inflatedCostCt` - two formulas that agree today is exactly how a preview and
+  a bill come apart from game year two (D-092).
+- **The interface can show the century** (E-09's "inspizierbar"): seven lines
+  over the whole span in the statistics centre with a marker on the year being
+  played, each row's current value printed beside it, read through the
+  simulation's own `economySeries`. The curve reaches the main thread in the
+  `ready` message beside the map - a genesis constant in a 20 Hz stride would
+  be the stride growth Fehlerkatalog 37 forbids, and the ledger books M21 at
+  zero layout change.
+- **Bundle budget booked**: 959,545 -> **965,937 B (+6,392)**, of which
+  **+1,505 B are the eleven i18n keys in two languages** and +4,887 B the
+  interface and `economy/curve.ts` under it; no new static `src/sim` import
+  chain. The old budget had 63 bytes of headroom, which is a coincidence and
+  not headroom, so it is raised to 972,000 with the measurement beside it.
+
+**Still owed by M21**: the container revival at the harbour terminal (the
+curve's boom from 1970 exists, the consumer does not), the delivery contracts
+with `Account.ContractPenalties`, the subsidy board, the low-emission purchase
+grants and the industry events from `streams.events`.

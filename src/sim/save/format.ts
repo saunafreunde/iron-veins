@@ -8,6 +8,9 @@ import { NEWS_CATEGORY_COUNT, type NewsEntry } from '../news/log';
 import {
   CHECKPOINT_INTERVAL_TICKS,
   COMPANY_COLOR_COUNT,
+  ECONOMY_CURVE_LENGTH,
+  ECONOMY_FACTOR_MAX_PERMILLE,
+  ECONOMY_FACTOR_MIN_PERMILLE,
   MAX_COMPANIES,
   Difficulty,
   LEDGER_HISTORY_MONTHS,
@@ -505,6 +508,45 @@ function parseWeatherField(value: unknown, path: string): Uint8Array {
     }
   }
   return bytes;
+}
+
+/**
+ * The century curve of SPEC2 M21 (E-09).
+ *
+ * Every entry is validated and so is the LENGTH, and the length is checked
+ * against the world rule rather than against a constant: a world without the
+ * economy rule must carry an EMPTY table and a world with it must carry a full
+ * one. That pairing is what makes the rule's off state an absence rather than a
+ * flag - the two cannot be held apart, so there is no such thing as a save that
+ * says it has no century and smuggles one, or one that claims a century it does
+ * not carry and would silently multiply every tariff by zero.
+ *
+ * The band is the generator's own clamp. An entry outside it would reach the
+ * tariff, the build bill and the energy meter as a multiplier nothing checks,
+ * and "unhashed is not unchecked" applies with more force to something that IS
+ * hashed.
+ */
+function parseEconomyCurve(value: unknown, path: string, economy: boolean): number[] {
+  const entries = asArray(value, path);
+  const expected = economy ? ECONOMY_CURVE_LENGTH : 0;
+  if (entries.length !== expected) {
+    throw new SaveFormatError(
+      `${path}: expected ${expected} entries for a world whose economy rule is ` +
+        `${economy ? 'on' : 'off'}, got ${entries.length}`,
+      path,
+    );
+  }
+  return entries.map((entry, at) => {
+    const permille = asInt(entry, `${path}[${at}]`);
+    if (permille < ECONOMY_FACTOR_MIN_PERMILLE || permille > ECONOMY_FACTOR_MAX_PERMILLE) {
+      throw new SaveFormatError(
+        `${path}[${at}]: ${permille} is outside the ` +
+          `${ECONOMY_FACTOR_MIN_PERMILLE}..${ECONOMY_FACTOR_MAX_PERMILLE} per-mille band`,
+        `${path}[${at}]`,
+      );
+    }
+    return permille;
+  });
 }
 
 function asBytes(value: unknown, path: string, expectedLength: number): Uint8Array {
@@ -1288,6 +1330,8 @@ export function parseWorldState(value: unknown, path: string): WorldStateData {
     throw new SaveFormatError(`${path}.mapSize: ${mapSizeRefusal(mapSize)}`, `${path}.mapSize`);
   }
 
+  const economy = asBoolean(stateRaw['economy'], `${path}.economy`);
+
   return {
     tick: asInt(stateRaw['tick'], `${path}.tick`),
     seed: asInt(stateRaw['seed'], `${path}.seed`),
@@ -1310,6 +1354,12 @@ export function parseWorldState(value: unknown, path: string): WorldStateData {
     // lost it is a save whose councils would rate the same company differently
     // after loading than before saving.
     elections: asBoolean(stateRaw['elections'], `${path}.elections`),
+    // The century rule of M21 and the curve it decides, required on the same
+    // terms and validated as ONE thing: the rule says whether there is a
+    // century, the table is it, and the parser refuses any save that holds a
+    // different opinion in each.
+    economy,
+    economyCurve: parseEconomyCurve(stateRaw['economyCurve'], `${path}.economyCurve`, economy),
     mapSize,
     rng: parseRngState(stateRaw['rng'], `${path}.rng`),
     companies: parseCompanies(stateRaw['companies'], `${path}.companies`),

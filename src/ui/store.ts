@@ -18,6 +18,7 @@ import type {
 import type { ReplayEntry, SaveEntry } from '../platform/Storage';
 import { DEFAULT_SETTINGS, type AppSettings } from '../shared/settings';
 import { MapClimate } from '../sim/constants';
+import { EconomyCurve } from '../sim/economy/curve';
 import type { MapGenPhase } from '../sim/mapgen';
 import type { ReplayVerification } from '../sim/save/replay';
 import type { ReplayMeta } from '../sim/save/replaySession';
@@ -131,6 +132,17 @@ export interface SimUiState extends SnapshotValues {
    * and the second input of the seasonal optics beside the published month.
    */
   climate: MapClimate;
+  /**
+   * The century curve of SPEC2 M21 (E-09), row major in per mille, or empty
+   * in a world whose economy rule is off.
+   *
+   * A world constant announced with the map, like the climate above it - and
+   * the interface reads it for exactly two things: to SHOW the century (E-09's
+   * "inspizierbar"), and to price a build preview through the same
+   * `economyCostCt` the bill goes through, so preview and bill cannot come
+   * apart the way D-092 records them coming apart over inflation.
+   */
+  economyCurve: EconomyCurve;
   /** Shared tile layers, handed over by the worker once the map exists. */
   mapBuffer: SharedArrayBuffer | null;
   towns: readonly TownMarker[];
@@ -321,6 +333,7 @@ export interface SimUiState extends SnapshotValues {
     mapSize: number;
     mapBuffer: SharedArrayBuffer;
     climate: MapClimate;
+    economyCurve: readonly number[];
     towns: readonly TownMarker[];
     industries: readonly IndustryMarker[];
   }) => void;
@@ -407,6 +420,21 @@ export interface SimUiState extends SnapshotValues {
   setFlowSource: (source: (() => { data: Int32Array; count: number; tick: number }) | null) => void;
 }
 
+/**
+ * The century as an {@link EconomyCurve}, so the interface reads it through the
+ * simulation's OWN accessors.
+ *
+ * The alternative - a raw array in the store and a second lookup written in the
+ * panel - is how a chart and a bill come to disagree about what year 1997 was
+ * worth. There is one table and one set of readers (`sim/economy/curve.ts`);
+ * this is the two-line adapter from the wire shape to it.
+ */
+function adoptCurve(rows: readonly number[]): EconomyCurve {
+  const curve = new EconomyCurve();
+  curve.load(rows);
+  return curve;
+}
+
 export const useSimStore = create<SimUiState>((set) => ({
   tick: 0,
   year: 1950,
@@ -431,6 +459,7 @@ export const useSimStore = create<SimUiState>((set) => ({
   townCount: 0,
   industryCount: 0,
   climate: MapClimate.Temperate,
+  economyCurve: new EconomyCurve(),
   mapBuffer: null,
   towns: [],
   industries: [],
@@ -501,6 +530,7 @@ export const useSimStore = create<SimUiState>((set) => ({
       mapSize: world.mapSize,
       mapBuffer: world.mapBuffer,
       climate: world.climate,
+      economyCurve: adoptCurve(world.economyCurve),
       towns: world.towns,
       industries: world.industries,
       townCount: world.towns.length,
@@ -605,6 +635,9 @@ export const useSimStore = create<SimUiState>((set) => ({
       openList: null,
       mapBuffer: null,
       mapSize: 0,
+      // The century belongs to the world that is going, exactly as its goals
+      // do: a curve left standing would price the next game's build preview.
+      economyCurve: new EconomyCurve(),
       flowStats: { drawn: 0, omitted: 0 },
     }),
   setCompany: (name, colorIndex) => set({ companyName: name, companyColorIndex: colorIndex }),

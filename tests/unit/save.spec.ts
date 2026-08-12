@@ -272,16 +272,17 @@ describe('save migrations', () => {
 
   it('pins the current save version', () => {
     // Bumping SAVE_VERSION has to be a conscious act, because from the first
-    // released build onwards it also requires a migration. 31 is M20's single
-    // bump (SPEC2 Z5): the physical town growth of section 13.2 owns it, and
-    // it is spent on the ONE thing about a growing town that is not derivable
-    // - `Town.roadTilesThisMonth`, the month's own street budget. The
-    // milestone's later bundles (the twelve-month supply window, the council
-    // elections) extend that migration in place and add no numbers.
+    // released build onwards it also requires a migration. 32 is M21's single
+    // bump (SPEC2 Z5): the century curve of E-09 owns it - the `economy` world
+    // rule plus the table it decides, one multiplier per cargo group per year
+    // and two rows more for the business cycle and the energy price. The
+    // milestone's later bundles (delivery contracts, the subsidy board, the
+    // container revival) extend that migration in place and add no numbers.
     //
-    // 30 was M19's: the two passenger classes of E-08, the cargo table grown
-    // by two and every number that named the retired `Passengers` id remapped.
-    expect(SAVE_VERSION).toBe(31);
+    // 31 was M20's: the physical town growth of section 13.2, spent on the ONE
+    // thing about a growing town that is not derivable - the month's own
+    // street budget.
+    expect(SAVE_VERSION).toBe(32);
   });
 
   it('has a real migration for every step from version 2 on', () => {

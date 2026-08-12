@@ -318,6 +318,7 @@ export class SimClient {
           mapSize: message.mapSize,
           mapBuffer: message.mapBuffer,
           climate: message.climate,
+          economyCurve: message.economyCurve,
           towns: message.towns,
           industries: message.industries,
         });

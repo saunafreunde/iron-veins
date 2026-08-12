@@ -99,9 +99,20 @@
  * field - it is the game day modulo the town count, a pure function of state
  * that is already saved (D-231, the D-174 pattern). A version 30 town had
  * never built anything, so the migration enters a spent budget of zero, which
- * is exactly what that world knew.
+ * is exactly what that world knew. 32 is M21's one bump, and the first in the
+ * chain to carry a table that is DRAWN rather than played: the century curve of
+ * SPEC2 E-09 - one multiplier per cargo group per year, plus the worldwide
+ * business cycle and the energy price - together with the `economy` world rule
+ * that decides whether a world has one at all. It is saved BECAUSE it is drawn:
+ * a curve rebuilt on load from the seed alone would be a second place the
+ * century is decided, and the day the generator moved, every existing save
+ * would quietly start playing a different hundred years. A version 31 world had
+ * no century, so the migration enters the rule as OFF and the curve as an EMPTY
+ * table - which is exactly what a world with the rule off holds for ever, and
+ * why this is the rare bump that moves no existing world hash at all (the
+ * argument is in `hashWorld`).
  */
-export const SAVE_VERSION = 31;
+export const SAVE_VERSION = 32;
 
 /** File extension used for manual and automatic saves. */
 export const SAVE_EXTENSION = '.ironsave';

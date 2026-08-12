@@ -21,7 +21,7 @@ import {
   TERRAFORM_COST_PER_STEP_CT,
   WAYPOINT_COST_CT,
 } from '../sim/constants';
-import { inflatedCostCt } from '../sim/cargo/payment';
+import { economyCostCt, type EconomyCurve } from '../sim/economy/curve';
 import { CommandKind } from '../sim/commands/types';
 import { INDUSTRY_SPECS } from '../sim/industry/types';
 import {
@@ -52,8 +52,8 @@ import { Tooltip } from './Tooltip';
  * (section 14.2), because a preview that disagrees with the bill is the exact
  * frustration section 17.3 exists to prevent.
  */
-function priceHint(tool: Tool, year: number): string {
-  const at = (baseCt: number): number => inflatedCostCt(baseCt, year, true);
+function priceHint(tool: Tool, year: number, curve: EconomyCurve): string {
+  const at = (baseCt: number): number => economyCostCt(baseCt, year, true, curve);
   switch (tool) {
     case 'road':
       return t('ui.tool.priceRoad', { amount: formatMoney(at(ROAD_COST_PER_TILE_CT)) });
@@ -141,6 +141,7 @@ export function TilePanel({ client }: { readonly client: SimClient }): ReactElem
   const selected = useSimStore((s) => s.selectedTile);
   const tool = useSimStore((s) => s.tool);
   const year = useSimStore((s) => s.year);
+  const economyCurve = useSimStore((s) => s.economyCurve);
   const setTool = useSimStore((s) => s.setTool);
   const autoSignal = useSimStore((s) => s.autoSignal);
   const setAutoSignal = useSimStore((s) => s.setAutoSignal);
@@ -187,7 +188,7 @@ export function TilePanel({ client }: { readonly client: SimClient }): ReactElem
           </Tooltip>
         ))}
       </div>
-      <p className="panel__hint">{priceHint(tool, year)}</p>
+      <p className="panel__hint">{priceHint(tool, year, economyCurve)}</p>
       {tool === 'track' && (
         <label className="panel__hint">
           <input

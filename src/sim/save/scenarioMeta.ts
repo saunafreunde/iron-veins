@@ -63,6 +63,7 @@ export interface ScenarioText {
 export const SCENARIO_LOCKABLE_RULES = [
   'climate',
   'difficulty',
+  'economy',
   'elections',
   'emissions',
   'goals',

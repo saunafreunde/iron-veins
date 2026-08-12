@@ -7,6 +7,7 @@ import {
   transferToStation,
 } from '../cargo/routing';
 import { deliveryRevenueCt, tileDistance } from '../cargo/payment';
+import { economyRateFactor } from '../economy/curve';
 import { Cargo, isPassengerClass, otherPassengerClass } from '../cargo/types';
 import {
   BRAKE_REACTION_SECONDS,
@@ -853,6 +854,10 @@ function serveStation(world: World, id: number, station: Station): number {
         ticksInTransit: world.tick - stack.createdTick,
         hasCooling,
         year: world.date.year,
+        // The tariff seam of SPEC2 M21 (E-09), and exactly 1 in a world
+        // without the economy rule - so a pre-M21 world multiplies by one and
+        // earns the cent it always earned.
+        rateFactor: economyRateFactor(world.economyCurve, stack.cargo, world.date.year),
       });
 
       bookRevenue(world.companyOf(vehicles.ownerId[id]!), revenue, stack.cargo);

@@ -555,6 +555,8 @@ export interface NewGameOptions {
   readonly weather: WeatherRule;
   /** The council-election rule of SPEC2 M20 (13.3): saved, hashed, off by default. */
   readonly elections: boolean;
+  /** The century rule of SPEC2 M21 (E-09): saved, hashed, off by default. */
+  readonly economy: boolean;
   readonly aiCompanies: number;
   /**
    * The goals the world is created with (SPEC2 M17), or absent for none.
@@ -603,6 +605,17 @@ export type WorkerToMainMessage =
       readonly industryCount: number;
       readonly towns: readonly TownMarker[];
       readonly industries: readonly IndustryMarker[];
+      /**
+       * The century curve of SPEC2 M21 (E-09), row major in per mille, or
+       * empty in a world whose economy rule is off.
+       *
+       * It travels with the map and nothing else, because it is the same kind
+       * of fact: drawn once at genesis and constant for the life of the world.
+       * A per-tick channel for a number that cannot change would be the
+       * snapshot-stride growth Fehlerkatalog 37 forbids, and the ledger books
+       * M21 at no layout change at all.
+       */
+      readonly economyCurve: readonly number[];
     }
   | { readonly type: 'companyChanged'; readonly name: string; readonly colorIndex: number }
   | { readonly type: 'commandRejected'; readonly reasonKey: string }

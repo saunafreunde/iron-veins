@@ -222,6 +222,21 @@ export interface NewGameParams {
    */
   readonly elections?: boolean;
   /**
+   * Whether this world has a century of economic weather (SPEC2 M21, E-09).
+   *
+   * A world rule for the same Z1 reason weather is one, and it reaches money at
+   * four seams rather than one: what a delivery pays, what building something
+   * costs, how much a primary industry produces and what a megajoule of
+   * traction work costs. The curve behind it is drawn once at genesis from the
+   * named `economy` stream, saved and hashed, and the monthly hooks only ever
+   * look it up.
+   *
+   * ABSENT MEANS OFF, and load-bearing exactly as above: every band this game
+   * owns was measured on a flat century, and a default of on would re-band the
+   * lot inside the milestone that introduces the rule (Fehlerkatalog 34).
+   */
+  readonly economy?: boolean;
+  /**
    * What this world asks of the player (SPEC2 M17), at most `MAX_GOALS` of
    * them.
    *

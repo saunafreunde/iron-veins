@@ -1499,6 +1499,45 @@ const v30_to_v31: SaveMigration = (payload) => {
   };
 };
 
+// -------------------------------------------------- M21: the century curve
+
+/**
+ * M21 gave the world a century (SPEC2 M21's one Z5 bump - v32, E-09).
+ *
+ * Both fields enter a version 31 world as NOTHING, and here more literally than
+ * anywhere else in this file:
+ *
+ *  - `economy` becomes false. Those worlds were played by an economy with no
+ *    century at all: every delivery, every build bill, every month of industry
+ *    output and every energy bill in the file was produced on a flat one.
+ *    Entering `true` would hand a loaded save a hundred years of recessions it
+ *    never had and move every band in the game under a player who changed
+ *    nothing (Fehlerkatalog 34).
+ *  - `economyCurve` becomes an EMPTY table - not a table of neutral thousands.
+ *    A world with the rule off does not have a flat century, it has no century,
+ *    and the two are told apart on purpose: the parser refuses a save whose
+ *    rule and table disagree, `hashWorld` hashes nothing for the pair, and that
+ *    is what makes this the rare bump that leaves every pin, every corpus
+ *    fixture and every scenario claim exactly where it was.
+ *
+ * Fields already present are kept, for the reason `v30_to_v31` gives: the
+ * corpus trick wraps a CURRENT state in an old container, and a world that says
+ * it has a century must not be told it has none - which here would not merely
+ * flatten it, it would make the pair inconsistent and the load would be refused.
+ */
+const v31_to_v32: SaveMigration = (payload) => {
+  const inner = state(payload);
+  const economy = inner['economy'] ?? false;
+  return {
+    ...payload,
+    state: {
+      ...inner,
+      economy,
+      economyCurve: Array.isArray(inner['economyCurve']) ? inner['economyCurve'] : [],
+    },
+  };
+};
+
 /**
  * The measure count on each side of this migration, as LITERALS.
  *
@@ -1602,6 +1641,7 @@ export const SAVE_MIGRATIONS: ReadonlyMap<number, SaveMigration> = new Map<numbe
   [28, v28_to_v29],
   [29, v29_to_v30],
   [30, v30_to_v31],
+  [31, v31_to_v32],
 ]);
 
 /**

@@ -135,6 +135,17 @@ export interface PaymentInput {
   readonly ticksInTransit: number;
   readonly hasCooling: boolean;
   readonly year: number;
+  /**
+   * What the century of SPEC2 M21 (E-09) says this cargo is worth this year,
+   * or 1 - which is what a world without the economy rule always passes.
+   *
+   * The tariff seam E-09 names, and it is a NUMBER handed in rather than a
+   * world looked up, for the reason `timeFactor` takes days instead of ticks:
+   * this file is the payment formula and knows nothing about worlds, which is
+   * what lets `tests/balance/tariff.spec.ts` price the whole catalogue without
+   * building one.
+   */
+  readonly rateFactor?: number;
 }
 
 /**
@@ -156,6 +167,7 @@ export function deliveryRevenueCt(input: PaymentInput): number {
       (input.distanceTiles / PAYMENT_DISTANCE_TILES) *
       timeFactor(input.cargo, days) *
       cooling *
-      epochFactor(input.year),
+      epochFactor(input.year) *
+      (input.rateFactor ?? 1),
   );
 }

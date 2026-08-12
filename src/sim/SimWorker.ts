@@ -956,6 +956,7 @@ function adoptWorld(current: World, sink: SnapshotWriter): void {
     industryCount: current.industries.length,
     towns: townMarkers(current),
     industries: industryMarkers(current.industries),
+    economyCurve: current.economyCurve.toData(),
   });
 }
 

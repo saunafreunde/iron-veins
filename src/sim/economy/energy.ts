@@ -1,4 +1,5 @@
 import { bookExpense } from './company';
+import { economyEnergyFactor } from './curve';
 import { Account } from './ledger';
 import { ENERGY_COST_CT_PER_MJ, JOULES_PER_MJ } from '../constants';
 import type { World } from '../World';
@@ -24,6 +25,12 @@ export function bookMonthlyEnergy(world: World): number {
   const vehicles = world.vehicles;
   const perCompany = world.companyScratch;
   perCompany.fill(0);
+  // What a megajoule costs THIS year (SPEC2 M21, E-09): the energy row of the
+  // century, read once for the whole pass and exactly 1 in a world without the
+  // economy rule. The shocks it carries are what make an electric railway a
+  // decision rather than a formality - the ratios between the five power
+  // sources are untouched, the level under them moves.
+  const energyFactor = economyEnergyFactor(world.economyCurve, world.date.year);
 
   for (let id = 0; id < vehicles.count; id++) {
     if (vehicles.alive[id] !== 1) continue;
@@ -31,7 +38,7 @@ export function bookMonthlyEnergy(world: World): number {
     vehicles.workJ[id] = 0;
     if (work <= 0) continue;
 
-    const rate = ENERGY_COST_CT_PER_MJ[vehicles.powerCode[id]!] ?? 0;
+    const rate = (ENERGY_COST_CT_PER_MJ[vehicles.powerCode[id]!] ?? 0) * energyFactor;
     perCompany[vehicles.ownerId[id]!]! += (work / JOULES_PER_MJ) * rate;
   }
 

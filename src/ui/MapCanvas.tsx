@@ -5,7 +5,7 @@ import { CommandKind, type Command } from '../sim/commands/types';
 import { TileMap } from '../sim/map/TileMap';
 import { SignalKind, signalKind } from '../sim/map/signals';
 import { RailType } from '../sim/map/track';
-import { inflatedCostCt } from '../sim/cargo/payment';
+import { economyCostCt } from '../sim/economy/curve';
 import { planRoadStop, RoadStopShape } from '../sim/net/roadBuilder';
 import { planTrack } from '../sim/net/trackBuilder';
 import { AUTO_SIGNAL_SPACING_TILES, DEADLOCK_WARN_TICKS } from '../sim/constants';
@@ -254,7 +254,10 @@ export function MapCanvas({ client }: { readonly client: SimClient }): ReactElem
         const plan = planRoadStop(map, 0, tile.x, tile.y, kind);
         const bay = plan.shape === RoadStopShape.Bay;
         state.setRoadStopPreview({
-          costCt: plan.reasonKey === null ? inflatedCostCt(plan.costCt, state.year, true) : 0,
+          costCt:
+            plan.reasonKey === null
+              ? economyCostCt(plan.costCt, state.year, true, state.economyCurve)
+              : 0,
           bay,
           reasonKey: plan.reasonKey,
         });
@@ -308,7 +311,9 @@ export function MapCanvas({ client }: { readonly client: SimClient }): ReactElem
         // inflate with the century (section 14.2), and a preview that showed
         // the raw constant would disagree with the bill - the exact frustration
         // section 17.3 exists to prevent.
-        costCt: inflatedCostCt(planned.route.costCt, state.year, true),
+        // ... and with the century of SPEC2 M21 in it, through the very
+        // function `World.costCt` charges through.
+        costCt: economyCostCt(planned.route.costCt, state.year, true, state.economyCurve),
         reasonKey: null,
       });
       view.setPreviewRoute(planned.route.tiles);
@@ -342,7 +347,14 @@ export function MapCanvas({ client }: { readonly client: SimClient }): ReactElem
           state.clearConnect();
           return;
         }
-        const result = planConnection(currentMap, from, station, state.year, state.assistant);
+        const result = planConnection(
+          currentMap,
+          from,
+          station,
+          state.year,
+          state.assistant,
+          state.economyCurve,
+        );
         if (result.ok) {
           state.setConnectPlan(result.plan, null);
           view.setPreviewRoute(result.plan.tiles);

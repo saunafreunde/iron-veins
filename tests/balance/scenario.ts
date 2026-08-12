@@ -128,6 +128,15 @@ export function flatScenario(
    * controlled world.
    */
   elections = false,
+  /**
+   * The century rule of SPEC2 M21 (E-09). Off by default and off in every
+   * balancing scenario, for the reason above it one milestone on: every band
+   * this game owns was measured on a flat century, and the curve multiplies
+   * exactly the tariff, cost, output and energy seams those bands are made of
+   * (Fehlerkatalog 34). It is a parameter because the four seams have to be
+   * provable on a controlled world.
+   */
+  economy = false,
 ): Scenario {
   const map = new TileMap(size);
   map.cornerHeight.fill(GROUND_HEIGHT);
@@ -155,6 +164,7 @@ export function flatScenario(
       emissions,
       weather,
       elections,
+      economy,
     },
     { map, towns, industries, seedUsed: seed },
   );

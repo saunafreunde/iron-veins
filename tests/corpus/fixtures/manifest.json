@@ -68,5 +68,12 @@
     "seed": 20260806,
     "tick": 6050,
     "worldHash": "63ea4f0ca2506741"
+  },
+  {
+    "file": "v32-played.ironsave",
+    "saveVersion": 32,
+    "seed": 20260806,
+    "tick": 6050,
+    "worldHash": "63ea4f0ca2506741"
   }
 ]

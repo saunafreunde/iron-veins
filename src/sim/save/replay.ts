@@ -118,6 +118,11 @@ export function replayGenesis(world: World): World {
     // would have caught it is the one this bundle writes below.
     weather: world.weather,
     elections: world.elections,
+    // And the century rule of M21 beside them. It is enough on its own: the
+    // curve is drawn at genesis from the seed and the named stream, both of
+    // which this function already reproduces, so a rebuilt genesis draws the
+    // same hundred years the recording was played under.
+    economy: world.economy,
     aiCompanies: world.ai.length,
     goals: world.goals.toData(),
   });

@@ -5,6 +5,7 @@ import {
   CO2_LEVY_FROM_YEAR,
   DAYS_PER_MONTH,
   DAYS_PER_YEAR,
+  ECONOMY_STREAM_NAME,
   MAX_COMPANIES,
   ROAD_CONGESTION_EPOCH_TICKS,
   START_YEAR,
@@ -31,7 +32,8 @@ import { reviewBankruptcy } from './economy/bankruptcy';
 import { bookDepreciation } from './economy/depreciation';
 import { bookMonthlyEmissions, closeEmissionsYear } from './economy/emissions';
 import { bookMonthlyEnergy } from './economy/energy';
-import { costFactor, inflatedCostCt } from './cargo/payment';
+import { EconomyCurve, economyCostCt } from './economy/curve';
+import { costFactor } from './cargo/payment';
 import { RailPathfinder } from './net/railPath';
 import { WaterPathfinder } from './net/waterPath';
 import { ReservationTable } from './net/reservations';
@@ -116,6 +118,15 @@ export interface WorldStateData {
   weatherField: Uint8Array;
   /** The council-election world rule of SPEC2 M20 (13.3). */
   elections: boolean;
+  /** The century world rule of SPEC2 M21 (E-09): saved, hashed, off by default. */
+  economy: boolean;
+  /**
+   * The century curve itself, row major in per mille - empty without the rule.
+   *
+   * Plain integers rather than a typed-array view, because it is what the save
+   * container carries and what the parser walks entry by entry.
+   */
+  economyCurve: number[];
   mapSize: number;
   rng: RngState;
   /** Every company, player first. */
@@ -247,6 +258,29 @@ export class World {
    * council it was born with, and both profile factors are exactly 1.
    */
   readonly elections: boolean;
+  /**
+   * Whether this world has a century at all (SPEC2 M21, E-09).
+   *
+   * A world rule in the full Z2 sense - saved, hashed, migrated, fixed at
+   * genesis - because the curve reaches money at four seams: the delivery
+   * tariff, `costCt`, the industry swing and the energy bill. Off unless the
+   * world was started with it, which is what keeps every band measured before
+   * M21 exactly where it was (Fehlerkatalog 34), and with it off
+   * {@link economyCurve} is EMPTY, so every reader in `economy/curve.ts`
+   * returns exactly 1 and the arithmetic is identical to a pre-M21 world's.
+   */
+  readonly economy: boolean;
+  /**
+   * The century itself: one multiplier per cargo group per year, plus the
+   * business cycle and the energy price (SPEC2 M21, E-09).
+   *
+   * Drawn ONCE in {@link World.create} from the named `economy` stream, saved,
+   * hashed, and read-only for ever after - the monthly hooks look it up and
+   * never draw (Z3). A world loaded from a file adopts the century the file
+   * carries and never redraws it, exactly as the weather field is loaded
+   * rather than re-simulated.
+   */
+  readonly economyCurve = new EconomyCurve();
   readonly rng: Rng;
   /**
    * Every company in the game, index = id. Zero is the player, 1..n are the
@@ -457,6 +491,11 @@ export class World {
     // And here too (SPEC2 M20): every world recorded before this milestone was
     // played by councils that never faced an election.
     this.elections = params.elections ?? false;
+    // And here too (SPEC2 M21, E-09): every world recorded before this
+    // milestone was played by an economy that did not have a century. The
+    // curve itself is NOT drawn here - `World.create` is genesis and
+    // `World.fromData` is a load, and only one of the two may draw one.
+    this.economy = params.economy ?? false;
     this.rng = Rng.fromSeed(gameplaySeed(this.seed));
     this.companies.push(
       createCompany(0, params.companyName, params.companyColorIndex, params.difficulty),
@@ -511,7 +550,24 @@ export class World {
    * generated one.
    */
   static fromGenerated(params: NewGameParams, generated: GeneratedWorld): World {
-    return new World(params, generated);
+    return World.born(params, generated);
+  }
+
+  /**
+   * The two genesis doors, and the ONE place a world is born rather than
+   * restored.
+   *
+   * `create` and `fromGenerated` are both a world's first moment; `fromData`
+   * is not, and that is exactly the distinction E-09 rests on. The century
+   * curve is drawn HERE, once, from the named stream - a load adopts the
+   * century its file carries and draws nothing, or a saved world would come
+   * back with a different century from the one it was played under, which is
+   * law #3 broken in the same silence D-185 kept the congestion layer out of.
+   */
+  private static born(params: NewGameParams, generated: GeneratedWorld): World {
+    const world = new World(params, generated);
+    if (world.economy) world.economyCurve.generate(world.streamFor(ECONOMY_STREAM_NAME));
+    return world;
   }
 
   /** Start a new game: generates the map, then builds the world around it. */
@@ -523,7 +579,7 @@ export class World {
       { size: params.mapSize, seed: params.seed, climate: params.climate },
       report,
     );
-    return new World(params, generated);
+    return World.born(params, generated);
   }
 
   /**
@@ -728,7 +784,7 @@ export class World {
    * books at once.
    */
   costCt(baseCt: number): number {
-    return inflatedCostCt(baseCt, this.date.year, this.inflation);
+    return economyCostCt(baseCt, this.date.year, this.inflation, this.economyCurve);
   }
 
   /** This year's price level for costs, 1 when inflation is off. */
@@ -756,6 +812,8 @@ export class World {
       weather: this.weather,
       weatherField: this.weatherField.cells,
       elections: this.elections,
+      economy: this.economy,
+      economyCurve: this.economyCurve.toData(),
       mapSize: this.map.size,
       rng: this.rng.getState(),
       companies: this.companies.map((company) => ({ ...company })),
@@ -834,6 +892,7 @@ export class World {
         roadCongestion: data.roadCongestion,
         weather: data.weather,
         elections: data.elections,
+        economy: data.economy,
         mapSize: data.mapSize,
         companyName: data.companies[0]!.name,
         companyColorIndex: data.companies[0]!.colorIndex,
@@ -848,6 +907,11 @@ export class World {
     // weather from the one that was saved, which is law #3 broken in the same
     // silence the congestion layer of D-185 was kept out of.
     world.weatherField.load(data.weatherField);
+    // The century the save was written under, for the same reason and with a
+    // sharper edge: the curve is DRAWN, so a world that redrew it on load
+    // would come back with a different century every time it was opened. It is
+    // adopted, never regenerated - `World.born` is the only door that draws.
+    world.economyCurve.load(data.economyCurve);
     world.stations.push(...data.stations.map(buildStation));
     // What a station serves and accepts is derived from the map, so it is
     // worked out again here rather than trusted from the file.
@@ -1276,6 +1340,33 @@ function hashDynamicState(h: Fnv1a64, world: World): void {
 export function hashWorld(world: World): string {
   const h = new Fnv1a64();
   hashDynamicState(h, world);
+
+  // The century of SPEC2 M21 (E-09). Two departures from the rules above it,
+  // both deliberate and both argued, because a departure without an argument
+  // is a defect rather than a decision:
+  //
+  //  - It is in the FULL digest only, like the M14 rings and the tile layers
+  //    below and for a sharper version of their reason: the curve is drawn
+  //    ONCE at genesis and is a constant for the life of the world, so 707
+  //    words a game day would buy the live digest nothing it can ever see
+  //    change (D-178's argument, one instrument further).
+  //  - It is hashed CONDITIONALLY, which the three world rules in
+  //    `hashDynamicState` are deliberately not. Their off value is a VALUE -
+  //    `false`, four bytes - and hashing it moved every pin in the game once.
+  //    This rule's off state is an ABSENCE: a world without it has no curve at
+  //    all and every reader in `economy/curve.ts` returns the exact identity,
+  //    so it is not merely similar to a pre-M21 world, it is arithmetically
+  //    the same one. Hashing nothing for it puts that identity in the digest
+  //    too, which turns "every band, pin, corpus fixture and scenario claim is
+  //    untouched with the rule off" from a re-measurement into an assertion
+  //    (`tests/unit/economyCurve.spec.ts`). Injectivity - what Z2 actually
+  //    asks - is unharmed: the only worlds that fingerprint like a pre-M21
+  //    world are worlds whose economy is off, and those ARE pre-M21 worlds in
+  //    every observable respect.
+  if (world.economy) {
+    h.u32(1);
+    h.intArray(world.economyCurve.rows);
+  }
 
   // The M14 cargo-history rings are saved state and therefore fingerprinted
   // (D-134) - but like the tile layers below they live in the FULL digest
