@@ -3971,7 +3971,13 @@ draws, zero i18n lines, zero atlas cells.
   different float from multiplying the four factors in sequence, and every band
   in this project would have moved on the re-association.
 - **The Fertig-wenn's ordering is NOT met, on 16 of 16 seeds, and the reason is
-  not the table.** Sixteen acceptance seeds, 25 years, three competitors:
+  not the table** - **and the reason it gives below is the one thing bundle 2
+  overturned** (D-253, digested under it): the capital handicap was applied to
+  the COMPETITORS as well as to the player, which the constant's own
+  documentation never said it should be. The figures in this bullet are the
+  measurement at `4530f39` and reproduce exactly; the conclusion "so the
+  handicap is correct and it is not this bundle's to remove" does not.
+  Sixteen acceptance seeds, 25 years, three competitors:
   Easy 40,803,531 EUR on 38,400,000 of start capital, Normal 26,215,097 on
   24,000,000, Hard 10,520,991 on **12,000,000**. `company/roster.ts` hands every
   company the world's difficulty, so a Hard competitor starts on 250,000 EUR
@@ -4010,3 +4016,80 @@ draws, zero i18n lines, zero atlas cells.
   somebody changes it the file says so, and carries D-220's refusal profile - no
   loop, no undeclared pair, `NoRoute` 0 at all three levels. **Full balance job
   only** (twelve quarter centuries, measured 194 s), the D-248 precedent.
+
+## The AI's scorer - the float order is load-bearing (D-252)
+
+**`base * p1 * p2 * p3` evaluated left to right is not `base * (p1 * p2 * p3)`,
+and every AI band in this project is one of those two numbers.** `rate` in
+`src/sim/ai/evaluate.ts` reaches four verdicts about the two ENDS of a pair (a
+rival at the source, a rival at the sink, a producing sink, a chain we already
+feed) and each is a factor on the ranking score. They travel as
+`Opportunity.scoreFlags`, a BITMASK, and `scoredWith` multiplies them one at a
+time in the order they have been multiplied in since M8 - deliberately, because
+the M24 terrain probe has to re-price a candidate at its measured way length and
+the obvious way to carry the verdicts across is a pre-multiplied product. That
+product is a different float, and adopting it would have moved scenario 5, the
+`aiGame` sweep, the soak fixture and the canonical pin at once.
+
+Anybody touching the scorer: keep the factors separate, keep the order, and if a
+new factor is added put it at the END of `scoredWith` rather than beside its
+relatives. The same rule is why `priced` takes `scoreFlags` and not a
+`scoreFactor` number.
+
+## M24 bundle 2 - the level is the player's handicap, and the clause is still open (D-253)
+
+Bundle 1 measured that Hard finishes BELOW Normal on 16 of 16 seeds, named
+`START_CAPITAL_CT` as the cause, and concluded that the handicap was correct.
+**The constant's own documentation said otherwise** - it is annotated as "the
+PLAYER'S start capital" - and `createCompany` handed that row to every company
+in the world, so three competitors were 750,000 EUR poorer per seed at Hard and
+900,000 richer at Easy, against a trait table worth single-digit percent. The
+code matches its documentation now: the player's company opens on the level's
+own row, every competitor on `AI_START_CAPITAL_CT` - the Normal baseline - in
+all three levels. **No save bump** (v34 stands), zero snapshot bytes, zero
+protocol fields, zero RNG draws, zero i18n lines, zero atlas cells, no migration
+edit.
+
+- **It is not the resource bonus SPEC.md 15 forbids**, and the entry says so at
+  length because the next reader will ask: no competitor ever holds more than
+  the amount a player starting a NORMAL game holds. Hard does not enrich the
+  opposition, it impoverishes the player - which is what a difficulty level
+  means. Held by two audits rather than by the sentence: a source walk (exactly
+  two files in `src/sim` may index the player's row, exactly one hands a
+  competitor its purse) and an assertion that a competitor's opening cash never
+  exceeds the baseline.
+- **The Normal arm is bit-identical seed by seed**, which is the identity proof
+  the whole project rests on here: all sixteen Normal rows reproduce to the cent
+  and the four-seed total is **7,293,303 EUR**, `aiGame`'s own figure since
+  D-248. Canonical pin, corpus manifest and soak fixture are Normal worlds and
+  are unmoved - re-run, not presumed.
+- **Hard is worth +14,214,449 EUR against bundle 1's measurement of it and the
+  clause is STILL not met.** Sixteen seeds, 25 years, three competitors, every
+  level's competitors now opening on the same 24,000,000 EUR: Easy 29,873,058
+  (+14.0 % on Normal), Normal 26,215,097, Hard **24,735,440 (-5.6 %)**; crewed
+  17/12/10, lines 28/17/16, vehicles 168/102/90, wound up 0/0/2. Per seed Hard
+  is ABOVE Normal on **5 of 16**, identical on 2 and below on 9. The ordering is
+  now the reverse of the one SPEC2 M24 asks for, at equal capital.
+- **The mechanism is the chain look-ahead, which bundle 1 already measured and
+  shipped anyway.** It is the one knob that differs across all three rows
+  (0/1/2) and it is anti-correlated with year-25 company value (+16.9 % at depth
+  0, -4.3 % at depth 2, D-252). What a deeper chain test buys is a line still
+  standing in ten years (D-225's steel mill closed in 1958 and took two lines'
+  sink with it), and a balance sheet at year twenty-five cannot tell a line that
+  was never built from a line that died. **The clause is reported open, not
+  tuned green**, and it now stands or falls on JUDGEMENT, which is the only kind
+  of answer SPEC.md 15 permits.
+- **On the four seeds the balance file plays, Hard beats Normal on 3 of 4 - and
+  it is not asserted.** That is the seed-selection failure D-220 exists to
+  prevent, and the second time in three bundles the four-seed view has disagreed
+  with the sixteen-seed one. `tests/balance/aiDifficulty.spec.ts` re-bands each
+  level (Easy 8,598,241, Normal **unmoved**, Hard 6,922,890 EUR on the four
+  swept seeds), measures "created" against the competitors' own purse, and
+  asserts the confound is gone instead of asserting an ordering.
+- **The level's OTHER balance-sheet term was measured and left standing**:
+  `LOAN_INTEREST_RATE_PER_YEAR` is 6.5 % at Hard against 4 % at Normal and a
+  competitor borrows at the world's rate. Ablated and reverted, it is worth
+  **+450,664 EUR (+1.8 %)** over the sixteen seeds and one winding-up, and Hard
+  remains 3.9 % under Normal. Unlike the purse it is a PRICE the player pays in
+  the same world and its constant claims nothing about whose it is, so it is
+  named rather than changed.

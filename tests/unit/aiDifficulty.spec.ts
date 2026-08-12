@@ -6,12 +6,14 @@ import {
   AI_CANDIDATES_TRIED,
   AI_DECISION_INTERVAL_TICKS,
   AI_MAX_VEHICLES_PER_LINE,
+  AI_START_CAPITAL_CT,
   AI_TENDER_MIN_MONTHS,
   COUNCIL_EXCLUSIVE_MIN_RATING,
   COUNCIL_RATING_NEVER,
   DIFFICULTY_AI_TRAITS,
   Difficulty,
   MapClimate,
+  START_CAPITAL_CT,
   TICKS_PER_MONTH,
   type DifficultyAiTraits,
 } from '../../src/sim/constants';
@@ -30,8 +32,10 @@ import { World } from '../../src/sim/World';
 /**
  * **SPEC.md 15 promises three difficulty levels with better evaluation
  * functions, and until SPEC2 M24 `evaluate.ts` never read `world.difficulty`
- * once** (D-252). The level moved the PLAYER'S start capital and loan interest
- * and left all three playing the identical opponent.
+ * once** (D-252). The level moved the start capital and the loan interest and
+ * left all three playing the identical opponent - and the capital it moved was
+ * handed to the COMPETITORS too, which is the defect D-253 closed: the player's
+ * purse follows the level, a competitor's is the Normal baseline in all three.
  *
  * `DIFFICULTY_AI_TRAITS` is the data table that closes it. This file holds the
  * three things that would otherwise rot:
@@ -83,6 +87,22 @@ function speaking(pattern: RegExp): string[] {
   return simSources().filter((name) => pattern.test(readFileSync(join(SIM_DIR, name), 'utf-8')));
 }
 
+/**
+ * The same walk with the comments taken out, because prose is not a reader -
+ * the rule this file already applies to `DIFFICULTY_AI_TRAITS` below, needed
+ * once more since `economy/company.ts` NAMES the constant it stopped looking
+ * up (D-253).
+ */
+function speakingInCode(pattern: RegExp): string[] {
+  return simSources().filter((name) =>
+    pattern.test(
+      readFileSync(join(SIM_DIR, name), 'utf-8')
+        .replace(/\/\*[\s\S]*?\*\//g, ' ')
+        .replace(/\/\/[^\n]*/g, ' '),
+    ),
+  );
+}
+
 const EASY = DIFFICULTY_AI_TRAITS[Difficulty.Easy]!;
 const NORMAL = DIFFICULTY_AI_TRAITS[Difficulty.Normal]!;
 const HARD = DIFFICULTY_AI_TRAITS[Difficulty.Hard]!;
@@ -128,6 +148,39 @@ describe('the difficulty table SPEC.md 15 asks for', () => {
     // and Hard's is the earliest the command would allow a player.
     expect(HARD.exclusiveRightsRating).toBe(COUNCIL_EXCLUSIVE_MIN_RATING);
     expect(EASY.exclusiveRightsRating).toBe(COUNCIL_RATING_NEVER);
+  });
+
+  /**
+   * **A level reaches a competitor through the judgement table and nowhere
+   * else** (D-253). It used to reach it through the purse as well:
+   * `createCompany` was handed `world.difficulty` for every company, so a Hard
+   * world's three competitors were 750,000 EUR poorer than a Normal world's
+   * before a judgement was made - a factor of two against a table worth
+   * single-digit percent (D-252), and the reason SPEC2 M24's ordering clause
+   * could not be measured at all.
+   *
+   * The audit is a source walk rather than a promise: exactly one file may look
+   * the player's row up, and it is the door the PLAYER'S company is built at.
+   */
+  it('reaches a competitor through the table and not through the purse', () => {
+    // `\b` before START excludes `AI_START_CAPITAL_CT`, whose own definition
+    // indexes the row - that is the derivation, not a second policy.
+    expect(speakingInCode(/\bSTART_CAPITAL_CT\[/).sort(byName)).toEqual([
+      'World.ts',
+      'constants.ts',
+    ]);
+    expect(speakingInCode(/AI_START_CAPITAL_CT/).sort(byName)).toEqual([
+      'company/roster.ts',
+      'constants.ts',
+    ]);
+    // Every competitor opens on the baseline, at every level.
+    for (const difficulty of [Difficulty.Easy, Difficulty.Normal, Difficulty.Hard]) {
+      const built = world(4711, difficulty);
+      for (const state of built.ai) {
+        expect(built.companyOf(state.companyId).cashCt).toBe(AI_START_CAPITAL_CT);
+      }
+      expect(built.playerCompany.cashCt).toBe(START_CAPITAL_CT[difficulty]);
+    }
   });
 
   /**

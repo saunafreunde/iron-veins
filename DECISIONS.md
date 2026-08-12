@@ -47,13 +47,14 @@ no entry below. A number may appear under several topics.
 - **Towns, council & ownership:** D-101, D-102, D-103, D-104, D-205, D-207,
   D-206, D-213, D-216, D-217, D-231, D-232, D-233, D-234, D-235
 - **Economy, finance & emissions:** D-008, D-090, D-091, D-092, D-105, D-154,
-  D-180, D-193, D-196, D-228, D-229, D-236, D-237, D-238, D-239, D-245
+  D-180, D-193, D-196, D-228, D-229, D-236, D-237, D-238, D-239, D-245,
+  D-253
 - **Balancing & scenarios:** D-038, D-039, D-040, D-041, D-066, D-087, D-088,
   D-116, D-151, D-152, D-156, D-158, D-159, D-187, D-190, D-194, D-195,
   D-196, D-197, D-198, D-199, D-200, D-203, D-204, D-207, D-211, D-213,
   D-215, D-216, D-220, D-221, D-222, D-224, D-225, D-226, D-228, D-229,
   D-232, D-233, D-234, D-235, D-236, D-237, D-238, D-239, D-245, D-246,
-  D-247, D-248, D-249, D-250
+  D-247, D-248, D-249, D-250, D-252, D-253
 - **Vehicles & fleet:** D-043, D-044, D-045, D-068, D-076, D-089, D-093,
   D-096, D-142, D-143, D-145, D-146, D-155, D-157, D-171, D-174, D-181, D-185,
   D-201, D-207, D-245, D-246
@@ -61,7 +62,7 @@ no entry below. A number may appear under several topics.
 - **Competitors, AI & tenders:** D-107, D-108, D-109, D-115, D-116, D-121,
   D-122, D-147, D-152, D-153, D-154, D-155, D-156, D-158, D-216, D-218,
   D-219, D-220, D-221, D-222, D-223, D-224, D-225, D-226, D-228, D-229,
-  D-230, D-238, D-250
+  D-230, D-238, D-250, D-252, D-253
 - **Rendering & art:** D-013, D-014, D-033, D-035, D-112, D-117, D-125, D-127,
   D-136, D-140, D-160, D-161, D-162, D-163, D-164, D-165, D-166, D-169, D-170,
   D-171, D-172, D-173, D-174, D-175, D-177, D-179, D-186, D-202, D-205, D-206,
@@ -83,10 +84,11 @@ no entry below. A number may appear under several topics.
   D-195, D-196, D-197, D-198, D-199, D-200, D-201, D-202, D-203, D-204,
   D-205, D-207, D-206, D-208, D-209, D-210, D-212, D-213, D-215, D-216,
   D-217, D-219, D-220, D-221, D-222, D-228, D-229, D-230, D-231, D-233,
-  D-234, D-235, D-236, D-241, D-242, D-248, D-249, D-250, D-251, D-252
+  D-234, D-235, D-236, D-241, D-242, D-248, D-249, D-250, D-251, D-252,
+  D-253
 - **Process & specification:** D-070, D-123, D-129, D-133, D-138, D-140,
   D-185, D-191, D-197, D-198, D-199, D-203, D-204, D-205, D-206, D-215,
-  D-222, D-225, D-226, D-227, D-228, D-229, D-235, D-252
+  D-222, D-225, D-226, D-227, D-228, D-229, D-235, D-252, D-253
 
 ---
 
@@ -16027,3 +16029,168 @@ project running - held by a source walk in `tests/unit/aiDifficulty.spec.ts`.
 - The bundle does NOT deliver the campaign, `profile.json`, the visible
   personality or the achievements. Those are M24's other MUSS points and their
   own bundles.
+
+### D-253 A difficulty level is the PLAYER'S handicap: a competitor opens on the Normal baseline at every level - and the ordering the clause asks for is still not met, now measured against the traits alone
+
+**D-252 measured that Hard finishes below Normal on 16 of 16 seeds and named the
+cause correctly - `START_CAPITAL_CT` - and then drew the wrong conclusion from
+it.** The conclusion was that the handicap is correct and not that bundle's to
+remove, because giving the Hard AI more would be the resource bonus SPEC.md 15
+forbids. The constant's own documentation says otherwise, and it has said so
+since M24 bundle 1 wrote it: the doc comment on `DIFFICULTY_AI_TRAITS` calls it
+"the PLAYER'S start capital". It was documented as the player's and applied to
+everyone.
+
+**The measurement, reproduced first.** Sixteen acceptance seeds, 25 years, three
+competitors, 256 temperate map, at `4530f39`: Easy 40,803,531, Normal
+26,215,097, Hard 10,520,991 EUR of company value against start capital of
+38,400,000 / 24,000,000 / 12,000,000 - D-252's table to the euro, including the
+per-seed ordering, Hard above Normal on **0 of 16**.
+
+**The defect is one argument in one call.** `createCompany`
+(`src/sim/economy/company.ts:39`) read `START_CAPITAL_CT[difficulty]` itself, and
+`company/roster.ts` handed it the world's difficulty for every competitor, so a
+Hard world's three competitors opened 750,000 EUR poorer than a Normal world's
+and an Easy world's 900,000 richer. The trait table is worth single-digit
+percent; the capital step is a factor of two. The cure is the shape rather than a
+number: `createCompany` takes the opening cash and the two DOORS decide it - the
+player's company on `START_CAPITAL_CT[difficulty]`, every competitor on the new
+`AI_START_CAPITAL_CT`, which is `START_CAPITAL_CT[Difficulty.Normal]` by
+derivation and not by a second literal. `createAiCompanies` lost its `difficulty`
+parameter outright, because a level has nothing left to say about what a
+competitor IS - only about how well it judges, which is `DIFFICULTY_AI_TRAITS`,
+read in `ai/evaluate.ts` and nowhere else.
+
+**Why this is not the forbidden resource bonus, because the next reader will
+ask.** SPEC.md 15 forbids giving the AI what a player could not have ("Verboten
+sind Ressourcen-Boni; erlaubt sind bessere Bewertungsfunktionen auf hoeheren
+Stufen"). No competitor ever holds more than the game's own baseline - the amount
+a player starting a Normal game holds - in any level. Hard does not enrich the
+AI; it impoverishes the PLAYER, which is what a difficulty level means and what
+`START_CAPITAL_CT` was documented as doing. At Normal every company still opens
+on the identical figure, which is the world every band in this project is
+measured on. `tests/unit/companies.spec.ts` asserts the boundary as a sentence -
+nothing a competitor holds at the start exceeds the baseline purse - and
+`tests/unit/aiDifficulty.spec.ts` holds it as a source walk: exactly two files in
+`src/sim` may index the player's row (`World.ts` and the constant's own
+definition), and exactly one hands a competitor its purse.
+
+**The Normal arm is bit-identical, seed by seed, and that is the identity
+proof.** All sixteen Normal rows reproduce to the cent - value, lines, vehicles,
+crewed, wound up - and the four-seed total is **7,293,303 EUR**, the figure
+`aiGame`'s sweep has recorded since D-248. No pin moved and none could: the
+canonical cross-OS pin, the corpus manifest and the soak fixture are Normal
+worlds, re-run and compared rather than presumed. `SAVE_VERSION` stays **34**
+(difficulty has been a saved, hashed world rule since D-110 and no field changed
+shape); zero snapshot bytes, zero protocol fields, zero RNG draws, zero i18n
+lines, zero atlas cells, no migration edit.
+
+#### Measured again over the sixteen seeds - and the Fertig-wenn is STILL not met
+
+Every level's competitors now open on the same 24,000,000 EUR, so the three arms
+differ by judgement and by nothing on the balance sheet:
+
+| level  | value at year 25 | created    | per euro | crewed | seeds crewed | lines | vehicles | wound up |
+| ------ | ---------------- | ---------- | -------- | ------ | ------------ | ----- | -------- | -------- |
+| Easy   |       29,873,058 | +5,873,058 |   1.2447 |     17 |        14/16 |    28 |      168 |        0 |
+| Normal |       26,215,097 | +2,215,097 |   1.0923 |     12 |        10/16 |    17 |      102 |        0 |
+| Hard   |       24,735,440 |   +735,440 |   1.0306 |     10 |         9/16 |    16 |       90 |        2 |
+
+**The Hard level is worth +14,214,449 EUR against D-252's measurement of it** -
+it went from destroying 1,479,009 EUR of its competitors' capital to creating
+735,440, from 7 crewed companies to 10, from 7 lines to 16, from 42 living
+vehicles to 90 - **and the clause is still not met.** Per seed, Hard reaches a
+higher company value than Normal on **5 of 16**, the identical figure on **2**
+(nobody built on either arm) and a lower one on **9**; in aggregate it is
+**5.6 % below** Normal while Easy is **14.0 % above** it.
+
+```
+seed        Normal        Hard       delta       seed        Normal        Hard       delta
+4711     1,462,984   1,747,826    +284,842      77003     1,401,601   1,386,601     -15,000
+4713     2,842,457   3,033,244    +190,787     918273     1,397,325   1,395,450      -1,875
+4712     1,329,982   1,500,000    +170,018     131313     1,500,000   1,500,000           0
+4714     1,657,880     641,820  -1,016,060     860213     1,857,945   2,424,361    +566,416
+2718     1,150,934     924,323    -226,611    8675309     1,325,923   1,478,118    +152,195
+31415      951,417     883,917     -67,500     246813     1,370,653   1,370,653           0
+60613    3,015,525   2,210,517    -805,009     555777     1,364,792   1,309,423     -55,369
+12345    1,349,926   1,305,526     -44,400   22071969     2,235,752   1,623,660    -612,092
+```
+
+**The ordering is now the REVERSE of the one asked for, at equal capital, and
+D-252 already named the mechanism**: company value at year twenty-five is
+anti-correlated with the chain look-ahead, which is the one knob that differs
+across all three rows (0 / 1 / 2), and D-252 measured it at +16.9 % for depth 0
+and -4.3 % for depth 2 at constant capital. Easy carries depth 0 and is 14.0 %
+above Normal; Hard carries depth 2 and is 5.6 % below it. What a deeper chain
+test buys is a line that is still standing in ten years - D-225's steel mill
+closed in 1958 and took the sink of two lines with it - and **a balance sheet at
+year twenty-five cannot tell a line that was never built from a line that died.**
+It can only count the money. The table is still ordered by judgement and the
+price is still recorded rather than tuned away; what is new is that the price is
+now the WHOLE of the difference between two levels, because the capital that used
+to dwarf it is gone.
+
+**On the four seeds the balance file plays, Hard beats Normal on 3 of 4** - and
+that is exactly why it is not asserted. A level ordering that holds on the seeds
+the suite happens to sweep is the seed-selection failure D-220 exists to prevent,
+and this is the second time in three bundles that the four-seed view has
+disagreed with the sixteen-seed one.
+
+**The second balance-sheet term of a level was measured and left standing.**
+`LOAN_INTEREST_RATE_PER_YEAR` is 6.5 % at Hard against 4 % at Normal, and a
+competitor borrows at the world's rate like the player. Ablated - the AI charged
+the Normal rate, the probe reverted afterwards - the Hard sweep measures
+**25,186,104 EUR against the shipped 24,735,440, i.e. +450,664 (+1.8 %)**, wound
+up 2 -> 1, five seeds moving and eleven identical to the euro. Hard is then still
+**3.9 % below Normal** and still above it on only 5 of 16 seeds. So the interest
+is real, it is worth under two percent, and it does not close the clause. It is
+deliberately NOT changed here, and SPEC.md 15's own sentence is why: the AI
+"unterliegt exakt denselben Regeln, PREISEN und Kreditgrenzen ... wie der
+Spieler". Interest is a price and a Hard world charges it to everybody; the
+credit line itself (`LOAN_MIN_LIMIT_CT` and the two factors above it) is
+difficulty-blind and stays so. A starting purse is in none of those three
+categories - it is the resource clause's business, and the resource clause is
+satisfied by a competitor never holding more than the baseline. Named, measured,
+and the next bundle's to decide.
+
+#### The four findings D-252 measured and left standing, each with a disposition
+
+- **`AI_CANDIDATES_TRIED` has never bound** - the longest candidate list over
+  eight seeds x twenty-five years x five personalities is FIVE. *Disposition:*
+  still inert and still kept. The equal-capital sweep changes nothing about it,
+  because the drain gate and the D-221/D-229 floor decide how long the list is
+  and neither of them reads the level. The world in which a depth of 20 binds is
+  a 1024 map with three hundred industries, and that is a map question.
+- **`fleetHeadroom` is inert** because the 12.3 advisor already asks for
+  `AI_MAX_VEHICLES_PER_LINE` on every line these worlds offer. *Disposition:*
+  unchanged and still inert at Hard. The Easy arm's 0.75 now runs on a Normal
+  purse and that level still fields 168 vehicles against Normal's 102, so what
+  moves Easy is the chain depth and not the headroom.
+- **The tender board never fires**: a 14.4 tender wants Goods, Food, Steel or
+  Planks delivered to a TOWN, and a competitor runs bus lines and hauls into a
+  works. *Disposition:* unchanged. A solvent Hard competitor builds MORE lines
+  (7 -> 16 over the sweep) and not a different KIND of line, so the board is
+  still dead and its cure is still D-225's onward leg.
+- **The float re-association trap in `rate`**: `base * p1 * p2 * p3` evaluated
+  left to right is not `base * (p1 * p2 * p3)`, which is why
+  `Opportunity.scoreFlags` is a bitmask and `scoredWith` multiplies in the one
+  order the score has been multiplied in since M8. *Disposition:* promoted out of
+  this log into `CLAUDE.md`'s AI section, because it is a landmine for the next
+  person who touches the scorer and a decision entry is not where that person
+  looks.
+
+#### What ships
+
+- `src/sim/economy/company.ts`, `src/sim/company/roster.ts`, `src/sim/World.ts`
+  and two constants. No behaviour change at Normal, proved by running rather than
+  by argument.
+- `tests/balance/aiDifficulty.spec.ts` re-bands each level on the four swept
+  seeds (Easy 8,598,241, Normal **unmoved at its old band**, Hard 6,922,890 EUR),
+  measures "created" against the competitors' own opening capital instead of the
+  player's, asserts that the three levels hand every competitor the same purse,
+  and drops the assertion that the Normal/Hard ratio exceeds 1.5 - which was true
+  only because of the confound.
+- The clause "ein Hard-KI-Lauf ... erreicht messbar hoeheren Firmenwert als
+  Normal" is **reported open**, with the trace above, exactly as D-252 reported
+  it. What changed is that it is now open for a reason about JUDGEMENT, which is
+  the only kind of reason SPEC.md 15 allows an answer to be made of.

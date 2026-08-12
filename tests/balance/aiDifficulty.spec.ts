@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { CommandQueue } from '../../src/sim/commands/queue';
 import {
+  AI_START_CAPITAL_CT,
   Difficulty,
   MapClimate,
   START_CAPITAL_CT,
@@ -12,45 +13,54 @@ import { LOOP_ISSUES, looping, recordOutcomes, refusalTrace, undeclared } from '
 import { AI_SWEEP_SEEDS, fullBalanceMode, hashTwin } from './determinism';
 
 /**
- * **The difficulty band of SPEC2 M24, and the measurement that says its
- * Fertig-wenn cannot be met by an evaluation function** (D-252).
+ * **The difficulty band of SPEC2 M24 - now with the capital confound removed,
+ * and the Fertig-wenn measured against the traits alone** (D-252, D-253).
  *
  * SPEC2 M24 asks for "ein Hard-KI-Lauf auf der Referenzkarte bei gleichem Seed
  * messbar hoeherer Firmenwert als Normal (eigene Testbaender je Stufe)". The
- * bands per level are here and they are measured. The ORDERING is not, and the
- * reason is not the traits:
+ * bands per level are here and they are measured. The ORDERING is not.
  *
- * **A difficulty level's dominant effect on a competitor is `START_CAPITAL_CT`,
- * and it points the other way.** Every company in a world - the player's and
- * every competitor's - starts on the level's own capital (`company/roster.ts`
- * hands `createCompany` the world's difficulty), so a Hard competitor begins
- * with **250,000 EUR against a Normal one's 500,000** and an Easy one's
- * 800,000. Three competitors are therefore 750,000 EUR poorer per seed at Hard
- * and 900,000 richer at Easy, before a single judgement is made. Giving the
- * Hard AI more would be exactly the "Ressourcen-Bonus" SPEC.md 15 forbids, so
- * the handicap is correct and it is not this bundle's to remove.
+ * **What changed since D-252: a competitor no longer plays the player's
+ * handicap.** `createCompany` used to be handed the world's difficulty for
+ * EVERY company, so a Hard world's three competitors opened 750,000 EUR poorer
+ * than a Normal world's and an Easy world's 900,000 richer - a factor of two
+ * against a trait table worth single-digit percent, which made the levels
+ * incomparable in the only currency the clause names. Since D-253 the player's
+ * company opens on `START_CAPITAL_CT[difficulty]` and every competitor on
+ * `AI_START_CAPITAL_CT`, the Normal baseline, at all three levels. Nothing is
+ * given to the opposition that a player could not have (SPEC.md 15's
+ * "Ressourcen-Boni"): a competitor's purse is exactly what a player starting a
+ * Normal game holds, in every level.
  *
- * Measured over the SIXTEEN acceptance seeds (25 years, 3 competitors, 256 map,
- * temperate), and the ordering fails on 16 of 16 - an ordering that held on one
- * seed would be the exact failure D-220 exists to prevent:
+ * **Measured over the SIXTEEN acceptance seeds after that fix** (25 years, 3
+ * competitors, 256 map, temperate; all three levels now start their
+ * competitors on the same 24,000,000 EUR):
  *
- * | level  | start capital | value at year 25 | created    | per euro | crewed | seeds |
- * | ------ | ------------- | ---------------- | ---------- | -------- | ------ | ----- |
- * | Easy   |    38,400,000 |       40,803,531 | +2,403,531 |   1.0626 |     20 | 14/16 |
- * | Normal |    24,000,000 |       26,215,097 | +2,215,097 |   1.0923 |     12 | 10/16 |
- * | Hard   |    12,000,000 |       10,520,991 | -1,479,009 |   0.8767 |      7 |  7/16 |
+ * | level  | value at year 25 | created    | per euro | crewed | seeds | lines | vehicles | wound up |
+ * | ------ | ---------------- | ---------- | -------- | ------ | ----- | ----- | -------- | -------- |
+ * | Easy   |       29,873,058 | +5,873,058 |   1.2447 |     17 | 14/16 |    28 |      168 |        0 |
+ * | Normal |       26,215,097 | +2,215,097 |   1.0923 |     12 | 10/16 |    17 |      102 |        0 |
+ * | Hard   |       24,735,440 |   +735,440 |   1.0306 |     10 |  9/16 |    16 |       90 |        2 |
  *
- * What the traits are worth is measured separately and at CONSTANT capital, one
- * knob at a time, and that measurement is the honest one: the terrain probe is
- * **+5.6 %** over eight seeds, the chain look-ahead **-4.3 %** at depth 2 and
- * **+16.9 %** at depth 0, the building rights **-0.2 %**, and the candidate
- * depth, the fleet headroom and the tender board are all EXACTLY inert. The
- * whole table is therefore worth single-digit percent where the capital step is
- * a factor of two. The trace is in D-252 and in the fields' own comments.
+ * **The Hard level is worth +14,214,449 EUR against D-252's measurement of it
+ * and the clause is still not met**: Hard reaches a HIGHER company value than
+ * Normal on **5 of 16 seeds**, the same figure on 2 (nobody built on either
+ * arm) and a lower one on 9, and in aggregate it is 5.6 % below Normal while
+ * Easy is 14.0 % above it. The ordering is now the reverse of the one asked
+ * for, at equal capital, and D-252 already named the mechanism: **company value
+ * at year twenty-five is anti-correlated with the chain look-ahead**, which is
+ * the one knob that differs across all three rows (0 / 1 / 2). What a deeper
+ * chain test buys is a line that is still standing in ten years (D-225's steel
+ * mill closed in 1958 and took the sink of two lines with it), and a balance
+ * sheet at year twenty-five cannot tell a line that was never built from a line
+ * that died - it can only count the money.
  *
- * So this file bands each level where it is, prints the table, and asserts the
- * one ordering claim that is true - that the three levels are three different
- * games.
+ * **On the four swept seeds Hard beats Normal on 3 of 4, and that is exactly
+ * why this file does not assert it.** A level ordering that holds on the seeds
+ * the suite happens to play is the failure D-220 exists to prevent. So the file
+ * bands each level where it is, asserts that the confound is gone, asserts that
+ * the three levels are three different games, and reports the ordering rather
+ * than claiming it.
  */
 
 const YEARS = 25;
@@ -117,7 +127,10 @@ function measure(name: string, difficulty: Difficulty): Level {
     for (const state of world.ai) {
       const company = world.companyOf(state.companyId);
       valueCt += company.cashCt - company.loanCt + company.fixedAssetsCt;
-      startCt += START_CAPITAL_CT[difficulty]!;
+      // What a COMPETITOR opened with, which since D-253 is the Normal
+      // baseline whatever the level is - so "created" below is comparable
+      // across the three rows instead of measuring the player's handicap.
+      startCt += AI_START_CAPITAL_CT;
       if (company.bankrupt) woundUp++;
       const owned = world.lines.ownedBy(state.companyId);
       lines += owned.length;
@@ -162,21 +175,28 @@ function queueOf(world: World): CommandQueue {
 }
 
 /**
- * The bands, measured on the four swept seeds at the commit that introduced
- * `DIFFICULTY_AI_TRAITS`. Each is its own band - SPEC2 M24's "eigene
- * Testbaender je Stufe" - and NOT a band on the difference between them, which
- * is the thing this bundle measured and could not deliver.
+ * The bands, measured on the four swept seeds. Each is its own band - SPEC2
+ * M24's "eigene Testbaender je Stufe" - and NOT a band on the difference
+ * between them, which is the thing this file measured and could not deliver.
  *
- * Normal's figure is the identity anchor and it is not an approximation: the
- * four-seed total below is **7,293,303 EUR to the euro**, which is the number
- * `aiGame`'s own sweep has recorded since D-248 (SPEC2 M23 bundle 4). The
- * Normal row of the traits table is the pre-M24 competitor, and that is the
- * cheapest proof of it there is.
+ * Measured after D-253 took the player's handicap off the competitors: Easy
+ * **8,598,241**, Normal **7,293,303**, Hard **6,922,890 EUR**, each banded at
+ * about +-11 % of its measurement, which is the width the first three carried.
+ *
+ * **Normal's band did not move and did not need to**: its four-seed total is
+ * **7,293,303 EUR to the euro**, the number `aiGame`'s own sweep has recorded
+ * since D-248 (SPEC2 M23 bundle 4), measured again through this file after the
+ * capital change. The Normal row of the traits table is the pre-M24 competitor
+ * AND a Normal world's competitors were never handed anything but the baseline,
+ * so the identity is proved twice over by one figure. Easy fell 11,869,470 ->
+ * 8,598,241 and Hard rose 3,425,685 -> 6,922,890: that is the 300,000 EUR a
+ * competitor used to be given at Easy and the 250,000 it used to be docked at
+ * Hard, played out over a quarter century by three companies on four seeds.
  */
 const BANDS: ReadonlyMap<string, readonly [number, number]> = new Map([
-  ['Easy', [10_500_000_00, 13_200_000_00]],
+  ['Easy', [7_650_000_00, 9_550_000_00]],
   ['Normal', [6_500_000_00, 8_100_000_00]],
-  ['Hard', [3_000_000_00, 3_900_000_00]],
+  ['Hard', [6_150_000_00, 7_700_000_00]],
 ]);
 
 const LEVELS: ReadonlyArray<readonly [string, Difficulty]> = [
@@ -241,22 +261,25 @@ describe.runIf(fullBalanceMode())('Schwierigkeit mit Zaehnen (SPEC2 M24)', () =>
   });
 
   /**
-   * **The ordering SPEC2 M24 asks for, asserted in the direction it holds.**
-   * Every competitor of a Hard world starts on a quarter of a million against a
-   * Normal one's half million, so the levels are ordered by the capital they
-   * are handed and the traits are worth single-digit percent on top. Asserting
-   * "Hard is richer" would be asserting something measured false on 16 of 16
-   * seeds; what is asserted is the confound itself, so the day somebody
-   * changes it this file says so.
+   * **The confound the clause could not be measured through, asserted gone.**
+   *
+   * The player's purse still moves with the level - that is what a level IS -
+   * and every competitor now opens on the Normal baseline whatever the level
+   * says, so the three arms above differ by JUDGEMENT and by nothing on the
+   * balance sheet (D-253). Asserting "Hard is richer" is still refused: it is
+   * true on 3 of the 4 seeds this file plays and false on 11 of the 16 the
+   * measurement above sweeps, which is precisely the seed-selection failure
+   * D-220 exists to prevent. What is asserted is the thing that would have to
+   * be true for the clause to mean anything at all.
    */
-  it('is ordered by the start capital the level hands every company', () => {
+  it('hands every competitor the same capital at every level', () => {
     expect(START_CAPITAL_CT[Difficulty.Easy]!).toBeGreaterThan(START_CAPITAL_CT[Difficulty.Normal]!);
     expect(START_CAPITAL_CT[Difficulty.Normal]!).toBeGreaterThan(START_CAPITAL_CT[Difficulty.Hard]!);
-    expect(level('Easy').valueCt).toBeGreaterThan(level('Normal').valueCt);
-    expect(level('Normal').valueCt).toBeGreaterThan(level('Hard').valueCt);
-    // And the traits do not close it: the whole table is worth single-digit
-    // percent at constant capital (D-252), the capital step is a factor of two.
-    expect(level('Normal').valueCt / level('Hard').valueCt).toBeGreaterThan(1.5);
+    // The competitors' purse is the Normal row - the game's own baseline, and
+    // never more than a player starting a Normal game holds.
+    expect(AI_START_CAPITAL_CT).toBe(START_CAPITAL_CT[Difficulty.Normal]);
+    const starts = LEVELS.map(([name]) => level(name).startCt);
+    expect(new Set(starts).size, `three levels, ${starts.join(' / ')} of start capital`).toBe(1);
   });
 
   it('leaves no competitor ordering what the command layer exists to refuse', () => {

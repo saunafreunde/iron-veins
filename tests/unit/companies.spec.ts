@@ -1,12 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { CommandKind } from '../../src/sim/commands/types';
 import {
+  AI_START_CAPITAL_CT,
   MAX_AI_COMPANIES,
   TICKS_PER_MONTH,
   TILE_PUBLIC,
   START_CAPITAL_CT,
   Difficulty,
 } from '../../src/sim/constants';
+import { createAiCompanies } from '../../src/sim/company/roster';
+import { createCompany } from '../../src/sim/economy/company';
+import { Rng } from '../../src/sim/rng';
 import { ModuleKind } from '../../src/sim/station/types';
 import { decodeSave, encodeSave } from '../../src/sim/save/serialize';
 import { hashWorld } from '../../src/sim/World';
@@ -52,10 +56,39 @@ describe('a game with competitors', () => {
     expect(world.companies.length).toBe(MAX_AI_COMPANIES + 1);
   });
 
-  it('starts every company with the same capital - the AI is not a cheat', () => {
+  /**
+   * **The AI is not a cheat, and since D-253 that is a sharper claim than
+   * "everybody gets the same".**
+   *
+   * A difficulty level is what the PLAYER is handed: `START_CAPITAL_CT` is the
+   * player's row and moves with the level, while every competitor opens on
+   * `AI_START_CAPITAL_CT` - the Normal baseline - in all three of them. So at
+   * Normal every company still starts on the same figure (asserted below, and
+   * it is the world this whole suite is measured on), at Hard the player is
+   * poorer than the opposition and at Easy richer.
+   *
+   * That is not the resource bonus SPEC.md 15 forbids: no competitor ever holds
+   * more than the amount a player starting a Normal game holds, so nothing is
+   * given to the opposition that a player could not have. Handing the level to
+   * the competitors instead made a Hard world's three competitors 750,000 EUR
+   * poorer per seed than a Normal world's, which is a factor of two against a
+   * judgement table worth single-digit percent (D-252).
+   */
+  it('gives every competitor the Normal baseline, at every level', () => {
     const world = flatScenario(SIZE, [], [], 9, 2).world;
     for (const company of world.companies) {
       expect(company.cashCt).toBe(START_CAPITAL_CT[Difficulty.Normal]);
+    }
+
+    for (const difficulty of [Difficulty.Easy, Difficulty.Normal, Difficulty.Hard]) {
+      const player = createCompany(0, 'Spielerbahn', 0, START_CAPITAL_CT[difficulty]!);
+      expect(player.cashCt).toBe(START_CAPITAL_CT[difficulty]);
+      for (const rival of createAiCompanies(3, 0, Rng.fromSeed(4711))) {
+        expect(rival.cashCt).toBe(AI_START_CAPITAL_CT);
+        // The sentence the entry rests on, as an assertion: nothing a
+        // competitor holds at the start exceeds the game's own baseline purse.
+        expect(rival.cashCt).toBeLessThanOrEqual(START_CAPITAL_CT[Difficulty.Normal]!);
+      }
     }
   });
 

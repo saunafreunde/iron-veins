@@ -9,7 +9,6 @@ import {
   LOAN_MIN_LIMIT_CT,
   LOAN_STEP_CT,
   MONTHS_PER_YEAR,
-  START_CAPITAL_CT,
   type Difficulty,
 } from '../constants';
 import { Cargo, CARGO_COUNT, isPassengerClass } from '../cargo/types';
@@ -25,18 +24,27 @@ import {
   monthlyShareCt,
 } from './ledger';
 
-/** Build the initial company state for a new game. */
+/**
+ * Build the initial company state for a new game.
+ *
+ * The opening cash is stated by the CALLER rather than looked up here, because
+ * the two doors answer differently: the player's company opens on the level's
+ * own `START_CAPITAL_CT`, a competitor on `AI_START_CAPITAL_CT` whatever the
+ * level is (D-253). This function used to take the difficulty and look the row
+ * up itself, which is how every competitor came to be handed the player's
+ * handicap.
+ */
 export function createCompany(
   id: number,
   name: string,
   colorIndex: number,
-  difficulty: Difficulty,
+  openingCashCt: number,
 ): CompanyState {
   return {
     id,
     name,
     colorIndex: colorIndex % COMPANY_COLOR_COUNT,
-    cashCt: START_CAPITAL_CT[difficulty]!,
+    cashCt: openingCashCt,
     loanCt: 0,
     profitThisYearCt: 0,
     lastYearProfitCt: 0,

@@ -9,6 +9,7 @@ import {
   OBSOLETE_UPKEEP_FACTOR,
   RELIABILITY_DECAY_PER_YEAR,
   RELIABILITY_SERVICE_GAIN,
+  START_CAPITAL_CT,
   TICKS_PER_MONTH,
   TICKS_PER_YEAR,
 } from '../../src/sim/constants';
@@ -47,7 +48,7 @@ import { apply, flatScenario, makeTown, type Scenario } from '../balance/scenari
 const BUS = 200;
 
 function company() {
-  return createCompany(0, 'Buchhaltung AG', 0, Difficulty.Normal);
+  return createCompany(0, 'Buchhaltung AG', 0, START_CAPITAL_CT[Difficulty.Normal]!);
 }
 
 describe('the accounts', () => {
@@ -62,7 +63,9 @@ describe('the accounts', () => {
     expect(c.accounts[Account.RevenueMail]).toBe(200);
     // Everything that is neither a person nor a letter is freight.
     expect(c.accounts[Account.RevenueFreight]).toBe(1_200);
-    expect(c.cashCt - createCompany(0, 'x', 0, Difficulty.Normal).cashCt).toBe(1_500);
+    expect(c.cashCt - createCompany(0, 'x', 0, START_CAPITAL_CT[Difficulty.Normal]!).cashCt).toBe(
+      1_500,
+    );
   });
 
   it('keeps depreciation out of the bank', () => {

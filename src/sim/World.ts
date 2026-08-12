@@ -9,6 +9,7 @@ import {
   MAX_COMPANIES,
   MAX_TICK,
   ROAD_CONGESTION_EPOCH_TICKS,
+  START_CAPITAL_CT,
   START_YEAR,
   TICKS_PER_DAY,
   TICKS_PER_MONTH,
@@ -629,16 +630,20 @@ export class World {
     // played by a company that paid for what it built.
     this.editorMode = params.editorMode ?? false;
     this.rng = Rng.fromSeed(gameplaySeed(this.seed));
+    // The level's own purse for the player, the Normal baseline for every
+    // competitor (D-253): a difficulty is what the player is handed, and
+    // handing it to the opposition too made a Hard world three competitors x
+    // 250,000 EUR poorer than a Normal one before a judgement was made.
     this.companies.push(
-      createCompany(0, params.companyName, params.companyColorIndex, params.difficulty),
+      createCompany(
+        0,
+        params.companyName,
+        params.companyColorIndex,
+        START_CAPITAL_CT[params.difficulty]!,
+      ),
     );
     this.companies.push(
-      ...createAiCompanies(
-        params.aiCompanies ?? 0,
-        params.companyColorIndex,
-        params.difficulty,
-        this.rng,
-      ),
+      ...createAiCompanies(params.aiCompanies ?? 0, params.companyColorIndex, this.rng),
     );
     this.ai = createAiStates(this.companies.length, this.rng);
     // Goals are a world rule like inflation (Z2): fixed when the world is

@@ -683,12 +683,41 @@ export const Difficulty = {
 } as const;
 export type Difficulty = (typeof Difficulty)[keyof typeof Difficulty];
 
-/** Starting capital per difficulty. [cent] */
+/**
+ * The starting capital of the PLAYER'S company, per difficulty. [cent]
+ *
+ * **It is the player's and it is applied to the player**, which is what the
+ * name of a difficulty level means: Hard does not enrich the opposition, it
+ * impoverishes the company the player is running. Until SPEC2 M24 bundle 2
+ * `createCompany` handed this row to every company in the world, so three
+ * competitors were 750,000 EUR poorer per seed at Hard and 900,000 richer at
+ * Easy - a difference measured at a factor of two against a trait table worth
+ * single-digit percent (D-252, D-253). What a competitor opens with is
+ * {@link AI_START_CAPITAL_CT}.
+ */
 export const START_CAPITAL_CT: readonly number[] = [
   800_000 * CENTS_PER_EURO,
   500_000 * CENTS_PER_EURO,
   250_000 * CENTS_PER_EURO,
 ];
+
+/**
+ * What a COMPETITOR opens with, at every difficulty: the Normal baseline. [cent]
+ *
+ * Origin: `START_CAPITAL_CT[Difficulty.Normal]`, by derivation rather than by a
+ * second literal - the two may never drift, because the whole argument for this
+ * constant is that it IS the game's own baseline purse.
+ *
+ * **Why this is not the resource bonus SPEC.md 15 forbids** ("Verboten sind
+ * Ressourcen-Boni; erlaubt sind bessere Bewertungsfunktionen auf hoeheren
+ * Stufen"): no competitor ever holds more than the amount a player starting a
+ * Normal game holds. The level is not a purse handed to the opposition, it is
+ * the purse handed to the player, and a competitor plays the same game on the
+ * same baseline in all three of them (D-253). It is also what makes the levels
+ * comparable at all: with the competitors' capital held fixed, the difference
+ * between two levels is the judgement of the table above and nothing else.
+ */
+export const AI_START_CAPITAL_CT: number = START_CAPITAL_CT[Difficulty.Normal]!;
 
 // -------------------------------------------------------------------- loans
 

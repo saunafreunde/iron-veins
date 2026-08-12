@@ -1,4 +1,4 @@
-import { COMPANY_COLOR_COUNT, MAX_AI_COMPANIES, type Difficulty } from '../constants';
+import { AI_START_CAPITAL_CT, COMPANY_COLOR_COUNT, MAX_AI_COMPANIES } from '../constants';
 import { createCompany } from '../economy/company';
 import type { Rng } from '../rng';
 import type { CompanyState } from '../types';
@@ -34,11 +34,20 @@ const AI_COMPANY_NAMES: readonly string[] = [
  *
  * Colours avoid the player's, because two companies the same colour on one map
  * is unreadable, and it costs one modulo to prevent.
+ *
+ * **The difficulty is deliberately not a parameter** (D-253). Every competitor
+ * opens on {@link AI_START_CAPITAL_CT} - the Normal baseline - in all three
+ * levels, because a level is what the PLAYER is handed and a competitor that
+ * was handed it too made the levels differ by a factor of two in capital while
+ * the judgement table they exist for is worth single-digit percent (D-252). The
+ * argument for dropping the parameter rather than passing `Difficulty.Normal`
+ * through it is that a level has nothing left to say about what a competitor IS
+ * - only about how well it judges, which is `DIFFICULTY_AI_TRAITS`, read in
+ * `ai/evaluate.ts` and nowhere else.
  */
 export function createAiCompanies(
   count: number,
   playerColorIndex: number,
-  difficulty: Difficulty,
   rng: Rng,
 ): CompanyState[] {
   const wanted = Math.max(0, Math.min(MAX_AI_COMPANIES, Math.trunc(count)));
@@ -56,7 +65,7 @@ export function createAiCompanies(
     // One colour apart, starting past the player's, so no two companies share
     // one and the assignment does not depend on how many there are.
     const colorIndex = (playerColorIndex + 1 + index) % COMPANY_COLOR_COUNT;
-    companies.push(createCompany(index + 1, name, colorIndex, difficulty));
+    companies.push(createCompany(index + 1, name, colorIndex, AI_START_CAPITAL_CT));
   }
   return companies;
 }
