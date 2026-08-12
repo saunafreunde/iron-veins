@@ -402,6 +402,25 @@ describe('the census walks (D-234)', () => {
     // `placeTown` already put houses around both centres; the corner town's
     // square runs from x = -3 to x = 5 and y = -2 to y = 6, so a third of it
     // is off the map.
+    //
+    // A TRAP for the one way the clamp can be got wrong, because without it
+    // the test is vacuous: a row walked from `y * size - 3` instead of from
+    // `y * size` wraps onto the last three tiles of the PREVIOUS row, and an
+    // empty map there means both walks agree by accident. So those tiles are
+    // given this town's id and a house each. A negative ROW cannot be trapped
+    // the same way and does not need to be - the index is negative, the typed
+    // array reads `undefined`, and both tests above it fail.
+    let trapped = 0;
+    for (let y = 0; y <= corner.y + radius; y++) {
+      for (let x = SCENARIO_SIZE - 3; x < SCENARIO_SIZE; x++) {
+        const index = map.tileIndex(x, y);
+        map.townId[index] = corner.id;
+        map.buildingKind[index] = BuildingKind.Commercial;
+        trapped++;
+      }
+    }
+    expect(trapped).toBeGreaterThan(0);
+
     const out = new Int32Array(8);
     for (const town of [corner, inland]) {
       const [wanted, wantedZones] = naive(map, town, radius);

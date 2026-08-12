@@ -2740,11 +2740,16 @@ every scenario figure is bit-identical across it.
   over `buildingKind`, and under it means CARRYING the census - which D-233
   refused for a stated reason and which is save state under Z4, so it is a
   bundle with a migration and a re-recorded pin, not a line in a closing one.
-- **Guards falsified before they were kept** (D-198): both clamped walks are
-  held against a verbatim copy of the pre-clamp naive walk, on a town whose
-  radius-4 square hangs over two map edges and on two towns whose squares
-  overlap; removing the owner check fails with "expected 40 to be 21", and both
-  tests assert their own non-vacuity.
+- **Guards falsified before they were kept, and one of them was vacuous first**
+  (D-198): both clamped walks are held against a VERBATIM copy of the pre-clamp
+  naive walk, on a town whose radius-4 square hangs over two map edges and on
+  two towns whose squares overlap. Dropping the low clamp fails with "Eckstadt:
+  total: expected 36 to be 18", removing the owner check with "Westheim: total:
+  expected 44 to be 14". The first only fails because the fixture PLANTS the
+  town's own houses on the tiles a row walked from `y * size - 3` wraps onto -
+  on an empty map the broken walk agreed with the naive one and the test passed
+  green with the clamp deleted. A negative ROW needs no trap: the index is
+  negative and a typed array reads `undefined` there.
 - **Re-run, not quoted**: eight shipped scenarios hash-identical (11 tests),
   their briefing and place-name guards green (53 tests, `SCENARIO_WORLD_CLAIMS`
   / `SCENARIO_BRIEFING_FIGURES` / `briefingTowns` unmoved - the claims are taken

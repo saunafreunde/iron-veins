@@ -13183,14 +13183,25 @@ better - the only thing that moved is how a loop is written.
 
 **Both new guards were falsified in the real source and the red build watched**
 (D-198's discipline). `tests/unit/townGrowth.spec.ts` now holds both clamped
-walks against a verbatim copy of the pre-clamp naive walk, on a town at (1, 2)
+walks against a VERBATIM copy of the pre-clamp naive walk, on a town at (1, 2)
 whose radius-4 square hangs over two map edges and on two towns four tiles
-apart whose squares overlap. Removing the owner check from the clamped walk
-fails with "Ostheim: total: expected 40 to be 21"; dropping the low clamp so
-the walk starts at `town.x - radius` fails the corner town with a count taken
-from the wrong rows. Both were reverted. The tests assert their own
-non-vacuity too - the corner town really has buildings, its square really
-overhangs both edges, and the two squares really overlap.
+apart whose squares overlap. Dropping the low clamp so the walk starts at
+`town.x - radius` fails with **"Eckstadt: total: expected 36 to be 18"**;
+removing the owner check fails with **"Westheim: total: expected 44 to be
+14"**. Both were reverted.
+
+**The first of those two guards was vacuous when it was first written, and the
+trap that fixes it is the interesting part.** A row walked from `y * size - 3`
+instead of from `y * size` wraps onto the last three tiles of the PREVIOUS row
+- and on an empty map those tiles carry nothing, so the broken walk and the
+naive walk agreed and the test passed green with the clamp deleted. The fixture
+therefore PLANTS the town's own id and a house on exactly those tiles before it
+measures. A negative ROW needs no trap and cannot be given one: the index is
+negative, a typed array reads `undefined` there, and the comparison falls
+through - so the y clamp is safe by the language and the file says so rather
+than pretending to test it. The tests assert their own non-vacuity as well: the
+corner town really has buildings, its square really overhangs both edges, the
+trap really was planted, and the two squares really do overlap.
 
 **Everything a growing world touches, re-run rather than quoted.**
 
