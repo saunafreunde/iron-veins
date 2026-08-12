@@ -97,6 +97,10 @@ export function SaveLoadPanel({
           {t('ui.close')}
         </button>
       </div>
+      {/* What the dialog behind that button accepts. A scenario the workshop
+          exported opens here like any other file, and until the M22 correction
+          bundle it did not - so the sentence naming it is part of the fix. */}
+      <p className="panel__hint">{t('ui.save.importHint')}</p>
 
       {loadError !== null && (
         <div className="panel__hint value--danger">

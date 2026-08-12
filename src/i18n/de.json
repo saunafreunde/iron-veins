@@ -758,6 +758,7 @@
   "ui.save.export": "Exportieren",
   "ui.save.delete": "Löschen",
   "ui.save.import": "Datei öffnen…",
+  "ui.save.importHint": "Öffnet Spielstände, Aufzeichnungen und Szenarien (.ironsave, .ironreplay, .ironscenario) - eine in der Werkstatt gebaute Karte wird hier geladen.",
   "ui.save.empty": "Noch keine Spielstände.",
   "ui.save.manual": "Spielstand",
   "ui.save.quick": "Schnellspeicher",

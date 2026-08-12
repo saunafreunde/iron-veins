@@ -13,21 +13,22 @@ no entry below. A number may appear under several topics.
 - **Determinism, RNG & hashing:** D-001, D-002, D-003, D-004, D-009, D-010,
   D-024, D-093, D-106, D-128, D-137, D-142, D-145, D-146, D-149, D-153, D-178,
   D-181, D-184, D-185, D-188, D-189, D-190, D-191, D-193, D-194, D-195,
-  D-196, D-200, D-201, D-202, D-204, D-232, D-233, D-236, D-240
+  D-196, D-200, D-201, D-202, D-204, D-232, D-233, D-236, D-240, D-244
 - **Commands, snapshot & worker boundary:** D-004, D-005, D-006, D-011, D-032,
   D-100, D-111, D-145, D-146, D-148, D-162, D-174, D-176, D-179, D-187, D-189,
-  D-192, D-193, D-196, D-200, D-202, D-218, D-240, D-241, D-242, D-243
+  D-192, D-193, D-196, D-200, D-202, D-218, D-240, D-241, D-242, D-243,
+  D-244
 - **Lines & timetables:** D-145, D-146, D-147, D-148, D-149, D-150, D-151,
   D-152, D-155, D-159
 - **Map generation & terrain:** D-018, D-019, D-020, D-021, D-022, D-023,
   D-025, D-027, D-197, D-198, D-199, D-216, D-231, D-234, D-240, D-242
 - **Terraforming & structures:** D-028, D-034, D-050, D-051, D-052, D-124,
-  D-141, D-240
+  D-141, D-240, D-244
 - **Save format, migrations & replays:** D-007, D-025, D-026, D-027, D-048,
   D-111, D-130, D-131, D-134, D-142, D-144, D-145, D-146, D-147, D-153, D-178,
   D-181, D-184, D-185, D-188, D-189, D-190, D-191, D-192, D-193, D-194,
   D-197, D-198, D-200, D-207, D-213, D-231, D-232, D-233, D-236, D-238,
-  D-239, D-240, D-241, D-243
+  D-239, D-240, D-241, D-243, D-244
 - **Rail & track:** D-042, D-043, D-044, D-045, D-046, D-047, D-053, D-141,
   D-153, D-157, D-184, D-230
 - **Signals & reservations:** D-054, D-055, D-056, D-057, D-058, D-059, D-060,
@@ -14756,3 +14757,127 @@ ueber den Frame-Timer waere ein zweiter Scheduler neben dem, der `runFrame`
 schon ist, und der wuerde die Messung selbst verzerren. Und die vier Karten
 messen den TICK, nicht die Bildrate: die zwei Frame-Budgets brauchen eine GPU
 und stehen weiter in README.md als Handmessung.
+---
+
+### D-244 Die Vorschau schreibt nichts, die Ablehnung schreibt nichts, und der Kuestenpinsel loescht nicht die Fluesse der halben Karte
+
+**SPEC2 M22, Korrektur-Bundle.** Ein unabhaengiger Verifizierer hat den
+Meilenstein bei `7b66849` nachgemessen und fuenf Defekte gefunden; drei davon
+sind derselbe Befehl. **Kein Save-Bump** - v33 gehoert Bundle 1, und hier gibt
+es nichts zu erweitern: kein gespeichertes Feld, kein gehashtes Byte, kein
+RNG-Zug, kein Snapshot-Byte, keine Atlas-Zelle, kein neuer CommandKind, keine
+Migration. Alle drei Pins unveraendert; jedes Balance-Band auf den Euro
+identisch mit D-243 (`npm run test:balance:full` gruen bei 101, Szenario 5
+1.022.084 / 1.802.165 / 2.153.604 EUR, Punktzahl 5.889, Netzterm-Faktor 2,55,
+Determinismus 37 gruen, Unit 1.750 gruen).
+
+**1. Die Vorschau hat die Welt veraendert - und zwar mehr als der Befehl
+selbst.** `planPaintRiver` ist die Vorschau-Haelfte des D-119-Paares, und
+D-119s ganze Regel ist, dass die Vorschau mit demselben Code plant, den der
+Befehl ausfuehrt, OHNE Zustand anzufassen. Gemessen auf einer frischen
+256er-Welt, Seed 777: `planPaintRiver(94, 10, 1)` allein nahm
+`standingWaterAboveSeaLevel` von **198 Kacheln auf 0** und bewegte
+`hashWorld`. Die Ursache war nicht der Aushub - der wurde korrekt
+zurueckgelegt - sondern die Zeile danach: die Funktion stellte die Hoehen
+wieder her und baute das Terrain aus ihnen mit
+`refreshShorelineEverywhere(map)` NEU auf. Eine Vorschau, die schreibt, ist
+schlimmer als keine Vorschau, weil der Bildschirm des Spielers und die Welt
+still auseinanderlaufen.
+
+**2. Ein abgelehntes `PaintRiver` hat trotzdem geschrieben.** r=4 bei 14,123,
+r=6 bei 178,14 und r=8 bei 94,10 antworten alle drei
+`cmd.reject.riverNeedsSeaLevel` und nahmen alle drei dieselben 198 -> 0. Es ist
+derselbe Fehler eine Ebene hoeher: die Ablehnung lief durch dieselbe
+Wiederherstellung. **Die Kur ist nicht die geloeschte Zeile, sondern die Form**:
+`runPaintRiver(world, x, y, radius, commit)` ist jetzt Befehl UND Vorschau in
+einer Funktion mit einem Flag - genau die Form, die `terraformBrush` seit
+Bundle 1 hat und die `planPaintRiver` nur behauptet hatte. Vorschau und
+Ablehnung nehmen denselben Wiederherstellungspfad, also ist die Atomizitaet
+eine Eigenschaft des Kontrollflusses und kein Versprechen. Das schliesst
+nebenbei ein Loch, das niemand gemeldet hatte: der alte Commit-Pfad grub die
+Region ein ZWEITES Mal und liess sie halb ausgehoben stehen, wenn dieser Lauf
+auf eine Kachel traf, die das Meer nicht erreicht.
+
+**3. Ein angenommenes `PaintRiver` hat die Fluesse des Generators UEBERALL
+geloescht.** Ein Radius-1-Pinsel an der Kueste entfernte alle 198
+ueber-Meereshoehe-Wasserkacheln der Karte. `refreshShorelineEverywhere` stellt
+jeder Kachel die Frage "stimmt dein Terrain mit deinen eigenen Ecken ueberein?",
+und auf Boden, den niemand angefasst hat, ist die Antwort falsch: `applyRivers`
+malt Wasser entlang eines Laufs, gleichgueltig auf welcher Hoehe das Tal liegt.
+D-240 hat diesen Rest als bekannten Erb-Quirk des GENERATORS protokolliert -
+ihn als Nebenwirkung eines fremden Pinsels zu loeschen ist etwas anderes und war
+nie sanktioniert. **Der Sweep ist jetzt begrenzt, und zwar an beiden Stellen,
+an denen es einen gab.** `applyTerraform` hat die Kuestenfrage ohnehin schon
+fuer jede Ecke gestellt, die es bewegt hat (`refreshShorelineAt`, vorher
+modulprivat); `PaintRiver` fragt zusaetzlich nur noch die Ecken der Pinselregion
+- bei r=8 hoechstens 18x18 Ecken, unabhaengig von der Kartengroesse. Und
+`terraformBrush` hatte dieselbe Mine: es rief den Ganz-Karten-Sweep, wenn
+`enforceSlopeInvariant` etwas heruntergezogen hatte. Die Methode gibt ihre
+Eckenliste jetzt heraus (`enforceSlopeInvariant(pulled)`), also ist auch dort
+der Sweep auf bewegten Boden begrenzt. `refreshShorelineEverywhere` bleibt als
+INSTRUMENT stehen, mit der Regel im Kopf der Funktion: kein Befehl ruft sie.
+
+**Die Behauptung ist per Herkunft gemessen, nicht per Zaehlerstand.** Nach 25
+angenommenen Pinseln auf einer 128er-Karte ist jede Kachel, die aufgehoert hat,
+stehendes Wasser zu sein, eine Kachel, deren EIGENE Ecken der Befehl bewegt hat
+- das prueft `tests/unit/editorAtomicity.spec.ts` einzeln nach. Der Rest bleibt
+stehen (163 -> 151 statt 163 -> 0), und die zwoelf verlorenen sind genau der
+gewoehnliche Terraform-Quirk, den D-240 schon beschrieben hat: ein Bergfluss
+wird zu Gras, wenn jemand NEBEN ihm Erde bewegt. Auf dem Fall des
+Verifizierers - ein Pinsel, 256er-Welt, Seed 777 - sind es jetzt **198 -> 198**.
+
+**Und geprueft wird es als Eigenschaft ueber alle fuenf Editor-Kinds, nicht als
+Fall fuer den einen kaputten.** `editorAtomicity.spec.ts` faehrt einen Schwarm
+von 120 Befehlen aller fuenf Arten ueber eine erzeugte Karte, einmal mit und
+einmal ohne Werkstatt-Regel, und verlangt nach JEDER Ablehnung einen
+byte-identischen Fingerabdruck: FNV je Kartenschicht (die Schichten werden am
+Objekt ABGELAUFEN, nicht aufgezaehlt, damit eine spaeter hinzugefuegte Schicht
+mitgeprueft wird, ohne dass jemand daran denken muss), beide
+Revisionszaehler, `hashWorld`, Entitaetszahlen und die Kasse. Der Schwarm wird
+gegengeprueft: jede Art muss mindestens eine Ablehnung UND der Lauf mindestens
+eine Annahme erzeugt haben, und eine Annahme muss den Fingerabdruck bewegen -
+sonst misst das Instrument nichts. Beide neuen Tests wurden gegen den alten Code
+gefahren und beide werden rot.
+
+**4. Das Replay liess eine Weltregel fallen.** `replayGenesis` trug `editorMode`
+nicht mit: eine Werkstattwelt wurde als Nicht-Werkstattwelt rekonstruiert,
+Genesis-Hash `2ada8be4d4abf346` -> `1b67eea3e4c24e07`. Das bricht M22s eigene
+Fertig-wenn-Klausel fuer genau die Karten, fuer die es den Meilenstein gibt -
+Kasse und Eigentum kamen zurueck, also lehnte das Replay Befehle ab, die die
+Welt des Autors angenommen hatte. **Es ist die dritte Auslassung derselben Art
+in Folge** (`weather` in M20 B3 gefunden, `elections` daneben nachgetragen), und
+deshalb ist die Kur nicht die Zeile, sondern der Test:
+`tests/unit/replayGenesis.spec.ts` laeuft `NewGameParams` Feld fuer Feld ab. Die
+Tabelle ist `Record<keyof Required<NewGameParams>, RuleProbe>` getippt, also ist
+ein neues Feld ein COMPILE-Fehler, bis jemand sagt, wie die Rekonstruktion es
+mittraegt; und jede Sonde setzt ihr Feld auf einen Wert, den der Default nicht
+hat (bei `inflation` und `emissions` heisst das AUS, weil die zwei
+standardmaessig an sind), liest ihn an der rekonstruierten Welt zurueck und
+vergleicht `hashWorld`. Siebzehn Faelle, plus einer mit allen Regeln
+gleichzeitig, weil die Regeln sich gegenseitig lesen.
+
+**5. Das Spiel konnte nicht oeffnen, was die Werkstatt schreibt.**
+`exportScenario` schrieb `.ironscenario`, und jeder Oeffnen-Dialog filterte
+`ironsave` bzw. `ironreplay` - die einzige Art, ein gerade exportiertes Szenario
+zu laden, war, die Datei umzubenennen. Zwei Listen sind, wie so etwas passiert,
+also gibt es jetzt eine: `OPENABLE_EXTENSIONS` in `save/version.ts`, neben den
+drei Endungen selbst, mit dem Argument, das M17 ohnehin schon protokolliert hat
+- die drei sind EIN Container mit EINEM Parser, also nimmt ein Dialog, der einen
+davon nimmt, alle drei. `Storage.ts` leitet beide Formen daraus ab (Tauri will
+die Endung ohne Punkt, ein Browser-`accept` mit), und
+`tests/unit/storage.spec.ts` liest die DATEI: ein `iron`-Endungsliteral in einem
+Dialog dort ist ein roter Build, weil eine Konstante nur die Dialoge bindet, die
+sie schon benutzen. Dazu eine Zeile unter dem Knopf, die sagt, was er nimmt -
+`ui.save.importHint`, de+en.
+
+**Bundle-Budget:** Hauptchunk **1.002.279 -> 1.002.746 B (+467)**, davon
+**+324 B die zwei i18n-Zeilen** (gemessen, indem genau sie geloescht und neu
+gebaut wurde: 1.002.422 B) und **+143 B die Oberflaeche plus die
+Endungs-Konstante**. Budget unveraendert bei 1.006.000 B.
+
+**Nicht im Tick-Pfad, also keine neue 6.1.1-Zeile.** Der begrenzte Sweep ist
+strikt billiger als der Ganz-Karten-Sweep, den er ersetzt, und beide liegen
+ausserhalb von `tick()`; `enforceSlopeInvariant` bekommt einen Null-Test je
+heruntergezogener Ecke. Die M22-Zeile bleibt bei +0,00 ms, gehalten durch
+Konstruktion und nicht durch eine Messung, und dieser Eintrag sagt das, statt
+eine Zahl zu erfinden.

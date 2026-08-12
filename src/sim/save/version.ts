@@ -153,3 +153,24 @@ export const REPLAY_EXTENSION = '.ironreplay';
  * bundle, which is the +32 kB half of D-191 measured above.
  */
 export const SCENARIO_EXTENSION = '.ironscenario';
+
+/**
+ * Every extension this build both WRITES and can hand to `decodeSave` - and
+ * therefore every extension an open dialog offers.
+ *
+ * One list rather than a literal per dialog, because two lists is how a format
+ * ends up writable and not openable: M22 wrote `.ironscenario` out of the
+ * workshop while every open dialog still filtered save and replay, so the only
+ * way to load a scenario an author had just exported was to rename the file.
+ * The three are one container with one parser (see the three entries above), so
+ * a dialog that can take one of them can take all three, and there is nothing
+ * to decide per door.
+ *
+ * `tests/unit/storage.spec.ts` holds `src/platform/Storage.ts` to it: an
+ * extension literal in a file dialog there is a red build.
+ */
+export const OPENABLE_EXTENSIONS: readonly string[] = [
+  SAVE_EXTENSION,
+  REPLAY_EXTENSION,
+  SCENARIO_EXTENSION,
+];

@@ -3,6 +3,12 @@ import {
   normaliseSettings,
   type AppSettings,
 } from '../shared/settings';
+import {
+  OPENABLE_EXTENSIONS,
+  REPLAY_EXTENSION,
+  SAVE_EXTENSION,
+  SCENARIO_EXTENSION,
+} from '../sim/save/version';
 
 /**
  * Where things are kept between sessions: the player's settings, and their
@@ -27,6 +33,27 @@ const SETTINGS_KEY = 'ironveins.settings';
 const SAVE_DIR = 'saves';
 const SAVE_INDEX_KEY = 'ironveins.saves';
 const CRASH_DIR = 'crashes';
+
+/**
+ * The file dialogs' vocabulary, taken from `save/version.ts` and never restated
+ * here.
+ *
+ * A Tauri filter wants the extension without its dot and a browser `accept`
+ * attribute wants it with one, which is the whole reason a dialog is tempted to
+ * write the string out again - and writing it out again is how `.ironscenario`
+ * became a format the workshop could write and no dialog could open (SPEC2 M22,
+ * the correction bundle). Both shapes are derived from the one list;
+ * `tests/unit/storage.spec.ts` fails on an extension literal in this file.
+ */
+function bare(extension: string): string {
+  return extension.startsWith('.') ? extension.slice(1) : extension;
+}
+
+/** Every openable format, as a Tauri dialog filter wants them. */
+const OPENABLE_FILTER: readonly string[] = OPENABLE_EXTENSIONS.map(bare);
+
+/** The same, as the `accept` attribute of a browser file input. */
+const OPENABLE_ACCEPT = OPENABLE_EXTENSIONS.join(',');
 
 function hasTauriRuntime(): boolean {
   return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
@@ -260,7 +287,7 @@ export async function exportSave(name: string, bytes: Uint8Array): Promise<boole
     const { save } = await import('@tauri-apps/plugin-dialog');
     const path = await save({
       defaultPath: name,
-      filters: [{ name: 'Iron Veins', extensions: ['ironsave'] }],
+      filters: [{ name: 'Iron Veins', extensions: [bare(SAVE_EXTENSION)] }],
     });
     if (path === null) return false;
     const { writeFile } = await import('@tauri-apps/plugin-fs');
@@ -287,7 +314,7 @@ export async function exportScenario(name: string, bytes: Uint8Array): Promise<b
     const { save } = await import('@tauri-apps/plugin-dialog');
     const path = await save({
       defaultPath: name,
-      filters: [{ name: 'Iron Veins Scenario', extensions: ['ironscenario'] }],
+      filters: [{ name: 'Iron Veins Scenario', extensions: [bare(SCENARIO_EXTENSION)] }],
     });
     if (path === null) return false;
     const { writeFile } = await import('@tauri-apps/plugin-fs');
@@ -438,7 +465,7 @@ export async function exportReplay(name: string, bytes: Uint8Array): Promise<boo
     const { save } = await import('@tauri-apps/plugin-dialog');
     const path = await save({
       defaultPath: name,
-      filters: [{ name: 'Iron Veins Replay', extensions: ['ironreplay'] }],
+      filters: [{ name: 'Iron Veins Replay', extensions: [bare(REPLAY_EXTENSION)] }],
     });
     if (path === null) return false;
     const { writeFile } = await import('@tauri-apps/plugin-fs');
@@ -459,7 +486,7 @@ export async function importReplay(): Promise<Uint8Array | null> {
     const { open } = await import('@tauri-apps/plugin-dialog');
     const path = await open({
       multiple: false,
-      filters: [{ name: 'Iron Veins', extensions: ['ironreplay', 'ironsave'] }],
+      filters: [{ name: 'Iron Veins', extensions: [...OPENABLE_FILTER] }],
     });
     if (typeof path !== 'string') return null;
     const { readFile } = await import('@tauri-apps/plugin-fs');
@@ -469,7 +496,7 @@ export async function importReplay(): Promise<Uint8Array | null> {
   return await new Promise<Uint8Array | null>((resolve) => {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = '.ironreplay,.ironsave';
+    input.accept = OPENABLE_ACCEPT;
     input.addEventListener('change', () => {
       const file = input.files?.[0];
       if (file === undefined) {
@@ -642,7 +669,7 @@ export async function importSave(): Promise<Uint8Array | null> {
     const { open } = await import('@tauri-apps/plugin-dialog');
     const path = await open({
       multiple: false,
-      filters: [{ name: 'Iron Veins', extensions: ['ironsave'] }],
+      filters: [{ name: 'Iron Veins', extensions: [...OPENABLE_FILTER] }],
     });
     if (typeof path !== 'string') return null;
     const { readFile } = await import('@tauri-apps/plugin-fs');
@@ -652,7 +679,7 @@ export async function importSave(): Promise<Uint8Array | null> {
   return await new Promise<Uint8Array | null>((resolve) => {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = '.ironsave';
+    input.accept = OPENABLE_ACCEPT;
     input.addEventListener('change', () => {
       const file = input.files?.[0];
       if (file === undefined) {

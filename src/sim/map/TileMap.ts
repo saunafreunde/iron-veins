@@ -347,9 +347,14 @@ export class TileMap {
    * each other's eight-neighbourhood, so this also guarantees that every tile
    * has one of the 16 representable slopes.
    *
-   * Returns the number of corners that had to be lowered.
+   * Returns the number of corners that had to be lowered. A caller that has to
+   * follow the sweep - asking the shoreline question of the ground it moved -
+   * passes `pulled` and gets the corner indices themselves, in the order they
+   * were lowered; the same corner may appear more than once, because a later
+   * pass may lower it again. Without the list the only honest follow-up is a
+   * whole-map sweep, and a whole-map sweep relabels ground nobody touched.
    */
-  enforceSlopeInvariant(): number {
+  enforceSlopeInvariant(pulled: number[] | null = null): number {
     const stride = this.size + 1;
     const heights = this.cornerHeight;
     let totalChanged = 0;
@@ -381,6 +386,7 @@ export class TileMap {
             heights[i] = lowest + 1;
             totalChanged++;
             changed = true;
+            if (pulled !== null) pulled.push(i);
           }
         }
       }

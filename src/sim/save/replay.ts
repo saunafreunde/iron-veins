@@ -123,6 +123,16 @@ export function replayGenesis(world: World): World {
     // which this function already reproduces, so a rebuilt genesis draws the
     // same hundred years the recording was played under.
     economy: world.economy,
+    // And the workshop rule of M22, which was missing until the correction
+    // bundle - the third omission in a row, and the reason the audit below the
+    // list is no longer a promise: `tests/unit/replayGenesis.spec.ts` walks
+    // `NewGameParams` field by field and fails on a rule this function drops.
+    // Dropping this one turned a workshop world into an ordinary one on the way
+    // through (genesis hash 2ada8be4d4abf346 -> 1b67eea3e4c24e07), which breaks
+    // M22's own Fertig-wenn for exactly the maps the milestone exists to make:
+    // funds and ownership came back, so the replay of an author's log refused
+    // commands the author's world had accepted.
+    editorMode: world.editorMode,
     aiCompanies: world.ai.length,
     goals: world.goals.toData(),
   });

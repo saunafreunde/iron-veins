@@ -1,6 +1,9 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
   deleteCrashBundle,
+  importSave,
   deleteSave,
   hasBackup,
   listCrashBundles,
@@ -13,6 +16,13 @@ import {
   type SaveEntry,
 } from '../../src/platform/Storage';
 import { SaveSlotKind } from '../../src/shared/protocol';
+import {
+  OPENABLE_EXTENSIONS,
+  REPLAY_EXTENSION,
+  SAVE_EXTENSION,
+  SCENARIO_EXTENSION,
+} from '../../src/sim/save/version';
+import { scenarioFileName } from '../../src/ui/editor/scenarioExport';
 
 /**
  * The atomic-write contract of the save shelf, exercised through the browser
@@ -162,5 +172,75 @@ describe('the save shelf keeps one backup per save', () => {
     expect(await readBackup('gone.ironsave')).toBeNull();
     expect(await hasBackup('gone.ironsave')).toBe(false);
     expect((await listSaves()).some((entry) => entry.name === 'gone.ironsave')).toBe(false);
+  });
+});
+
+// -------------------------------------------- what the open dialog will take
+
+/**
+ * Everything this build WRITES, it can also OPEN (SPEC2 M22, the correction
+ * bundle to D-241).
+ *
+ * The defect was not subtle and nothing caught it: `exportScenario` wrote
+ * `.ironscenario` out of the workshop and every open dialog in the game
+ * filtered `ironsave` (and, for the replay door, `ironreplay`) - so the only
+ * way to open a scenario an author had just exported was to rename the file.
+ * Two lists is how that happens, so there is one now, in `save/version.ts`
+ * beside the extensions themselves.
+ *
+ * The audit is over the SOURCE rather than over the exported constant, because
+ * a constant only binds the dialogs that already use it: what has to be
+ * impossible is a fourth dialog writing the string out again.
+ */
+describe('coupling: a format this build writes is a format it can open', () => {
+  const source = readFileSync(
+    fileURLToPath(new URL('../../src/platform/Storage.ts', import.meta.url)),
+    'utf-8',
+  );
+
+  /** Every `iron…` extension literal in a file, with its line, ignoring prose. */
+  function extensionLiterals(text: string): string[] {
+    const found: string[] = [];
+    const lines = text.split('\n');
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i]!;
+      if (line.trimStart().startsWith('*') || line.trimStart().startsWith('//')) continue;
+      for (const match of line.matchAll(/['"`]\.?(iron[a-z]+)['"`]/g)) {
+        found.push(`${match[1]!} at line ${i + 1}`);
+      }
+    }
+    return found;
+  }
+
+  it('states no extension of its own - every dialog reads save/version.ts', () => {
+    expect(extensionLiterals(source)).toEqual([]);
+  });
+
+  it('meta: catches a dialog that writes the string out again', () => {
+    const planted = "      filters: [{ name: 'Iron Veins', extensions: ['ironsave'] }],";
+    expect(extensionLiterals(planted)).toEqual(['ironsave at line 1']);
+  });
+
+  it('offers the scenario the workshop exports', () => {
+    // The three formats are one container with one parser, so an open dialog
+    // that takes one takes all three - and the scenario is the one that was
+    // missing.
+    expect(OPENABLE_EXTENSIONS).toContain(SCENARIO_EXTENSION);
+    expect(OPENABLE_EXTENSIONS).toContain(SAVE_EXTENSION);
+    expect(OPENABLE_EXTENSIONS).toContain(REPLAY_EXTENSION);
+    expect(scenarioFileName('Werkstatt-Insel').endsWith(SCENARIO_EXTENSION)).toBe(true);
+  });
+
+  it('hands the browser input every one of them', async () => {
+    // The `accept` attribute is the browser half of the same dialog, and it is
+    // where the defect was visible without a desktop build.
+    const input = { type: '', accept: '', addEventListener: () => undefined, click: () => undefined };
+    vi.stubGlobal('document', { createElement: () => input });
+    void importSave();
+    await Promise.resolve();
+
+    for (const extension of OPENABLE_EXTENSIONS) {
+      expect(input.accept.split(','), extension).toContain(extension);
+    }
   });
 });

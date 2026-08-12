@@ -758,6 +758,7 @@
   "ui.save.export": "Export",
   "ui.save.delete": "Delete",
   "ui.save.import": "Open file…",
+  "ui.save.importHint": "Opens saved games, recordings and scenarios (.ironsave, .ironreplay, .ironscenario) - a map built in the workshop is loaded here.",
   "ui.save.empty": "No saved games yet.",
   "ui.save.manual": "Saved game",
   "ui.save.quick": "Quick save",

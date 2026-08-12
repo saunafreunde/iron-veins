@@ -546,7 +546,12 @@ describe('PaintRiver and standing water above sea level', () => {
     for (let i = 0; i < 25; i++) {
       run(fixture, { kind: CommandKind.PaintRiver, x: 5 + i * 4, y: 5 + ((i * 7) % 100), radius: 1 });
     }
+    // Never MORE - that is this command's own claim. That it is also never
+    // wiped out is a different claim and it belongs to a different file: the
+    // whole-map sweep this command used to end in took all of it, and
+    // `editorAtomicity.spec.ts` holds the tiles it may take by provenance.
     expect(standingWaterAboveSeaLevel(world.map)).toBeLessThanOrEqual(before);
+    expect(standingWaterAboveSeaLevel(world.map)).toBeGreaterThan(0);
   });
 });
 

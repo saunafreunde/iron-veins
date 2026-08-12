@@ -17,8 +17,10 @@ import {
 import { Structure } from '../map/structures';
 import { Terrain } from '../map/terrain';
 import {
+  captureGround,
   digTileToSeaLevel,
-  refreshShorelineEverywhere,
+  refreshShorelineAt,
+  restoreGround,
   terraformBrush,
 } from '../map/terraform';
 import { industrySiteRefusal, occupy } from '../mapgen/industries';
@@ -386,33 +388,85 @@ export function paintForest(world: World, x: number, y: number, radius: number):
  * through low ground; an author who wants a valley river digs the valley first.
  */
 export function planPaintRiver(world: World, x: number, y: number, radius: number): EditorPlan {
+  return runPaintRiver(world, x, y, radius, false);
+}
+
+/**
+ * The command AND its preview, in one function with a commit flag - the shape
+ * `terraformBrush` has and the shape `planPaintRiver` only claimed to have.
+ *
+ * Three things follow from the flag being the only difference, and all three
+ * were defects an independent verifier measured before the flag existed:
+ *
+ *  - **a preview writes nothing.** The dig runs against the real map because a
+ *    cascade's price cannot be predicted tile by tile without running it; what
+ *    makes that legitimate is {@link restoreGround} putting every byte back,
+ *    heights, terrain, both revision counters and the two derived layers. The
+ *    old preview restored the heights and then rebuilt the terrain FROM them
+ *    with a whole-map sweep, which deleted every river the generator had drawn
+ *    above sea level - 198 tiles on a 256 map, from a radius-1 brush.
+ *  - **a refusal writes nothing either**, and for free: a refused run takes the
+ *    same restore path as a preview, so the atomicity the command architecture
+ *    rests on is a property of the control flow rather than of a promise. That
+ *    matters most on the path where the region is dug HALFWAY and then meets a
+ *    tile that cannot reach the sea - the very refusal this command exists to
+ *    give (`riverNeedsSeaLevel`).
+ *  - **an accepted dig relabels only what it dug.** `applyTerraform` has
+ *    already asked the shoreline question of every corner it moved; the sweep
+ *    here is the belt-and-braces pass over the region the author named, bounded
+ *    by the brush and therefore incapable of reaching a river on the far side
+ *    of the map.
+ */
+function runPaintRiver(
+  world: World,
+  x: number,
+  y: number,
+  radius: number,
+  commit: boolean,
+): EditorPlan {
   const region = regionRefusal(radius);
   if (region !== null) return refused(region);
   if (!world.map.contains(x, y)) return refused(RejectReason.OutsideMap);
 
-  // The plan is the command run against the real map and put back, exactly as
-  // the brush's is - a dig is a cascade, and a cascade's price cannot be
-  // predicted tile by tile without running it.
-  const savedHeights = Uint8Array.from(world.map.cornerHeight);
-  const savedTerrain = Uint8Array.from(world.map.terrain);
-  const savedRevision = world.map.revision;
-  const savedTrackRevision = world.map.trackRevision;
-
+  const map = world.map;
+  const snapshot = captureGround(map);
   const dug = digRegion(world, x, y, radius);
+  const accepted = dug.reasonKey === null && dug.cells > 0;
 
-  world.map.cornerHeight.set(savedHeights);
-  world.map.terrain.set(savedTerrain);
-  world.map.revision = savedRevision;
-  world.map.trackRevision = savedTrackRevision;
-  if (dug.changedShoreline) refreshShorelineEverywhere(world.map);
+  if (!commit || !accepted) {
+    restoreGround(map, snapshot, dug.changedShoreline);
+    if (dug.reasonKey !== null) return refused(dug.reasonKey);
+    if (dug.cells === 0) return refused(RejectReason.NothingToPaint);
+    return { reasonKey: null, costCt: world.costCt(dug.costCt), affectedCells: dug.cells };
+  }
 
-  if (dug.reasonKey !== null) return refused(dug.reasonKey);
-  if (dug.cells === 0) return refused(RejectReason.NothingToPaint);
-  return {
-    reasonKey: null,
-    costCt: world.costCt(dug.costCt),
-    affectedCells: dug.cells,
-  };
+  refreshShorelineAt(map, regionCorners(map, x, y, radius));
+  map.noteChange();
+  return { reasonKey: null, costCt: world.costCt(dug.costCt), affectedCells: dug.cells };
+}
+
+/**
+ * Every corner of every tile of the brush region, clamped to the map.
+ *
+ * The bound on the accepted command's shoreline sweep: a radius-8 brush names
+ * 17x17 tiles and therefore at most 18x18 corners, whatever the map size.
+ */
+function regionCorners(
+  map: { size: number },
+  x: number,
+  y: number,
+  radius: number,
+): readonly number[] {
+  const stride = map.size + 1;
+  const minX = Math.max(0, x - radius);
+  const maxX = Math.min(map.size, x + radius + 1);
+  const minY = Math.max(0, y - radius);
+  const maxY = Math.min(map.size, y + radius + 1);
+  const corners: number[] = [];
+  for (let cy = minY; cy <= maxY; cy++) {
+    for (let cx = minX; cx <= maxX; cx++) corners.push(cy * stride + cx);
+  }
+  return corners;
 }
 
 /**
@@ -459,19 +513,16 @@ function digRegion(
 }
 
 export function paintRiver(world: World, x: number, y: number, radius: number): CommandOutcome {
+  // The price is asked first because affordability is asked first everywhere,
+  // and asking it is a preview - it moves nothing (`commit: false`).
   const plan = planPaintRiver(world, x, y, radius);
   if (plan.reasonKey !== null) return { ok: false, reasonKey: plan.reasonKey };
   if (!affordable(world, plan.costCt)) {
     return { ok: false, reasonKey: RejectReason.InsufficientFunds };
   }
 
-  const dug = digRegion(world, x, y, radius);
-  if (dug.reasonKey !== null) return { ok: false, reasonKey: dug.reasonKey };
-  // Belt and braces on the one claim this command exists to make: after the
-  // dig, no tile of the region may hold water its own corners do not justify.
-  // The dig's own cascades have already flooded them; the sweep proves it.
-  refreshShorelineEverywhere(world.map);
-  world.map.noteChange();
-  chargeBuild(world, world.costCt(dug.costCt));
+  const done = runPaintRiver(world, x, y, radius, true);
+  if (done.reasonKey !== null) return { ok: false, reasonKey: done.reasonKey };
+  chargeBuild(world, done.costCt);
   return ACCEPTED;
 }

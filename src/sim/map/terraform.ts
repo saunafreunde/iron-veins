@@ -199,14 +199,19 @@ function collectAffected(
  * Ask the shoreline question of EVERY tile, not only of the corners one action
  * moved.
  *
- * `enforceSlopeInvariant` is a whole-map sweep and reports how many corners it
- * pulled down, never which ones, so a bulk edit that ends in it has no corner
- * list to hand {@link refreshShoreline}. Rather than invent one, the workshop's
- * brush asks the same question everywhere - it is outside the hot path by
- * construction (the M22 ledger row is +0.00 ms for exactly this reason), and a
+ * **No command may call this, and the M22 correction bundle is why.** A
  * complete pass cannot leave a tile whose terrain disagrees with its own
- * corners, which is the whole failure this bundle exists to keep out of player
- * maps.
+ * corners - which sounds like a guarantee and is really a demolition order:
+ * {@link standingWaterAboveSeaLevel} counts the tiles the GENERATOR leaves in
+ * exactly that state, and on a 256 map there are 198 of them. `PaintRiver` used
+ * this to finish a one-tile brush at the coast and deleted every one of them,
+ * across the whole map, in both the preview and the refusal path. The commands
+ * ask {@link refreshShorelineAt} about the corners they moved instead;
+ * `enforceSlopeInvariant` hands its own corner list out for the same reason.
+ *
+ * What is left here is the INSTRUMENT: the quirk of SPEC2 M22 is "a mountain
+ * river is water until somebody asks the shoreline question near it", and
+ * asking it everywhere is how a test demonstrates that in one line.
  *
  * Returns true when anything changed, on the same terms as the corner-local
  * version, and does the same relabelling when it did.
@@ -258,8 +263,18 @@ export function standingWaterAboveSeaLevel(map: TileMap): number {
   return count;
 }
 
-/** Recompute water, coast and the derived layers after the shoreline moved. */
-function refreshShoreline(map: TileMap, corners: readonly number[]): boolean {
+/**
+ * Recompute water, coast and the derived layers after the shoreline moved.
+ *
+ * **Scoped by construction, and that is the whole point.** The question this
+ * asks a tile - "does your terrain agree with your own corners?" - has a wrong
+ * answer on ground NOBODY touched: `applyRivers` paints water along a traced
+ * course whatever height the valley is at (see {@link standingWaterAboveSeaLevel}),
+ * so a sweep that asks it everywhere turns every mountain river on the map into
+ * grass as a side effect of an edit at the coast. Ask it only of the corners the
+ * edit moved and that cannot happen.
+ */
+export function refreshShorelineAt(map: TileMap, corners: readonly number[]): boolean {
   const stride = map.size + 1;
   let changed = false;
 
@@ -297,6 +312,60 @@ function refreshShoreline(map: TileMap, corners: readonly number[]): boolean {
     computeLandmasses(map);
   }
   return changed;
+}
+
+/**
+ * Every byte a terraform-shaped edit can move, kept so that a PREVIEW or a
+ * REFUSAL can put them all back.
+ *
+ * The two callers that need this - `terraformBrush(commit: false)` and the
+ * workshop's `PaintRiver` - restore through ONE pair of functions rather than
+ * two copies of the same three lines, because the copies were what let
+ * `PaintRiver` restore the heights and then rebuild the terrain from them with
+ * a whole-map sweep (the M22 correction bundle). Restoring is not "undo the
+ * bits I remember changing": it is putting the map back byte for byte and
+ * recomputing what is DERIVED from those bytes.
+ */
+export interface GroundSnapshot {
+  readonly cornerHeight: Uint8Array;
+  readonly terrain: Uint8Array;
+  readonly revision: number;
+  readonly trackRevision: number;
+}
+
+/** Take the snapshot. Deliberately outside the hot path - law #7 is untouched. */
+export function captureGround(map: TileMap): GroundSnapshot {
+  return {
+    cornerHeight: Uint8Array.from(map.cornerHeight),
+    terrain: Uint8Array.from(map.terrain),
+    revision: map.revision,
+    trackRevision: map.trackRevision,
+  };
+}
+
+/**
+ * Put the ground back exactly as it was, including the two revision counters -
+ * a preview that bumped them would rebuild the world on every pointer move, and
+ * a refused command that bumped them would be observable in the one place a
+ * refusal must not be observable at all.
+ *
+ * `changedShoreline` says whether the run recomputed `oceanMask` and
+ * `landmassId`; those are derived from the bytes above, so restoring the bytes
+ * and recomputing them is a complete restoration and not an approximation.
+ */
+export function restoreGround(
+  map: TileMap,
+  snapshot: GroundSnapshot,
+  changedShoreline: boolean,
+): void {
+  map.cornerHeight.set(snapshot.cornerHeight);
+  map.terrain.set(snapshot.terrain);
+  map.revision = snapshot.revision;
+  map.trackRevision = snapshot.trackRevision;
+  if (changedShoreline) {
+    markOcean(map);
+    computeLandmasses(map);
+  }
 }
 
 /** Price of moving `count` corners at the given ground surcharge. */
@@ -371,7 +440,7 @@ export function applyTerraform(
   }
   map.noteChange();
 
-  const changedShoreline = refreshShoreline(map, affected.corners);
+  const changedShoreline = refreshShorelineAt(map, affected.corners);
   return {
     ok: true,
     costCt: estimate.costCt,
@@ -492,10 +561,7 @@ export function terraformBrush(
 ): TerraformResult {
   if (radius < 0 || x < 0 || y < 0 || x > map.size || y > map.size) return REJECTED_OUT_OF_RANGE;
 
-  const savedHeights = commit ? null : Uint8Array.from(map.cornerHeight);
-  const savedTerrain = commit ? null : Uint8Array.from(map.terrain);
-  const savedRevision = map.revision;
-  const savedTrackRevision = map.trackRevision;
+  const snapshot = commit ? null : captureGround(map);
 
   let costCt = 0;
   let changedCorners = 0;
@@ -533,21 +599,17 @@ export function terraformBrush(
   // state the sixteen slopes cannot express. In practice the cascades have
   // already held it and this moves nothing - which is an assertion in
   // `tests/unit/editorCommands.spec.ts`, not an assumption here.
-  if (changedCorners > 0 && map.enforceSlopeInvariant() > 0) {
+  //
+  // The sweep asks the shoreline question only of the corners it actually
+  // pulled. A whole-map pass here would relabel ground the brush never touched
+  // - see {@link refreshShorelineAt} for the tiles that would lose their water.
+  const pulled: number[] = [];
+  if (changedCorners > 0 && map.enforceSlopeInvariant(pulled) > 0) {
     map.noteChange();
-    changedShoreline = refreshShorelineEverywhere(map) || changedShoreline;
+    changedShoreline = refreshShorelineAt(map, pulled) || changedShoreline;
   }
 
-  if (savedHeights !== null && savedTerrain !== null) {
-    map.cornerHeight.set(savedHeights);
-    if (changedShoreline) {
-      map.terrain.set(savedTerrain);
-      markOcean(map);
-      computeLandmasses(map);
-    }
-    map.revision = savedRevision;
-    map.trackRevision = savedTrackRevision;
-  }
+  if (snapshot !== null) restoreGround(map, snapshot, changedShoreline);
 
   if (changedCorners === 0) {
     return {

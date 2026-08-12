@@ -3439,8 +3439,89 @@ euro.
   scheduler beside `runFrame` and would distort the measurement it exists to
   take.
 
+## M22 correction bundle - the five defects an independent verifier measured (D-244)
+
+Measured at `7b66849` on a fresh 256 world, seed 777, and three of the five
+were the same command. **No save bump** - v33 is bundle 1's; zero saved fields,
+zero hashed bytes, zero RNG draws, zero snapshot bytes, zero atlas cells, zero
+new command kinds, no migration edit. All three pins unmoved, every band
+identical to D-243 to the euro.
+
+- **A preview that writes is worse than no preview** (D-244). `planPaintRiver`
+  restored the heights the dig had moved and then rebuilt the terrain FROM them
+  with `refreshShorelineEverywhere` - so the preview alone took
+  `standingWaterAboveSeaLevel` from **198 tiles to 0** and moved `hashWorld`.
+  The cure is the SHAPE, not the deleted line: `runPaintRiver(..., commit)` is
+  the command and the preview in one function with a flag, which is the form
+  `terraformBrush` has had since bundle 1 and the one `planPaintRiver` only
+  claimed to have. Preview and refusal take the same restore path
+  (`captureGround`/`restoreGround`), so **atomicity is a property of the
+  control flow rather than a promise** - and the same change closes a hole
+  nobody had reported: the old commit path dug the region a SECOND time and
+  left it half excavated if that run met a tile that could not reach the sea.
+- **A refused command leaves the world byte-identical, and it is a PROPERTY
+  over all five kinds** (D-244). Three refusals answering `riverNeedsSeaLevel`
+  took the same 198 -> 0. `tests/unit/editorAtomicity.spec.ts` now drives 120
+  commands of all five kinds over a generated map, with and without the
+  workshop rule, and demands a byte-identical fingerprint after EVERY refusal:
+  FNV per map layer - the layers are WALKED off the object rather than listed,
+  so a layer added later is covered without anybody remembering - plus both
+  revision counters, `hashWorld`, the entity counts and the cash. The sweep is
+  cross-checked (every kind must meet both answers; an acceptance must move the
+  fingerprint) and both new specs were run against the old code and go red.
+- **The shoreline sweep is scoped to ground the command MOVED, at both places
+  that had one** (D-244). One radius-1 brush at the coast used to delete every
+  above-sea-level water tile on the map, because `refreshShorelineEverywhere`
+  asks each tile whether its terrain agrees with its own corners - and on
+  untouched ground the answer is wrong: `applyRivers` paints water along a
+  course whatever height the valley is at. That residual is D-240's named
+  GENERATOR quirk; deleting it as a side effect of an unrelated brush is a
+  different thing and was never sanctioned. `applyTerraform` already asked the
+  question of every corner it moved (`refreshShorelineAt`, previously module
+  private); `PaintRiver` adds only the corners of its own brush region (at
+  r=8, 18x18 corners whatever the map size), and `terraformBrush` - which had
+  the same mine behind `enforceSlopeInvariant` - now takes that method's own
+  corner list (`enforceSlopeInvariant(pulled)`). `refreshShorelineEverywhere`
+  survives as the INSTRUMENT that demonstrates the quirk, with the rule in its
+  own doc comment: **no command calls it.** Proven by PROVENANCE rather than by
+  a count - after 25 accepted brushes on a 128 map, every tile that stopped
+  being standing water had its own corners dug (163 -> 151, and the twelve are
+  the ordinary terraform revert D-240 already described); on the verifier's own
+  case it is **198 -> 198**.
+- **`replayGenesis` carries every world rule, and the audit is the cure**
+  (D-244). `editorMode` was missing, so a workshop world replayed as an
+  ordinary one (genesis hash `2ada8be4d4abf346` -> `1b67eea3e4c24e07`) - funds
+  and ownership came back and the replay refused commands the author's world
+  had accepted, which breaks M22's own Fertig-wenn for exactly the maps the
+  milestone exists to make. It is the THIRD omission of the same kind in a row
+  (`weather`, `elections`), so `tests/unit/replayGenesis.spec.ts` walks
+  `NewGameParams` field by field: the table is typed
+  `Record<keyof Required<NewGameParams>, RuleProbe>`, so a new rule is a
+  compile error until somebody says how the reconstruction carries it, and each
+  probe sets its field to a value the default is not (for `inflation` and
+  `emissions` that means OFF), reads it back and compares `hashWorld`.
+- **A format this build writes is a format it can open** (D-244).
+  `exportScenario` wrote `.ironscenario` and every open dialog filtered
+  `ironsave`/`ironreplay`, so the only way to load a scenario an author had
+  just exported was to rename the file. `OPENABLE_EXTENSIONS` lives in
+  `save/version.ts` beside the three extensions - one container, one parser, so
+  a dialog that takes one takes all three - and `Storage.ts` derives both
+  shapes from it (Tauri wants the extension without its dot, a browser
+  `accept` with). `tests/unit/storage.spec.ts` reads the FILE: an extension
+  literal in a dialog there is a red build, because a constant only binds the
+  dialogs that already use it. Plus `ui.save.importHint`, de+en.
+
+Bundle budget: main chunk **1,002,279 -> 1,002,746 B (+467)**, of which
+**+324 B are the two i18n lines** (measured by deleting exactly those and
+rebuilding); budget unchanged at 1,006,000 B. Nothing in the hot path was
+touched, so the M22 ledger row stays +0.00 ms by construction and this entry
+says so rather than inventing a number.
+
 **M22 is complete.** The workshop speaks only commands (D-240), the palette
 builds nothing else and exports `.ironscenario` (D-241), a picture is a mapgen
 input with a contrast control that moves the relief and not the coast (D-242),
 and the four benchmark maps print p99 in the suite and show a result screen in
-the game (D-243).
+the game (D-243). **Closed on a correction bundle** (D-244): the
+preview and the refusal write nothing, the shoreline sweep is scoped to ground
+the command moved, `replayGenesis` carries every rule with an audit that makes
+the next omission a compile error, and the game opens what the workshop writes.
