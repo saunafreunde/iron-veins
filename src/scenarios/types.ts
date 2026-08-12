@@ -67,6 +67,15 @@ export interface ScenarioRules {
    * introduces the field (Fehlerkatalog 34).
    */
   readonly weather: WeatherRule;
+  /**
+   * The council-election rule of SPEC2 M20 (13.3).
+   *
+   * Stated by every scenario for the reason above it, one milestone on: all
+   * eight ship with it OFF, because their goal thresholds were measured by a
+   * game whose councils never changed hands, and a population goal is decided
+   * by the growth formula the council rating is a factor of.
+   */
+  readonly elections: boolean;
 }
 
 export interface ShippedScenario {
@@ -134,6 +143,7 @@ export function newGameOptionsOf(
     occupancyPenalty: rules.occupancyPenalty,
     signalPenalty: rules.signalPenalty,
     roadCongestion: rules.roadCongestion,
+    elections: rules.elections,
     weather: rules.weather,
     aiCompanies: rules.aiCompanies,
     goals: scenario.goals.map((goal) => goal.spec),

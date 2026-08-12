@@ -75,6 +75,7 @@ export function NewGameDialog({
   const [occupancyPenalty, setOccupancyPenalty] = useState(false);
   const [signalPenalty, setSignalPenalty] = useState(false);
   const [roadCongestion, setRoadCongestion] = useState(false);
+  const [elections, setElections] = useState(false);
   // And the weather rule of M18, off for the same reason: every band in the
   // game was measured by a world without weather.
   const [weather, setWeather] = useState<WeatherRule>(WeatherRule.Off);
@@ -220,6 +221,14 @@ export function NewGameDialog({
         />{' '}
         {t('ui.newGame.roadCongestion')}
       </label>
+      <label className="panel__hint">
+        <input
+          type="checkbox"
+          checked={elections}
+          onChange={(event) => setElections(event.target.checked)}
+        />{' '}
+        {t('ui.newGame.elections')}
+      </label>
 
       <label className="field">
         <span className="field__label">{t('ui.newGame.seed')}</span>
@@ -258,6 +267,7 @@ export function NewGameDialog({
               signalPenalty,
               roadCongestion,
               weather,
+              elections,
               aiCompanies,
             })
           }

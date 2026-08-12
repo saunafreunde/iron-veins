@@ -70,6 +70,7 @@ import {
 } from './save/replaySession';
 import { decodeSave, encodeSave } from './save/serialize';
 import { councilRating, exclusiveRightsCostCt, TOWN_MEASURE_COUNT } from './town/council';
+import { ticksToNextElection } from './town/elections';
 import { calendarFromTick, hashWorldLive, World } from './World';
 
 /**
@@ -236,6 +237,12 @@ function townMarkers(current: World): TownMarker[] {
         : 0,
       exclusiveCostCt: exclusiveRightsCostCt(current, town),
       measureReady: ready,
+      councilProfile: town.councilProfile,
+      // -1 where the world holds no elections, so the panel shows the council
+      // it has and says nothing about a ballot that will never come.
+      monthsToElection: current.elections
+        ? Math.ceil(ticksToNextElection(current.tick) / TICKS_PER_MONTH)
+        : -1,
     };
   });
 }

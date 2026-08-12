@@ -38,6 +38,17 @@ export interface TownMarker {
   readonly exclusiveCostCt: number;
   /** Per measure, whether the player may buy it right now. */
   readonly measureReady: readonly boolean[];
+  /** Which council is sitting here: a CouncilProfile (SPEC2 M20). */
+  readonly councilProfile: number;
+  /**
+   * Months until the next ballot, or -1 in a world whose elections rule is off.
+   *
+   * The panel needs the number and not the rule, so the worker answers the
+   * question rather than sending the flag and letting the interface do the
+   * arithmetic - the same posture the exclusive rights' `exclusiveMonthsLeft`
+   * takes one field up.
+   */
+  readonly monthsToElection: number;
 }
 
 /** One open tender, as the contract panel shows it (section 14.4). */
@@ -542,6 +553,8 @@ export interface NewGameOptions {
   readonly roadCongestion: boolean;
   /** The weather rule of SPEC2 M18 (E-01): saved, hashed, off by default. */
   readonly weather: WeatherRule;
+  /** The council-election rule of SPEC2 M20 (13.3): saved, hashed, off by default. */
+  readonly elections: boolean;
   readonly aiCompanies: number;
   /**
    * The goals the world is created with (SPEC2 M17), or absent for none.

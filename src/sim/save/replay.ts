@@ -109,6 +109,15 @@ export function replayGenesis(world: World): World {
     occupancyPenalty: world.occupancyPenalty,
     signalPenalty: world.signalPenalty,
     roadCongestion: world.roadCongestion,
+    // The weather rule was missing here until SPEC2 M20 bundle 3 added the
+    // election rule beside it and looked. Every rule this function omits is a
+    // rule the reconstruction quietly turns OFF, so a recording of a harsh
+    // world that had to fall back to a genesis rebuild would have re-simulated
+    // under a clear sky and reported a desync that was the rebuild's own. It
+    // is one line, it belongs with the fields around it, and the audit that
+    // would have caught it is the one this bundle writes below.
+    weather: world.weather,
+    elections: world.elections,
     aiCompanies: world.ai.length,
     goals: world.goals.toData(),
   });

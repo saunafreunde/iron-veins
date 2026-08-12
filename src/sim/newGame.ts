@@ -32,6 +32,7 @@ export function worldParamsFor(options: NewGameOptions): NewGameParams {
     signalPenalty: options.signalPenalty,
     roadCongestion: options.roadCongestion,
     weather: options.weather,
+    elections: options.elections,
     aiCompanies: options.aiCompanies,
     goals: options.goals,
   };

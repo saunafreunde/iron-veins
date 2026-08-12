@@ -581,6 +581,10 @@ function parseTowns(value: unknown, path: string): Town[] {
         raw['foodDeliveredThisMonth'],
         `${path}[${i}].foodDeliveredThisMonth`,
       ),
+      electronicsDeliveredThisMonth: asFinite(
+        raw['electronicsDeliveredThisMonth'],
+        `${path}[${i}].electronicsDeliveredThisMonth`,
+      ),
       buildingMaterialThisMonth: asFinite(
         raw['buildingMaterialThisMonth'],
         `${path}[${i}].buildingMaterialThisMonth`,
@@ -601,6 +605,11 @@ function parseTowns(value: unknown, path: string): Town[] {
       exclusiveCompanyId: asInt(raw['exclusiveCompanyId'], `${path}[${i}].exclusiveCompanyId`),
       exclusiveUntilTick: asInt(raw['exclusiveUntilTick'], `${path}[${i}].exclusiveUntilTick`),
       measureReadyTick: parseNumbers(raw['measureReadyTick'], `${path}[${i}].measureReadyTick`),
+      councilProfile: asInt(raw['councilProfile'], `${path}[${i}].councilProfile`),
+      noiseBarrierUntilTick: parseNumbers(
+        raw['noiseBarrierUntilTick'],
+        `${path}[${i}].noiseBarrierUntilTick`,
+      ),
     });
   }
   return towns;
@@ -1297,6 +1306,10 @@ export function parseWorldState(value: unknown, path: string): WorldStateData {
     // different one after loading than before saving.
     weather: parseWeatherRule(stateRaw['weather'], `${path}.weather`),
     weatherField: parseWeatherField(stateRaw['weatherField'], `${path}.weatherField`),
+    // The election rule of M20, required on the same terms: a save that has
+    // lost it is a save whose councils would rate the same company differently
+    // after loading than before saving.
+    elections: asBoolean(stateRaw['elections'], `${path}.elections`),
     mapSize,
     rng: parseRngState(stateRaw['rng'], `${path}.rng`),
     companies: parseCompanies(stateRaw['companies'], `${path}.companies`),

@@ -376,6 +376,7 @@ const NEW_GAME_FIELDS: Record<keyof Required<NewGameParams>, true> = {
   signalPenalty: true,
   roadCongestion: true,
   weather: true,
+  elections: true,
   goals: true,
 };
 

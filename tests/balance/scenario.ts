@@ -5,6 +5,7 @@ import { industrySpec, type Industry } from '../../src/sim/industry/types';
 import { TileMap } from '../../src/sim/map/TileMap';
 import { Terrain } from '../../src/sim/map/terrain';
 import { ModuleKind } from '../../src/sim/station/types';
+import { CouncilProfile } from '../../src/sim/town/council';
 import { BuildingKind, RoadBit, TownSize, type Town } from '../../src/sim/town/types';
 import { World } from '../../src/sim/World';
 
@@ -118,6 +119,15 @@ export function flatScenario(
    * have to be provable on a controlled world.
    */
   weather: WeatherRule = WeatherRule.Off,
+  /**
+   * The council-election rule of SPEC2 M20. Off by default and off in every
+   * balancing scenario, for the reason above it one milestone on: every band
+   * of section 19.4 was measured by councils that never faced a voter, and an
+   * election reweights the rating that SPEC.md 13.2's growth formula is scaled
+   * by (D-232). It is a parameter because the ballot has to be provable on a
+   * controlled world.
+   */
+  elections = false,
 ): Scenario {
   const map = new TileMap(size);
   map.cornerHeight.fill(GROUND_HEIGHT);
@@ -144,6 +154,7 @@ export function flatScenario(
       aiCompanies,
       emissions,
       weather,
+      elections,
     },
     { map, towns, industries, seedUsed: seed },
   );
@@ -164,6 +175,7 @@ export function makeTown(id: number, x: number, y: number, population: number, n
     transportedThisMonth: 0,
     goodsDeliveredThisMonth: 0,
     foodDeliveredThisMonth: 0,
+    electronicsDeliveredThisMonth: 0,
     buildingMaterialThisMonth: 0,
     supplyProducedMean: 0,
     supplyTransportedMean: 0,
@@ -175,6 +187,8 @@ export function makeTown(id: number, x: number, y: number, population: number, n
     exclusiveCompanyId: -1,
     exclusiveUntilTick: 0,
     measureReadyTick: [],
+    councilProfile: CouncilProfile.Balanced,
+    noiseBarrierUntilTick: [],
   };
 }
 

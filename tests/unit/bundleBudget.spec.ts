@@ -66,8 +66,26 @@ const DIST = join(REPO_ROOT, 'dist');
  * contact shadow - and NONE of it is an import of a `src/sim` module that
  * decodes, serialises or steps the world, which is what this budget exists to
  * catch. 956,000 is that measurement plus ~0.5 %.
+ *
+ * **Raised again for SPEC2 M20 bundle 3** (the zone economy and the council
+ * elections), with the measurement and the same rule. The A/B is two builds of
+ * the same tree - a worktree at the bundle's parent commit against the working
+ * tree, `NODE_ENV=production` on both: **955,606 B -> 959,448 B, +3,842 B**,
+ * against 394 B of headroom left under the old number, so this bundle had to
+ * book whatever it weighed. Split by copying ONLY the two catalogues into the
+ * baseline worktree and rebuilding: **+1,505 B are the eleven new i18n keys in
+ * two languages** (the two measures, the three council profiles, the four
+ * council read-outs, the two news sentences and the new-game rule's own
+ * paragraph), and the remaining **+2,337 B are the interface and the constant
+ * tables it reaches through `constants.ts`** - the council panel's profile and
+ * election rows, the new-game checkbox, and the election, profile-factor,
+ * measure and milestone tables. **No new static `src/sim` import chain**: the
+ * council panel already imported `town/council.ts` for `TOWN_MEASURE_KEYS` and
+ * takes `COUNCIL_PROFILE_KEYS` from the same module, and `town/elections.ts` is
+ * reached only from `SimWorker.ts`, which is its own chunk. 966,000 is the new
+ * measurement plus ~0.7 %.
  */
-const MAIN_CHUNK_BUDGET_BYTES = 956_000;
+const MAIN_CHUNK_BUDGET_BYTES = 966_000;
 
 /** The verdict, separated from the measuring so a planted size can be judged. */
 interface BudgetVerdict {

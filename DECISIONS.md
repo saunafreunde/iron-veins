@@ -13,7 +13,7 @@ no entry below. A number may appear under several topics.
 - **Determinism, RNG & hashing:** D-001, D-002, D-003, D-004, D-009, D-010,
   D-024, D-093, D-106, D-128, D-137, D-142, D-145, D-146, D-149, D-153, D-178,
   D-181, D-184, D-185, D-188, D-189, D-190, D-191, D-193, D-194, D-195,
-  D-196, D-200, D-201, D-202, D-204, D-232
+  D-196, D-200, D-201, D-202, D-204, D-232, D-233
 - **Commands, snapshot & worker boundary:** D-004, D-005, D-006, D-011, D-032,
   D-100, D-111, D-145, D-146, D-148, D-162, D-174, D-176, D-179, D-187, D-189,
   D-192, D-193, D-196, D-200, D-202, D-218
@@ -26,7 +26,7 @@ no entry below. A number may appear under several topics.
 - **Save format, migrations & replays:** D-007, D-025, D-026, D-027, D-048,
   D-111, D-130, D-131, D-134, D-142, D-144, D-145, D-146, D-147, D-153, D-178,
   D-181, D-184, D-185, D-188, D-189, D-190, D-191, D-192, D-193, D-194,
-  D-197, D-198, D-200, D-207, D-213, D-231, D-232
+  D-197, D-198, D-200, D-207, D-213, D-231, D-232, D-233
 - **Rail & track:** D-042, D-043, D-044, D-045, D-046, D-047, D-053, D-141,
   D-153, D-157, D-184, D-230
 - **Signals & reservations:** D-054, D-055, D-056, D-057, D-058, D-059, D-060,
@@ -36,18 +36,18 @@ no entry below. A number may appear under several topics.
   D-208, D-210, D-230, D-231
 - **Cargo, payment & routing:** D-036, D-037, D-065, D-067, D-075, D-077,
   D-078, D-118, D-142, D-151, D-176, D-178, D-187, D-207, D-211, D-213,
-  D-215
+  D-215, D-233
 - **Industry & production:** D-022, D-062, D-063, D-064, D-069, D-071, D-079,
   D-085, D-086, D-174, D-201, D-202, D-205, D-225, D-232
 - **Towns, council & ownership:** D-101, D-102, D-103, D-104, D-205, D-207,
-  D-206, D-213, D-216, D-217, D-231, D-232
+  D-206, D-213, D-216, D-217, D-231, D-232, D-233
 - **Economy, finance & emissions:** D-008, D-090, D-091, D-092, D-105, D-154,
   D-180, D-193, D-196, D-228, D-229
 - **Balancing & scenarios:** D-038, D-039, D-040, D-041, D-066, D-087, D-088,
   D-116, D-151, D-152, D-156, D-158, D-159, D-187, D-190, D-194, D-195,
   D-196, D-197, D-198, D-199, D-200, D-203, D-204, D-207, D-211, D-213,
   D-215, D-216, D-220, D-221, D-222, D-224, D-225, D-226, D-228, D-229,
-  D-232
+  D-232, D-233
 - **Vehicles & fleet:** D-043, D-044, D-045, D-068, D-076, D-089, D-093,
   D-096, D-142, D-143, D-145, D-146, D-155, D-157, D-171, D-174, D-181, D-185,
   D-201, D-207
@@ -76,7 +76,7 @@ no entry below. A number may appear under several topics.
   D-167, D-183, D-186, D-188, D-189, D-190, D-191, D-192, D-193, D-194,
   D-195, D-196, D-197, D-198, D-199, D-200, D-201, D-202, D-203, D-204,
   D-205, D-207, D-206, D-208, D-209, D-210, D-212, D-213, D-215, D-216,
-  D-217, D-219, D-220, D-221, D-222, D-228, D-229, D-230, D-231
+  D-217, D-219, D-220, D-221, D-222, D-228, D-229, D-230, D-231, D-233
 - **Process & specification:** D-070, D-123, D-129, D-133, D-138, D-140,
   D-185, D-191, D-197, D-198, D-199, D-203, D-204, D-205, D-206, D-215,
   D-222, D-225, D-226, D-227, D-228, D-229
@@ -12891,3 +12891,183 @@ bundle 2. The v31 migration is EXTENDED in place (Z5); no bump.
 green at p99 6.07 ms with the daily map change in place. `npm run format:check`
 is red on the same 31 files it was red on before (D-227); the three new test
 files were formatted before they were committed and are not among them.
+
+### D-233 The zones become an economy and the councils face the voters - a new stream, a world rule with an off anchor, and every band bit-identical
+
+**SPEC2 M20 bundle 3, and it is two things that had to ship together**: the
+first ECONOMIC use of the 13.1 zones, and the elections SPEC2 asks for by name.
+Both extend the milestone's one `SAVE_VERSION` bump in place - **v31 stands**
+(Z5) - and the `v30_to_v31` migration is the same function with more in it.
+
+**The zone economy.** SPEC2 M20: "Wohnen erzeugt Pendler / verbraucht
+Waren+Lebensmittel; Gewerbe erzeugt Post+Business-Pax / verbraucht
+Waren+Elektronik". Two of those four were already true - the M19 classes split a
+town's passengers by `station.commercialShare` (D-207) - so what this bundle
+adds is the POST and the whole consumption side. The parallel path was checked
+for first, which is what the task asked: `town/update.ts` already held the
+production pass, the demand arithmetic and the growth formula, and all three are
+extended rather than duplicated.
+
+- **The post follows the shops and the town's TOTAL never moves.** A stop's mail
+  weight is `1 + TOWN_MAIL_COMMERCIAL_WEIGHT * commercialShare` over the
+  coverage-times-rating share it already had, NORMALISED over the town's stops.
+  That is D-207's device one cargo along, and normalising is what makes it an
+  exact no-op wherever every stop of a town has the same zone mix - which covers
+  a town with ONE station and every hand-built world of section 19.4, where the
+  share is zero everywhere (the D-201 device). A rate scaled per zone would have
+  changed how much post a town makes, and with it scenario 1.
+- **Electronics gets a counter, not a fifth term.** SPEC.md 13.2 has four supply
+  terms and `versorgungWaren` is one basket, so radios still count as goods
+  where the formula reads them - they have since M5. What needed separating is
+  the DEMAND: `TOWN_INHABITANTS_PER_ELECTRONICS` is multiplied by the commercial
+  SHARE of the town's buildings and added to the goods demand, so a town with
+  shops wants more of the same basket. `Town.electronicsDeliveredThisMonth` is
+  the saved, hashed counter that makes that possible, and it exists because a
+  demand cannot be scaled per zone while the deliveries behind it are one
+  number.
+- **Food is the houses' demand**: `population * residentialShare / 700`. A town
+  that is a third shops is fed by two thirds of what a wholly residential one
+  needs, and an all-residential town takes exactly the pre-M20 figure.
+- **The census is monthly, counted, and its own walk.** `countTownZones` is
+  `countTownBuildings` asked one question further on, into a preallocated
+  four-slot scratch indexed by `BuildingKind` (a monthly hook allocates no more
+  than a tick does, law #7, D-231). It is NOT folded into the daily deficit
+  walk: that one is a DAILY question about one town and this is a MONTHLY
+  question about every town. A town with no buildings at all reads as fully
+  residential, which is what it was before the zones meant anything.
+- **What the split deliberately does not touch is ACCEPTANCE.** A stop covering
+  houses still takes electronics whether or not the town has a commercial zone
+  (`TOWN_CARGO` is unchanged). The demand is the shops'; the acceptance is the
+  houses'. Unhooking the second from the first would re-open D-118's dead end -
+  an electronics works whose output nobody takes closes in twenty-four months.
+
+**The elections, and the one decision the whole bundle turns on.**
+
+- **A ballot is a WORLD RULE with an off anchor** (Z1/Z2, Fehlerkatalog 34, the
+  D-200 precedent). A council profile reweights the rating; the rating gates
+  building permits and exclusive rights and - since D-232 - is a FACTOR of
+  SPEC.md 13.2's growth formula. So an election reaches money, which under Z1
+  makes it saved, hashed and fixed at genesis, and under Fehlerkatalog 34 makes
+  it OFF unless the world was started with it: every band this game owns was
+  measured by councils that never faced a voter. `NewGameParams.elections` is
+  the eleventh entry of `SCENARIO_LOCKABLE_RULES`, all eight shipped scenarios
+  state it `false` explicitly, and `runElections` returns on its first line for
+  a world that has it off - no stream constructed, no draw taken, no profile
+  written.
+- **The draws come from a NEW named stream and this is the exact mistake D-106
+  was written for.** `streamFor(streamSalt('politics') + electionNumber)`, the
+  weather's shape one period out (D-128's tender-review precedent). A single
+  draw from `world.rng` here would shift every later breakdown roll of 11.3 in
+  every existing seed - the balance scenarios, the soak recording and every save
+  a player holds would run a different future for a reason that has nothing to
+  do with politics. **Instrumented rather than argued**: `elections.spec.ts`
+  plays three full terms with the rule on and with it off and requires
+  `world.rng.getState()` to be IDENTICAL, with the comparison proved
+  non-vacuous - a four-town world elects somebody other than the balanced
+  council, the two worlds hash differently because of it, and the gameplay
+  stream is still in the same place. A second test wraps only the election's own
+  generator (`streamFor` is shared - the tender review draws from it monthly)
+  and counts **one word per town per election**, which is Z3's identical-draw-
+  count clause made checkable.
+- **The profile reweights two terms and invents none.** Green doubles the noise
+  and the clean-fleet bonus, business-friendly halves both; "umgekehrt" is read
+  as the reciprocal rather than as a second invented number. The cap
+  (`COUNCIL_NOISE_MAX`) is applied AFTER the weight, or a green council could
+  not reach the towns where a company laid most track. Balanced is 1 and 1, is
+  what every town is born with, and is what a world with the rule off keeps for
+  ever - so the rating arithmetic of a world that did not ask for politics is
+  the pre-M20 arithmetic term for term.
+- **The Fertig-wenn, measured**: the same company, the same map, the same month,
+  only the council different - nine tiles of track cost 5 rating points under a
+  balanced council, 11 under a green one and 3 under a business-friendly one,
+  i.e. the table's x2 and x0.5 within the one point an integer rating rounds by.
+  And the converse is asserted too: a company with no track and no fleet has
+  neither term, so a green council is not "everybody loses points".
+- **Two new measures, and both refuse rather than charge for nothing.**
+  `SponsorStations` pays goodwill per station the company runs here and is
+  refused (`nothingToDo`) to a company with none - sponsoring a station one does
+  not have is not a thing a council can be sold. `NoiseBarrier` halves the noise
+  term for two years and is refused where the company laid no track, asking
+  `townTrackTiles` - the noise term's OWN definition, exported so a wall cannot
+  be sold beside a line the rating does not charge for. Half and not zero: a
+  wall is not the line going away, and against a green council the pair puts the
+  term back exactly where a balanced council had it (asserted).
+- **`TOWN_MEASURE_COUNT` 5 -> 7 re-lays a saved array**, because
+  `measureReadyTick` is company-major with that count as its stride: what was
+  company 1's tree cooldown is company 0's sponsorship slot now. `v30_to_v31`
+  re-lays it row by row with BOTH counts written out as literals (D-207's rule -
+  a migration writes the shape of its own target version, never the live
+  constant's). **The exposure is stated and checked rather than papered over**:
+  a list this build wrote, wrapped in a v30 container by the corpus trick,
+  cannot be told apart from a real v30 one - it does not arise because no corpus
+  fixture and no `save.spec.ts` world buys a town measure, and that emptiness is
+  now a test rather than an assumption.
+- **News: edge-triggered first, `postOnce` behind it.** An election line is
+  written only for a council that actually CHANGED and only for a town the
+  player has a station in (D-202's storm-warning filter). A growth milestone is
+  compared against the population BEFORE and AFTER the month that just ran, so a
+  town sitting over a threshold for thirty years is one entry rather than three
+  hundred and sixty. **The stated floor of using `postOnce` at all**: its key is
+  the message AND the place, so two milestones for one town with nothing written
+  in between collapse into one line - pinned in the test rather than hidden, and
+  priced in months, since the thresholds are a factor of two apart.
+
+**A defect found on the way and fixed**: `replayGenesis` did not pass the
+WEATHER rule. Every rule that function omits is a rule the reconstruction
+quietly turns off, so a recording of a harsh world that fell back to a genesis
+rebuild would have re-simulated under a clear sky and reported a desync that was
+the rebuild's own. One line, beside the election rule that was about to be
+forgotten the same way.
+
+**Measured, and the headline is that nothing moved that was not a new hashed
+byte.**
+
+- **Not one balance band moved and the hand-built worlds are bit-identical**:
+  scenario 1 payback in game year 3 (balances 485,735 / 493,316 / 501,669 /
+  509,938 / 518,793 / 521,260 EUR), scenario 2 investment 249,980 EUR and
+  payback year 6, scenario 3 **159,516 EUR/yr**, Harter Winter **-4.36 %**,
+  Punktzahl **5,889** with the same 36/26/24/13 split, Netzdesign green. That is
+  by CONSTRUCTION for those worlds: they are all-residential, so
+  `residentialShare` is 1, `commercialShare` is 0 and every new term is the term
+  that was there.
+- **Scenario 5 is identical to the euro** - road 1,022,084, rail 1,802,165,
+  expansive 2,153,604 EUR, D-229's figures exactly - although it plays a
+  GENERATED map with real commercial zones. The reason is worth writing down:
+  its competitors haul passengers and freight into industries, and nothing in
+  that world delivers goods, food or electronics INTO a town, so both new
+  demands are compared against a delivered zero and answer zero exactly as
+  before. The zone economy is observable where somebody supplies a town, and the
+  balance suite has no such line on a generated map.
+- **Pins moved once each, and only because new hashed fields joined the
+  digest.** Canonical cross-OS `817c99ef5dfe2061` -> **`5f4c022bef5b94d1`**,
+  soak `75ef4332dae55b89` -> **`9aac5ef0864d5c69`** at **unchanged 35
+  commands**, corpus manifest re-recorded with a fresh `v31-played.ironsave`;
+  the nine frozen fixtures still decode to ONE world (`1dd5bb6255a236a9`) and
+  only the v31 one differs, which is D-231's correct behaviour.
+  `SCENARIO_WORLD_CLAIMS` did NOT move - the claims are measured at genesis, and
+  the two `passiveGrowth` curves play years in which nothing is delivered at
+  all, so they take the shrink branch untouched.
+- **Cost.** The census is the only new per-town work and it is measured by A/B
+  on the same 512 world with 40 towns: `growTowns` **24.51 -> 91.34 us per game
+  MONTH**, i.e. +66.8 us a month or about **0.011 us a tick**, against a ledger
+  line of +0.10 ms. `npm run test:perf` on the reference fixture (120 towns,
+  elections off) reads tick **p50 1.756 / p99 2.912 ms** against the M10
+  baseline 1.45 / 3.26 - the p99 BELOW it, so no acceptance number is claimed
+  beyond "inside this machine's noise" (D-167/D-215's posture).
+- **Main bundle 955,606 -> 959,448 B**, against 394 B of headroom left under the
+  old budget, so this bundle had to book whatever it weighed. Split by copying
+  only the two catalogues into a baseline worktree and rebuilding: **+1,505 B
+  are the eleven new i18n keys in two languages** and **+2,337 B the interface
+  and the constant tables it reaches through `constants.ts`**. No new static
+  `src/sim` import chain - the council panel already imported `town/council.ts`,
+  and `town/elections.ts` is reached only from `SimWorker.ts`. Budget raised
+  956,000 -> **966,000 B** with that measurement beside it (D-192's rule).
+
+**Verified by running**, on the final tree: `npm run typecheck` clean;
+`npm run lint` clean; `npx vitest run tests/unit` **120 files / 1,549 tests**
+green (118 -> 120 files, +24 cases); `npx vitest run tests/determinism tests/corpus` green after the two
+re-records; `npm run test:balance:full` **12 files / 101 tests** green;
+`npm run test:soak` **4** green at the re-recorded hash; `npm run test:perf`
+green. `npm run format:check` stays red on the files D-227 names; the two new
+test files and the new simulation file were formatted before they were
+committed.

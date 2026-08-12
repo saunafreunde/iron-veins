@@ -7,7 +7,7 @@ import {
   COUNCIL_REFUSAL_RATING,
   TOWN_MEASURE_COST_CT,
 } from '../sim/constants';
-import { TOWN_MEASURE_KEYS } from '../sim/town/council';
+import { COUNCIL_PROFILE_KEYS, TOWN_MEASURE_KEYS } from '../sim/town/council';
 import type { SimClient } from './SimClient';
 import { useSimStore } from './store';
 
@@ -44,6 +44,18 @@ export function CouncilPanel({
         <div>
           <dt>{t('ui.council.rating')}</dt>
           <dd className={ratingClass}>{town.councilRating}</dd>
+        </div>
+        <div>
+          <dt>{t('ui.council.profile')}</dt>
+          <dd className="value">{t(COUNCIL_PROFILE_KEYS[town.councilProfile] ?? '')}</dd>
+        </div>
+        <div>
+          <dt>{t('ui.council.nextElection')}</dt>
+          <dd className="value">
+            {town.monthsToElection < 0
+              ? t('ui.council.noElections')
+              : t('ui.council.electionIn', { months: town.monthsToElection })}
+          </dd>
         </div>
         <div>
           <dt>{t('ui.council.exclusive')}</dt>

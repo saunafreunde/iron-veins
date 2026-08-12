@@ -17,6 +17,7 @@ import type { TileMap } from '../map/TileMap';
 import { Structure } from '../map/structures';
 import { slopeRise, Terrain } from '../map/terrain';
 import type { Rng } from '../rng';
+import { CouncilProfile } from '../town/council';
 import { BuildingKind, RoadBit, TownSize, type Town } from '../town/types';
 import { PlaceNameGenerator } from './names';
 
@@ -431,6 +432,42 @@ export function countTownBuildings(map: TileMap, town: Town, radius: number): nu
 }
 
 /**
+ * Count the town's buildings BY ZONE into `out`, indexed by {@link BuildingKind}.
+ *
+ * The census SPEC2 M20's zone economy asks its demands against: a town's food
+ * demand is its houses' and its electronics demand is its shops'. `out` is the
+ * caller's preallocated buffer because the reader is a monthly hook and the
+ * monthly hooks do not allocate either (law #7, D-231); slot
+ * {@link BuildingKind.None} is written as zero so the array can be indexed by
+ * the enum without a branch.
+ *
+ * The same walk as {@link countTownBuildings} one question further on, and
+ * deliberately not folded into it: the deficit that decides whether a house
+ * goes up is a DAILY question about one town and this is a MONTHLY question
+ * about every town, and merging them would make the cheap one pay for the
+ * dear one every game day.
+ */
+export function countTownZones(map: TileMap, town: Town, radius: number, out: Int32Array): void {
+  out[BuildingKind.None] = 0;
+  out[BuildingKind.Residential] = 0;
+  out[BuildingKind.Commercial] = 0;
+  out[BuildingKind.Industrial] = 0;
+
+  for (let dy = -radius; dy <= radius; dy++) {
+    const y = town.y + dy;
+    for (let dx = -radius; dx <= radius; dx++) {
+      const x = town.x + dx;
+      if (!map.contains(x, y)) continue;
+      const index = map.tileIndex(x, y);
+      if (map.townId[index] !== town.id) continue;
+      const kind = map.buildingKind[index]!;
+      if (kind === BuildingKind.None) continue;
+      out[kind] = out[kind]! + 1;
+    }
+  }
+}
+
+/**
  * Join a new town street tile to the neighbour in direction `k`, both ways.
  *
  * The write and the question are one table (`STEP_BIT` / `STEP_BACK_BIT`),
@@ -729,8 +766,13 @@ export function generateTowns(map: TileMap, rng: Rng): Town[] {
       exclusiveCompanyId: -1,
       exclusiveUntilTick: 0,
       measureReadyTick: [],
+      // Every town is born with a balanced council and no paid-for walls; a
+      // world whose elections rule is off keeps both for ever (SPEC2 M20).
+      councilProfile: CouncilProfile.Balanced,
+      noiseBarrierUntilTick: [],
       goodsDeliveredThisMonth: 0,
       foodDeliveredThisMonth: 0,
+      electronicsDeliveredThisMonth: 0,
       buildingMaterialThisMonth: 0,
       supplyProducedMean: 0,
       supplyTransportedMean: 0,

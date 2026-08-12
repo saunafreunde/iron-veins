@@ -1471,18 +1471,99 @@ const v30_to_v31: SaveMigration = (payload) => {
     ...payload,
     state: {
       ...inner,
+      // Bundle 3's world rule. `?? false` rather than an overwrite, for
+      // `keptNumbers`' reason: the corpus trick wraps a CURRENT state in an old
+      // container, and a world that says it holds elections must not be told
+      // it does not.
+      elections: inner['elections'] ?? false,
       ...mapSection(inner, 'towns', (town) =>
-        keptNumbers(town, {
-          roadTilesThisMonth: 0,
-          buildingMaterialThisMonth: 0,
-          supplyProducedMean: 0,
-          supplyTransportedMean: 0,
-          supplyMonths: 0,
-        }),
+        withMeasureSlots(
+          keptNumbers(town, {
+            roadTilesThisMonth: 0,
+            buildingMaterialThisMonth: 0,
+            supplyProducedMean: 0,
+            supplyTransportedMean: 0,
+            supplyMonths: 0,
+            // Bundle 3: the zone economy's own counter, the council that is
+            // sitting, and the walls nobody has paid for yet. A version 30
+            // town had taken no radios this month, had never faced an election
+            // (so it is Balanced, which is what every town is born with) and
+            // had no barrier - none of which is a convenient default: it is
+            // exactly what that world knew about itself.
+            electronicsDeliveredThisMonth: 0,
+            councilProfile: COUNCIL_PROFILE_BALANCED_V31,
+          }),
+        ),
       ),
     },
   };
 };
+
+/**
+ * The measure count on each side of this migration, as LITERALS.
+ *
+ * A migration writes the shape of its OWN target version and never the shape
+ * the live constants happen to have - the trap D-207 found latent in
+ * `v24_to_v25` and `v27_to_v28`, where a zero-fill sized from `CARGO_COUNT`
+ * would have written today's width into a save that was on its way to a
+ * version that did not have it. If a later milestone adds an eighth measure,
+ * v31 still has seven and this step must still write seven.
+ */
+const TOWN_MEASURE_COUNT_V30 = 5;
+const TOWN_MEASURE_COUNT_V31 = 7;
+
+/** `CouncilProfile.Balanced`, written out for the same reason. */
+const COUNCIL_PROFILE_BALANCED_V31 = 0;
+
+/**
+ * Re-lay `measureReadyTick` for the two measures SPEC2 M20 adds, and fill the
+ * barrier list.
+ *
+ * The cooldown list is COMPANY-MAJOR with the measure count as its stride, so
+ * growing the count from five to seven moves every company but the first: what
+ * was company 1's tree cooldown at index 5 is company 0's sponsorship slot now.
+ * A flat ring re-laid row by row, exactly like the tenth ledger account of
+ * `v18_to_v19` - and getting it wrong would not throw, it would silently hand
+ * one company another's cooldowns.
+ *
+ * The exposure is stated rather than papered over: a list THIS build wrote,
+ * wrapped in a version 30 container by the corpus trick, cannot be told apart
+ * from a real version 30 one and would be re-laid a second time. It does not
+ * arise, and the reason is checkable rather than hopeful - no fixture in
+ * `tests/corpus` and no world in `save.spec.ts` buys a town measure, so every
+ * list that reaches this function through those doors is EMPTY and an empty
+ * list is returned untouched. `tests/unit/save.spec.ts` asserts that emptiness
+ * directly, so the day somebody gives a fixture a campaign the claim goes red
+ * instead of the hash going quietly wrong.
+ */
+function withMeasureSlots(entry: unknown): unknown {
+  if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) return entry;
+  const raw = entry as Record<string, unknown>;
+  const filled: Record<string, unknown> = { ...raw };
+
+  const barrier = raw['noiseBarrierUntilTick'];
+  filled['noiseBarrierUntilTick'] = Array.isArray(barrier) ? barrier : [];
+
+  const slots = raw['measureReadyTick'];
+  if (!Array.isArray(slots) || slots.length === 0) return filled;
+  // A list already this build's shape - the corpus trick again - is left
+  // alone. A version 30 list is a multiple of the OLD stride and can only be
+  // read one way; anything longer than the old stride would allow has already
+  // been re-laid.
+  const relaid: number[] = [];
+  for (let index = 0; index < slots.length; index++) {
+    const value = slots[index];
+    if (typeof value !== 'number' || !Number.isFinite(value) || value === 0) continue;
+    const company = Math.floor(index / TOWN_MEASURE_COUNT_V30);
+    const measure = index % TOWN_MEASURE_COUNT_V30;
+    relaid[company * TOWN_MEASURE_COUNT_V31 + measure] = value;
+  }
+  for (let index = 0; index < relaid.length; index++) {
+    if (relaid[index] === undefined) relaid[index] = 0;
+  }
+  filled['measureReadyTick'] = relaid;
+  return filled;
+}
 
 /**
  * Registry keyed by the version a migration reads (section 19.1).

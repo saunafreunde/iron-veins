@@ -50,6 +50,20 @@ export interface Town {
   goodsDeliveredThisMonth: number;
   foodDeliveredThisMonth: number;
   /**
+   * Electronics delivered into the town this month. [units]
+   *
+   * Its own counter since SPEC2 M20 bundle 3, and it is a counter rather than
+   * a fifth supply term: SPEC.md 13.2 has four terms, so electronics stays in
+   * the same `versorgungWaren` basket it has been credited to since M5. What
+   * needed separating is the DEMAND side - a town wants electronics only where
+   * it has shops (`TOWN_INHABITANTS_PER_ELECTRONICS`), while it wants general
+   * goods wherever it has people - and a demand cannot be scaled per zone
+   * while the deliveries behind it are added up in one number.
+   *
+   * Cleared by `growTowns` with the other monthly counters.
+   */
+  electronicsDeliveredThisMonth: number;
+  /**
    * Building material delivered into a builders' merchant of this town this
    * month. [units]
    *
@@ -115,6 +129,24 @@ export interface Town {
    * trees, streets funded, buildings knocked down. Decays every month.
    */
   councilGoodwill: number[];
+  /**
+   * Which kind of council is sitting here (SPEC2 M20): a CouncilProfile.
+   *
+   * Saved and hashed rather than derived, although it IS reproducible from the
+   * seed and the election number: the profile is what the news reported and
+   * what the panel shows, and two worlds whose towns are governed differently
+   * must never fingerprint the same. Every town is born balanced, which is
+   * also what it stays for ever in a world with the elections rule off - so
+   * the rule ships as an exact no-op (Fehlerkatalog 34).
+   */
+  councilProfile: number;
+  /**
+   * Tick each company's paid-for noise barrier stops standing, by company id.
+   *
+   * Sparse like `measureReadyTick` beside it: a company that never bought one
+   * has no entry, and an entry in the past is a wall that has come down.
+   */
+  noiseBarrierUntilTick: number[];
   /** Company holding exclusive building rights here, or -1 for none. */
   exclusiveCompanyId: number;
   /** Tick those rights lapse. Meaningless while exclusiveCompanyId is -1. */

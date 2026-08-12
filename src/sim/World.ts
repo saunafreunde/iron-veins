@@ -70,6 +70,7 @@ import { createAiStates } from './ai/roster';
 import type { AiState } from './ai/types';
 import { reviewContracts, type Contract } from './economy/contracts';
 import { reviewCouncils } from './town/council';
+import { runElections } from './town/elections';
 import { growTownFabric } from './town/growth';
 import { growTowns, produceTownCargo } from './town/update';
 import {
@@ -113,6 +114,8 @@ export interface WorldStateData {
   weather: WeatherRule;
   /** The 16x16 weather field, one WeatherCell per region (SPEC2 M18). */
   weatherField: Uint8Array;
+  /** The council-election world rule of SPEC2 M20 (13.3). */
+  elections: boolean;
   mapSize: number;
   rng: RngState;
   /** Every company, player first. */
@@ -231,6 +234,19 @@ export class World {
    * stream (Z3). The renderer sees it only through the snapshot block.
    */
   readonly weatherField = new WeatherField();
+  /**
+   * Whether the town councils of section 13.3 are ever re-elected (SPEC2 M20).
+   *
+   * A world rule in the full Z2 sense - saved, hashed, migrated, fixed at
+   * genesis - because an election reaches money: a council profile reweights
+   * the rating, the rating gates building permits and exclusive rights, and
+   * since D-232 it is a factor of SPEC.md 13.2's own growth formula. Off
+   * unless the world was started with it, which is what keeps every band
+   * measured before M20 exactly where it was (Fehlerkatalog 34): with it off
+   * `runElections` returns on its first line, every town keeps the balanced
+   * council it was born with, and both profile factors are exactly 1.
+   */
+  readonly elections: boolean;
   readonly rng: Rng;
   /**
    * Every company in the game, index = id. Zero is the player, 1..n are the
@@ -438,6 +454,9 @@ export class World {
     // Absent means OFF here too, and for the same reason (SPEC2 M18, E-01):
     // every world recorded before M18 was played without weather.
     this.weather = params.weather ?? WeatherRule.Off;
+    // And here too (SPEC2 M20): every world recorded before this milestone was
+    // played by councils that never faced an election.
+    this.elections = params.elections ?? false;
     this.rng = Rng.fromSeed(gameplaySeed(this.seed));
     this.companies.push(
       createCompany(0, params.companyName, params.companyColorIndex, params.difficulty),
@@ -658,6 +677,13 @@ export class World {
       }
       // One new works a year, by preference where nothing is served yet.
       openNewIndustries(this);
+      // And, every fourth year, the councils of section 13.3 face the voters
+      // (SPEC2 M20). Last in the yearly block on purpose: what an election
+      // changes is what NEXT month's review makes of the same company, and
+      // `reviewCouncils` has already run for the month this year ends with -
+      // so a ballot can never rewrite a rating that has already been read.
+      // A world with the rule off returns from this on its first line.
+      runElections(this);
     }
   }
 
@@ -729,6 +755,7 @@ export class World {
       roadCongestion: this.roadCongestion,
       weather: this.weather,
       weatherField: this.weatherField.cells,
+      elections: this.elections,
       mapSize: this.map.size,
       rng: this.rng.getState(),
       companies: this.companies.map((company) => ({ ...company })),
@@ -806,6 +833,7 @@ export class World {
         signalPenalty: data.signalPenalty,
         roadCongestion: data.roadCongestion,
         weather: data.weather,
+        elections: data.elections,
         mapSize: data.mapSize,
         companyName: data.companies[0]!.name,
         companyColorIndex: data.companies[0]!.colorIndex,
@@ -927,6 +955,11 @@ function hashDynamicState(h: Fnv1a64, world: World): void {
   // the F3 overlay one day's worth of work to watch the sky it can see change
   // (the goal-block argument of D-193).
   h.intArray(world.weatherField.cells);
+  // The election rule of M20, on the same terms as every rule above it: two
+  // worlds whose councils face the voters and whose councils never do rate the
+  // same company differently within a game year, so they must never fingerprint
+  // alike. Adding it moved every world hash once (D-137/D-130).
+  h.u32(world.elections ? 1 : 0);
 
   const rng = world.rng.getState();
   h.u32(rng[0]).u32(rng[1]).u32(rng[2]).u32(rng[3]);
@@ -976,6 +1009,9 @@ function hashDynamicState(h: Fnv1a64, world: World): void {
     h.u32(town.x).u32(town.y).u32(town.sizeClass).int(town.population).u32(town.radius);
     h.f64(town.producedThisMonth).f64(town.transportedThisMonth);
     h.f64(town.goodsDeliveredThisMonth).f64(town.foodDeliveredThisMonth);
+    // Electronics, counted apart since SPEC2 M20's zone economy: it is a
+    // monthly input to the growth decision exactly like the two beside it.
+    h.f64(town.electronicsDeliveredThisMonth);
     // SPEC.md 13.2's building-material term and its twelve-month passenger
     // window (SPEC2 M20 bundle 2). All four are historical inputs to the
     // monthly growth decision, so all four are hashed: a window that travelled
@@ -998,6 +1034,12 @@ function hashDynamicState(h: Fnv1a64, world: World): void {
     for (const goodwill of town.councilGoodwill) h.f64(goodwill);
     h.u32(town.measureReadyTick.length);
     for (const tick of town.measureReadyTick) h.u32(tick);
+    // The council sitting here and the walls somebody paid for (SPEC2 M20).
+    // Both are saved state and both change what this town thinks of a company
+    // next month, so both are hashed like every other saved figure (D-134).
+    h.u32(town.councilProfile);
+    h.u32(town.noiseBarrierUntilTick.length);
+    for (const tick of town.noiseBarrierUntilTick) h.u32(tick);
   }
 
   h.u32(world.contracts.length);

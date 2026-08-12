@@ -6,14 +6,18 @@ import {
   COUNCIL_EXCLUSIVE_MIN_RATING,
   COUNCIL_EXCLUSIVE_MONTHS,
   COUNCIL_GOODWILL_DECAY_PER_MONTH,
+  COUNCIL_NOISE_BARRIER_FACTOR,
   COUNCIL_NOISE_MAX,
   COUNCIL_NOISE_PER_TILE,
+  COUNCIL_PROFILE_GREEN_FACTOR,
+  COUNCIL_PROFILE_NOISE_FACTOR,
   COUNCIL_RATING_NEUTRAL,
   COUNCIL_REFUSAL_RATING,
   COUNCIL_STATION_TARGET,
   COUNCIL_STATION_WEIGHT,
   COUNCIL_TRANSPORT_WEIGHT,
   TICKS_PER_MONTH,
+  TOWN_MEASURE_BARRIER_MONTHS,
   TOWN_MEASURE_ROAD_REACH,
   TOWN_MEASURE_ROAD_TILES,
   TOWN_MEASURE_TREE_TILES,
@@ -42,6 +46,30 @@ import type { World } from '../World';
  * cleared house costing a company the town for ever.
  */
 
+/**
+ * Which kind of council is sitting (SPEC2 M20).
+ *
+ * A profile does not add a term to the rating; it reweights two that were
+ * always there. That is the whole design: an election changes what a town
+ * MINDS, not what a company did, so the same network is worth a different
+ * rating under a different council and nothing about the company had to move.
+ */
+export const CouncilProfile = {
+  Balanced: 0,
+  Green: 1,
+  Business: 2,
+} as const;
+export type CouncilProfile = (typeof CouncilProfile)[keyof typeof CouncilProfile];
+
+export const COUNCIL_PROFILE_COUNT = 3;
+
+/** Translation keys for the profiles, indexed by CouncilProfile. */
+export const COUNCIL_PROFILE_KEYS: readonly string[] = [
+  'council.profile.balanced',
+  'council.profile.green',
+  'council.profile.business',
+];
+
 /** The measures of section 13.3, in the order their constants are indexed. */
 export const TownMeasure = {
   PlantTrees: 0,
@@ -49,10 +77,14 @@ export const TownMeasure = {
   AdvertiseSmall: 2,
   AdvertiseMedium: 3,
   AdvertiseLarge: 4,
+  /** SPEC2 M20: pay towards the stops this company runs in the town. */
+  SponsorStations: 5,
+  /** SPEC2 M20: a wall along the line, which halves the noise term. */
+  NoiseBarrier: 6,
 } as const;
 export type TownMeasure = (typeof TownMeasure)[keyof typeof TownMeasure];
 
-export const TOWN_MEASURE_COUNT = 5;
+export const TOWN_MEASURE_COUNT = 7;
 
 /** Translation keys for the measures, indexed by TownMeasure. */
 export const TOWN_MEASURE_KEYS: readonly string[] = [
@@ -61,6 +93,8 @@ export const TOWN_MEASURE_KEYS: readonly string[] = [
   'council.measure.adSmall',
   'council.measure.adMedium',
   'council.measure.adLarge',
+  'council.measure.sponsor',
+  'council.measure.barrier',
 ];
 
 /** Is this tile inside the built-up area of a town? Returns the town, or null. */
@@ -110,6 +144,27 @@ export function bookDemolition(world: World, tile: number): void {
 /** Add goodwill a measure bought. */
 export function addGoodwill(town: Town, companyId: number, points: number): void {
   town.councilGoodwill[companyId] = (town.councilGoodwill[companyId] ?? 0) + points;
+}
+
+/** How many stations this company runs inside this town. */
+export function stationsInTown(world: World, town: Town, companyId: number): number {
+  let stations = 0;
+  for (let s = 0; s < world.stations.length; s++) {
+    const station = world.stations[s]!;
+    if (station.ownerId === companyId && station.townId === town.id) stations++;
+  }
+  return stations;
+}
+
+/** Put a paid-for noise barrier up for the next two years (SPEC2 M20). */
+export function raiseNoiseBarrier(world: World, town: Town, companyId: number): void {
+  town.noiseBarrierUntilTick[companyId] =
+    world.tick + TOWN_MEASURE_BARRIER_MONTHS * TICKS_PER_MONTH;
+}
+
+/** Is this company's barrier still standing here? */
+export function noiseBarrierStanding(world: World, town: Town, companyId: number): boolean {
+  return world.tick < (town.noiseBarrierUntilTick[companyId] ?? 0);
 }
 
 /**
@@ -226,37 +281,59 @@ export function reviewCouncils(world: World): void {
   }
 }
 
-function ratingFor(world: World, town: Town, companyId: number, goodwill: number): number {
-  let stations = 0;
-  for (let s = 0; s < world.stations.length; s++) {
-    const station = world.stations[s]!;
-    if (station.ownerId === companyId && station.townId === town.id) stations++;
-  }
-  const service = Math.min(1, stations / COUNCIL_STATION_TARGET) * COUNCIL_STATION_WEIGHT;
+/**
+ * What one council thinks of one company, 0..100 (section 13.3).
+ *
+ * Exported since SPEC2 M20 so the election test can measure the SHIFT rather
+ * than a played population: the milestone's Fertig-wenn is "ein Wahlergebnis
+ * die Ratsgewichte nachweislich verschiebt", and what shifts is this function's
+ * answer for an unchanged company on an unchanged map.
+ *
+ * The two profile factors multiply the two terms SPEC2 names and nothing else.
+ * Both are exactly 1 for a balanced council, which every town is born with and
+ * stays for ever in a world with the elections rule off - so the whole
+ * mechanism is arithmetically absent from a world that did not ask for it.
+ */
+export function ratingFor(world: World, town: Town, companyId: number, goodwill: number): number {
+  const service =
+    Math.min(1, stationsInTown(world, town, companyId) / COUNCIL_STATION_TARGET) *
+    COUNCIL_STATION_WEIGHT;
 
   const carried = town.transportedByCompany[companyId] ?? 0;
   const share = town.producedThisMonth > 0 ? Math.min(1, carried / town.producedThisMonth) : 0;
 
-  const noise = Math.min(COUNCIL_NOISE_MAX, noiseTiles(world, town, companyId) * COUNCIL_NOISE_PER_TILE);
+  // The cap is applied to the WEIGHTED noise, not before it: a green council
+  // that doubled a term already held at 25 would double nothing, and the
+  // profile has to be able to reach the towns where a company laid most track.
+  const barrier = noiseBarrierStanding(world, town, companyId) ? COUNCIL_NOISE_BARRIER_FACTOR : 1;
+  const noiseWeight = COUNCIL_PROFILE_NOISE_FACTOR[town.councilProfile] ?? 1;
+  const noise = Math.min(
+    COUNCIL_NOISE_MAX,
+    townTrackTiles(world, town, companyId) * COUNCIL_NOISE_PER_TILE * noiseWeight * barrier,
+  );
 
   // A council rewards a clean fleet, which is the third leg of section 14.3 -
   // the levy is the stick, the grant pays for the change, and this is what a
   // town thinks of a company that made it.
   const intensity = world.emissions ? emissionIntensity(world, companyId) : -1;
-  const green = intensity >= 0 && intensity <= COUNCIL_GREEN_INTENSITY ? COUNCIL_GREEN_BONUS : 0;
+  const greenWeight = COUNCIL_PROFILE_GREEN_FACTOR[town.councilProfile] ?? 1;
+  const green =
+    intensity >= 0 && intensity <= COUNCIL_GREEN_INTENSITY ? COUNCIL_GREEN_BONUS * greenWeight : 0;
 
   const raw =
-    COUNCIL_RATING_NEUTRAL +
-    service +
-    share * COUNCIL_TRANSPORT_WEIGHT -
-    noise +
-    green +
-    goodwill;
+    COUNCIL_RATING_NEUTRAL + service + share * COUNCIL_TRANSPORT_WEIGHT - noise + green + goodwill;
   return Math.max(0, Math.min(100, Math.round(raw)));
 }
 
-/** Track tiles this company laid inside the town's built-up area. */
-function noiseTiles(world: World, town: Town, companyId: number): number {
+/**
+ * Track tiles this company laid inside the town's built-up area.
+ *
+ * Exported since SPEC2 M20: the noise barrier refuses a company with no track
+ * here, and it has to ask the same question the noise term answers - a second
+ * definition of "noise this company makes" would let a wall be sold beside a
+ * line the rating does not charge for.
+ */
+export function townTrackTiles(world: World, town: Town, companyId: number): number {
   const map = world.map;
   let tiles = 0;
 

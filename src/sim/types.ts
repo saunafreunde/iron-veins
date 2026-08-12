@@ -207,6 +207,21 @@ export interface NewGameParams {
    */
   readonly weather?: WeatherRule;
   /**
+   * Whether the town councils of section 13.3 are re-elected (SPEC2 M20).
+   *
+   * A world rule for the same Z1 reason weather is one: an election reweights
+   * two terms of the council rating, and the rating decides building permits,
+   * the price of exclusive rights and - since D-232 - a factor of the growth
+   * formula of SPEC.md 13.2. So two worlds with the same seed and the same
+   * commands but different politics grow differently and diverge.
+   *
+   * ABSENT MEANS OFF, and load-bearing exactly as above: every band this game
+   * owns was measured by councils that never faced a voter, and a default of
+   * on would re-band the lot inside the milestone that introduces the rule
+   * (SPEC2 Fehlerkatalog 34).
+   */
+  readonly elections?: boolean;
+  /**
    * What this world asks of the player (SPEC2 M17), at most `MAX_GOALS` of
    * them.
    *

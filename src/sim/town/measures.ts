@@ -4,6 +4,7 @@ import {
   TOWN_MEASURE_COOLDOWN_TICKS,
   TOWN_MEASURE_COST_CT,
   TOWN_MEASURE_GOODWILL,
+  TOWN_MEASURE_SPONSOR_PER_STATION,
 } from '../constants';
 import { ACCEPTED, RejectReason, type CommandOutcome } from '../commands/types';
 import {
@@ -12,9 +13,13 @@ import {
   exclusiveRightsCostCt,
   fundRoads,
   grantExclusiveRights,
+  noiseBarrierStanding,
   plantTrees,
+  raiseNoiseBarrier,
+  stationsInTown,
   TOWN_MEASURE_COUNT,
   TownMeasure,
+  townTrackTiles,
 } from './council';
 import type { World } from '../World';
 
@@ -88,9 +93,29 @@ export function applyTownMeasure(
   if (measure === TownMeasure.FundRoads && fundRoads(world, town) === 0) {
     return reject(RejectReason.NothingToDo);
   }
+  // And the two SPEC2 M20 measures refuse for the same reason one step along:
+  // there has to be something of this company's here for them to be about.
+  // Sponsorship pays PER station, so a company with none would buy the flat
+  // base and nothing else; a barrier stands beside track, so a company that
+  // laid none in this town would be paying for a wall along somebody else's
+  // line - and its own rating carries no noise term to abate.
+  let stations = 0;
+  if (measure === TownMeasure.SponsorStations) {
+    stations = stationsInTown(world, town, company.id);
+    if (stations === 0) return reject(RejectReason.NothingToDo);
+  }
+  if (measure === TownMeasure.NoiseBarrier) {
+    if (noiseBarrierStanding(world, town, company.id)) return reject(RejectReason.MeasureNotReady);
+    if (townTrackTiles(world, town, company.id) === 0) return reject(RejectReason.NothingToDo);
+  }
 
   bookExpense(company, chargeCt);
-  addGoodwill(town, company.id, TOWN_MEASURE_GOODWILL[measure]!);
+  addGoodwill(
+    town,
+    company.id,
+    TOWN_MEASURE_GOODWILL[measure]! + stations * TOWN_MEASURE_SPONSOR_PER_STATION,
+  );
+  if (measure === TownMeasure.NoiseBarrier) raiseNoiseBarrier(world, town, company.id);
   town.measureReadyTick[slot] = world.tick + TOWN_MEASURE_COOLDOWN_TICKS[measure]!;
   return ACCEPTED;
 }

@@ -51,6 +51,21 @@ function playedWorld(): { world: World; queue: CommandQueue } {
 }
 
 describe('save round trip', () => {
+  it('buys no town measure, which is what the v31 slot remap rests on', () => {
+    // SPEC2 M20 bundle 3 grew `TOWN_MEASURE_COUNT` from five to seven, and the
+    // cooldown list is company-major with that count as its stride - so
+    // `v30_to_v31` re-lays it. A list THIS build wrote, wrapped in a version 30
+    // container by the corpus trick, cannot be told apart from a real version
+    // 30 one and would be re-laid a second time. The migration's comment says
+    // the case does not arise because every list that reaches it through these
+    // doors is empty; this is that claim, asserted rather than assumed.
+    const { world } = playedWorld();
+    for (const town of world.towns) {
+      expect(town.measureReadyTick.length, town.name).toBe(0);
+      expect(town.noiseBarrierUntilTick.length, town.name).toBe(0);
+    }
+  });
+
   it('restores a bit-identical world', () => {
     const { world, queue } = playedWorld();
     const before = hashWorld(world);

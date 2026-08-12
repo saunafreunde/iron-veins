@@ -995,9 +995,14 @@ function deliverCargo(world: World, station: Station, cargo: Cargo, amount: numb
   if (left <= 0 || station.townId < 0) return;
   const town = world.towns[station.townId];
   if (town === undefined) return;
-  // Electronics count as goods: a town wants manufactured articles, and the
-  // growth formula of section 13.2 does not distinguish furniture from radios.
-  if (cargo === Cargo.Goods || cargo === Cargo.Electronics) town.goodsDeliveredThisMonth += left;
+  // Electronics still count as goods where 13.2 reads them - `growTowns` adds
+  // the two into one `versorgungWaren` basket, because the formula has four
+  // supply terms and not five - but they are COUNTED apart since SPEC2 M20:
+  // what a town wants of them is a property of its commercial zone, and a
+  // demand cannot be scaled per zone while the deliveries behind it are one
+  // number.
+  if (cargo === Cargo.Goods) town.goodsDeliveredThisMonth += left;
+  else if (cargo === Cargo.Electronics) town.electronicsDeliveredThisMonth += left;
   else if (cargo === Cargo.Food) town.foodDeliveredThisMonth += left;
 }
 

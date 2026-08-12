@@ -2610,6 +2610,78 @@ EXTENDED in place (Z5), no bump.
   refuses it, and the guard is on the CAPITAL instead - 1,462,984 measured
   against a 1,200,000 band. Every other band and scenario 5 are untouched.
 
+## M20 bundle 3 - the zones become an economy, the councils face the voters (D-233)
+
+**The first ECONOMIC use of the 13.1 zones, and the politics half of 13.3.**
+Both extend the milestone's one bump in place - **v31 stands** (Z5) - and the
+`v30_to_v31` migration is the same function with more in it. Every balance band
+is bit-identical and so is scenario 5; the pins moved only because new hashed
+fields joined the digest.
+
+- **The post follows the shops and a town's total never moves.** A stop's mail
+  weight is `1 + TOWN_MAIL_COMMERCIAL_WEIGHT * commercialShare` over the
+  coverage-times-rating share it already had, NORMALISED over the town's stops -
+  D-207's device one cargo along. Normalising is what makes it an exact no-op
+  wherever every stop of a town has the same zone mix, which covers a town with
+  ONE station and every hand-built world of 19.4.
+- **Electronics gets a counter, not a fifth term.** 13.2 has four supply terms,
+  so radios still count as goods where the formula reads them; what the
+  commercial zone adds is DEMAND (`TOWN_INHABITANTS_PER_ELECTRONICS` times the
+  commercial share). Food is the houses' demand, scaled by the residential
+  share. **Acceptance is deliberately untouched** - a stop covering houses still
+  takes radios wherever there is no commercial zone, or D-118's dead end
+  reopens. The zone census is a MONTHLY walk into a preallocated four-slot
+  scratch, and it is not folded into the daily deficit walk (that one asks one
+  town a day, this one asks every town a month).
+- **An election is a WORLD RULE with an off anchor** (Z1/Z2, Fehlerkatalog 34,
+  the D-200 precedent): a council profile reweights the rating, the rating gates
+  permits and exclusive rights and is a FACTOR of 13.2's growth since D-232, so
+  it reaches money. `elections` is off unless the world was started with it, all
+  eight shipped scenarios state it, and `runElections` returns on its first
+  line - no stream, no draw, no profile.
+- **The ballot draws from a NEW named stream, and this is the exact mistake
+  D-106 was written for.** `streamFor(streamSalt('politics') + electionNumber)`.
+  Proved rather than argued: three full terms with the rule on and with it off
+  leave `world.rng` in the IDENTICAL state, with the comparison shown
+  non-vacuous (a four-town world elects somebody, the two worlds hash
+  differently), and a second test wraps only the election's own generator and
+  counts **one word per town per election**.
+- **A profile reweights two terms and invents none**: green doubles the noise
+  and the clean-fleet bonus, business-friendly halves both, balanced is 1 and 1.
+  The cap is applied AFTER the weight, or a green council could not reach the
+  towns where a company laid most track. Measured: nine tiles of track cost 5 /
+  11 / 3 rating points under the three councils, and a company with no track and
+  no fleet is unmoved by any of them.
+- **Two new measures that refuse rather than charge for nothing.**
+  `SponsorStations` pays per station the company runs here and is refused to one
+  with none; `NoiseBarrier` halves the noise for two years, is refused where the
+  company laid no track (asking the noise term's OWN definition,
+  `townTrackTiles`), and against a green council the pair puts the term back
+  exactly where a balanced council had it. `TOWN_MEASURE_COUNT` 5 -> 7 re-lays
+  the company-major `measureReadyTick`, with both counts as LITERALS (D-207's
+  rule) and the corpus-trick exposure stated and asserted rather than assumed.
+- **News is edge-triggered first and `postOnce` behind it.** An election line
+  needs a council that actually changed AND a town the player has a station in;
+  a growth milestone compares the population before and after the month that
+  ran. **Stated floor**: `postOnce` keys on message AND place, so two milestones
+  for one town with nothing in between are one line - pinned, not hidden.
+- **Found and fixed on the way**: `replayGenesis` never passed the WEATHER rule,
+  so a recording of a harsh world that fell back to a genesis rebuild would have
+  re-simulated under a clear sky and reported a desync that was the rebuild's
+  own.
+- **Measured**: scenario 1 payback year 3, scenario 2 249,980 EUR / year 6,
+  scenario 3 159,516 EUR/yr, Harter Winter -4.36 %, Punktzahl 5,889, scenario 5
+  **identical to the euro** (1,022,084 / 1,802,165 / 2,153,604) - and the reason
+  it is identical although it plays a generated map is that nothing in that
+  world delivers goods, food or electronics INTO a town. Census cost
+  `growTowns` **24.51 -> 91.34 us per game MONTH** (40 towns, 512 map), i.e.
+  ~0.011 us a tick; tick p50 1.756 / p99 2.912 ms against the M10 baseline
+  1.45 / 3.26. Pins: canonical `817c99ef5dfe2061` -> **`5f4c022bef5b94d1`**,
+  soak `75ef4332dae55b89` -> **`9aac5ef0864d5c69`** at unchanged 35 commands,
+  corpus re-recorded (the nine frozen fixtures still decode to ONE world).
+  Main bundle 955,606 -> **959,448 B**, budget raised to 966,000 with the split
+  measured (+1,505 B i18n, +2,337 B interface and constant tables).
+
 ## Still outstanding
 
 - **A player still practically never meets a railway competitor, and D-228 says

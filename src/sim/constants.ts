@@ -1459,6 +1459,52 @@ export const TOWN_INHABITANTS_PER_GOODS = 900;
 export const TOWN_INHABITANTS_PER_FOOD = 700;
 
 /**
+ * Inhabitants per tonne of electronics demanded per month, counted over the
+ * COMMERCIAL zone alone. [inhabitants/tonne/month]
+ *
+ * SPEC2 M20's zone economy: "Gewerbe ... verbraucht Waren+Elektronik". Goods
+ * and food are demanded by the whole town (both zones eat and both zones buy
+ * manufactured articles); electronics is the one demand that exists only where
+ * a town has shops, so the figure below is multiplied by the commercial SHARE
+ * of the town's buildings before it becomes a demand.
+ *
+ * One step out from goods on the same scale, for the same reason
+ * {@link TOWN_INHABITANTS_PER_BUILDING_MATERIAL} is: a head buys fewer radios
+ * a month than tonnes of general goods. At 1,800, a city of 8,000 whose
+ * buildings are a third commercial wants 1.48 t a month against one
+ * ElectronicsWorks' monthly output, so a single works supplies several towns -
+ * which is what keeps the term reachable rather than decorative.
+ *
+ * The electronics DELIVERED into a town have counted towards its goods supply
+ * since M5 and still do (`versorgungWaren` is one basket, because SPEC.md 13.2
+ * has four supply terms and not five). What this constant adds is the other
+ * side of that basket: a town with shops WANTS them.
+ */
+export const TOWN_INHABITANTS_PER_ELECTRONICS = 1_800;
+
+/**
+ * How much more mail a fully commercial catchment offers than a fully
+ * residential one. [dimensionless]
+ *
+ * SPEC2 M20's zone economy again: "Gewerbe erzeugt Post+Business-Pax". The
+ * town's mail output per inhabitant is NOT touched - what this weight decides
+ * is which of a town's stops the same total is offered at, exactly as the M19
+ * passenger classes split the same total between commuters and business
+ * travellers (D-207). A stop's weight is
+ * `1 + TOWN_MAIL_COMMERCIAL_WEIGHT * commercialShare`, normalised over the
+ * town's stops.
+ *
+ * That is why the figure is a WEIGHT and not a rate: normalised weights make
+ * the rule an exact no-op wherever every stop of a town has the same zone mix,
+ * which includes every hand-built balancing world of section 19.4 (all
+ * residential, `commercialShare` 0) and every town with a single station. Only
+ * a town served by two stops in different quarters can see it, and there the
+ * shopping-street stop takes three times the post office traffic of the
+ * suburban one.
+ */
+export const TOWN_MAIL_COMMERCIAL_WEIGHT = 2;
+
+/**
  * Inhabitants per tonne of building material demanded per month.
  * [inhabitants/tonne/month]
  *
@@ -1623,15 +1669,31 @@ export const COUNCIL_EXCLUSIVE_MONTHS = 12;
 export const COUNCIL_EXCLUSIVE_COST_CT_PER_HEAD = 400;
 
 /**
- * The measures of section 13.3: plant trees, fund streets, and three sizes of
- * advertising campaign. Indexed by TownMeasure.
+ * The measures of section 13.3: plant trees, fund streets, three sizes of
+ * advertising campaign, and the two SPEC2 M20 adds - station sponsorship and a
+ * noise barrier. Indexed by TownMeasure.
+ *
+ * The two new prices sit where their effects do. Sponsorship is priced between
+ * the small and the medium campaign because what it buys is goodwill like a
+ * campaign, only earned rather than bought: it pays per station the company
+ * actually runs here, so a company with no presence gets nothing for it. The
+ * barrier is the dearest thing on the list bar the large campaign, because it
+ * is the only measure that changes how a rating TERM is computed rather than
+ * adding a decaying bonus on top of it.
  */
 export const TOWN_MEASURE_COST_CT: readonly number[] = [
-  20_000_00, 80_000_00, 50_000_00, 140_000_00, 320_000_00,
+  20_000_00, 80_000_00, 50_000_00, 140_000_00, 320_000_00, 90_000_00, 180_000_00,
 ];
 
-/** Goodwill each measure buys, in rating points. */
-export const TOWN_MEASURE_GOODWILL: readonly number[] = [6, 14, 10, 22, 40];
+/**
+ * Goodwill each measure buys, in rating points.
+ *
+ * The noise barrier buys none: its whole effect is the noise term it abates,
+ * and a barrier that ALSO bought goodwill would be paid twice for one wall.
+ * Sponsorship's entry is a base; {@link TOWN_MEASURE_SPONSOR_PER_STATION} is
+ * what it adds per station.
+ */
+export const TOWN_MEASURE_GOODWILL: readonly number[] = [6, 14, 10, 22, 40, 4, 0];
 
 /** How long before the same measure can be bought again. [ticks] */
 export const TOWN_MEASURE_COOLDOWN_TICKS: readonly number[] = [
@@ -1640,6 +1702,110 @@ export const TOWN_MEASURE_COOLDOWN_TICKS: readonly number[] = [
   TICKS_PER_MONTH * 3,
   TICKS_PER_MONTH * 6,
   TICKS_PER_MONTH * 12,
+  TICKS_PER_MONTH * 6,
+  TICKS_PER_MONTH * 12,
+];
+
+/**
+ * Extra goodwill station sponsorship buys per station the company runs in the
+ * town. [rating points/station]
+ *
+ * Three stations is {@link COUNCIL_STATION_TARGET}, the point at which the
+ * service term of the rating is already at full marks, so a fully committed
+ * operator buys 4 + 3 x 6 = 22 points - the medium campaign's figure at two
+ * thirds of its price. A company with nothing in the town buys nothing and the
+ * measure refuses rather than charging for it: sponsoring a station one does
+ * not have is not a thing a council can be sold.
+ */
+export const TOWN_MEASURE_SPONSOR_PER_STATION = 6;
+
+/** How long a paid-for noise barrier keeps standing. [months] */
+export const TOWN_MEASURE_BARRIER_MONTHS = 24;
+
+/**
+ * What a standing noise barrier does to the noise term. [dimensionless]
+ *
+ * Half, and deliberately not zero: a wall along the line is not the line going
+ * away, and a company that could buy its track out of the rating entirely
+ * would have no reason left to route around a town. Against a GREEN council -
+ * which doubles noise (see {@link COUNCIL_PROFILE_NOISE_FACTOR}) - a barrier
+ * puts the term back exactly where a balanced council would have had it, which
+ * is the pairing the two mechanisms were written as.
+ */
+export const COUNCIL_NOISE_BARRIER_FACTOR = 0.5;
+
+// ---------------------------------------------------------- town elections
+
+/**
+ * Years between council elections. [years]
+ *
+ * SPEC2 M20: "Wahlen alle N Jahre aus `streams.politics`". Four is a term of
+ * office short enough that a century holds twenty-five of them - so a player
+ * who serves a town well meets several councils - and long enough that a
+ * company can build against the council it has: a green council doubles what
+ * track through the streets costs in rating, and reacting to that with a
+ * barrier or a different alignment has to be worth doing before the next
+ * ballot.
+ */
+export const ELECTION_TERM_YEARS = 4;
+
+/**
+ * Name of the election RNG stream (Z3, D-106/D-128).
+ *
+ * The elections draw from `world.streamFor` and never from the shared gameplay
+ * stream. This is the exact mistake D-106 was written for: a single draw taken
+ * from `world.rng` here would shift every later breakdown roll in every
+ * existing seed and turn the balance scenarios red for a reason that has
+ * nothing to do with them. The salt is this name folded with the ELECTION
+ * NUMBER - the same shape the weather uses with the game day, and a periodic
+ * hook needs a sequence that differs per invocation (D-128).
+ */
+export const ELECTION_STREAM_NAME = 'politics';
+
+/**
+ * The three council profiles of SPEC2 M20, and their relative weight at an
+ * election. Indexed by CouncilProfile. [dimensionless]
+ *
+ * A balanced council is the likeliest single outcome and the two committed
+ * ones share the rest evenly, so a town is neither reliably green nor reliably
+ * business-friendly and a company cannot plan a century around one ballot. It
+ * is also what every town is BORN with and what a world with the rule off has
+ * for ever, which is what makes `elections: false` an exact no-op rather than
+ * a different starting point (the D-201 device).
+ */
+export const COUNCIL_PROFILE_WEIGHT: readonly number[] = [2, 1, 1];
+
+/**
+ * What each profile does to the NOISE term of the rating, indexed by
+ * CouncilProfile. [dimensionless]
+ *
+ * SPEC2 M20 verbatim: "gruener Rat: Laerm x 2, Gruen-Bonus x 2; wirtschaftsnah
+ * umgekehrt". "Umgekehrt" is read as the reciprocal rather than as a second
+ * invented number, so the three rows are 1, 2 and 1/2 - a business-friendly
+ * council minds track through its streets half as much as a balanced one, and
+ * a green council twice as much.
+ */
+export const COUNCIL_PROFILE_NOISE_FACTOR: readonly number[] = [1, 2, 0.5];
+
+/** The same, for the clean-fleet bonus of section 14.3. [dimensionless] */
+export const COUNCIL_PROFILE_GREEN_FACTOR: readonly number[] = [1, 2, 0.5];
+
+/**
+ * Populations a town's growth is reported at, ascending. [inhabitants]
+ *
+ * SPEC2 M20 asks for "Wachstums-Meilensteine via postOnce". A milestone is
+ * edge-triggered on the month the population crosses one of these, so a town
+ * that sits at 5,001 for thirty years is one entry and not three hundred and
+ * sixty; `postOnce` is the second guard behind that, not the first (D-202's
+ * shape for the storm warning).
+ *
+ * They are round numbers a player recognises rather than a formula: the first
+ * is roughly the village a starting bus line serves, the last is larger than
+ * anything the generator places, so a town reaching it did so because somebody
+ * built for it.
+ */
+export const TOWN_MILESTONE_POPULATIONS: readonly number[] = [
+  1_000, 2_500, 5_000, 10_000, 20_000, 50_000,
 ];
 
 /** Tiles of forest one planting turns over, at most. [tiles] */

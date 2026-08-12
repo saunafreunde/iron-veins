@@ -32,6 +32,8 @@ function town(id: number, name: string, x: number, y: number): TownMarker {
     sizeClass: 1,
     population: 1_200,
     councilRating: 50,
+    councilProfile: 0,
+    monthsToElection: -1,
     exclusiveCompanyId: -1,
     exclusiveMonthsLeft: 0,
     exclusiveCostCt: 0,

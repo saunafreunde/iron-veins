@@ -12,19 +12,33 @@ import {
   TOWN_GROWTH_RATING_FLOOR,
   TOWN_GROWTH_RATING_SPAN,
   TOWN_INHABITANTS_PER_BUILDING_MATERIAL,
+  TOWN_INHABITANTS_PER_ELECTRONICS,
   TOWN_INHABITANTS_PER_FOOD,
   TOWN_INHABITANTS_PER_GOODS,
+  TOWN_MAIL_COMMERCIAL_WEIGHT,
   TOWN_PRODUCTION_SLICES_PER_MONTH,
   TOWN_SHRINK_RATE_PER_MONTH,
   TOWN_SUPPLY_WINDOW_MONTHS,
 } from '../constants';
 import { assignStationIndustries } from '../industry/catchment';
+import { countTownZones } from '../mapgen/towns';
+import { reportTownMilestone } from '../news/report';
 import { inCatchment, stationRating, type Station } from '../station/types';
 import { depositAtStation, depositPassengers } from '../cargo/routing';
 import { notePassengerOffer } from '../station/returns';
 import { councilRating } from './council';
-import type { Town } from './types';
+import { BuildingKind, type Town } from './types';
 import type { World } from '../World';
+
+/**
+ * The zone census `growTowns` reads its demands against, refilled per town.
+ *
+ * Four slots, indexed by {@link BuildingKind}, allocated once at module load:
+ * a monthly hook may not allocate any more than a tick may (law #7, D-231),
+ * and it is scratch rather than state - filled at the top of every town's turn
+ * and read only until that turn ends.
+ */
+const zoneCensus = new Int32Array(4);
 
 /**
  * Town output and growth (sections 13.1 and 13.2).
@@ -103,9 +117,20 @@ export function assignStationCatchment(world: World, station: Station): void {
 export function produceTownCargo(world: World): void {
   for (const town of world.towns) {
     let totalWeight = 0;
+    // The mail weight of SPEC2 M20's zone economy: the same coverage-times-
+    // rating share, MULTIPLIED by how commercial the stop's own catchment is.
+    // SPEC2 asks that the commercial zone be what produces post, and the
+    // device is M19's (D-207): the town's TOTAL is untouched and what changes
+    // is which of its stops the post is offered at. Normalising the weights is
+    // what makes that exact - where every stop of a town has the same zone mix
+    // the factor cancels, which covers a town with one station and every
+    // hand-built world of section 19.4 (all residential, share 0).
+    let totalMailWeight = 0;
     for (const station of world.stations) {
       if (station.townId !== town.id) continue;
-      totalWeight += station.buildingsCovered * (stationRating(station, world.tick) / 100);
+      const weight = station.buildingsCovered * (stationRating(station, world.tick) / 100);
+      totalWeight += weight;
+      totalMailWeight += weight * (1 + TOWN_MAIL_COMMERCIAL_WEIGHT * station.commercialShare);
     }
     if (totalWeight <= 0) continue;
 
@@ -114,8 +139,12 @@ export function produceTownCargo(world: World): void {
 
     for (const station of world.stations) {
       if (station.townId !== town.id) continue;
-      const share =
-        (station.buildingsCovered * (stationRating(station, world.tick) / 100)) / totalWeight;
+      const weight = station.buildingsCovered * (stationRating(station, world.tick) / 100);
+      const share = weight / totalWeight;
+      const mailShare =
+        totalMailWeight > 0
+          ? (weight * (1 + TOWN_MAIL_COMMERCIAL_WEIGHT * station.commercialShare)) / totalMailWeight
+          : share;
       // What a town produces is counted whether or not the station could take
       // it: the growth ratio has to divide by the offer, not by the acceptance.
       const offered = passengers * share;
@@ -141,7 +170,7 @@ export function produceTownCargo(world: World): void {
       // balancing world of section 19.4 a no-op for that rule.
       notePassengerOffer(station, Cargo.CommuterPax, commuters);
       notePassengerOffer(station, Cargo.BusinessPax, business);
-      depositAtStation(world, station, Cargo.Mail, mail * share);
+      depositAtStation(world, station, Cargo.Mail, mail * mailShare);
     }
   }
 }
@@ -325,12 +354,39 @@ export function growTowns(world: World): void {
   for (const town of world.towns) {
     const supplyPassengers = rollPassengerWindow(town);
 
-    // Demand for the three things a town consumes, from section 13.2.
-    const goodsWanted = town.population / TOWN_INHABITANTS_PER_GOODS;
-    const foodWanted = town.population / TOWN_INHABITANTS_PER_FOOD;
+    // The zone economy of SPEC2 M20: which of the town's demands exist at all
+    // is a property of what its buildings are zoned as. Counted from the map
+    // rather than carried, for `countTownBuildings`' reason one field along -
+    // a saved zone census would have to be kept in step with the growth, the
+    // shrinkage, the demolition command and every future rule that clears a
+    // tile, and a census that drifts silently is what the M14 x-ray was
+    // written about.
+    countTownZones(world.map, town, town.radius, zoneCensus);
+    const zoned =
+      zoneCensus[BuildingKind.Residential]! +
+      zoneCensus[BuildingKind.Commercial]! +
+      zoneCensus[BuildingKind.Industrial]!;
+    // A town with no buildings at all reads as fully residential, which is
+    // what it was before the zones meant anything: every hand-built world of
+    // section 19.4 is all-residential too, so both take exactly the pre-M20
+    // arithmetic (the D-201 device).
+    const residentialShare = zoned > 0 ? zoneCensus[BuildingKind.Residential]! / zoned : 1;
+    const commercialShare = zoned > 0 ? zoneCensus[BuildingKind.Commercial]! / zoned : 0;
+
+    // Demand for the things a town consumes, from section 13.2 and, per zone,
+    // from SPEC2 M20: goods are wanted wherever there are people (both zones
+    // buy manufactured articles), food only by the houses, and electronics
+    // only by the shops. Electronics stays in the GOODS basket on the delivery
+    // side - 13.2 has four supply terms and not five, and a town has counted
+    // radios as goods since M5 - so what the commercial zone adds is the other
+    // half of that basket: a town with shops wants them.
+    const goodsWanted =
+      town.population / TOWN_INHABITANTS_PER_GOODS +
+      (town.population * commercialShare) / TOWN_INHABITANTS_PER_ELECTRONICS;
+    const foodWanted = (town.population * residentialShare) / TOWN_INHABITANTS_PER_FOOD;
     const buildingWanted = town.population / TOWN_INHABITANTS_PER_BUILDING_MATERIAL;
-    const supplyGoods =
-      goodsWanted > 0 ? Math.min(1, town.goodsDeliveredThisMonth / goodsWanted) : 0;
+    const goodsDelivered = town.goodsDeliveredThisMonth + town.electronicsDeliveredThisMonth;
+    const supplyGoods = goodsWanted > 0 ? Math.min(1, goodsDelivered / goodsWanted) : 0;
     const supplyFood = foodWanted > 0 ? Math.min(1, town.foodDeliveredThisMonth / foodWanted) : 0;
     const supplyBuilding =
       buildingWanted > 0 ? Math.min(1, town.buildingMaterialThisMonth / buildingWanted) : 0;
@@ -344,12 +400,19 @@ export function growTowns(world: World): void {
       servingCompanyRating(world, town),
     );
 
+    const before = town.population;
     town.population = Math.round(town.population * (1 + rate));
+    // The growth milestones of SPEC2 M20, edge-triggered where both figures
+    // are in hand - the only place they are - so a town that has been over a
+    // threshold for thirty years is one entry rather than three hundred and
+    // sixty (`postOnce` is the guard behind that, not the one in front).
+    reportTownMilestone(world, town, before);
     town.producedThisMonth = 0;
     town.transportedByCompany.length = 0;
     town.transportedThisMonth = 0;
     town.goodsDeliveredThisMonth = 0;
     town.foodDeliveredThisMonth = 0;
+    town.electronicsDeliveredThisMonth = 0;
     town.buildingMaterialThisMonth = 0;
     // The month's street budget of SPEC.md 13.2, cleared with the rest on the
     // convention this function owns: whoever reads a monthly figure resets it.

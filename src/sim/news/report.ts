@@ -5,6 +5,7 @@ import {
   DEADLOCK_WARN_TICKS,
   INDUSTRY_CLOSURE_MONTHS,
   INDUSTRY_WARNING_MONTHS,
+  TOWN_MILESTONE_POPULATIONS,
   WEATHER_REGION_COUNT,
 } from '../constants';
 import { weatherRegionOf } from '../weather/field';
@@ -13,7 +14,7 @@ import { analyseDeadlocks, type DeadlockReport } from '../net/deadlock';
 import { isInTrouble } from '../economy/company';
 import { industrySpec, type Industry } from '../industry/types';
 import { isObsolete } from '../vehicles/lifecycle';
-import { councilRating } from '../town/council';
+import { COUNCIL_PROFILE_KEYS, councilRating } from '../town/council';
 import type { Town } from '../town/types';
 import type { World } from '../World';
 import { NewsCategory, NewsSeverity } from './log';
@@ -333,6 +334,96 @@ export function reportCouncil(world: World, town: Town): void {
     messageKey: 'news.councilRefuses',
     params: { town: town.name },
     tileIndex: tile,
+  });
+}
+
+/**
+ * A council that has just changed hands (SPEC2 M20). Called from the election.
+ *
+ * Two filters, and both of them are about not writing noise into a log the
+ * player is meant to keep open:
+ *
+ *  - only towns the PLAYER has a station in. A hundred and forty towns voting
+ *    on one day is a hundred and forty sentences about places the player has
+ *    never been; a council that decides what the player's own track costs in
+ *    rating is news. The storm warning of D-202 filters on exactly this and
+ *    for exactly this reason;
+ *  - only a council that actually CHANGED, which `runElections` decides where
+ *    it holds both results. A re-elected council is the world going on as it
+ *    was.
+ *
+ * `postOnce` is the guard behind those, not in front of them: it suppresses a
+ * repeat only while the entry is the newest, so two towns changing on the same
+ * day both get their line - different tiles - and neither can repeat.
+ */
+export function reportElection(world: World, town: Town, profile: number): void {
+  let served = false;
+  for (const station of world.stations) {
+    if (station.ownerId !== world.playerCompanyId) continue;
+    if (station.townId !== town.id) continue;
+    served = true;
+    break;
+  }
+  if (!served) return;
+
+  world.news.postOnce({
+    tick: world.tick,
+    category: NewsCategory.Town,
+    severity: NewsSeverity.Info,
+    messageKey: 'news.election',
+    params: { town: town.name, profile: COUNCIL_PROFILE_KEYS[profile] ?? '' },
+    tileIndex: world.map.tileIndex(town.x, town.y),
+  });
+}
+
+/**
+ * A town that has just grown past one of the milestones of SPEC2 M20.
+ *
+ * Edge-triggered by `growTowns`, which holds the population before and after
+ * the month it just applied, so a town sitting at 5,001 for thirty years is
+ * ONE entry: the population is compared against
+ * {@link TOWN_MILESTONE_POPULATIONS} on both sides and the entry is written
+ * only for a threshold that lies between them. Upwards only - a shrinking town
+ * has the 10.1 instruments and does not need a headline for every thousand it
+ * loses on the way down.
+ *
+ * Filtered to towns the player serves, like every other town line in this
+ * file, and posted through `postOnce` behind that.
+ *
+ * **The stated floor of using `postOnce` here**: its key is the message AND
+ * the place, so a town that crosses two thresholds with nothing else written
+ * in between gets one line rather than two. That is the price of the guard
+ * SPEC2 M20 asks for by name, and it is priced in months - the thresholds are
+ * a factor of two apart, so a town takes years to cross two of them, and a
+ * game year with no other news in it is not a game anybody is playing.
+ * `elections.spec.ts` pins the collapse rather than hiding it.
+ */
+export function reportTownMilestone(world: World, town: Town, before: number): void {
+  const after = town.population;
+  if (after <= before) return;
+
+  let crossed = -1;
+  for (const milestone of TOWN_MILESTONE_POPULATIONS) {
+    if (before < milestone && after >= milestone) crossed = milestone;
+  }
+  if (crossed < 0) return;
+
+  let served = false;
+  for (const station of world.stations) {
+    if (station.ownerId !== world.playerCompanyId) continue;
+    if (station.townId !== town.id) continue;
+    served = true;
+    break;
+  }
+  if (!served) return;
+
+  world.news.postOnce({
+    tick: world.tick,
+    category: NewsCategory.Town,
+    severity: NewsSeverity.Info,
+    messageKey: 'news.townMilestone',
+    params: { town: town.name, population: crossed },
+    tileIndex: world.map.tileIndex(town.x, town.y),
   });
 }
 
