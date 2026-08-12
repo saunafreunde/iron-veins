@@ -1,8 +1,4 @@
-import {
-  PLACE_NAME_PREFIXES,
-  PLACE_NAME_ROOTS,
-  PLACE_NAME_SUFFIXES,
-} from '../../src/sim/mapgen/names';
+import { PLACE_NAME_SETS, type PlaceNameSet } from '../../src/sim/mapgen/names';
 
 /**
  * Every place a piece of scenario text names, in the order it names them
@@ -20,11 +16,20 @@ import {
  * **The grammar is the generator's own, not a heuristic.** A place name is
  * exactly what `PlaceNameGenerator.compose` can produce - one of 32 roots
  * followed by one of 22 suffixes, optionally behind one of 16 prefixes and a
- * hyphen - and this module builds its pattern out of those three exported
- * tables. A syllable added to the generator widens the audit the same day. That
- * is deliberately the same shape as `INDUSTRY_SMOKE_ANCHORS` (D-174) and the
- * tool registry (D-183): the enumeration lives in one place and the audit
- * consumes it rather than restating it.
+ * hyphen - and this module builds its pattern out of the exported tables. A
+ * syllable added to the generator widens the audit the same day. That is
+ * deliberately the same shape as `INDUSTRY_SMOKE_ANCHORS` (D-174) and the tool
+ * registry (D-183): the enumeration lives in one place and the audit consumes
+ * it rather than restating it.
+ *
+ * **Two vocabularies since SPEC2 M23** (D-246), and the pattern is a union of
+ * per-SET patterns rather than a union of the six tables. The difference is
+ * not cosmetic: a single pattern over all roots and all suffixes would accept
+ * a German root under an English ending - "Rosenford", "Ahornton" - which no
+ * generator in the game can produce, and every such cross product is a word
+ * this audit could read as a place that never existed. One alternative per
+ * set is exactly the set of names the generator can hand out, which is what
+ * the whole module is for.
  *
  * **What this finds, and what the caller does with it.** The two halves catch
  * different edits and both are needed:
@@ -72,9 +77,15 @@ export interface PlaceName {
  * is what keeps "Weidengrund" from being read a second time out of the middle
  * of "Nieder-Weidengrund".
  */
+function patternOf(set: PlaceNameSet): string {
+  return (
+    `(?:(?:${set.prefixes.join('|')})-)?` +
+    `(?:${set.roots.join('|')})(?:${set.suffixes.join('|')})`
+  );
+}
+
 const PLACE = new RegExp(
-  `(?<![\\p{L}-])(?:(?:${PLACE_NAME_PREFIXES.join('|')})-)?` +
-    `(?:${PLACE_NAME_ROOTS.join('|')})(?:${PLACE_NAME_SUFFIXES.join('|')})(?![\\p{L}])`,
+  `(?<![\\p{L}-])(?:${PLACE_NAME_SETS.map(patternOf).join('|')})(?![\\p{L}])`,
   'gu',
 );
 

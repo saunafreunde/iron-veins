@@ -1,5 +1,6 @@
-import { INDUSTRY_MIN_DISTANCE, TILES_PER_INDUSTRY } from '../constants';
+import { INDUSTRY_MIN_DISTANCE, type MapClimate, TILES_PER_INDUSTRY } from '../constants';
 import type { Cargo } from '../cargo/types';
+import { climateIndustryTypes, industryAllowedIn } from '../industry/climateSets';
 import {
   INDUSTRY_SPECS,
   industrySpec,
@@ -201,8 +202,15 @@ export function release(map: TileMap, industry: Industry): void {
   }
 }
 
-/** Cumulative weight table so a type can be drawn in one random step. */
-export function buildWeightTable(): {
+/**
+ * Cumulative weight table so a type can be drawn in one random step.
+ *
+ * Restricted to the climate's own industry set since SPEC2 M23 (D-246). For a
+ * temperate world the set IS the catalogue in catalogue order, so the table,
+ * the total and therefore every draw are bit-identical to the pre-M23 ones -
+ * which is why no temperate world, band or pin moved with this bundle.
+ */
+export function buildWeightTable(climate: MapClimate): {
   types: IndustryType[];
   cumulative: number[];
   total: number;
@@ -210,9 +218,9 @@ export function buildWeightTable(): {
   const types: IndustryType[] = [];
   const cumulative: number[] = [];
   let total = 0;
-  for (const spec of INDUSTRY_SPECS) {
-    total += spec.weight;
-    types.push(spec.type);
+  for (const type of climateIndustryTypes(climate)) {
+    total += industrySpec(type).weight;
+    types.push(type);
     cumulative.push(total);
   }
   return { types, cumulative, total };
@@ -226,10 +234,11 @@ export function drawType(rng: Rng, table: ReturnType<typeof buildWeightTable>): 
   return table.types[table.types.length - 1]!;
 }
 
-/** Which industry types produce a given cargo. */
-function producersOf(cargo: Cargo): IndustryType[] {
+/** Which industry types this climate has that produce a given cargo. */
+function producersOf(cargo: Cargo, climate: MapClimate): IndustryType[] {
   const result: IndustryType[] = [];
   for (const spec of INDUSTRY_SPECS) {
+    if (!industryAllowedIn(climate, spec.type)) continue;
     if (spec.outputs.includes(cargo)) result.push(spec.type);
   }
   return result;
@@ -259,6 +268,7 @@ function repairChains(
   rng: Rng,
   towns: readonly Town[],
   placed: Industry[],
+  climate: MapClimate,
 ): Industry[] {
   let nextId = placed.length;
 
@@ -270,7 +280,7 @@ function repairChains(
       for (const input of industrySpec(consumer.type).inputs) {
         if (hasSupplier(placed, consumer.landmassId, input)) continue;
 
-        for (const producerType of producersOf(input)) {
+        for (const producerType of producersOf(input, climate)) {
           const spot = findSpot(
             map,
             rng,
@@ -333,10 +343,15 @@ function repairChains(
   return compacted;
 }
 
-/** Place all industries of the map. */
-export function generateIndustries(map: TileMap, rng: Rng, towns: readonly Town[]): Industry[] {
+/** Place all industries of the map, from the climate's own set (SPEC2 M23). */
+export function generateIndustries(
+  map: TileMap,
+  rng: Rng,
+  towns: readonly Town[],
+  climate: MapClimate,
+): Industry[] {
   const wanted = Math.max(1, Math.round(map.tileCount / TILES_PER_INDUSTRY));
-  const table = buildWeightTable();
+  const table = buildWeightTable(climate);
   const placed: Industry[] = [];
 
   for (let i = 0; i < wanted; i++) {
@@ -356,5 +371,5 @@ export function generateIndustries(map: TileMap, rng: Rng, towns: readonly Town[
     occupy(map, industry);
   }
 
-  return repairChains(map, rng, towns, placed);
+  return repairChains(map, rng, towns, placed, climate);
 }

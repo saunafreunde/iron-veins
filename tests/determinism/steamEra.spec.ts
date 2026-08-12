@@ -62,7 +62,7 @@ describe('an 1850 game with the steam catalogue', () => {
     expect(scenario.world.startYear).toBe(1850);
     expect(scenario.world.date.year).toBe(1850);
 
-    const trains = availableVehicles(VehicleKind.Train, 1850);
+    const trains = availableVehicles(VehicleKind.Train, 1850, MapClimate.Temperate);
     expect(trains.length).toBeGreaterThan(0);
     for (const spec of trains) {
       expect(spec.introYear, spec.nameKey).toBeLessThanOrEqual(1850);

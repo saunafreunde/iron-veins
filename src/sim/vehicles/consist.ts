@@ -7,7 +7,9 @@ import {
   LATERAL_ACCEL_PASSENGER,
   MAX_CONSIST_UNITS,
   MAX_TRAIN_LENGTH_M,
+  type MapClimate,
 } from '../constants';
+import { specAvailable } from './availability';
 import { capacityFor, hasVehicleSpec, vehicleSpec } from './catalog';
 import { RailRole, VehicleKind, type VehicleSpec } from './spec';
 
@@ -209,7 +211,11 @@ export const ConsistReason = {
  * refused, or null when it is legal - every refusal names the concrete problem
  * rather than "cannot build" (section 17.3).
  */
-export function validateConsist(specIds: readonly number[], year: number): string | null {
+export function validateConsist(
+  specIds: readonly number[],
+  year: number,
+  climate: MapClimate,
+): string | null {
   if (specIds.length === 0) return ConsistReason.Empty;
   if (specIds.length > MAX_CONSIST_UNITS) return ConsistReason.TooManyUnits;
 
@@ -221,7 +227,7 @@ export function validateConsist(specIds: readonly number[], year: number): strin
     if (spec.kind !== VehicleKind.Train || spec.railRole === RailRole.None) {
       return ConsistReason.NotRail;
     }
-    if (year < spec.introYear || year > spec.retireYear) return ConsistReason.NotAvailable;
+    if (!specAvailable(spec, year, climate)) return ConsistReason.NotAvailable;
     if (spec.railRole === RailRole.Traction) traction++;
     lengthM += spec.lengthM;
   }

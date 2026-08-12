@@ -137,6 +137,9 @@ export const MapClimate = {
 } as const;
 export type MapClimate = (typeof MapClimate)[keyof typeof MapClimate];
 
+/** How many climates there are. [1] Origin: the four entries above. */
+export const MAP_CLIMATE_COUNT = 4;
+
 /** Sea level temperature at the middle of the map, per climate. [degC] */
 export const CLIMATE_BASE_TEMPERATURE_C: readonly number[] = [12, -6, 26, 24];
 

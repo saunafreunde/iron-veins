@@ -304,18 +304,24 @@ const SCENARIO_WORLD_CLAIMS: Readonly<Record<string, WorldClaim>> = {
       { from: atIndustry(1), to: atIndustry(0), distance: 65.8, climb: 20, water: 5, levels: 11 },
     ],
   },
-  // "Zwischen Silberheim und Ulmenburg liegen 60 Tiles Luftlinie - und elf
+  // "Zwischen Wrenmoor und Nettlewick liegen 60 Tiles Luftlinie - und elf
   // Hoehenstufen ..., also 88 Meter, dazu acht Tiles Wasser." Plus the reason
   // the tonnage goal here counts passengers: nothing on this map burns coal.
+  //
+  // The two names and the industry counts are SPEC2 M23's (D-246): an arctic
+  // world is named from the English syllable set and grows the arctic industry
+  // set. The ground is untouched - every corridor figure below is the one the
+  // pre-M23 world measured, to the decimal, because the climate reaches the
+  // NAMES and the industry table and nothing that places a town.
   gebirgslogistik: {
     townsTotal: 40,
     citiesAt8000: 3,
     townsAt2500: 16,
-    industries: 2,
+    industries: 5,
     inhabitedLandmasses: 2,
     towns: [
-      [3, 'Silberheim', 8_000],
-      [18, 'Ulmenburg', 2_500],
+      [3, 'Wrenmoor', 8_000],
+      [18, 'Nettlewick', 2_500],
     ],
     briefingTowns: [3, 18],
     corridors: [
@@ -330,20 +336,31 @@ const SCENARIO_WORLD_CLAIMS: Readonly<Record<string, WorldClaim>> = {
         heights: [2, 13],
       },
     ],
-    industriesOfType: [[IndustryType.CoalMine, 2]],
+    industriesOfType: [
+      [IndustryType.CoalMine, 3],
+      [IndustryType.IronOreMine, 2],
+    ],
+    // Still true, and for a sharper reason than before: the arctic set HAS a
+    // power station and a steel mill in it - they are core, every climate has
+    // them - and this small map grew neither, so three coal mines and two iron
+    // ore mines stand on a map with nobody to sell to.
     cargoWithoutAcceptor: Cargo.Coal,
   },
-  // "Sandenheim ... liegt auf einer Insel. Neu-Lindenried ... liegt 52 Tiles
-  // entfernt auf dem Festland. Dazwischen ist offenes Meer."
+  // "Heathermoor ... liegt auf einer Insel. Lower-Falconhaven ... liegt 52
+  // Tiles entfernt auf dem Festland. Dazwischen ist offenes Meer."
+  //
+  // English names and the tropical industry set since SPEC2 M23 (D-246); the
+  // three land masses, their sizes, the corridor and both populations are the
+  // world this scenario always described.
   inselhuepfen: {
     townsTotal: 40,
     citiesAt8000: 2,
     townsAt2500: 12,
-    industries: 7,
+    industries: 9,
     inhabitedLandmasses: 3,
     towns: [
-      [23, 'Neu-Lindenried', 8_000],
-      [8, 'Sandenheim', 8_000],
+      [23, 'Lower-Falconhaven', 8_000],
+      [8, 'Heathermoor', 8_000],
     ],
     // The island first in both languages, the mainland second.
     briefingTowns: [8, 23],
@@ -402,17 +419,24 @@ const SCENARIO_WORLD_CLAIMS: Readonly<Record<string, WorldClaim>> = {
     // Staedte" and names none of them.
     briefingTowns: [],
   },
-  // "Wueste, zehn Industrien, zwei Grossstaedte", and the desert growth curve
+  // "Wueste, elf Industrien, zwei Grossstaedte", and the desert growth curve
   // the doc comment contrasts with the temperate one.
+  //
+  // Ten until SPEC2 M23 (D-246), and this is the one briefing NUMERAL the
+  // climate sets moved: the desert grows the mineral arm - three gravel pits,
+  // two cement works and a builders' merchant - instead of the farms and
+  // forests it used to draw from the whole catalogue, and eleven works fit
+  // where ten did. The sentence was rewritten with it, in both languages,
+  // which is what `SCENARIO_BRIEFING_FIGURES` forces.
   ueberleben: {
     townsTotal: 40,
     citiesAt8000: 2,
     townsAt2500: 15,
-    industries: 10,
+    industries: 11,
     inhabitedLandmasses: 1,
     towns: [
-      [8, 'Sandenwerder', 8_000],
-      [13, 'Hinter-Falkenrode', 8_000],
+      [8, 'Heatherreach', 8_000],
+      [13, 'Deep-Caldridge', 8_000],
     ],
     // Neither is named anywhere in the scenario's text; both are pinned
     // because the doc comment counts them.

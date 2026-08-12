@@ -1,7 +1,29 @@
+import { Cargo } from '../cargo/types';
+
 /**
  * Town model. M1 creates towns, their layout and their population; growth,
  * demand and the town council follow in M2 and M8.
  */
+
+/**
+ * Everything a town puts into a station, ascending - the enumeration
+ * `produceTownCargo` in `town/update.ts` deposits and nothing else.
+ *
+ * It exists because SPEC2 M19 gave a town a SECOND passenger class, and a
+ * class no station accepted would be the dead end of D-118 one production
+ * chain further out: produced every game day, never collectable, filling the
+ * station to its capacity and taking the classes that ARE served down with
+ * it. `tests/unit/deliveries.spec.ts` walks this list against the station's
+ * own acceptance table, and `tests/unit/passengerClasses.spec.ts` holds the
+ * list itself against what a played town actually deposits.
+ *
+ * It lives in this LEAF module rather than beside the hook that deposits it
+ * (SPEC2 M23 bundle 2, D-246), and `town/update.ts` re-exports it so every
+ * reader is unchanged. The reason is measured: the climate tables have to know
+ * what a town makes, and reaching the monthly hook to ask pulled the station
+ * and the world into the main chunk (+10,115 B against the D-191 budget).
+ */
+export const TOWN_OUTPUTS: readonly Cargo[] = [Cargo.Mail, Cargo.CommuterPax, Cargo.BusinessPax];
 
 /** Size classes, used for the starting population and the layout radius. */
 export const TownSize = {

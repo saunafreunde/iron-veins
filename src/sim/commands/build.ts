@@ -77,6 +77,7 @@ import { RoadBit } from '../town/types';
 import type { Cargo } from '../cargo/types';
 import { defaultCargo, vehicleSpec, VehicleKind } from '../vehicles/catalog';
 import { powerCode as vehiclePowerCode } from '../vehicles/spec';
+import { specAvailable } from '../vehicles/availability';
 import { aggregateConsist, consistDefaultCargo, validateConsist } from '../vehicles/consist';
 import { refitCapacity, refitPriceCt } from '../vehicles/refit';
 import { releaseAll } from '../vehicles/reservations';
@@ -946,7 +947,7 @@ export function buyAircraft(
   if (spec.kind !== VehicleKind.Aircraft) return reject(RejectReason.WrongVehicleKind);
 
   const year = world.date.year;
-  if (year < spec.introYear || year > spec.retireYear) return reject(RejectReason.NotAvailableYet);
+  if (!specAvailable(spec, year, world.climate)) return reject(RejectReason.NotAvailableYet);
   // The low-emission purchase grant of section 14.3 (SPEC2 M21): what the
   // company really pays, through the ONE function all four buy commands share.
   // Exactly the inflated list price in a world without the levy and before its
@@ -989,7 +990,7 @@ export function buyShip(
   if (spec.kind !== VehicleKind.Ship) return reject(RejectReason.WrongVehicleKind);
 
   const year = world.date.year;
-  if (year < spec.introYear || year > spec.retireYear) return reject(RejectReason.NotAvailableYet);
+  if (!specAvailable(spec, year, world.climate)) return reject(RejectReason.NotAvailableYet);
   // The low-emission purchase grant of section 14.3 (SPEC2 M21): what the
   // company really pays, through the ONE function all four buy commands share.
   // Exactly the inflated list price in a world without the levy and before its
@@ -1087,7 +1088,7 @@ export function buyTrain(
     station.modules.some((m) => m.tileIndex === tile && m.kind === ModuleKind.RailDepot);
   if (!isDepot) return reject(RejectReason.NeedsRailDepot);
 
-  const problem = validateConsist(specIds, world.date.year);
+  const problem = validateConsist(specIds, world.date.year, world.climate);
   if (problem !== null) return reject(problem);
 
   const aggregate = aggregateConsist(specIds);
@@ -1144,7 +1145,7 @@ export function buyRoadVehicle(
   if (spec.kind !== VehicleKind.Road) return reject(RejectReason.WrongVehicleKind);
 
   const year = world.date.year;
-  if (year < spec.introYear || year > spec.retireYear) return reject(RejectReason.NotAvailableYet);
+  if (!specAvailable(spec, year, world.climate)) return reject(RejectReason.NotAvailableYet);
   // The low-emission purchase grant of section 14.3 (SPEC2 M21): what the
   // company really pays, through the ONE function all four buy commands share.
   // Exactly the inflated list price in a world without the levy and before its

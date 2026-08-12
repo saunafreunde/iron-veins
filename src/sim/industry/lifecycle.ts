@@ -3,6 +3,7 @@ import {
   INDUSTRY_NEW_PER_YEAR,
   INDUSTRY_OPENING_ATTEMPTS,
   INDUSTRY_WARNING_MONTHS,
+  MapClimate,
 } from '../constants';
 import { buildWeightTable, drawType, findSpot, occupy, release } from '../mapgen/industries';
 import { reportNewIndustry } from '../news/report';
@@ -26,8 +27,20 @@ import { industrySpec, newIndustry, type Industry } from './types';
  * needs.
  */
 
-/** The weight table is a pure function of the catalogue; build it once. */
-const WEIGHTS = buildWeightTable();
+/**
+ * The weight table is a pure function of the catalogue AND of the climate
+ * (SPEC2 M23, D-246); build one per climate, once.
+ *
+ * A works that opens during a game has to come from the same set the map was
+ * generated from, or the first farm on the map would appear in an arctic world
+ * in game year two - the difference between four economies and four skins.
+ */
+const WEIGHTS: readonly ReturnType<typeof buildWeightTable>[] = [
+  buildWeightTable(MapClimate.Temperate),
+  buildWeightTable(MapClimate.Arctic),
+  buildWeightTable(MapClimate.Tropical),
+  buildWeightTable(MapClimate.Desert),
+];
 
 /**
  * Close a works down for good.
@@ -79,7 +92,7 @@ export function closureWarningLevel(industry: Industry): number {
  */
 export function openNewIndustries(world: World): void {
   for (let n = 0; n < INDUSTRY_NEW_PER_YEAR; n++) {
-    const type = drawType(world.rng, WEIGHTS);
+    const type = drawType(world.rng, WEIGHTS[world.climate] ?? WEIGHTS[MapClimate.Temperate]!);
     const spec = industrySpec(type);
 
     const spot = findSpot(

@@ -1,4 +1,6 @@
 import { Cargo } from '../cargo/types';
+import type { MapClimate } from '../constants';
+import { specAvailable } from './availability';
 import { ERA_SPECS } from './eraCatalog';
 import { RAIL_SPECS } from './railCatalog';
 import { AIRCRAFT_SPECS, SHIP_SPECS } from './waterCatalog';
@@ -680,23 +682,31 @@ export function hasVehicleSpec(id: number): boolean {
  * Vehicles of a kind that can be bought in `year`, in catalogue order.
  * Sorted by id so the list is stable regardless of how the table is edited.
  */
-export function availableVehicles(kind: VehicleKind, year: number): VehicleSpec[] {
+export function availableVehicles(
+  kind: VehicleKind,
+  year: number,
+  climate: MapClimate,
+): VehicleSpec[] {
   const result: VehicleSpec[] = [];
   for (const spec of VEHICLE_SPECS) {
     if (spec.kind !== kind) continue;
-    if (year < spec.introYear || year > spec.retireYear) continue;
+    if (!specAvailable(spec, year, climate)) continue;
     result.push(spec);
   }
   result.sort((a, b) => a.id - b.id);
   return result;
 }
 
-/** Rail vehicles of one role that can be bought in `year`. */
-export function availableRailVehicles(role: RailRole, year: number): VehicleSpec[] {
+/** Rail vehicles of one role that can be bought in `year`, in this climate. */
+export function availableRailVehicles(
+  role: RailRole,
+  year: number,
+  climate: MapClimate,
+): VehicleSpec[] {
   const result: VehicleSpec[] = [];
   for (const spec of VEHICLE_SPECS) {
     if (spec.railRole !== role) continue;
-    if (year < spec.introYear || year > spec.retireYear) continue;
+    if (!specAvailable(spec, year, climate)) continue;
     result.push(spec);
   }
   result.sort((a, b) => a.id - b.id);

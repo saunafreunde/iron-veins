@@ -217,7 +217,9 @@ export function placeTownSeed(
   const stream = editorStream(world, x, y);
   const town = newTown(
     world.towns.length,
-    new PlaceNameGenerator(stream).next(),
+    // The world's own vocabulary, so a hand-placed town is named like the ones
+    // beside it (SPEC2 M23, D-246).
+    new PlaceNameGenerator(stream, world.climate).next(),
     x,
     y,
     sizeClass as TownSize,

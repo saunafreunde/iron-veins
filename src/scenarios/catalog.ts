@@ -325,12 +325,19 @@ const PASSAGIERNETZ: ShippedScenario = {
 };
 
 /**
- * Seed 148, arctic, 256 tiles. Measured: the straight line from Silberheim (3,
- * 8,000) to Ulmenburg (18, 2,500) is 60 tiles long, climbs and falls through
+ * Seed 148, arctic, 256 tiles. Measured: the straight line from Wrenmoor (3,
+ * 8,000) to Nettlewick (18, 2,500) is 60 tiles long, climbs and falls through
  * 27 height levels, spans heights 2 to 13 - eleven levels, 88 m - and crosses
  * eight tiles of water. The steepest long corridor between two real towns in
- * two hundred scanned seeds. At this climate the map grows two coal mines and
- * nothing that accepts coal, so the tonnage goal here is passengers.
+ * two hundred scanned seeds. At this climate the map grows three coal mines,
+ * two iron ore mines and nothing that accepts either, so the tonnage goal here
+ * is passengers.
+ *
+ * The two towns are named in English since SPEC2 M23 (D-246): an arctic world
+ * names its places from the English syllable set that closes SPEC.md 6.5. The
+ * GROUND did not move - the corridor is the same sixty tiles through the same
+ * twenty-seven levels, which is why every figure the briefing quotes is
+ * unchanged and only the two names in it are not.
  *
  * The BAND 2 to 13 is pinned since D-199 (`CorridorClaim.heights`); the claims
  * table held only the difference before, and "spans 2 to 13" would have read
@@ -342,14 +349,14 @@ const GEBIRGSLOGISTIK: ShippedScenario = {
   author: AUTHOR,
   briefing: {
     de:
-      'Zwischen Silberheim und Ulmenburg liegen 60 Tiles Luftlinie - und elf ' +
+      'Zwischen Wrenmoor und Nettlewick liegen 60 Tiles Luftlinie - und elf ' +
       'Hoehenstufen zwischen dem tiefsten und dem hoechsten Punkt der Geraden, also ' +
       '88 Meter, dazu acht Tiles Wasser. Die gerade Linie ist die teuerste; die ' +
       'Steigungsregel misst ueber ein Fenster, nicht von Tile zu Tile, also gewinnt ' +
       'hier, wer den Umweg am Hang findet. Die Streckenkosten aus 8.4 sind ' +
       'eingeschaltet: belegte Abschnitte und Signale kosten den Zug etwas.',
     en:
-      'Sixty tiles of straight line lie between Silberheim and Ulmenburg - and ' +
+      'Sixty tiles of straight line lie between Wrenmoor and Nettlewick - and ' +
       'eleven height levels between its lowest and its highest point, which is 88 ' +
       'metres, plus eight tiles of water. The direct route is the expensive one; the ' +
       'gradient rule measures over a window rather than tile to tile, so the win goes ' +
@@ -359,8 +366,8 @@ const GEBIRGSLOGISTIK: ShippedScenario = {
   goals: [
     {
       caption: {
-        de: 'Silberheim und Ulmenburg verbinden',
-        en: 'Connect Silberheim and Ulmenburg',
+        de: 'Wrenmoor und Nettlewick verbinden',
+        en: 'Connect Wrenmoor and Nettlewick',
       },
       spec: {
         kind: GoalKind.ConnectStations,
@@ -418,14 +425,19 @@ const GEBIRGSLOGISTIK: ShippedScenario = {
 
 /**
  * Seed 67, tropical, 256 tiles. Measured: three inhabited land masses. The
- * 45,084-tile mainland carries Neu-Lindenried (23, 8,000); a 252-tile island
- * off the south-east corner carries Sandenheim (8, 8,000) 52 tiles away across
- * open water; a third islet of 27 tiles carries a village. Which town stands
+ * 45,084-tile mainland carries Lower-Falconhaven (23, 8,000); a 252-tile
+ * island off the south-east corner carries Heathermoor (8, 8,000) 52 tiles
+ * away across open water; a third islet of 27 tiles carries a village. Which town stands
  * on which land mass is pinned as a PAIR since D-198 - the sorted sizes alone
  * would still hold if the two cities swapped islands, and then the scenario
  * would be a different one. Two cities of 8,000 with sea between them is what
  * "island hopping" means here - no bridge can span it, so the connection is a
  * ship or it is nothing.
+ *
+ * Both towns are named in English since SPEC2 M23 (D-246), and the map now
+ * grows the tropical industry set: nine works, of which three forestries and
+ * two sawmills are the timber arm no other climate but the temperate one has.
+ * The islands, the distances and the populations are the same world.
  */
 const INSELHUEPFEN: ShippedScenario = {
   id: 'inselhuepfen',
@@ -433,13 +445,13 @@ const INSELHUEPFEN: ShippedScenario = {
   author: AUTHOR,
   briefing: {
     de:
-      'Sandenheim hat 8.000 Einwohner und liegt auf einer Insel. Neu-Lindenried hat ' +
-      'ebenso viele und liegt 52 Tiles entfernt auf dem Festland. Dazwischen ist ' +
+      'Heathermoor hat 8.000 Einwohner und liegt auf einer Insel. Lower-Falconhaven ' +
+      'hat ebenso viele und liegt 52 Tiles entfernt auf dem Festland. Dazwischen ist ' +
       'offenes Meer - keine Bruecke, keine Strasse, kein Gleis. Ein Kai bewegt ' +
       'uebrigens nie den Stationsmittelpunkt: die Reichweite wird vom Zentrum aus ' +
       'gemessen, nicht von der Mole.',
     en:
-      'Sandenheim has 8,000 inhabitants and sits on an island. Neu-Lindenried has ' +
+      'Heathermoor has 8,000 inhabitants and sits on an island. Lower-Falconhaven has ' +
       'as many and sits 52 tiles away on the mainland. Between them is open sea - ' +
       'no bridge, no road, no track. A quay never moves the station centre, by the ' +
       'way: catchment is measured from the centre, not from the berth.',
@@ -447,8 +459,8 @@ const INSELHUEPFEN: ShippedScenario = {
   goals: [
     {
       caption: {
-        de: 'Neu-Lindenried und Sandenheim verbinden',
-        en: 'Connect Neu-Lindenried and Sandenheim',
+        de: 'Lower-Falconhaven und Heathermoor verbinden',
+        en: 'Connect Lower-Falconhaven and Heathermoor',
       },
       spec: {
         kind: GoalKind.ConnectStations,
@@ -772,7 +784,8 @@ const SPEEDRUN: ShippedScenario = {
 
 /**
  * Seed 69, desert, 256 tiles, HARD, four competitors, every world rule the
- * game has switched ON. Measured: ten industries and only two towns of 8,000,
+ * game has switched ON. Measured: eleven industries and only two towns of
+ * 8,000,
  * the rest at 2,500 or below - a thin offer for five companies, and one that
  * does not grow at all: a desert town of 8,000 that nobody serves is down to
  * 7,376 by the end of 1975, which is exactly what a temperate one reaches,
@@ -791,13 +804,13 @@ const UEBERLEBEN: ShippedScenario = {
   author: AUTHOR,
   briefing: {
     de:
-      'Wueste, zehn Industrien, zwei Grossstaedte - und vier Konkurrenten auf ' +
+      'Wueste, elf Industrien, zwei Grossstaedte - und vier Konkurrenten auf ' +
       '250.000 EUR Startkapital. Jede Weltregel ist eingeschaltet: Inflation, ' +
       'CO2-Abgabe, beide Streckenkosten aus 8.4 und der Strassenstau. Drei Monate ' +
       'in den roten Zahlen sind eine Warnung, zwoelf das Ende. Bis 1975 zu ' +
       'ueberleben ist hier keine Formsache.',
     en:
-      'Desert, ten industries, two cities - and four competitors, on 250,000 EUR of ' +
+      'Desert, eleven industries, two cities - and four competitors, on 250,000 EUR of ' +
       'starting capital. Every world rule is on: inflation, the carbon levy, both ' +
       '8.4 route costs and road congestion. Three months in the red are a warning, ' +
       'twelve are the end. Surviving to 1975 here is not a formality.',

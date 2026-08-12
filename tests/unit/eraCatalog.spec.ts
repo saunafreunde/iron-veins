@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import de from '../../src/i18n/de.json';
 import en from '../../src/i18n/en.json';
-import { EARLIEST_START_YEAR, END_YEAR, START_YEAR } from '../../src/sim/constants';
+import { EARLIEST_START_YEAR, END_YEAR, MapClimate, START_YEAR } from '../../src/sim/constants';
 import { ERA_SPECS } from '../../src/sim/vehicles/eraCatalog';
 import { availableVehicles, VEHICLE_SPECS } from '../../src/sim/vehicles/catalog';
 import { RailRole, VehicleKind, type VehicleSpec } from '../../src/sim/vehicles/spec';
@@ -158,7 +158,7 @@ describe('the era block is closed at 1949', () => {
     const kinds = [VehicleKind.Train, VehicleKind.Road, VehicleKind.Ship, VehicleKind.Aircraft];
     for (let year = START_YEAR; year <= END_YEAR; year++) {
       for (const kind of kinds) {
-        const offered = availableVehicles(kind, year).map((spec) => spec.id);
+        const offered = availableVehicles(kind, year, MapClimate.Temperate).map((spec) => spec.id);
         const expected = VEHICLE_SPECS.filter(
           (spec) =>
             spec.kind === kind && !isEra(spec) && year >= spec.introYear && year <= spec.retireYear,
@@ -172,7 +172,7 @@ describe('the era block is closed at 1949', () => {
     // The other half of the same claim: a start year with nothing to buy is a
     // world that cannot be played, which is why the presets are presets.
     for (let year = EARLIEST_START_YEAR; year < START_YEAR; year++) {
-      const trains = availableVehicles(VehicleKind.Train, year);
+      const trains = availableVehicles(VehicleKind.Train, year, MapClimate.Temperate);
       expect(
         trains.some((spec) => spec.railRole === RailRole.Traction),
         `no traction in ${year}`,
@@ -182,11 +182,11 @@ describe('the era block is closed at 1949', () => {
         `no wagon in ${year}`,
       ).toBe(true);
       expect(
-        availableVehicles(VehicleKind.Road, year).length,
+        availableVehicles(VehicleKind.Road, year, MapClimate.Temperate).length,
         `no road vehicle in ${year}`,
       ).toBeGreaterThan(0);
       expect(
-        availableVehicles(VehicleKind.Ship, year).length,
+        availableVehicles(VehicleKind.Ship, year, MapClimate.Temperate).length,
         `no ship in ${year}`,
       ).toBeGreaterThan(0);
     }
@@ -198,7 +198,7 @@ describe('the era block is closed at 1949', () => {
     // coal. Asserted at the four preset years rather than everywhere, because
     // this is the claim about the SCREEN's offer.
     for (const year of [1850, 1880, 1920]) {
-      const trains = availableVehicles(VehicleKind.Train, year);
+      const trains = availableVehicles(VehicleKind.Train, year, MapClimate.Temperate);
       expect(
         trains.some((spec) => spec.railRole === RailRole.Traction && spec.power === 'steam'),
         `no steam traction in ${year}`,

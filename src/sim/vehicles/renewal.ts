@@ -1,4 +1,5 @@
-import { AUTO_RENEW_LIFE_SHARE } from '../constants';
+import { AUTO_RENEW_LIFE_SHARE, type MapClimate } from '../constants';
+import { specAvailable } from './availability';
 import { aggregateConsist } from './consist';
 import { capacityFor, hasVehicleSpec, vehicleSpec, VEHICLE_SPECS } from './catalog';
 import { RAIL_SPECS } from './railCatalog';
@@ -50,7 +51,12 @@ export function dueForRenewal(world: World, id: number): boolean {
  * Returns -1 when nothing qualifies, which is the common case in a decade with
  * no new models: the vehicle simply keeps running and grows old.
  */
-export function successorOf(current: VehicleSpec, cargo: Cargo, year: number): number {
+export function successorOf(
+  current: VehicleSpec,
+  cargo: Cargo,
+  year: number,
+  climate: MapClimate,
+): number {
   const pool = current.railRole === RailRole.None ? VEHICLE_SPECS : RAIL_SPECS;
   const wanted = capacityFor(current, cargo);
   let best: VehicleSpec | null = null;
@@ -59,7 +65,7 @@ export function successorOf(current: VehicleSpec, cargo: Cargo, year: number): n
     if (candidate.id === current.id) continue;
     if (candidate.kind !== current.kind) continue;
     if (candidate.railRole !== current.railRole) continue;
-    if (year < candidate.introYear || year > candidate.retireYear) continue;
+    if (!specAvailable(candidate, year, climate)) continue;
     if (capacityFor(candidate, cargo) < wanted) continue;
     // A vehicle that needs wires cannot replace one that does not: the line it
     // runs on may have none, and stranding a fleet is worse than an old fleet.
@@ -93,14 +99,14 @@ export function renewalConsist(world: World, id: number): number[] | null {
   const units = vehicles.consist[id]!;
 
   if (units.length === 0) {
-    const successor = successorOf(vehicleSpec(vehicles.specId[id]!), cargo, year);
+    const successor = successorOf(vehicleSpec(vehicles.specId[id]!), cargo, year, world.climate);
     return successor < 0 ? null : [successor];
   }
 
   const replacement: number[] = [];
   let changed = false;
   for (const unit of units) {
-    const successor = successorOf(vehicleSpec(unit), cargo, year);
+    const successor = successorOf(vehicleSpec(unit), cargo, year, world.climate);
     if (successor < 0 || !hasVehicleSpec(successor)) replacement.push(unit);
     else {
       replacement.push(successor);

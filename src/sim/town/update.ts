@@ -50,18 +50,16 @@ const zoneCensus = new Int32Array(4);
  */
 
 /**
- * Everything a town puts into a station, ascending - the enumeration
- * `produceTownCargo` below deposits and nothing else.
+ * The three classes a town offers, re-exported from `town/types.ts`.
  *
- * It exists because SPEC2 M19 gave a town a SECOND passenger class, and a
- * class no station accepted would be the dead end of D-118 one production
- * chain further out: produced every game day, never collectable, filling the
- * station to its capacity and taking the classes that ARE served down with
- * it. `tests/unit/deliveries.spec.ts` walks this list against the station's
- * own acceptance table, and `tests/unit/passengerClasses.spec.ts` holds the
- * list itself against what a played town actually deposits.
+ * The list itself MOVED to the leaf module in SPEC2 M23 bundle 2 and it moved
+ * for a measured reason (D-246): `industry/climateSets.ts` has to know what a
+ * town produces, and importing this file to find out pulled the whole monthly
+ * town hook - and through it the station and the world - into the main chunk,
+ * measured at +10,115 B against the D-191 bundle budget. The enumeration is
+ * still in ONE place; it is just in a place that costs a reader nothing.
  */
-export const TOWN_OUTPUTS: readonly Cargo[] = [Cargo.Mail, Cargo.CommuterPax, Cargo.BusinessPax];
+export { TOWN_OUTPUTS } from './types';
 
 /** Passengers and mail a town produces per production slice. */
 function outputPerSlice(population: number, perInhabitantPerMonth: number): number {

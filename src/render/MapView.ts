@@ -891,11 +891,20 @@ export class MapView {
    * is what a baked chunk remembers, so a chunk knows whether its pixels are
    * this season's without comparing anything (the D-164 `waterRow` device).
    */
-  private appliedSeason: SeasonLook = { stage: SeasonStage.Summer, snowLine: SNOW_LINE_NONE };
-  private pendingSeason: SeasonLook = { stage: SeasonStage.Summer, snowLine: SNOW_LINE_NONE };
+  private appliedSeason: SeasonLook = {
+    stage: SeasonStage.Summer,
+    snowLine: SNOW_LINE_NONE,
+    climate: MapClimate.Temperate,
+  };
+  private pendingSeason: SeasonLook = {
+    stage: SeasonStage.Summer,
+    snowLine: SNOW_LINE_NONE,
+    climate: MapClimate.Temperate,
+  };
   private appliedSeasonKey = seasonKeyOf({
     stage: SeasonStage.Summer,
     snowLine: SNOW_LINE_NONE,
+    climate: MapClimate.Temperate,
   });
   private pendingSeasonKey = this.appliedSeasonKey;
   /**
@@ -2224,11 +2233,7 @@ export class MapView {
 
     this.seasonTarget = this.pendingSeason;
     this.seasonTargetKey = this.pendingSeasonKey;
-    this.seasonJobCount = planSeasonRepaint(
-      this.appliedSeason.stage,
-      this.seasonTarget.stage,
-      this.seasonJobs,
-    );
+    this.seasonJobCount = planSeasonRepaint(this.appliedSeason, this.seasonTarget, this.seasonJobs);
     this.seasonJobAt = 0;
     this.seasonJobPage = 0;
     this.seasonCellsPainted = 0;
@@ -2247,6 +2252,7 @@ export class MapView {
   /** Carry the running regeneration a bounded number of steps. */
   private runSeasonSteps(): void {
     const stage = this.seasonTarget.stage;
+    const climate = this.seasonTarget.climate;
     for (let step = 0; step < SEASON_REPAINT_STEPS_PER_FRAME; step++) {
       if (this.seasonJobAt >= this.seasonJobCount) break;
       const page = this.seasonJobPage === 0 ? this.basePage! : this.detailPage!;
@@ -2254,6 +2260,7 @@ export class MapView {
       this.seasonCellsPainted += page.atlas.repaintSeasonJob(
         this.seasonJobs[this.seasonJobAt]!,
         stage,
+        climate,
       );
       this.seasonRegenMs += performance.now() - started;
       if (this.seasonJobPage === 0) {

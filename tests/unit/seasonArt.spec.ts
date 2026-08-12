@@ -7,6 +7,7 @@ import {
   seasonKeyOf,
   seasonLookFor,
   seasonStageFor,
+  type SeasonLook,
   SeasonStage,
   shouldStartRegeneration,
   SNOW_LINE_NONE,
@@ -195,10 +196,25 @@ describe('the look of one terrain', () => {
 describe('what a season change repaints', () => {
   const out: number[] = [];
 
+  /**
+   * One look at a named stage, in one climate.
+   *
+   * `planSeasonRepaint` compares LOOKS since SPEC2 M23, because the town cells
+   * are repainted both by a roof taking snow and by the climate's own
+   * architecture (D-246). Every assertion below holds the climate fixed, which
+   * is the season question asked exactly as it was before that bundle; the
+   * climate half has its own test at the end of this block.
+   */
+  const at = (stage: SeasonStage, climate: MapClimate = MapClimate.Temperate): SeasonLook => ({
+    stage,
+    snowLine: SNOW_LINE_NONE,
+    climate,
+  });
+
   it('lists exactly the terrains whose look moved, and no others', () => {
     for (let from = 0; from < 4; from++) {
       for (let to = 0; to < 4; to++) {
-        const count = planSeasonRepaint(from as SeasonStage, to as SeasonStage, out);
+        const count = planSeasonRepaint(at(from as SeasonStage), at(to as SeasonStage), out);
         const listed = new Set(out.slice(0, count));
         for (let terrain = 0; terrain < TERRAIN_COUNT; terrain++) {
           const moved =
@@ -213,13 +229,13 @@ describe('what a season change repaints', () => {
   });
 
   it('is empty for a change that moves nothing', () => {
-    expect(planSeasonRepaint(SeasonStage.Summer, SeasonStage.Summer, out)).toBe(0);
+    expect(planSeasonRepaint(at(SeasonStage.Summer), at(SeasonStage.Summer), out)).toBe(0);
   });
 
   it('takes the town cells in exactly the changes that snow or clear a roof', () => {
     for (let from = 0; from < 4; from++) {
       for (let to = 0; to < 4; to++) {
-        const count = planSeasonRepaint(from as SeasonStage, to as SeasonStage, out);
+        const count = planSeasonRepaint(at(from as SeasonStage), at(to as SeasonStage), out);
         const takesBuildings = out.slice(0, count).includes(SEASON_JOB_BUILDINGS);
         expect(takesBuildings, `${from}->${to}`).toBe(
           roofSnowFor(from as SeasonStage) !== roofSnowFor(to as SeasonStage),
@@ -229,11 +245,34 @@ describe('what a season change repaints', () => {
     expect(roofSnowFor(SeasonStage.Winter)).toBeGreaterThan(0);
   });
 
+  it('takes the town cells when the CLIMATE changes and the season does not', () => {
+    // The world constant arrives once, after the pages are built in the
+    // temperate default, and it has to reach the six town cells (D-246). No
+    // terrain row moves with it: the biomes are the simulation's and the
+    // season's, never the architecture's.
+    const count = planSeasonRepaint(
+      at(SeasonStage.Summer, MapClimate.Temperate),
+      at(SeasonStage.Summer, MapClimate.Desert),
+      out,
+    );
+    expect(out.slice(0, count)).toEqual([SEASON_JOB_BUILDINGS]);
+
+    // And a climate whose architecture is the same row repaints nothing -
+    // the comparison is on the LOOK the cells are drawn in, not on the id.
+    expect(
+      planSeasonRepaint(
+        at(SeasonStage.Summer, MapClimate.Temperate),
+        at(SeasonStage.Summer, MapClimate.Temperate),
+        out,
+      ),
+    ).toBe(0);
+  });
+
   it('repaints a minority of the ten terrain rows, which is why it fits', () => {
     // Four rows of ten, plus the town cells twice a year: this is the
     // arithmetic behind the 30 ms budget of SPEC2 6.2, stated where it can go
     // red rather than in a comment.
-    const count = planSeasonRepaint(SeasonStage.Summer, SeasonStage.Autumn, out);
+    const count = planSeasonRepaint(at(SeasonStage.Summer), at(SeasonStage.Autumn), out);
     expect(count).toBeLessThan(TERRAIN_COUNT / 2);
     expect(count).toBeGreaterThan(0);
   });

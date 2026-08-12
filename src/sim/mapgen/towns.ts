@@ -1,4 +1,5 @@
 import {
+  type MapClimate,
   TILE_PUBLIC,
   TILES_PER_TOWN,
   TOWN_BUILT_RADIUS_MARGIN,
@@ -821,10 +822,17 @@ export function settleTown(map: TileMap, town: Town, rng: Rng): void {
   layOutTown(map, town, rng);
 }
 
-/** Create every town of the map, laid out and claimed. */
-export function generateTowns(map: TileMap, rng: Rng): Town[] {
+/**
+ * Create every town of the map, laid out and claimed.
+ *
+ * The climate reaches this function for ONE reason: it chooses the vocabulary
+ * the towns are named in (SPEC2 M23, D-246). Nothing else about a town's
+ * placement or layout knows about it - the biomes were assigned before this
+ * step and the ground is the ground.
+ */
+export function generateTowns(map: TileMap, rng: Rng, climate: MapClimate): Town[] {
   const centres = placeCentres(map, rng, targetTownCount(map.size));
-  const names = new PlaceNameGenerator(rng);
+  const names = new PlaceNameGenerator(rng, climate);
   const towns: Town[] = [];
 
   for (let i = 0; i < centres.length; i++) {

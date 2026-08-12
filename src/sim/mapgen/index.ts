@@ -146,10 +146,10 @@ function generateOnce(
   markCoast(map);
 
   report?.(MapGenPhase.Towns, attempt);
-  const towns = generateTowns(map, rng);
+  const towns = generateTowns(map, rng, params.climate);
 
   report?.(MapGenPhase.Industries, attempt);
-  const industries = generateIndustries(map, rng, towns);
+  const industries = generateIndustries(map, rng, towns, params.climate);
 
   report?.(MapGenPhase.Validate, attempt);
   const playable = findStartingPair(map, towns) !== null;

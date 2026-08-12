@@ -1,3 +1,4 @@
+import { MapClimate } from '../sim/constants';
 import { INDUSTRY_TYPE_COUNT } from '../sim/industry/types';
 import { SIGNAL_KIND_COUNT, SignalKind } from '../sim/map/signals';
 import { SLOPE_COUNT, TERRAIN_COUNT } from '../sim/map/terrain';
@@ -21,6 +22,7 @@ import {
   snowedRoof,
   terrainLook,
 } from './seasonArt';
+import { architectureFor } from './townArchitecture';
 import {
   box,
   catenaryMast,
@@ -243,7 +245,7 @@ export interface TerrainAtlas {
    * texture source, which is what lets a regeneration run over several frames
    * and still swap seasons in one frame (MapView).
    */
-  repaintSeasonJob(job: number, stage: SeasonStage): number;
+  repaintSeasonJob(job: number, stage: SeasonStage, climate: MapClimate): number;
 }
 
 /** Corner offsets of the base diamond inside a cell, in draw order N-E-S-W. */
@@ -895,8 +897,10 @@ function drawTownBuilding(
   level: number,
   emissiveOnly = false,
   stage: SeasonStage = SeasonStage.Summer,
+  climate: MapClimate = MapClimate.Temperate,
 ): void {
   const snow = roofSnowFor(stage);
+  const build = architectureFor(climate);
   const view: IsoView = {
     cx: originX + TILE_W / 2,
     cy: originY + CELL_TOP + TILE_H / 2,
@@ -911,7 +915,7 @@ function drawTownBuilding(
     const height = (9 + grow * 7) * px;
     const w = 0.5 + grow * 0.06;
     if (!emissiveOnly) contactShadow(ctx, view, { u: w, v: w * 0.78 });
-    if (!emissiveOnly) box(ctx, view, { u: w, v: w * 0.78, height, colour: '#c9b79c' });
+    if (!emissiveOnly) box(ctx, view, { u: w, v: w * 0.78, height, colour: build.houseWall });
     windows(ctx, view, {
       u: w,
       v: w * 0.78,
@@ -925,8 +929,8 @@ function drawTownBuilding(
       u: w,
       v: w * 0.78,
       base: height,
-      rise: (6 + grow) * px,
-      colour: snowedRoof('#8d4b3c', snow),
+      rise: (6 + grow) * px * build.roofPitch,
+      colour: snowedRoof(build.houseRoof, snow),
     });
     return;
   }
@@ -936,7 +940,7 @@ function drawTownBuilding(
     const height = (15 + grow * 12) * px;
     const w = 0.54 + grow * 0.05;
     if (!emissiveOnly) contactShadow(ctx, view, { u: w, v: w * 0.86 });
-    if (!emissiveOnly) box(ctx, view, { u: w, v: w * 0.86, height, colour: '#cfd4d8' });
+    if (!emissiveOnly) box(ctx, view, { u: w, v: w * 0.86, height, colour: build.blockWall });
     windows(ctx, view, {
       u: w,
       v: w * 0.86,
@@ -950,7 +954,7 @@ function drawTownBuilding(
       u: w * 0.4,
       v: w * 0.34,
       height: 3 * px,
-      colour: snowedRoof('#9aa1a8', snow),
+      colour: snowedRoof(build.blockRoof, snow),
       base: height,
     });
     return;
@@ -960,14 +964,14 @@ function drawTownBuilding(
   const height = (8 + grow * 4) * px;
   const w = 0.62 + grow * 0.06;
   if (!emissiveOnly) contactShadow(ctx, view, { u: w, v: w * 0.7 });
-  if (!emissiveOnly) box(ctx, view, { u: w, v: w * 0.7, height, colour: '#9b968c' });
+  if (!emissiveOnly) box(ctx, view, { u: w, v: w * 0.7, height, colour: build.shedWall });
   sawtoothRoof(ctx, view, {
     u: w,
     v: w * 0.7,
     base: height,
     rise: 3 * px,
     teeth: 2,
-    colour: snowedRoof('#5c6068', snow),
+    colour: snowedRoof(build.shedRoof, snow),
     glass: emissiveOnly ? EMISSIVE_WINDOW_HEX : '#82aebf',
     glassOnly: emissiveOnly,
   });
@@ -1587,16 +1591,38 @@ export function buildTerrainAtlas(): TerrainAtlas {
    * repaint that only painted over would leave the previous season showing
    * wherever the new artwork happens not to reach.
    */
-  const repaintSeasonJob = (job: number, stage: SeasonStage): number => {
+  const repaintSeasonJob = (job: number, stage: SeasonStage, climate: MapClimate): number => {
     if (job === SEASON_JOB_BUILDINGS) {
       for (let variant = 0; variant < BUILDING_VARIANTS; variant++) {
         const kind = variant % 3;
         const level = (variant / 3) | 0;
         ctx.clearRect(variant * CELL_W, BUILDING_ROW * CELL_H, CELL_W, CELL_H);
-        drawTownBuilding(ctx, variant * CELL_W, BUILDING_ROW * CELL_H, kind, level, false, stage);
+        // The climate is the town ARCHITECTURE of SPEC2 M23 (D-246): the same
+        // six cells, repainted in what this world builds with. It travels
+        // beside the season because it is the same repaint - one seam, not a
+        // second regeneration path.
+        drawTownBuilding(
+          ctx,
+          variant * CELL_W,
+          BUILDING_ROW * CELL_H,
+          kind,
+          level,
+          false,
+          stage,
+          climate,
+        );
         // The twin, from the same call site in the same pass.
         ctx.clearRect(variant * CELL_W, EMISSIVE_ROW * CELL_H, CELL_W, CELL_H);
-        drawTownBuilding(ctx, variant * CELL_W, EMISSIVE_ROW * CELL_H, kind, level, true, stage);
+        drawTownBuilding(
+          ctx,
+          variant * CELL_W,
+          EMISSIVE_ROW * CELL_H,
+          kind,
+          level,
+          true,
+          stage,
+          climate,
+        );
       }
       return BUILDING_VARIANTS * 2;
     }
@@ -1702,7 +1728,10 @@ interface DetailCellSpec {
  * Pure until drawn - the layout is identical for every stage, so
  * `planDetailAtlas` needs no season at all.
  */
-function detailCellSpecs(stage: SeasonStage = SeasonStage.Summer): readonly DetailCellSpec[] {
+function detailCellSpecs(
+  stage: SeasonStage = SeasonStage.Summer,
+  climate: MapClimate = MapClimate.Temperate,
+): readonly DetailCellSpec[] {
   const specs: DetailCellSpec[] = [];
 
   for (let terrain = 0; terrain < TERRAIN_COUNT; terrain++) {
@@ -1794,7 +1823,7 @@ function detailCellSpecs(stage: SeasonStage = SeasonStage.Summer): readonly Deta
       key: `b${variant}`,
       tall: true,
       seasonJob: SEASON_JOB_BUILDINGS,
-      draw: (ctx) => drawTownBuilding(ctx, 0, 0, kind, level, false, stage),
+      draw: (ctx) => drawTownBuilding(ctx, 0, 0, kind, level, false, stage, climate),
     });
   }
 
@@ -1911,9 +1940,9 @@ export function buildDetailAtlas(): TerrainAtlas {
    * page has no emissive row (D-172: it stands full at 4096x4096 and every
    * zoom composites its glow from the base page).
    */
-  const repaintSeasonJob = (job: number, stage: SeasonStage): number => {
+  const repaintSeasonJob = (job: number, stage: SeasonStage, climate: MapClimate): number => {
     let painted = 0;
-    for (const spec of detailCellSpecs(stage)) {
+    for (const spec of detailCellSpecs(stage, climate)) {
       if (spec.seasonJob !== job) continue;
       paint(spec);
       painted++;

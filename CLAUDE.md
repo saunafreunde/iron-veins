@@ -3609,3 +3609,75 @@ p50/p99 1.444 / 3.082 ms against the M10 baseline of 1.45 / 3.26.
 1,002,746 -> 1,031,963 B, split by deletion into +21,262 B of specs, +6,160 B of
 i18n and +1,795 B of interface; budget 1,006,000 -> 1,040,000 B with no static
 `src/sim` decode chain in the entry chunk.
+
+## M23 bundle 2 - four climate economies (D-246)
+
+Four industry sets, one vehicle-availability gate shared with the era gating,
+four town architectures and the English syllable set that closes SPEC.md 6.5.
+**No save bump** - v34 is bundle 1's and this one extends it - no migration, no
+snapshot byte, no protocol field, no atlas cell, no i18n line. Canonical pin
+`1fa54bf95cc82b40` and corpus `3b797322b43b717c` unmoved; scenario 5 at
+1,022,084 / 1,802,165 / 2,153,604 EUR, score 5,889, Netzdesign 3.75, winter
+4.36 % - re-run, not assumed.
+
+- **A core and four arms, and the partition is exact** (D-246). Coal, iron ore,
+  the power station, the steel mill and the machine works are in every climate;
+  what tells four worlds apart is exactly one arm each - food (temperate), oil
+  (arctic), timber (tropical), stone (desert). 5 + 2 + 4 + 3 + 3 = 17: **the
+  four arms are pairwise disjoint, miss the core and with it are the whole
+  catalogue**, which is the disjointness this milestone claims and it is
+  asserted against the tables. Each arm runs in exactly two climates - its own
+  and the temperate one.
+- **The temperate set IS the catalogue, deliberately** - so temperate is a
+  superset of the other three rather than disjoint from them, and the test says
+  which half is claimed. The reason is D-245's for closing the era catalogue in
+  1949 (Fehlerkatalog 34): the temperate generator carries every 19.4 band, the
+  canonical hash and five of the eight shipped scenarios, and taking one arm
+  off it would re-band all of them inside the milestone that introduced the
+  tables. Its weight table, total and every draw are bit-identical to the
+  pre-M23 ones.
+- **The D-118 walk runs per climate set and in BOTH directions.** The
+  catalogue-wide walk cannot see a plastics plant whose refinery is in another
+  climate. The "nothing consumed without a supplier" half is the one a subset
+  breaks, and it is why the arms are ARMS: remove a single works and the
+  generator's chain repair cascades and clears half the map again.
+- **One gate, seven callers.** `specAvailable(spec, year, climate)` is the era
+  window AND the climate mask; the comparison used to stand written out in
+  three buy commands, the consist validator, the successor finder and the two
+  shop lists. The mask is DERIVED from the climate's industry set - a vehicle
+  is refused when nothing it carries or could be refitted to is made in that
+  world - never a list of refused ids. Traction (empty capacity) is never
+  refused, and passengers, mail and containers exist everywhere because towns
+  and ports make them, so every climate keeps a railway and a bus line. In a
+  temperate world the mask is the identity.
+- **The English syllable set closes SPEC.md 6.5**, in the same SHAPE as the
+  German one (16/32/22 plus the hyphen) so a world does not draw a different
+  number of random words because of its climate. Temperate is German, the other
+  three are English. The D-199 guard reads a union of per-SET patterns, never
+  of six tables: a shared alternation would accept "Rosenford" - a cross
+  product no generator can produce and the audit would read as a place.
+- **The three non-temperate scenarios moved in NAMES and INDUSTRIES only.**
+  Town centres, size classes, populations, corridors and land masses are the
+  same to the decimal, because the climate reaches the names and the industry
+  table and nothing that places a town. Gebirgslogistik 2 -> 5 industries,
+  Inselhuepfen 7 -> 9, Ueberleben 10 -> 11, and exactly one briefing numeral
+  moved with them ("zehn Industrien" -> "elf", both languages).
+- **Town architecture books ZERO atlas cells**: four colour-and-pitch rows over
+  the same six procedural cells M18 already repaints seasonally, so
+  `planSeasonRepaint` compares LOOKS instead of stages. Where the Kenney bake is
+  present the baked `building:` cells are climate-blind and the architecture
+  varies only on the procedural path - a climate axis in the bake is four times
+  the building cells and belongs to the art bundle that owns M23's ~150 booked
+  cells.
+- **Two constants moved to leaf modules for a measured reason.** Reaching
+  `town/update.ts` for `TOWN_OUTPUTS` and `catchment.ts` for
+  `PORT_OVERSEAS_CARGO` pulled the monthly town hook, the station and the world
+  into the main chunk through `vehicles/catalog.ts`: **+10,115 B for four cargo
+  ids**, exactly what D-191's budget exists to catch. Both now live in
+  `town/types.ts` and `cargo/types.ts` and are re-exported.
+
+Main chunk 1,031,963 -> **1,034,981 B** against an unchanged 1,040,000 budget
+(5,019 B of air, no raise asked for). **`npm run test:soak` is red and was red
+before this bundle**: the fixture says save version 33 against the current 34,
+i.e. bundle 1's bump left it unrecorded (`ac42a57`), and the check fires before
+a tick runs.

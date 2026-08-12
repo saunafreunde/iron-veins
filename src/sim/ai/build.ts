@@ -195,7 +195,7 @@ export function pickRoadVehicle(world: World, cargo: number): number {
   let best = -1;
   let bestCapacity = 0;
 
-  for (const spec of availableVehicles(VehicleKind.Road, world.date.year)) {
+  for (const spec of availableVehicles(VehicleKind.Road, world.date.year, world.climate)) {
     const capacity = capacityFor(spec, cargo as Cargo);
     if (capacity <= 0) continue;
     if (capacity > bestCapacity || (capacity === bestCapacity && spec.id < best)) {
@@ -212,7 +212,7 @@ export function pickTrain(world: World, cargo: number): number[] {
 
   let locomotive = -1;
   let bestPower = 0;
-  for (const spec of availableRailVehicles(RailRole.Traction, year)) {
+  for (const spec of availableRailVehicles(RailRole.Traction, year, world.climate)) {
     // Never electric: the AI lays plain track, and a wire-only locomotive on it
     // is a vehicle that will not move.
     if (spec.power === 'electric') continue;
@@ -225,7 +225,7 @@ export function pickTrain(world: World, cargo: number): number[] {
 
   let wagon = -1;
   let bestCapacity = 0;
-  for (const spec of availableRailVehicles(RailRole.Wagon, year)) {
+  for (const spec of availableRailVehicles(RailRole.Wagon, year, world.climate)) {
     const capacity = capacityFor(spec, cargo as Cargo);
     if (capacity <= 0) continue;
     if (capacity > bestCapacity || (capacity === bestCapacity && spec.id < wagon)) {

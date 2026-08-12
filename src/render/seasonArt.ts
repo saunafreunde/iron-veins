@@ -1,8 +1,15 @@
 import { TERRAIN_COLORS } from '../shared/palette';
-import { MAX_HEIGHT, SEA_LEVEL, SEASON_FRICTION_GAIN, type MapClimate } from '../sim/constants';
+import {
+  MAP_CLIMATE_COUNT,
+  MAX_HEIGHT,
+  SEA_LEVEL,
+  SEASON_FRICTION_GAIN,
+  type MapClimate,
+} from '../sim/constants';
 import { Terrain, TERRAIN_COUNT } from '../sim/map/terrain';
 import { winterFrictionFactor } from '../sim/weather/seasons';
 import { shade } from './shapes';
+import { architectureFor } from './townArchitecture';
 
 /**
  * The pure half of the seasonal optics (SPEC2 M18: "Saison-Optik: Atlas-Seiten
@@ -120,10 +127,25 @@ export interface SeasonLook {
   readonly stage: SeasonStage;
   /** Lowest height wearing snow; {@link SNOW_LINE_NONE} when none does. */
   readonly snowLine: number;
+  /**
+   * The world's climate (SPEC2 M23).
+   *
+   * It rides in the look because the look is what the atlas is repainted
+   * against, and the town architecture of D-246 is a per-climate repaint of
+   * the same six cells the season already repaints. A world constant in a
+   * per-month structure looks odd until the alternative is written out: a
+   * second key, a second target and a second regeneration path, all to say
+   * "the artwork these pages hold is out of date".
+   */
+  readonly climate: MapClimate;
 }
 
 export function seasonLookFor(month: number, climate: MapClimate): SeasonLook {
-  return { stage: seasonStageFor(month, climate), snowLine: snowLineFor(month, climate) };
+  return {
+    stage: seasonStageFor(month, climate),
+    snowLine: snowLineFor(month, climate),
+    climate,
+  };
 }
 
 /**
@@ -136,7 +158,7 @@ export function seasonLookFor(month: number, climate: MapClimate): SeasonLook {
  * NOT part of it - two months that look the same are the same key.
  */
 export function seasonKeyOf(look: SeasonLook): number {
-  return look.stage * (MAX_HEIGHT + 2) + look.snowLine;
+  return (look.stage * (MAX_HEIGHT + 2) + look.snowLine) * MAP_CLIMATE_COUNT + look.climate;
 }
 
 /**
@@ -288,15 +310,26 @@ export function snowedRoof(hex: string, t: number): string {
  */
 export const SEASON_JOB_BUILDINGS = -1;
 
-export function planSeasonRepaint(from: SeasonStage, to: SeasonStage, out: number[]): number {
+export function planSeasonRepaint(from: SeasonLook, to: SeasonLook, out: number[]): number {
   let count = 0;
   for (let terrain = 0; terrain < TERRAIN_COUNT; terrain++) {
-    const current = terrainLook(terrain, from);
-    const target = terrainLook(terrain, to);
+    const current = terrainLook(terrain, from.stage);
+    const target = terrainLook(terrain, to.stage);
     if (current.colour === target.colour && current.speckle === target.speckle) continue;
     out[count++] = terrain;
   }
-  if (roofSnowFor(from) !== roofSnowFor(to)) out[count++] = SEASON_JOB_BUILDINGS;
+  // Two things move the town cells and they go through the SAME job: the
+  // roofs taking snow (M18) and the climate's own architecture (SPEC2 M23,
+  // D-246). A world's climate changes exactly once - when the simulation
+  // announces it - and that one change has to repaint the six cells even
+  // though no season moved, which is why the comparison is on the LOOK and
+  // not on the stage alone.
+  if (
+    roofSnowFor(from.stage) !== roofSnowFor(to.stage) ||
+    architectureFor(from.climate) !== architectureFor(to.climate)
+  ) {
+    out[count++] = SEASON_JOB_BUILDINGS;
+  }
   return count;
 }
 

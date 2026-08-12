@@ -5,6 +5,7 @@ import {
   AUTO_RENEW_LIFE_SHARE,
   CENTS_PER_EURO,
   ENERGY_COST_CT_PER_MJ,
+  MapClimate,
   START_YEAR,
   TICKS_PER_YEAR,
 } from '../../src/sim/constants';
@@ -62,7 +63,7 @@ describe('choosing a successor', () => {
   it('picks a vehicle of the same mode that is on sale and carries as much', () => {
     const bus = vehicleSpec(BUS);
     // Far enough into the century that a newer bus certainly exists.
-    const successor = successorOf(bus, Cargo.CommuterPax, 2000);
+    const successor = successorOf(bus, Cargo.CommuterPax, 2000, MapClimate.Temperate);
     expect(successor).toBeGreaterThan(0);
 
     const chosen = vehicleSpec(successor);
@@ -76,7 +77,12 @@ describe('choosing a successor', () => {
 
   it('offers nothing when the catalogue has nothing newer', () => {
     // In the first game year the 1950 bus is the newest bus there is.
-    const newest = successorOf(vehicleSpec(BUS), Cargo.CommuterPax, START_YEAR);
+    const newest = successorOf(
+      vehicleSpec(BUS),
+      Cargo.CommuterPax,
+      START_YEAR,
+      MapClimate.Temperate,
+    );
     if (newest >= 0) {
       expect(vehicleSpec(newest).lifetimeYears).toBeGreaterThanOrEqual(
         vehicleSpec(BUS).lifetimeYears,
@@ -86,16 +92,18 @@ describe('choosing a successor', () => {
 
   it('never proposes a vehicle that needs wires to replace one that does not', () => {
     for (const spec of [vehicleSpec(BUS)]) {
-      const successor = successorOf(spec, Cargo.CommuterPax, 2040);
+      const successor = successorOf(spec, Cargo.CommuterPax, 2040, MapClimate.Temperate);
       if (successor < 0) continue;
       expect(vehicleSpec(successor).needsCatenary).toBe(false);
     }
   });
 
   it('gives the same answer every time it is asked', () => {
-    const first = successorOf(vehicleSpec(BUS), Cargo.CommuterPax, 1990);
+    const first = successorOf(vehicleSpec(BUS), Cargo.CommuterPax, 1990, MapClimate.Temperate);
     for (let i = 0; i < 5; i++) {
-      expect(successorOf(vehicleSpec(BUS), Cargo.CommuterPax, 1990)).toBe(first);
+      expect(successorOf(vehicleSpec(BUS), Cargo.CommuterPax, 1990, MapClimate.Temperate)).toBe(
+        first,
+      );
     }
   });
 });

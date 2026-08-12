@@ -22,7 +22,8 @@ no entry below. A number may appear under several topics.
 - **Lines & timetables:** D-145, D-146, D-147, D-148, D-149, D-150, D-151,
   D-152, D-155, D-159
 - **Map generation & terrain:** D-018, D-019, D-020, D-021, D-022, D-023,
-  D-025, D-027, D-197, D-198, D-199, D-216, D-231, D-234, D-240, D-242
+  D-025, D-027, D-197, D-198, D-199, D-216, D-231, D-234, D-240, D-242,
+  D-246
 - **Terraforming & structures:** D-028, D-034, D-050, D-051, D-052, D-124,
   D-141, D-240, D-244
 - **Save format, migrations & replays:** D-007, D-025, D-026, D-027, D-048,
@@ -41,7 +42,7 @@ no entry below. A number may appear under several topics.
   D-078, D-118, D-142, D-151, D-176, D-178, D-187, D-207, D-211, D-213,
   D-215, D-233, D-237
 - **Industry & production:** D-022, D-062, D-063, D-064, D-069, D-071, D-079,
-  D-085, D-086, D-174, D-201, D-202, D-205, D-225, D-232, D-239
+  D-085, D-086, D-174, D-201, D-202, D-205, D-225, D-232, D-239, D-246
 - **Towns, council & ownership:** D-101, D-102, D-103, D-104, D-205, D-207,
   D-206, D-213, D-216, D-217, D-231, D-232, D-233, D-234, D-235
 - **Economy, finance & emissions:** D-008, D-090, D-091, D-092, D-105, D-154,
@@ -50,10 +51,10 @@ no entry below. A number may appear under several topics.
   D-116, D-151, D-152, D-156, D-158, D-159, D-187, D-190, D-194, D-195,
   D-196, D-197, D-198, D-199, D-200, D-203, D-204, D-207, D-211, D-213,
   D-215, D-216, D-220, D-221, D-222, D-224, D-225, D-226, D-228, D-229,
-  D-232, D-233, D-234, D-235, D-236, D-237, D-238, D-239, D-245
+  D-232, D-233, D-234, D-235, D-236, D-237, D-238, D-239, D-245, D-246
 - **Vehicles & fleet:** D-043, D-044, D-045, D-068, D-076, D-089, D-093,
   D-096, D-142, D-143, D-145, D-146, D-155, D-157, D-171, D-174, D-181, D-185,
-  D-201, D-207, D-245
+  D-201, D-207, D-245, D-246
 - **Water & air:** D-094, D-095, D-096, D-097, D-098, D-099, D-237
 - **Competitors, AI & tenders:** D-107, D-108, D-109, D-115, D-116, D-121,
   D-122, D-147, D-152, D-153, D-154, D-155, D-156, D-158, D-216, D-218,
@@ -62,7 +63,7 @@ no entry below. A number may appear under several topics.
 - **Rendering & art:** D-013, D-014, D-033, D-035, D-112, D-117, D-125, D-127,
   D-136, D-140, D-160, D-161, D-162, D-163, D-164, D-165, D-166, D-169, D-170,
   D-171, D-172, D-173, D-174, D-175, D-177, D-179, D-186, D-202, D-205, D-206,
-  D-208, D-209, D-212, D-214, D-217, D-241
+  D-208, D-209, D-212, D-214, D-217, D-241, D-246
 - **UI & input:** D-011, D-013, D-015, D-035, D-110, D-113, D-114, D-119,
   D-126, D-148, D-165, D-166, D-177, D-179, D-180, D-181, D-182, D-183, D-184,
   D-186, D-187, D-189, D-191, D-192, D-193, D-194, D-195, D-196, D-200, D-202,
@@ -15037,3 +15038,153 @@ i18n-Zeilen**, **+1.795 B die Oberflaeche und die zwei Regeln. Kein statischer
 am gebauten Entry-Chunk nachgeprueft (kein `decodeSave`, kein `encodeSave`, kein
 `hashWorld`, kein Save-Magic, kein `streamFor`). Budget 1.006.000 ->
 **1.040.000 B**, die Messung plus ~0,8 %.
+
+### D-246 Vier Klima-Oekonomien: der Kern, die vier Arme, das EINE Verfuegbarkeitstor - und das temperierte Klima, das bewusst der ganze Katalog bleibt
+
+**SPEC2 M23, Bundle 2.** Vier Industriesets, eine Fahrzeugmaske, vier
+Stadt-Architekturen und ein zweites Silbenset - **kein Save-Bump, keine
+Migration, kein Snapshot-Byte, kein Protokollfeld, keine Atlas-Zelle** (der
+EINE Z5-Bump des Meilensteins gehoert Bundle 1 und liegt auf v34; dieses Bundle
+ERWEITERT es und verbraucht es nicht). Kanonischer Pin `1fa54bf95cc82b40`,
+Korpus-Welthash `3b797322b43b717c`, Szenario 5 auf 1.022.084 / 1.802.165 /
+2.153.604 EUR, Punktzahl 5.889, Netzdesign 3,75 (Ausrichtung 2,01x /
+Kapazitaet 1,87x), Winter 4,36 % - **nachgeprueft durch Ausfuehren, nicht
+angenommen** (`npm run test:balance:full`, 112 Tests in 13 Dateien).
+
+**1. Der Katalog zerfaellt in einen KERN und vier ARME, und die Zerlegung ist
+exakt.** Kohle, Eisenerz, Kraftwerk, Stahlwerk und Maschinenfabrik hat jede
+Welt - das ist die Kohlebahn und die Stahlkette, auf die jedes Band aus 19.4
+kalibriert ist. Was ein Klima UNTERSCHEIDET, ist genau ein Arm: Nahrung (Farm,
+Lebensmittelwerk) im temperierten, Oel (Bohrturm, Raffinerie, Kunststoff,
+Elektronik) in der Arktis, Holz (Forst, Saegewerk, Moebel) in den Tropen, Stein
+(Kiesgrube, Zementwerk, Baustoffhandel) in der Wueste. Fuenf plus zwei plus
+vier plus drei plus drei ist siebzehn: **die vier Arme sind paarweise disjunkt,
+schneiden den Kern nicht und ergeben mit ihm den GANZEN Katalog** - das ist die
+Disjunktheit, die dieser Meilenstein beansprucht, und sie wird an den Tabellen
+gemessen statt an einem Spielgefuehl (`tests/unit/climateEconomies.spec.ts`).
+Jeder Arm laeuft in genau ZWEI Klimata: seinem eigenen und dem temperierten.
+
+**2. Das temperierte Set ist der ganze Katalog, und das ist eine Entscheidung
+mit Preis.** Damit ist Temperiert eine OBERMENGE der anderen drei und nicht von
+ihnen disjunkt; die drei spezialisierten Klimata sind untereinander in beide
+Richtungen verschieden, gegen Temperiert nur in eine. Der Grund ist genau der,
+mit dem D-245 den Aera-Katalog 1949 geschlossen hat (Fehlerkatalog 34): der
+temperierte Generator traegt jedes Band aus 19.4, den kanonischen Cross-OS-Hash
+und fuenf der acht mitgelieferten Szenarien. Naehme man dem temperierten Set
+einen Arm weg, zoege die Gewichtstabelle andere Typen, die Platzierungsschleife
+andere Ziehungen und **jede je gemessene Zahl dieses Projekts waere innerhalb
+des Meilensteins neu zu banden** - Wiederaufbaus drei Bauernhoefe und drei
+Lebensmittelwerke gaebe es dann nicht mehr, Frachtrauschs vier Gruben und zwei
+Kraftwerke staenden woanders. So bleibt fuer `Temperate` die Tabelle, die
+Summe und jede Ziehung bit-identisch, und gemessen hat sich kein temperierter
+Wert um eine Ziffer bewegt. Der Test sagt beide Haelften: was disjunkt IST
+(die Arme) und was es nicht ist (die Sets).
+
+**3. Der D-118-Kettenlauf je Klima-Set, in BEIDE Richtungen.** Der
+katalogweite Lauf in `deliveries.spec.ts` kann eine Teilmenge nicht sehen: ein
+Kunststoffwerk ohne seine Raffinerie oder eine Farm ohne ihr Lebensmittelwerk
+faellt dort durch kein Netz. Pro Klima wird darum beides gefragt - nichts wird
+produziert, was niemand nimmt (Industrie-Rezept, Stadtnachfrage, Kai), und
+nichts verbraucht, was niemand macht. Die zweite Haelfte ist die, die eine
+Teilmenge bricht, und sie ist der Grund fuer die ARME statt einzelner
+Streichungen: nimmt man einen einzelnen Betrieb heraus, kaskadiert die
+Kettenreparatur des Generators und raeumt die halbe Karte wieder ab.
+
+**4. Die Fahrzeugmaske ist ABGELEITET und teilt sich EIN Tor mit der
+Aera-Gatterung.** SPEC2 verlangt den geteilten Mechanismus woertlich. Vor
+diesem Bundle stand der Aera-Vergleich `year < introYear || year > retireYear`
+an SIEBEN Stellen ausgeschrieben - drei Kaufkommandos, der Zug-Validator, der
+Nachfolgerfinder und die zwei Ladenlisten. Alle sieben rufen jetzt
+`specAvailable(spec, year, climate)`, also koennen Laden, Kommando, Komposition
+und Erneuerung nicht mehr verschieden darueber denken, was es gibt. Die Maske
+selbst ist keine Liste verbotener Ids, sondern eine Frage an das Klima-Set:
+**ein Fahrzeug faellt weg, wenn nichts, was es laden oder auf das es
+umgeruestet werden koennte, in dieser Welt hergestellt wird** - ein Tankwagen
+im Regenwald ohne Oelquelle, ein Viehwagen in der Arktis ohne Farm. Eine
+handgeschriebene Id-Liste waere eine zweite Inhaltstabelle, die beim ersten
+zwischen zwei Armen verschobenen Betrieb auseinanderlaeuft. Zwei Regeln halten
+die Sache spielbar und stehen im Test: **ein Fahrzeug ohne Kapazitaet wird nie
+abgelehnt** (eine Lok zieht, was ihre Wagen halten - ein Klima ohne Loks waere
+ein Klima ohne Bahn), und Passagiere, Post und Container macht jede Welt, weil
+Staedte und Kais sie machen. In einer temperierten Welt ist die Maske die
+Identitaet, und das ist der zweite Grund, aus dem kein Band sich bewegt hat.
+
+**5. Die Namenstabellen: das englische Silbenset schliesst SPEC.md 6.5.** 6.5
+verlangt "einen deutschen bzw. englischen Namen aus generierten Silben", und es
+gab nur die deutsche Haelfte. Das englische Set hat dieselbe FORM - 16
+Praefixe, 32 Staemme, 22 Endungen, ein Bindestrich -, damit eine Welt nicht
+wegen ihres Klimas eine andere Anzahl Zufallswoerter zieht und damit die
+D-199-Grammatik "Stamm plus Endung, optional hinter einem Praefix" eine Regel
+in zwei Vokabularen bleibt statt zwei Regeln. Zugeordnet wird per Klima:
+temperiert deutsch, arktisch/tropisch/wuestenartig englisch. **Der
+D-199-Waechter liest das Muster als VEREINIGUNG von Set-Mustern, nicht von
+sechs Tabellen** - eine gemeinsame Alternation liesse "Rosenford" und
+"Ahornton" zu, Kreuzprodukte, die kein Generator herstellen kann und die der
+Audit als Orte lesen wuerde, die es nie gab. Gemessen an den acht
+mitgelieferten Briefings: die vier, die keinen Ort nennen, nennen weiterhin
+keinen, und die vier, die welche nennen, werden weiter Sequenz fuer Sequenz
+gehalten - der Waechter hat die neuen englischen Namen von sich aus gelesen,
+bevor eine Zeile Briefing angefasst wurde.
+
+**6. Was sich an den drei nicht-temperierten Szenarien bewegt hat, und was
+NICHT.** Der Boden hat sich nicht bewegt: Stadtmittelpunkte, Groessenklassen,
+Einwohnerzahlen, Korridore, Landmassen und Wassertiles sind auf die Dezimale
+dieselben, weil das Klima die NAMEN und die Industrietabelle erreicht und
+nichts, was eine Stadt platziert. Gewechselt haben die Namen (Gebirgslogistik:
+Silberheim/Ulmenburg -> Wrenmoor/Nettlewick; Inselhuepfen:
+Sandenheim/Neu-Lindenried -> Heathermoor/Lower-Falconhaven; Ueberleben:
+Sandenwerder/Hinter-Falkenrode -> Heatherreach/Deep-Caldridge) und die
+Industrien: 2 -> 5 (arktisch, jetzt 3 Kohlegruben und 2 Eisenerzgruben), 7 -> 9
+(tropisch, darunter 3 Forste und 2 Saegewerke - der Holzarm), 10 -> 11
+(Wueste, darunter 3 Kiesgruben, 2 Zementwerke und ein Baustoffhandel - der
+Steinarm). Genau EINE Briefing-Zahl bewegte sich mit ("zehn Industrien" ->
+"elf", in beiden Sprachen), und `SCENARIO_BRIEFING_FIGURES` hat sie erzwungen.
+Gebirgslogistiks `cargoWithoutAcceptor: Coal` bleibt wahr und aus einem
+schaerferen Grund als vorher: Kraftwerk und Stahlwerk sind KERN, jede Welt hat
+sie im Set - diese kleine Karte hat nur keines von beiden gewachsen.
+
+**7. Stadt-Architektur: vier Bauweisen, null Atlas-Zellen.** Wand- und
+Dachfarben und die Dachneigung je Klima (`render/townArchitecture.ts`), gelesen
+von denselben sechs prozeduralen Zellen, die M18 schon saisonal neu malt - die
+Naht ist die Regenerationsnaht von D-202 und keine zweite. Die temperierte
+Zeile traegt exakt die Literale, die der Atlas immer gemalt hat, und der Test
+pinnt sie, weil eine Aenderung dort die Optik jeder je ausgelieferten Welt
+aendern wuerde, ohne dass sonst irgendetwas im Repository es merkt.
+`planSeasonRepaint` vergleicht seit diesem Bundle LOOKS statt Stufen, weil die
+Weltkonstante Klima genau einmal ankommt - nach dem Bau der Seiten im
+temperierten Default - und die sechs Zellen dann treffen muss, obwohl sich
+keine Jahreszeit bewegt hat. **Was das NICHT tut, klar gesagt:** wo der
+Kenney-Bake liegt, zeichnet `staticArt.ts` `building:<zone>:<stage>`, und diese
+Zellen sind klimablind - auf einer Maschine mit gefuelltem Asset-Cache
+variiert die Architektur also nur dort, wo die prozedurale Zelle gezeichnet
+wird. Eine Klima-Achse im Bake waere das Vierfache der Gebaeudezellen und
+gehoert in das M23-Kunstbundle, das die ~150 gebuchten Zellen besitzt
+(Fehlerkatalog 40); dieses Bundle gibt sie nicht still aus.
+
+**8. Zwei Konstanten sind in ihre Blattmodule umgezogen, und der Grund ist
+gemessen.** `climateSets.ts` muss wissen, was eine Stadt und was ein
+Container-Terminal herstellt. Der direkte Weg - `TOWN_OUTPUTS` aus
+`town/update.ts`, `PORT_OVERSEAS_CARGO` aus `industry/catchment.ts` - zieht
+ueber `vehicles/catalog.ts` den Monats-Hook der Stadt, die Station und die Welt
+in den Hauptchunk: **gemessen 1.045.068 gegen 1.034.953 B, also +10.115 B fuer
+vier Cargo-Ids**, genau der Unfall, fuer den D-191 das Budget aufgestellt hat.
+Die Aufzaehlungen bleiben an EINER Stelle, die Stelle ist jetzt ein
+importfreies Blatt (`town/types.ts`, `cargo/types.ts`), und die alten Module
+re-exportieren, sodass kein Leser sich aendert.
+
+**9. Ein rotes Feld, das nicht dieses Bundle ist:** `npm run test:soak` faellt
+seit Bundle 1 (`ac42a57`) mit "the soak fixture was recorded under save version
+33, current is 34" - die Fixture (`tests/soak/fixtures/soak-ai-quarter-century.json`,
+zuletzt in M22 Bundle 1 geschrieben) wurde beim v34-Bump nicht neu
+aufgezeichnet. Die Pruefung schlaegt an, BEVOR ein Tick laeuft, und die
+Soak-Welt ist temperiert, also ist der Befund von diesem Bundle unabhaengig und
+wird hier gemeldet statt still mit einer Neuaufnahme ueberschrieben: wer neu
+aufzeichnet, sollte das gegen den Bump tun, der die Fixture ungueltig gemacht
+hat.
+
+**Bundle-Budget:** Hauptchunk **1.031.963 -> 1.034.981 B (+3.018)** gegen
+unveraenderte 1.040.000 B, **Restluft 5.019 B** - keine Anhebung noetig und
+keine beantragt. Szenario-Katalog-Chunk 13.319 -> 13.539 B (die drei
+umgeschriebenen Briefings), `SimWorker` 406.983 B, `replay` 226.494 B, CSS
+13.470 B. Keine i18n-Zeile, keine Allowlist-Zeile und keine neue Konstante in
+`constants.ts` ausser `MAP_CLIMATE_COUNT` (Einheit und Herkunft annotiert).

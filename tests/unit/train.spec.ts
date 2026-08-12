@@ -158,10 +158,14 @@ describe('the rail catalogue', () => {
 
   it('has traction and wagons available in every playable year', () => {
     for (let year = 1950; year <= 2050; year += 5) {
-      expect(availableRailVehicles(RailRole.Traction, year).length, `year ${year}`).toBeGreaterThan(
-        0,
-      );
-      expect(availableRailVehicles(RailRole.Wagon, year).length, `year ${year}`).toBeGreaterThan(0);
+      expect(
+        availableRailVehicles(RailRole.Traction, year, MapClimate.Temperate).length,
+        `year ${year}`,
+      ).toBeGreaterThan(0);
+      expect(
+        availableRailVehicles(RailRole.Wagon, year, MapClimate.Temperate).length,
+        `year ${year}`,
+      ).toBeGreaterThan(0);
     }
   });
 });
@@ -197,22 +201,28 @@ describe('train composition', () => {
   });
 
   it('refuses a train that no locomotive could move', () => {
-    expect(validateConsist([], 1950)).not.toBeNull();
-    expect(validateConsist([OPEN_WAGON, OPEN_WAGON], 1950)).toBe('cmd.reject.consistNoTraction');
+    expect(validateConsist([], 1950, MapClimate.Temperate)).not.toBeNull();
+    expect(validateConsist([OPEN_WAGON, OPEN_WAGON], 1950, MapClimate.Temperate)).toBe(
+      'cmd.reject.consistNoTraction',
+    );
   });
 
   it('refuses a train longer than the limit', () => {
     const coaches: number[] = [HEAVY_LOCO];
     while (aggregateConsist(coaches).lengthM <= MAX_TRAIN_LENGTH_M) coaches.push(PASSENGER_COACH);
-    expect(validateConsist(coaches, 1950)).toBe('cmd.reject.consistTooLong');
+    expect(validateConsist(coaches, 1950, MapClimate.Temperate)).toBe('cmd.reject.consistTooLong');
   });
 
   it('refuses a vehicle that is not rail at all', () => {
-    expect(validateConsist([HEAVY_LOCO, 200], 1950)).toBe('cmd.reject.consistNotRail');
+    expect(validateConsist([HEAVY_LOCO, 200], 1950, MapClimate.Temperate)).toBe(
+      'cmd.reject.consistNotRail',
+    );
   });
 
   it('refuses a vehicle the year does not offer yet', () => {
-    expect(validateConsist([ELECTRIC_LOCO], 1950)).toBe('cmd.reject.notAvailableYet');
+    expect(validateConsist([ELECTRIC_LOCO], 1950, MapClimate.Temperate)).toBe(
+      'cmd.reject.notAvailableYet',
+    );
   });
 });
 

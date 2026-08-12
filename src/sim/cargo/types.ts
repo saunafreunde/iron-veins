@@ -74,6 +74,20 @@ export type Cargo = (typeof Cargo)[keyof typeof Cargo];
 export const CARGO_COUNT = 20;
 
 /**
+ * What crosses a harbour container terminal's quay wall in BOTH directions -
+ * the overseas meta-cargo of SPEC2 M21 (E-09).
+ *
+ * `industry/catchment.ts` re-exports it and remains where its meaning is
+ * documented: it is the only acceptance list that is also a PRODUCTION list,
+ * so a container port is by construction the acceptor of what a container port
+ * makes. The table itself sits in this leaf module since SPEC2 M23 bundle 2
+ * (D-246) for the reason `TOWN_OUTPUTS` moved: the climate tables ask what a
+ * world produces, and asking `catchment.ts` pulled the station and the world
+ * into the main chunk.
+ */
+export const PORT_OVERSEAS_CARGO: readonly Cargo[] = [Cargo.Containers];
+
+/**
  * The passenger classes of SPEC2 M19, ascending.
  *
  * They share a vehicle's seats: a coach refitted to one of them loads that

@@ -63,9 +63,11 @@ function TrainBuilder({
   const removeUnit = useSimStore((s) => s.removeTrainUnit);
   const clearDraft = useSimStore((s) => s.clearTrainDraft);
 
-  const traction = availableRailVehicles(RailRole.Traction, year);
-  const wagons = availableRailVehicles(RailRole.Wagon, year);
-  const problem = validateConsist(draft, year);
+  const climate = useSimStore((s) => s.climate);
+
+  const traction = availableRailVehicles(RailRole.Traction, year, climate);
+  const wagons = availableRailVehicles(RailRole.Wagon, year, climate);
+  const problem = validateConsist(draft, year, climate);
   const summary = aggregateConsist(draft);
   const affordable = summary.priceCt <= cashCt;
 
@@ -176,6 +178,7 @@ export function FleetPanel({ client }: { readonly client: SimClient }): ReactEle
   const year = useSimStore((s) => s.year);
   const economyCurve = useSimStore((s) => s.economyCurve);
   const mapSize = useSimStore((s) => s.mapSize);
+  const climate = useSimStore((s) => s.climate);
 
   const station =
     selectedTile === null ? undefined : stationAtTile(stations, selectedTile.x, selectedTile.y);
@@ -189,9 +192,11 @@ export function FleetPanel({ client }: { readonly client: SimClient }): ReactEle
   const isAirport = moduleHere !== undefined && isAirModule(moduleHere.kind);
 
   const selected = fleet.find((vehicle) => vehicle.id === selectedVehicleId);
-  const buyable = availableVehicles(VehicleKind.Road, year);
-  const buyableShips = availableVehicles(VehicleKind.Ship, year);
-  const buyableAircraft = availableVehicles(VehicleKind.Aircraft, year);
+  // The shop asks exactly what the buy command asks - one gate, seven callers
+  // (SPEC2 M23, D-246) - so it can never offer what the world refuses.
+  const buyable = availableVehicles(VehicleKind.Road, year, climate);
+  const buyableShips = availableVehicles(VehicleKind.Ship, year, climate);
+  const buyableAircraft = availableVehicles(VehicleKind.Aircraft, year, climate);
 
   return (
     <section className="panel">

@@ -1,4 +1,4 @@
-import { Cargo, CARGO_COUNT } from '../cargo/types';
+import { Cargo, CARGO_COUNT, PORT_OVERSEAS_CARGO } from '../cargo/types';
 import { STATION_CATCHMENT_SCAN_RADIUS } from '../constants';
 import type { TileMap } from '../map/TileMap';
 import { inCatchment, isContainerPort, type Station } from '../station/types';
@@ -86,7 +86,7 @@ export const TOWN_CARGO: readonly Cargo[] = [Cargo.Goods, Cargo.Food, Cargo.Elec
  * the same trap `commercialShare` documents one function down. A port that
  * takes boxes in 1951 costs nothing, because in 1951 nothing makes one.
  */
-export const PORT_OVERSEAS_CARGO: readonly Cargo[] = [Cargo.Containers];
+export { PORT_OVERSEAS_CARGO } from '../cargo/types';
 
 /**
  * True for the meta-cargo that lives only between quay walls.
