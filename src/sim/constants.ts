@@ -3250,6 +3250,58 @@ export const AUTO_SIGNAL_STATION_RADIUS = 4;
  */
 export const MAX_TRAIN_OCCUPIED_TILES = MAX_TRAIN_LENGTH_M / TILE_SIZE_M + 1;
 
+// ------------------------------------------- the scenario workshop (SPEC2 M22)
+
+/**
+ * Largest brush radius one editor command may name. [tiles / corners]
+ *
+ * A brush is a square of edge `2 * radius + 1`, so this is the per-command
+ * REGION CAP SPEC2 M22 asks for by name, stated at the only place a caller can
+ * state it. Origin: 8 gives a 17 x 17 square, i.e.
+ * {@link EDITOR_BRUSH_MAX_CELLS} = 289 cells. That is the largest region whose
+ * worst case - every corner dragging a full {@link MAX_TERRAFORM_CORNERS}
+ * cascade - stays inside the same order of work as one 128-tile map
+ * generation, and it is small enough that a refusal never throws away minutes
+ * of shaping. The cap binds on the COMMAND, before anything is written, so an
+ * oversized brush is a named refusal and never a half-applied edit.
+ */
+export const EDITOR_BRUSH_MAX_RADIUS = 8;
+
+/** Cells a brush of the maximum radius covers - the cap read as an area. */
+export const EDITOR_BRUSH_MAX_CELLS = (2 * EDITOR_BRUSH_MAX_RADIUS + 1) ** 2; // 289
+
+/**
+ * Price of seeding one town. [cent]
+ *
+ * The workshop's commands are ordinary priced commands wherever the editor rule
+ * is off (SPEC2 M22: "bepreist nach dem D-119-Preview-Muster, kostenlos unter
+ * Editor-Regel"), so every one of them needs a real number. Origin: a village
+ * of 400 puts up roughly ten buildings and a street cross of some twenty tiles,
+ * which at `ROAD_COST_PER_TILE_CT` alone is 4,000 EUR - the founder pays an
+ * order of magnitude more than the tarmac, because what is bought is a
+ * settlement and not a road.
+ */
+export const EDITOR_TOWN_SEED_COST_CT = 200_000 * CENTS_PER_EURO;
+
+/**
+ * Price of siting one industry. [cent]
+ *
+ * Origin: the same order as the works it puts up. A coal mine's gross offer is
+ * about 25,200 EUR over a 100-tile haul (D-237's own comparison), so a hundred
+ * thousand is four of those and nobody sites one by accident.
+ */
+export const EDITOR_INDUSTRY_COST_CT = 100_000 * CENTS_PER_EURO;
+
+/**
+ * Price of planting one tile of wood. [cent]
+ *
+ * Origin: one fifth of a tile of road (`ROAD_COST_PER_TILE_CT` = 200 EUR).
+ * Forest is the cheapest thing the workshop writes because it moves no earth
+ * and carries no upkeep - what it buys is the difference between a bare
+ * hillside and a forestry's placement rule being satisfied.
+ */
+export const EDITOR_FOREST_COST_PER_TILE_CT = 40 * CENTS_PER_EURO;
+
 // -------------------------------------------------------------- construction
 
 /**

@@ -237,6 +237,25 @@ export interface NewGameParams {
    */
   readonly economy?: boolean;
   /**
+   * Whether this world is a scenario workshop rather than a game (SPEC2 M22).
+   *
+   * A world rule for the same Z1 reason every rule above it is one, and the
+   * only one that reaches money by SUSPENDING it: inside a workshop a command
+   * is neither charged nor refused for funds, and the tile owner is not asked.
+   * Two worlds with the same seed and the same log therefore diverge on the
+   * first build the acting company could not afford, which makes the flag saved
+   * and hashed rather than a checkbox.
+   *
+   * Chosen once, at genesis, and never afterwards: the workshop runs against a
+   * PAUSED pre-start world, so the single-author-of-state law holds unchanged -
+   * everything the author does is still a command in the same queue.
+   *
+   * ABSENT MEANS OFF, and load-bearing exactly as above: every save, every
+   * balancing scenario, every determinism fixture and all eight shipped
+   * scenarios were played by a company that paid for what it built.
+   */
+  readonly editorMode?: boolean;
+  /**
    * What this world asks of the player (SPEC2 M17), at most `MAX_GOALS` of
    * them.
    *

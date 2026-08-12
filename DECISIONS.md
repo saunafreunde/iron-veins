@@ -13,21 +13,21 @@ no entry below. A number may appear under several topics.
 - **Determinism, RNG & hashing:** D-001, D-002, D-003, D-004, D-009, D-010,
   D-024, D-093, D-106, D-128, D-137, D-142, D-145, D-146, D-149, D-153, D-178,
   D-181, D-184, D-185, D-188, D-189, D-190, D-191, D-193, D-194, D-195,
-  D-196, D-200, D-201, D-202, D-204, D-232, D-233, D-236
+  D-196, D-200, D-201, D-202, D-204, D-232, D-233, D-236, D-240
 - **Commands, snapshot & worker boundary:** D-004, D-005, D-006, D-011, D-032,
   D-100, D-111, D-145, D-146, D-148, D-162, D-174, D-176, D-179, D-187, D-189,
-  D-192, D-193, D-196, D-200, D-202, D-218
+  D-192, D-193, D-196, D-200, D-202, D-218, D-240
 - **Lines & timetables:** D-145, D-146, D-147, D-148, D-149, D-150, D-151,
   D-152, D-155, D-159
 - **Map generation & terrain:** D-018, D-019, D-020, D-021, D-022, D-023,
-  D-025, D-027, D-197, D-198, D-199, D-216, D-231, D-234
+  D-025, D-027, D-197, D-198, D-199, D-216, D-231, D-234, D-240
 - **Terraforming & structures:** D-028, D-034, D-050, D-051, D-052, D-124,
-  D-141
+  D-141, D-240
 - **Save format, migrations & replays:** D-007, D-025, D-026, D-027, D-048,
   D-111, D-130, D-131, D-134, D-142, D-144, D-145, D-146, D-147, D-153, D-178,
   D-181, D-184, D-185, D-188, D-189, D-190, D-191, D-192, D-193, D-194,
   D-197, D-198, D-200, D-207, D-213, D-231, D-232, D-233, D-236, D-238,
-  D-239
+  D-239, D-240
 - **Rail & track:** D-042, D-043, D-044, D-045, D-046, D-047, D-053, D-141,
   D-153, D-157, D-184, D-230
 - **Signals & reservations:** D-054, D-055, D-056, D-057, D-058, D-059, D-060,
@@ -14076,3 +14076,178 @@ verfaelscht wird.
 elftes Konto und Foerdergeld (D-238), Industrie-Events (hier) - und der
 Balance-Anker "Konjunktur: aus" ist ueber alle vier Bundles hinweg gehalten
 worden.
+
+### D-240 Die Werkstatt spricht nur Commands: fuenf Editor-Kinds, die Weltregel `editorMode` - und `PaintRiver` ueber Meereshoehe, abgelehnt statt erfunden
+
+SPEC2 M22, Bundle 1: die Simulationshaelfte der Szenario-Werkstatt. Fuenf neue
+`CommandKind`s, eine Weltregel, **der EINE Z5-Bump des Meilensteins
+(SAVE_VERSION 32 -> 33)**, und die eine Frage, die SPEC2 hier namentlich
+entschieden haben will. `src/ui/editor/` - Werkzeugpalette, Pinselgroessen,
+Debug-Overlays - ist Bundle 2; Heightmap-Import, Benchmark-Karten und der
+`.ironscenario`-Export sind die Bundles danach.
+
+**Die Werkstatt spricht nur Commands, und das ist kein Stil, sondern der Grund
+fuer den Meilenstein.** Eine im Editor gebaute Karte IST ein Befehlslog, und ein
+Befehlslog ist etwas, das der Beweiskette aus M16 vorgelegt werden kann. Keiner
+der fuenf ist also ein "Generatoraufruf aus der Oberflaeche": jeder ist ein
+gewoehnlicher Eintrag in derselben Queue, mit Besitzer, Preis,
+Ablehnungsvokabular, Parser-Zweig und i18n in beiden Sprachen.
+
+* `TerraformBrushRegion` (43) - Quadrat von Ecken, Kantenlaenge `2r+1`, jede Ecke
+  faehrt die gewoehnliche Terraform-Kaskade, danach `enforceSlopeInvariant` ueber
+  die Region.
+* `PlaceTownSeed` (44) - `newTown` + `settleTown`, die beiden Aufrufe, die
+  `generateTowns` seit M2 macht, aus einer Hand statt aus einem Wurf.
+* `PlaceIndustryAt` (45) - `industrySiteRefusal`, die vier Standortfragen des
+  Generators an EINER genannten Kachel statt hinter einer Suchschleife.
+* `PaintForest` (46) - `Terrain.Forest` auf offenen, trockenen, unbebauten
+  Boden (Gras, Feld, Marsch).
+* `PaintRiver` (47) - siehe unten; schreibt **kein** Terrain.
+
+**Der Regionsdeckel bindet am COMMAND, nicht am Werkzeug.**
+`EDITOR_BRUSH_MAX_RADIUS` = 8, also `EDITOR_BRUSH_MAX_CELLS` = 289 Zellen, mit
+Einheit und Herkunft in `constants.ts`. Am Werkzeug waere er wertlos: ein
+aufgezeichnetes Log muss von einem Build abspielbar sein, dessen Palette andere
+Pinselgroessen anbietet, und ein ungedeckelter Bulk-Edit ist eine unbegrenzte
+Menge Arbeit hinter einem Eintrag. Der Deckel greift, **bevor ein Byte bewegt
+ist** - `brushTooLarge` ist eine Ablehnung und nie ein halb angewandter Edit;
+`tests/unit/editorCommands.spec.ts` prueft beide Richtungen (r = max
+angenommen, r = max + 1 abgelehnt mit unveraendertem Hoehenfeld) und dass
+derselbe Deckel fuer beide Malwerkzeuge gilt.
+
+**Vorschau UND Befehl sind EINE Funktion, wortwoertlich (D-119).**
+`terraformBrush(..., commit: false)` faehrt die ganze Operation gegen die echte
+Karte und legt danach jedes Byte zurueck - Hoehen, Terrain **und die beiden
+Revisionszaehler**. Der letzte Punkt ist keine Kosmetik: eine Vorschau, die
+`revision` bewegt, laesst den Renderer bei jeder Mausbewegung die Welt neu
+bauen. Eine zweite Preisformel wurde damit gar nicht erst geschrieben, was der
+einzige Weg ist, auf dem Preis und Rechnung nicht ab Spieljahr zwei auseinander
+laufen koennen. Der Test misst die Unversehrtheit byteweise.
+
+**Die Slope-Invariante ueberlebt den Bulk-Edit, und die Messung sagt mehr als
+das.** Zwoelf ueberlappende Pinsel ueber aufgerauhtes Gelaende, nach jedem
+einzelnen `worstTileSlope <= 1` - und danach meldet `enforceSlopeInvariant()`
+**0 bewegte Ecken**. Der von SPEC2 bestellte Sweep ist also nicht die
+Reparatur, sondern der Beweis: die Kaskade je Ecke haelt die Invariante schon,
+und wenn der Sweep doch etwas zieht, wird die Uferfrage fuer die ganze Karte neu
+gestellt (`refreshShorelineEverywhere`, ausserhalb des Hot-Path per
+Ledger-Zeile).
+
+**`editorMode` schaltet GENAU ZWEI Dinge ab, und `commands/editorRule.ts` ist das
+eine Tor darauf** (das `weather/effects.ts`-Muster eine Ebene hoeher): Funds und
+Ownership. `affordable`, `buildBudgetCt`, `chargeBuild`, `refundBuild`,
+`ownershipWaived` - fuenf Funktionen, und ausserhalb der Regel liefert jede
+Term fuer Term das, was das Spiel seit M2 gerechnet hat. Die 15
+Kassenvergleiche und die 15 Buchungen in `build.ts` gehen durch sie, und
+`mayBuildOn` ist die EINE Eigentumsfrage der Bauschicht.
+
+* **Kostenlos heisst in BEIDEN Richtungen kostenlos.** `refundBuild` ist die
+  Haelfte, die man vergisst: eine Werkstatt, die nichts berechnet, aber die
+  Abrissverguetung auszahlt, laesst einen Autor durch Bauen und Abreissen genau
+  das Startkapital drucken, das sein Szenario ausliefert. Gemessen im Test.
+* **Was NICHT abgeschaltet wird**, und jede Zeile davon ist eine Behauptung mit
+  einem Testfall: Wasser, freier Boden, die Hoehengrenze, der
+  E-11-Hindernis-Waechter der Terraform-Kaskade und der Stadtrat aus 13.3
+  einschliesslich exklusiver Baurechte. Das ist, was die Karte IST; wer das
+  aussetzt, schreibt Zustaende, die die Simulation nicht ausdruecken kann - und
+  ein Szenario ist ein Save (D-194), das laden muss.
+* **Der Eigentumstest im Terraform brauchte nichts.** `cornerObstruction`
+  liefert `ForeignOwner` nur dort, wo `built` ohnehin wahr ist, also verfeinert
+  der Besitz die ANTWORT und nie das Ergebnis (D-104 woertlich). In der
+  Werkstatt hiesse dieselbe Kachel `Occupied` - beides eine Ablehnung.
+* **Nicht sperrbar im Szenario** (`NOT_LOCKABLE` in
+  `tests/unit/scenarioCoupling.spec.ts`): `editorMode` ist die Regel der
+  WERKSTATT, nicht der ausgelieferten Welt. Ein Szenario, das sie pinnt, gaebe
+  jedem Spieler ein Spiel, in dem nichts kostet und niemandem etwas gehoert.
+
+**Null Zug auf `world.rng` (Z3, Fehlerkatalog 25).** Zwei der fuenf brauchen
+Zufall - Stadtname und Strassenabstand - und nehmen ihn aus
+`streamFor(streamSalt('editor') + Eckenindex)`, also **mit der genannten Kachel
+gesalzen**. Dadurch baut derselbe Befehl dieselbe Stadt, egal an welcher Stelle
+des Logs er steht; der Test faehrt alle fuenf Befehle und vergleicht den
+Generatorzustand davor und danach Wort fuer Wort, und ein zweiter Test baut
+dieselbe Stadt in zwei Welten mit unterschiedlicher Vorgeschichte.
+
+**`PaintRiver` ueber Meereshoehe: ABGELEHNT, nicht formalisiert.** SPEC2 M22
+laesst beides zu und verlangt eine Entscheidung. Sie faellt so:
+
+* **Formalisieren hiesse eine zweite Wasseroberflaeche**, und D-097 hat schon
+  aufgeschrieben, dass dieses Spiel genau eine hat: eine Kachel ist Wasser,
+  wenn selbst ihre hoechste Ecke auf oder unter `SEA_LEVEL` liegt. Genau das
+  schreibt `floodSeaLevel`, und genau das liest jede Uferauffrischung seit M2.
+* **Der Quirk ist real und wird gemessen, nicht behauptet.** `applyRivers`
+  malt `Terrain.Water` entlang der verfolgten Bahn, gleich auf welcher Hoehe
+  das Tal liegt - `refreshShoreline` fragt nur `isSubmerged`. Der Test setzt
+  eine Wasserkachel acht Stufen ueber dem Meer (das, was `applyRivers` tut),
+  faehrt EIN gewoehnliches Terraform daneben und sieht sie zu Gras werden.
+* **Also schreibt `PaintRiver` ueberhaupt kein Terrain.** Er **graebt** jede
+  genannte Kachel bis zum Meer (`digTileToSeaLevel`) und laesst die
+  gewoehnliche Uferauffrischung fluten. Was dabei entsteht, ueberlebt jedes
+  spaetere Terraform - im Test nachgefahren: Fluss schneiden, daneben Land
+  heben, Ufer neu fragen, die Kachel ist noch Wasser.
+* **Der Preis steht dabei, statt versteckt zu werden.** Eine Region, die das
+  Meer im Erdbudget eines Befehls nicht erreicht, wird GANZ abgelehnt
+  (`riverNeedsSeaLevel`). Die Werkstatt schneidet Fluesse in Kuestennaehe und
+  durch tiefes Gelaende; wer ein Talflussbett will, hebt erst das Tal aus.
+* **Das neue Messinstrument ist `standingWaterAboveSeaLevel(map)`** und es
+  benennt den Rest ehrlich: auf einer erzeugten 128er-Karte ist es **groesser
+  als null**, weil der GENERATOR weiter Bergfluesse malt. Bundle 1 schliesst
+  die ERZEUGUNGS-Haelfte - kein Werkstatt-Befehl kann einen anlegen, gemessen
+  ueber 25 Pinsel auf einer erzeugten Welt (der Zaehler steigt nie) - und
+  benennt die Generator-Haelfte als Rest. Sie zu reparieren bewegt jede erzeugte
+  Karte, jeden Pin und jeden `SCENARIO_WORLD_CLAIM` und ist ein eigener Bundle.
+
+**Der Bump und was er bewegt hat.** `editorMode` wird **unbedingt** gehasht, auf
+den Bedingungen jeder Regel vor v32 und ausdruecklich NICHT auf denen von D-236:
+der Aus-Zustand des Jahrhunderts ist eine ABWESENHEIT (leere Tabelle, jeder
+Leser liefert exakt 1), der Aus-Zustand dieser Regel ist ein WERT -
+`editorRule.ts` wird in jeder Welt und bei jedem Bau befragt. Eine bedingte
+Hashung waere also Simulationsverhalten, das der Digest nicht sieht, also genau
+das Loch, fuer das `saveFieldCoupling.spec.ts` existiert. Folge, nach dem
+D-137/D-130-Protokoll neu aufgezeichnet:
+
+* Kanonischer Cross-OS-Pin `29f227b0d3cf3db1` -> **`f1349c9b9c922981`**
+* Soak `ff8eb61c2dec1669` -> **`1f1ac33ffed6afe9`** bei **unveraenderten 35
+  Kommandos und 16 Checkpoints** - der Beweis, dass nur der Digest sich bewegt
+  hat und kein Spiel
+* Korpus fuer alle zwoelf Fixtures neu aufgezeichnet, `v33-played.ironsave`
+  ergaenzt; die eingefrorenen Alt-Fixtures dekodieren weiter zu EINER Welt
+  (v22-v30 auf `56982201046249b9`, v31-v33 auf `d3c2c16e6d8bf6e1` - dieselbe
+  Zweiteilung wie vorher, aus D-231s Grund)
+* `SCENARIO_WORLD_CLAIMS` und die Briefing-/Ortsnamen-Waechter **unveraendert**,
+  gelaufen statt behauptet: es wurde kein erzeugtes Byte bewegt
+
+**Kein Band bewegt, alles auf den Euro identisch mit D-239**:
+`npm run test:balance:full` gruen bei 101 - Szenario 5 1.022.084 / 1.802.165 /
+2.153.604 EUR, Punktzahl 5.889, Netzdesign 3,75, Harter Winter -4,36 %,
+aiGame-Sweep 7.293.303 EUR. Das ist erwartbar und trotzdem nachgefahren: die
+Regel ist in jeder dieser Welten aus, und `editorRule.ts` liefert dort Term fuer
+Term die alte Rechnung.
+
+**Der UI-Erzeuger fehlt und steht auf der dokumentierten Erlaubnisliste.** Die
+fuenf Kinds stehen in `NO_UI_ISSUER` in `tests/unit/commandCoupling.spec.ts`,
+mit dem Grund und mit der Frist: **Bundle 2 loescht diese fuenf Zeilen.** Der
+Audit faellt auch andersherum - ein Kind, das die Oberflaeche erzeugt UND das
+gelistet ist, ist ein roter Build -, also kann der Eintrag seinen Grund nicht
+ueberleben.
+
+**Nicht gemessen und deshalb nicht beansprucht:** keine `npm run test:perf`-Zahl
+und keine Bundle-Budget-Zahl fuer diesen Bundle. Der Editor liegt per
+Ledger-Zeile ausserhalb des Hot-Path (M22: +0,00 ms) und dieser Bundle fasst
+keine Datei unter `src/ui` an; die Ledger-Zeile 6.1.1 fuer M22 gehoert an das
+Ende des Meilensteins, wenn Palette, Import und Benchmark-Karten stehen.
+
+**Tests:** `tests/unit/editorCommands.spec.ts` (32 Faelle: Parser-Rundreise
+aller fuenf Kinds, derselbe Weg durch `parseScenarioFixture` des
+Determinismus-Runners, ein verstuemmelter Befehl als Fehler statt als Default,
+i18n in beiden Katalogen fuer Labels und Ablehnungen; der Deckel in beide
+Richtungen und fuer beide Malwerkzeuge; die Invariante ueber zwoelf Pinsel plus
+der Null-Sweep; Funds und Ownership abgeschaltet, Wasser/Boden/Hoehengrenze/
+Terraform-Waechter/Stadtrat NICHT; kostenlos in beide Richtungen; die Regel im
+Hash, in der Save-Rundreise und in der Migration; der Quirk gemessen, der
+Generator-Rest gemessen, die Ablehnung, der Schnitt, sein Ueberleben und der
+Nicht-Anstieg auf einer erzeugten Welt; die Standortregeln der drei
+Platzierungsbefehle; null RNG-Zug und Reproduzierbarkeit; Preis gleich
+Rechnung und die byteweise Unversehrtheit der Vorschau) - plus die fuenf
+Stichproben in `tests/unit/commandCoupling.spec.ts` und `editorMode` in beiden
+Kopplungstabellen von `tests/unit/scenarioCoupling.spec.ts`.

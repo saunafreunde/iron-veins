@@ -3149,3 +3149,77 @@ people stop working - drawn from `streams.events`, read by the industry clock of
   i18n keys in two languages; budget 978,000 unchanged. Zero snapshot bytes -
   the board never reaches the interface at all, because SPEC2 orders news here
   and nothing else - and zero atlas cells.
+
+## M22 bundle 1 - the editor speaks only commands (D-240)
+
+The simulation half of the scenario workshop: five new `CommandKind`s, one
+world rule, **the milestone's ONE Z5 bump (SAVE_VERSION 32 -> 33)**, and the
+question SPEC2 M22 names by hand. `src/ui/editor/` is bundle 2; heightmap
+import, the four benchmark maps and the `.ironscenario` export are the bundles
+after it.
+
+- **A map an author builds IS a command log**, which is why none of the five is
+  a generator call from the interface: `TerraformBrushRegion` (43),
+  `PlaceTownSeed` (44), `PlaceIndustryAt` (45), `PaintForest` (46) and
+  `PaintRiver` (47) are ordinary entries in the same queue, with an owner, a
+  price, a refusal vocabulary, a parser case and de+en. Three of them REUSE the
+  generator's own placement questions rather than restating them
+  (`isValidCentre` + the `TOWN_MIN_DISTANCE` spacing, `industrySiteRefusal`,
+  `newTown`/`settleTown` split out of `generateTowns`), so a town the workshop
+  places is a town the generator could have placed.
+- **The region cap binds on the COMMAND, not on the tool.**
+  `EDITOR_BRUSH_MAX_RADIUS` = 8 (289 cells), because a recorded log has to be
+  replayable by a build whose palette offers other brush sizes. It refuses
+  BEFORE a byte moves, so an oversized brush is never a half-applied edit.
+- **Preview and command are ONE function, literally** (D-119):
+  `terraformBrush(..., commit: false)` runs the whole operation against the real
+  map and puts every byte back - heights, terrain **and the two revision
+  counters**, because a preview that bumped `revision` would rebuild the world
+  on every pointer move. **The invariant sweep is the proof, not the repair**:
+  twelve overlapping brushes over roughed-up ground keep `worstTileSlope <= 1`
+  after every one, and `enforceSlopeInvariant()` then reports **0 corners**.
+- **`editorMode` suspends exactly TWO things and `commands/editorRule.ts` is the
+  one gate on both** (the `weather/effects.ts` pattern): funds and ownership.
+  **Free means free in BOTH directions** - `refundBuild` exists because a
+  workshop that charged nothing and refunded half would let an author print the
+  starting capital its own scenario ships. What is NOT suspended, each with its
+  own test case: water, clear ground, the height limit, the E-11 obstruction
+  guard and the town council of 13.3 including exclusive rights. The terraform
+  ownership test needed nothing - `cornerObstruction` returns `ForeignOwner`
+  only where `built` is true anyway, so ownership refines the ANSWER and never
+  the outcome (D-104 verbatim). Not lockable in a scenario: it is the rule of
+  the WORKSHOP, not of the world that ships.
+- **Zero draws on `world.rng`** (Z3). Two of the five need randomness (a town's
+  name and its street spacing) and take it from
+  `streamFor(streamSalt('editor') + corner index)` - **salted with the tile the
+  command names**, so the same command builds the same town wherever it sits in
+  the log.
+- **`PaintRiver` above sea level is REFUSED, not formalised** - the one thing
+  SPEC2 says must not ship broken. Formalising needs a second water surface and
+  D-097 already recorded that this game has exactly one. **The quirk is
+  measured, not asserted**: a water tile eight levels above the sea (what
+  `applyRivers` writes) turns to grass on ONE ordinary terraform beside it. So
+  `PaintRiver` writes no terrain at all - it DIGS each tile to the sea
+  (`digTileToSeaLevel`) and lets the ordinary shoreline refresh flood it, and
+  what it cuts survives every later terraform. The price is stated: a region
+  that cannot reach sea level inside one command's earth budget is refused WHOLE
+  (`riverNeedsSeaLevel`). **The named residual is the GENERATOR**:
+  `standingWaterAboveSeaLevel(map)` is greater than zero on a generated 128 map
+  and no workshop command ever raises it (measured over 25 brushes); repairing
+  the generator moves every map, every pin and every `SCENARIO_WORLD_CLAIM` and
+  is its own bundle.
+- **The rule is hashed UNCONDITIONALLY**, explicitly not on D-236's terms: the
+  century's off state is an ABSENCE, this one's is a VALUE (`editorRule.ts` is
+  consulted in every world on every build), so a conditional hash would be sim
+  behaviour the digest cannot see. Pins re-recorded under D-137/D-130: canonical
+  `29f227b0d3cf3db1` -> **`f1349c9b9c922981`**, soak `ff8eb61c2dec1669` ->
+  **`1f1ac33ffed6afe9`** at **unchanged 35 commands and 16 checkpoints** (the
+  evidence that only the digest moved), corpus re-recorded for all twelve
+  fixtures with `v33-played.ironsave` added, `SCENARIO_WORLD_CLAIMS` unmoved and
+  RUN rather than assumed.
+- **Every band identical to D-239 to the euro**, `npm run test:balance:full`
+  green at 101 (scenario 5 1,022,084 / 1,802,165 / 2,153,604 EUR, score 5,889,
+  Netzdesign 3.75, hard winter -4.36 %, aiGame sweep 7,293,303 EUR).
+- **The five kinds are on the documented `NO_UI_ISSUER` allowlist with a
+  deadline: bundle 2 deletes those five lines.** The audit fails both ways, so
+  the entry cannot outlive its reason.

@@ -50,6 +50,16 @@ export const CommandKind = {
   SendVehicleToDepot: 41,
   /** Take on one of the standing supply orders of SPEC2 M21. */
   AcceptSupplyContract: 42,
+  /** Raise or lower a whole square of corners at once (SPEC2 M22). */
+  TerraformBrushRegion: 43,
+  /** Found a town where the author points (SPEC2 M22). */
+  PlaceTownSeed: 44,
+  /** Site one industry of a chosen type (SPEC2 M22). */
+  PlaceIndustryAt: 45,
+  /** Plant wood over a square region (SPEC2 M22). */
+  PaintForest: 46,
+  /** Cut a watercourse down to the sea (SPEC2 M22). */
+  PaintRiver: 47,
 } as const;
 export type CommandKind = (typeof CommandKind)[keyof typeof CommandKind];
 
@@ -459,7 +469,105 @@ export interface RefitVehicleCommand {
   readonly cargo: number;
 }
 
+/**
+ * Raise or lower every corner of a square region by one level (SPEC2 M22).
+ *
+ * The region is the square of half width `radius` on the CORNER grid around
+ * (x, y), so a radius of 0 is exactly `RaiseLand`/`LowerLand` and a radius of
+ * `EDITOR_BRUSH_MAX_RADIUS` is the largest edit one command may name. The cap
+ * is a property of the COMMAND rather than of the tool that issues it: a
+ * recorded log has to be replayable by a build whose palette offers different
+ * brush sizes, and an uncapped bulk edit is an unbounded amount of work behind
+ * one entry (SPEC2 M22's "Regionsdeckel pro Command").
+ *
+ * Every corner runs the ordinary terraform cascade, and the whole region is
+ * swept by `enforceSlopeInvariant` afterwards.
+ */
+export interface TerraformBrushRegionCommand {
+  readonly kind: typeof CommandKind.TerraformBrushRegion;
+  /** Centre corner of the brush. */
+  readonly x: number;
+  readonly y: number;
+  /** Half width of the square, 0..EDITOR_BRUSH_MAX_RADIUS. [corners] */
+  readonly radius: number;
+  /** A value of TerraformDirection: 1 raises, -1 lowers. */
+  readonly direction: number;
+}
+
+/**
+ * Found a town at a chosen tile (SPEC2 M22).
+ *
+ * The generator's own placement - claim the ground, lay the streets, put the
+ * houses up, prune what serves nothing, pave last - run at ONE spot the author
+ * names instead of at a dart the generator threw. What it does NOT do is
+ * choose the spot: `isValidCentre` and the Poisson spacing of `TOWN_MIN_DISTANCE`
+ * are asked here exactly as the generator asks them, so a town the workshop
+ * places is a town the generator could have placed.
+ */
+export interface PlaceTownSeedCommand {
+  readonly kind: typeof CommandKind.PlaceTownSeed;
+  readonly x: number;
+  readonly y: number;
+  /** A value of TownSize: which of the three starting populations. */
+  readonly sizeClass: number;
+}
+
+/**
+ * Site one industry of a chosen type at a chosen tile (SPEC2 M22).
+ *
+ * The placement RULES of section 6.6 are asked at the named spot - footprint,
+ * terrain, height, the required near-terrain, the near-town distance and the
+ * minimum distance to the next works - because an industry standing where its
+ * own rule forbids is a works the generator would never make and the balance
+ * tables have never priced.
+ */
+export interface PlaceIndustryAtCommand {
+  readonly kind: typeof CommandKind.PlaceIndustryAt;
+  readonly x: number;
+  readonly y: number;
+  /** A value of IndustryType. */
+  readonly industryType: number;
+}
+
+/** Plant wood over a square region of tiles (SPEC2 M22). */
+export interface PaintForestCommand {
+  readonly kind: typeof CommandKind.PaintForest;
+  readonly x: number;
+  readonly y: number;
+  /** Half width of the square, 0..EDITOR_BRUSH_MAX_RADIUS. [tiles] */
+  readonly radius: number;
+}
+
+/**
+ * Cut a watercourse through a square region (SPEC2 M22).
+ *
+ * It writes NO terrain. SPEC2 M22 asks for "standing water at height X" to be
+ * formalised or refused, and it is REFUSED: the game has exactly one water
+ * surface - a tile is water when even its highest corner is at or below
+ * `SEA_LEVEL` - so this command DIGS each named tile down until the sea is
+ * there by the game's own rule, and the ordinary shoreline refresh floods it.
+ * Water made that way survives every later terraform, which is precisely what
+ * the `applyRivers`/`refreshShoreline` revert quirk does not.
+ *
+ * The consequence is stated rather than hidden: a region that cannot reach sea
+ * level inside one command's earth budget is refused whole, so the workshop
+ * cuts rivers near the coast and through low ground, and the author raises the
+ * land afterwards rather than painting a river up a mountain.
+ */
+export interface PaintRiverCommand {
+  readonly kind: typeof CommandKind.PaintRiver;
+  readonly x: number;
+  readonly y: number;
+  /** Half width of the square, 0..EDITOR_BRUSH_MAX_RADIUS. [tiles] */
+  readonly radius: number;
+}
+
 export type Command =
+  | TerraformBrushRegionCommand
+  | PlaceTownSeedCommand
+  | PlaceIndustryAtCommand
+  | PaintForestCommand
+  | PaintRiverCommand
   | AcceptContractCommand
   | AcceptSupplyContractCommand
   | BuildWaypointCommand
@@ -599,5 +707,29 @@ export const RejectReason = {
   NoSuchLine: 'cmd.reject.noSuchLine',
   TooManyLines: 'cmd.reject.tooManyLines',
   InvalidTakt: 'cmd.reject.invalidTakt',
+  /** The workshop's per-command region cap (SPEC2 M22). */
+  BrushTooLarge: 'cmd.reject.brushTooLarge',
+  /** A brush or a placement whose numbers are not a region at all. */
+  InvalidRegion: 'cmd.reject.invalidRegion',
+  /** Nothing in the painted region was ground the tool may write on. */
+  NothingToPaint: 'cmd.reject.nothingToPaint',
+  /** A town centre where the generator's own rules refuse one. */
+  BadTownSite: 'cmd.reject.badTownSite',
+  /** A town centre too close to one that already exists. */
+  TownTooClose: 'cmd.reject.townTooClose',
+  /** The map already carries as many towns as the generator would make. */
+  TooManyTowns: 'cmd.reject.tooManyTowns',
+  /** Ground the placement rules of section 6.6 refuse for this works. */
+  BadIndustrySite: 'cmd.reject.badIndustrySite',
+  /** A works too close to one that already stands. */
+  IndustryTooClose: 'cmd.reject.industryTooClose',
+  /** A type or size class the game does not have. */
+  UnknownType: 'cmd.reject.unknownType',
+  /**
+   * A river the ground cannot carry: the region does not reach sea level
+   * inside one command's earth budget (SPEC2 M22 - standing water at height X
+   * is refused, never invented).
+   */
+  RiverNeedsSeaLevel: 'cmd.reject.riverNeedsSeaLevel',
 } as const;
 export type RejectReason = (typeof RejectReason)[keyof typeof RejectReason];

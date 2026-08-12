@@ -124,6 +124,8 @@ export interface WorldStateData {
   elections: boolean;
   /** The century world rule of SPEC2 M21 (E-09): saved, hashed, off by default. */
   economy: boolean;
+  /** The workshop world rule of SPEC2 M22: saved, hashed, off by default. */
+  editorMode: boolean;
   /**
    * The century curve itself, row major in per mille - empty without the rule.
    *
@@ -282,6 +284,28 @@ export class World {
    * returns exactly 1 and the arithmetic is identical to a pre-M21 world's.
    */
   readonly economy: boolean;
+  /**
+   * Whether this world is a scenario WORKSHOP rather than a game (SPEC2 M22).
+   *
+   * A world rule in the full Z2 sense - saved, hashed, migrated, fixed at
+   * genesis - and the reason it must be one rather than a setting is the
+   * sharpest in the file: it decides whether a command is ACCEPTED. Two worlds
+   * with the same seed and the same command log, one with the rule and one
+   * without, diverge on the first build the acting company could not afford or
+   * did not own the ground for, so a rule that lived outside the digest would
+   * let them fingerprint alike - the exact failure Z2 exists to prevent.
+   *
+   * It suspends exactly two checks and `commands/editorRule.ts` is the one gate
+   * on both (funds, ownership); everything that decides what the map physically
+   * IS - water, slope, the height limit, occupied ground, the E-11 obstruction
+   * guard, the council of 13.3 - is untouched, because a scenario is a save
+   * (D-194) and a save has to load into a world the simulation can express.
+   *
+   * ABSENT MEANS OFF, and load-bearing exactly as for every rule above: every
+   * world this game has ever recorded was played by a company that paid for
+   * what it built and owned what it stood on.
+   */
+  readonly editorMode: boolean;
   /**
    * The century itself: one multiplier per cargo group per year, plus the
    * business cycle and the energy price (SPEC2 M21, E-09).
@@ -537,6 +561,9 @@ export class World {
     // curve itself is NOT drawn here - `World.create` is genesis and
     // `World.fromData` is a load, and only one of the two may draw one.
     this.economy = params.economy ?? false;
+    // And here too (SPEC2 M22): every world recorded before this milestone was
+    // played by a company that paid for what it built.
+    this.editorMode = params.editorMode ?? false;
     this.rng = Rng.fromSeed(gameplaySeed(this.seed));
     this.companies.push(
       createCompany(0, params.companyName, params.companyColorIndex, params.difficulty),
@@ -873,6 +900,7 @@ export class World {
       weatherField: this.weatherField.cells,
       elections: this.elections,
       economy: this.economy,
+      editorMode: this.editorMode,
       economyCurve: this.economyCurve.toData(),
       mapSize: this.map.size,
       rng: this.rng.getState(),
@@ -962,6 +990,7 @@ export class World {
         weather: data.weather,
         elections: data.elections,
         economy: data.economy,
+        editorMode: data.editorMode,
         mapSize: data.mapSize,
         companyName: data.companies[0]!.name,
         companyColorIndex: data.companies[0]!.colorIndex,
@@ -1102,6 +1131,16 @@ function hashDynamicState(h: Fnv1a64, world: World): void {
   // same company differently within a game year, so they must never fingerprint
   // alike. Adding it moved every world hash once (D-137/D-130).
   h.u32(world.elections ? 1 : 0);
+  // The workshop rule of M22, on the same terms and with the sharpest version
+  // of the same argument: it decides whether a command is accepted at all, so
+  // a world that built for free and a world that paid must never fingerprint
+  // alike. Hashing it moved every world hash once (D-137/D-130). It is NOT
+  // hashed conditionally the way the century of D-236 is: its off state is a
+  // VALUE and not an absence - `editorRule.ts` is consulted in every world, on
+  // every build - so a conditional hash would be a line of simulation
+  // behaviour the digest cannot see, which is the hole
+  // `saveFieldCoupling.spec.ts` exists to find.
+  h.u32(world.editorMode ? 1 : 0);
 
   const rng = world.rng.getState();
   h.u32(rng[0]).u32(rng[1]).u32(rng[2]).u32(rng[3]);

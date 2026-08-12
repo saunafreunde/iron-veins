@@ -22,12 +22,27 @@ const UI_DIR = fileURLToPath(new URL('../../src/ui/', import.meta.url));
 /**
  * Kinds that deliberately have no interface issuer.
  *
- * Empty today: every command the simulation accepts can be issued by the
- * player. A kind that only the AI or a dev tool may issue gets an entry HERE,
- * with the reason, instead of silently having no button - and the audit fails
- * a stale entry, so the list cannot outlive its reasons.
+ * A kind that only the AI or a dev tool may issue gets an entry HERE, with the
+ * reason, instead of silently having no button - and the audit fails a stale
+ * entry, so the list cannot outlive its reasons.
+ *
+ * The five entries below are the scenario workshop's own commands (SPEC2 M22).
+ * They are here for exactly ONE bundle: M22 bundle 1 ships the simulation half
+ * - the kinds, the parser, the `editorMode` rule, the save bump - and bundle 2
+ * ships `src/ui/editor/` with the palette that issues them. Splitting it that
+ * way is what keeps the save bump and its pin re-record in one reviewable
+ * change; the allowlist is the honest way to say "not yet" rather than to
+ * weaken the audit, and **bundle 2 deletes these five lines**. An entry that is
+ * still here when the palette exists is a red build, because the audit fails a
+ * kind that IS issued and is listed.
  */
-const NO_UI_ISSUER: readonly string[] = [];
+const NO_UI_ISSUER: readonly string[] = [
+  'TerraformBrushRegion',
+  'PlaceTownSeed',
+  'PlaceIndustryAt',
+  'PaintForest',
+  'PaintRiver',
+];
 
 /**
  * Command construction sites: `kind: CommandKind.X` is how a command literal
@@ -216,6 +231,17 @@ const SAMPLES: Record<keyof typeof CommandKind, Command> = {
   ReleaseVehicleFromLine: { kind: CommandKind.ReleaseVehicleFromLine, vehicleId: 8 },
   SetLineTakt: { kind: CommandKind.SetLineTakt, lineId: 2, taktTicks: 4_000, offsetTicks: 600 },
   SetTransferNode: { kind: CommandKind.SetTransferNode, stationId: 5, transferNode: true },
+  TerraformBrushRegion: {
+    kind: CommandKind.TerraformBrushRegion,
+    x: 41,
+    y: 42,
+    radius: 3,
+    direction: -1,
+  },
+  PlaceTownSeed: { kind: CommandKind.PlaceTownSeed, x: 43, y: 44, sizeClass: 1 },
+  PlaceIndustryAt: { kind: CommandKind.PlaceIndustryAt, x: 45, y: 46, industryType: 7 },
+  PaintForest: { kind: CommandKind.PaintForest, x: 47, y: 48, radius: 2 },
+  PaintRiver: { kind: CommandKind.PaintRiver, x: 49, y: 50, radius: 1 },
 };
 
 function auditParserRoundTrip(

@@ -272,17 +272,20 @@ describe('save migrations', () => {
 
   it('pins the current save version', () => {
     // Bumping SAVE_VERSION has to be a conscious act, because from the first
-    // released build onwards it also requires a migration. 32 is M21's single
-    // bump (SPEC2 Z5): the century curve of E-09 owns it - the `economy` world
-    // rule plus the table it decides, one multiplier per cargo group per year
-    // and two rows more for the business cycle and the energy price. The
-    // milestone's later bundles (delivery contracts, the subsidy board, the
-    // container revival) extend that migration in place and add no numbers.
+    // released build onwards it also requires a migration. 33 is M22's single
+    // bump (SPEC2 Z5): the scenario workshop owns it - the `editorMode` world
+    // rule, which suspends the funds and the ownership check and therefore
+    // decides whether a COMMAND is accepted. The milestone's later bundles (the
+    // tool palette, the heightmap import, the benchmark maps, the scenario
+    // export) extend that migration in place and add no numbers. The five new
+    // command kinds need no migration of their own: a kind is a number in a
+    // log, and a log written by an older build cannot contain one that did not
+    // exist (D-131, E-11).
     //
-    // 31 was M20's: the physical town growth of section 13.2, spent on the ONE
-    // thing about a growing town that is not derivable - the month's own
-    // street budget.
-    expect(SAVE_VERSION).toBe(32);
+    // 32 was M21's: the century curve of E-09 - the `economy` world rule plus
+    // the table it decides. 31 was M20's: the physical town growth of section
+    // 13.2, spent on the month's own street budget.
+    expect(SAVE_VERSION).toBe(33);
   });
 
   it('has a real migration for every step from version 2 on', () => {

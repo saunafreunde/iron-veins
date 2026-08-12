@@ -110,9 +110,20 @@
  * no century, so the migration enters the rule as OFF and the curve as an EMPTY
  * table - which is exactly what a world with the rule off holds for ever, and
  * why this is the rare bump that moves no existing world hash at all (the
- * argument is in `hashWorld`).
+ * argument is in `hashWorld`). 33 is M22's one bump, and it is spent on a rule
+ * that decides whether a COMMAND is accepted: `editorMode`, the scenario
+ * workshop of SPEC2 M22, which suspends the funds and the ownership check and
+ * nothing else. Five command kinds arrive with it - `TerraformBrushRegion`,
+ * `PlaceTownSeed`, `PlaceIndustryAt`, `PaintForest`, `PaintRiver` - but a
+ * command kind is a number in a log and needs no migration; what needs one is
+ * the rule, because a save that lost it would be charged differently after
+ * loading than before saving. A version 32 world was played by a company that
+ * paid for what it built and owned the ground it stood on, so the migration
+ * enters the rule as OFF - which is exactly what that world did. Unlike the
+ * century of v32 the flag is hashed UNCONDITIONALLY, on the terms every rule
+ * before v32 was, so this bump moves every world digest in the game once.
  */
-export const SAVE_VERSION = 32;
+export const SAVE_VERSION = 33;
 
 /** File extension used for manual and automatic saves. */
 export const SAVE_EXTENSION = '.ironsave';

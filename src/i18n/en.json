@@ -1053,5 +1053,20 @@
   "ui.tooltip.vehicle.earned": "Lifetime revenue, the yearly rate beside it - hold it against the yearly upkeep above: a line that cannot out-earn its upkeep is a hobby.",
   "ui.tooltip.finance.valueGraph": "Company value = cash plus the fleet's book value minus the loan - one point per closed year, the last one is today. Buying a vehicle alone does not move it (money becomes book value); depreciation and profit do.",
   "ui.tooltip.line.networkValue": "This line's earned revenue divided by its vehicles' ceiling: capacity x tariff x top speed - what they would take with no loading time and a full load in both directions. Because the ceiling does not depend on the alignment, the percentage measures the network design rather than the size of the fleet. So far {earned} of {ceiling}.",
-  "ui.tooltip.finance.networkValue": "The whole fleet's earned revenue divided by its ceiling: capacity x tariff x top speed - what the vehicles would take with no loading time and a full load in both directions. The ceiling depends on the vehicles alone and never on the alignment: the whole difference between a smooth, signalled line and a slapdash one lands in the numerator. Parked vehicles count. So far {earned} of {ceiling}."
+  "ui.tooltip.finance.networkValue": "The whole fleet's earned revenue divided by its ceiling: capacity x tariff x top speed - what the vehicles would take with no loading time and a full load in both directions. The ceiling depends on the vehicles alone and never on the alignment: the whole difference between a smooth, signalled line and a slapdash one lands in the numerator. Parked vehicles count. So far {earned} of {ceiling}.",
+  "cmd.reject.brushTooLarge": "That brush is larger than one workshop action may be.",
+  "cmd.reject.invalidRegion": "Those numbers do not describe a region.",
+  "cmd.reject.nothingToPaint": "Nothing in that region is ground this tool may write on.",
+  "cmd.reject.badTownSite": "No town can stand here: too steep, too wet, or too near the map edge.",
+  "cmd.reject.townTooClose": "The nearest town is too close.",
+  "cmd.reject.tooManyTowns": "The map already carries as many towns as the generator would place.",
+  "cmd.reject.badIndustrySite": "This ground does not satisfy that industry's placement rules.",
+  "cmd.reject.industryTooClose": "The nearest industry is too close.",
+  "cmd.reject.unknownType": "There is no such type.",
+  "cmd.reject.riverNeedsSeaLevel": "A river needs sea level: this ground cannot be dug that far in one command. Standing water halfway up a hill is not something this game holds.",
+  "editor.tool.terraformBrushRegion": "Terrain brush",
+  "editor.tool.placeTownSeed": "Found town",
+  "editor.tool.placeIndustryAt": "Site industry",
+  "editor.tool.paintForest": "Plant wood",
+  "editor.tool.paintRiver": "Cut river"
 }

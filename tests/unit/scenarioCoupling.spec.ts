@@ -378,6 +378,7 @@ const NEW_GAME_FIELDS: Record<keyof Required<NewGameParams>, true> = {
   weather: true,
   elections: true,
   economy: true,
+  editorMode: true,
   goals: true,
 };
 
@@ -392,6 +393,14 @@ const NOT_LOCKABLE: readonly { field: string; reason: string }[] = [
   {
     field: 'companyColorIndex',
     reason: 'the same, one field over',
+  },
+  {
+    field: 'editorMode',
+    reason:
+      'the rule of the WORKSHOP a scenario was made in, not of the world it ships (SPEC2 M22). ' +
+      'A scenario that pinned it would hand every player a game in which nothing costs anything ' +
+      'and no ground belongs to anybody - the opposite of what a locked rule is for, which is ' +
+      'to guarantee the author the conditions the goals were calibrated under',
   },
   {
     field: 'aiCompanies',

@@ -7,7 +7,15 @@ import {
   TAKT_MAX_TICKS,
   TAKT_MIN_TICKS,
 } from '../constants';
-import { bookExpense, repayLoan, takeLoan } from '../economy/company';
+import { repayLoan, takeLoan } from '../economy/company';
+import { affordable, buildBudgetCt, chargeBuild } from './editorRule';
+import {
+  paintForest,
+  paintRiver,
+  placeIndustryAt,
+  placeTownSeed,
+  terraformBrushRegion,
+} from './editor';
 import type { ModuleKind } from '../station/types';
 import { waypointServes } from '../map/waypoints';
 import { reAnchorVehicle, releaseVehicle, scheduleOf } from '../lines/LineStore';
@@ -112,13 +120,31 @@ export function executeCommand(world: World, command: Command): CommandOutcome {
         world.map,
         command.x,
         command.y,
-        world.company.cashCt,
+        buildBudgetCt(world),
         world.company.id,
       );
       if (!result.ok) return { ok: false, reasonKey: result.reasonKey ?? '' };
-      chargeCompany(world, result.costCt);
+      chargeBuild(world, result.costCt);
       return ACCEPTED;
     }
+
+    // The five commands of the scenario workshop (SPEC2 M22). Ordinary
+    // commands in every respect - queue, owner, price, refusal vocabulary,
+    // parser case - which is what makes an author's map a replayable log.
+    case CommandKind.TerraformBrushRegion:
+      return terraformBrushRegion(world, command.x, command.y, command.radius, command.direction);
+
+    case CommandKind.PlaceTownSeed:
+      return placeTownSeed(world, command.x, command.y, command.sizeClass);
+
+    case CommandKind.PlaceIndustryAt:
+      return placeIndustryAt(world, command.x, command.y, command.industryType);
+
+    case CommandKind.PaintForest:
+      return paintForest(world, command.x, command.y, command.radius);
+
+    case CommandKind.PaintRiver:
+      return paintRiver(world, command.x, command.y, command.radius);
 
     case CommandKind.BuildTrack:
       return buildTrack(
@@ -629,17 +655,12 @@ function terraform(
 ): CommandOutcome {
   const estimate = estimateTerraform(world.map, x, y, direction, world.company.id);
   if (!estimate.ok) return { ok: false, reasonKey: estimate.reasonKey ?? '' };
-  if (world.costCt(estimate.costCt) > world.company.cashCt) {
+  if (!affordable(world, world.costCt(estimate.costCt))) {
     return { ok: false, reasonKey: RejectReason.InsufficientFunds };
   }
 
   const result = applyTerraform(world.map, x, y, direction, world.company.id);
   if (!result.ok) return { ok: false, reasonKey: result.reasonKey ?? '' };
-  chargeCompany(world, world.costCt(result.costCt));
+  chargeBuild(world, world.costCt(result.costCt));
   return ACCEPTED;
-}
-
-/** Book a construction expense against cash, annual profit and the month. */
-function chargeCompany(world: World, amountCt: number): void {
-  bookExpense(world.company, amountCt);
 }

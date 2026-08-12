@@ -75,7 +75,7 @@ export function targetTownCount(size: number): number {
 }
 
 /** A tile is a usable town centre if it is flat, dry and not on the border. */
-function isValidCentre(map: TileMap, x: number, y: number): boolean {
+export function isValidCentre(map: TileMap, x: number, y: number): boolean {
   if (x < BORDER_MARGIN || y < BORDER_MARGIN) return false;
   if (x >= map.size - BORDER_MARGIN || y >= map.size - BORDER_MARGIN) return false;
   if (map.terrain[map.tileIndex(x, y)] === Terrain.Water) return false;
@@ -771,6 +771,56 @@ function layOutTown(map: TileMap, town: Town, rng: Rng): void {
   paveTownGround(map, town, radius);
 }
 
+/**
+ * A fresh town record at its starting population, with nothing built yet.
+ *
+ * Split out of {@link generateTowns} so the workshop's `PlaceTownSeed` (SPEC2
+ * M22) creates the SAME record the generator does: a town with a field the
+ * generator fills and a hand-placed one does not is a town that behaves
+ * differently in the growth pass, the council and the save, and nothing would
+ * notice until a scenario was played.
+ */
+export function newTown(id: number, name: string, x: number, y: number, sizeClass: TownSize): Town {
+  return {
+    id,
+    name,
+    x,
+    y,
+    sizeClass,
+    population: TOWN_START_POPULATION[sizeClass],
+    radius: TOWN_START_RADIUS[sizeClass],
+    producedThisMonth: 0,
+    transportedThisMonth: 0,
+    transportedByCompany: [],
+    councilRating: [],
+    councilGoodwill: [],
+    exclusiveCompanyId: -1,
+    exclusiveUntilTick: 0,
+    measureReadyTick: [],
+    // Every town is born with a balanced council and no paid-for walls; a
+    // world whose elections rule is off keeps both for ever (SPEC2 M20).
+    councilProfile: CouncilProfile.Balanced,
+    noiseBarrierUntilTick: [],
+    goodsDeliveredThisMonth: 0,
+    foodDeliveredThisMonth: 0,
+    electronicsDeliveredThisMonth: 0,
+    buildingMaterialThisMonth: 0,
+    supplyProducedMean: 0,
+    supplyTransportedMean: 0,
+    supplyMonths: 0,
+    roadTilesThisMonth: 0,
+  };
+}
+
+/**
+ * Put one town on the ground: claim its area, then lay it out in D-216's five
+ * passes. The generator's own two calls, exported as one for `PlaceTownSeed`.
+ */
+export function settleTown(map: TileMap, town: Town, rng: Rng): void {
+  claimArea(map, town);
+  layOutTown(map, town, rng);
+}
+
 /** Create every town of the map, laid out and claimed. */
 export function generateTowns(map: TileMap, rng: Rng): Town[] {
   const centres = placeCentres(map, rng, targetTownCount(map.size));
@@ -780,39 +830,9 @@ export function generateTowns(map: TileMap, rng: Rng): Town[] {
   for (let i = 0; i < centres.length; i++) {
     const centre = centres[i]!;
     const sizeClass = rollSizeClass(rng);
-    const town: Town = {
-      id: i,
-      name: names.next(),
-      x: centre.x,
-      y: centre.y,
-      sizeClass,
-      population: TOWN_START_POPULATION[sizeClass],
-      radius: TOWN_START_RADIUS[sizeClass],
-      producedThisMonth: 0,
-      transportedThisMonth: 0,
-      transportedByCompany: [],
-      councilRating: [],
-      councilGoodwill: [],
-      exclusiveCompanyId: -1,
-      exclusiveUntilTick: 0,
-      measureReadyTick: [],
-      // Every town is born with a balanced council and no paid-for walls; a
-      // world whose elections rule is off keeps both for ever (SPEC2 M20).
-      councilProfile: CouncilProfile.Balanced,
-      noiseBarrierUntilTick: [],
-      goodsDeliveredThisMonth: 0,
-      foodDeliveredThisMonth: 0,
-      electronicsDeliveredThisMonth: 0,
-      buildingMaterialThisMonth: 0,
-      supplyProducedMean: 0,
-      supplyTransportedMean: 0,
-      supplyMonths: 0,
-      roadTilesThisMonth: 0,
-    };
+    const town = newTown(i, names.next(), centre.x, centre.y, sizeClass);
     towns.push(town);
-
-    claimArea(map, town);
-    layOutTown(map, town, rng);
+    settleTown(map, town, rng);
   }
   return towns;
 }

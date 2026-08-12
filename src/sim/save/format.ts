@@ -944,6 +944,50 @@ export function parseCommand(value: unknown, path: string): Command {
         contractId: asInt(raw['contractId'], `${path}.contractId`),
       };
 
+    // The five commands of the scenario workshop (SPEC2 M22). They go through
+    // this one parser like everything else, which is what makes an editor
+    // session a replayable log rather than a picture of a map.
+    case CommandKind.TerraformBrushRegion:
+      return {
+        kind: CommandKind.TerraformBrushRegion,
+        x: asInt(raw['x'], `${path}.x`),
+        y: asInt(raw['y'], `${path}.y`),
+        radius: asInt(raw['radius'], `${path}.radius`),
+        direction: asInt(raw['direction'], `${path}.direction`),
+      };
+
+    case CommandKind.PlaceTownSeed:
+      return {
+        kind: CommandKind.PlaceTownSeed,
+        x: asInt(raw['x'], `${path}.x`),
+        y: asInt(raw['y'], `${path}.y`),
+        sizeClass: asInt(raw['sizeClass'], `${path}.sizeClass`),
+      };
+
+    case CommandKind.PlaceIndustryAt:
+      return {
+        kind: CommandKind.PlaceIndustryAt,
+        x: asInt(raw['x'], `${path}.x`),
+        y: asInt(raw['y'], `${path}.y`),
+        industryType: asInt(raw['industryType'], `${path}.industryType`),
+      };
+
+    case CommandKind.PaintForest:
+      return {
+        kind: CommandKind.PaintForest,
+        x: asInt(raw['x'], `${path}.x`),
+        y: asInt(raw['y'], `${path}.y`),
+        radius: asInt(raw['radius'], `${path}.radius`),
+      };
+
+    case CommandKind.PaintRiver:
+      return {
+        kind: CommandKind.PaintRiver,
+        x: asInt(raw['x'], `${path}.x`),
+        y: asInt(raw['y'], `${path}.y`),
+        radius: asInt(raw['radius'], `${path}.radius`),
+      };
+
     case CommandKind.BuyExclusiveRights:
       return {
         kind: CommandKind.BuyExclusiveRights,
@@ -1443,6 +1487,10 @@ export function parseWorldState(value: unknown, path: string): WorldStateData {
     // different opinion in each.
     economy,
     economyCurve: parseEconomyCurve(stateRaw['economyCurve'], `${path}.economyCurve`, economy),
+    // The workshop rule of M22, required on the same terms as every rule above
+    // it: a save that has lost it is a save whose next build is charged
+    // differently after loading than before saving.
+    editorMode: asBoolean(stateRaw['editorMode'], `${path}.editorMode`),
     mapSize,
     rng: parseRngState(stateRaw['rng'], `${path}.rng`),
     companies: parseCompanies(stateRaw['companies'], `${path}.companies`),

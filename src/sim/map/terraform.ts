@@ -200,6 +200,69 @@ function collectAffected(
   return { ok: true, corners: affected };
 }
 
+/**
+ * Ask the shoreline question of EVERY tile, not only of the corners one action
+ * moved.
+ *
+ * `enforceSlopeInvariant` is a whole-map sweep and reports how many corners it
+ * pulled down, never which ones, so a bulk edit that ends in it has no corner
+ * list to hand {@link refreshShoreline}. Rather than invent one, the workshop's
+ * brush asks the same question everywhere - it is outside the hot path by
+ * construction (the M22 ledger row is +0.00 ms for exactly this reason), and a
+ * complete pass cannot leave a tile whose terrain disagrees with its own
+ * corners, which is the whole failure this bundle exists to keep out of player
+ * maps.
+ *
+ * Returns true when anything changed, on the same terms as the corner-local
+ * version, and does the same relabelling when it did.
+ */
+export function refreshShorelineEverywhere(map: TileMap): boolean {
+  let changed = false;
+  for (let y = 0; y < map.size; y++) {
+    for (let x = 0; x < map.size; x++) {
+      const index = map.tileIndex(x, y);
+      const submerged = map.isSubmerged(x, y);
+      const isWater = map.terrain[index] === Terrain.Water;
+      if (submerged && !isWater) {
+        map.terrain[index] = Terrain.Water;
+        changed = true;
+      } else if (!submerged && isWater) {
+        map.terrain[index] =
+          map.baseHeight(x, y) <= SEA_LEVEL + 1 ? Terrain.Coast : Terrain.Grass;
+        changed = true;
+      }
+    }
+  }
+  if (changed) {
+    markOcean(map);
+    computeLandmasses(map);
+  }
+  return changed;
+}
+
+/**
+ * How many tiles hold water their own corners do not justify.
+ *
+ * The measuring instrument behind SPEC2 M22's "standing water at height X":
+ * `applyRivers` paints `Terrain.Water` along a traced course whatever height
+ * the valley is at, while every shoreline refresh since M2 answers the question
+ * with {@link TileMap.isSubmerged} alone - so a mountain river is water until
+ * the first terraform anywhere near it, and then it is grass. The editor's own
+ * commands may never add to this count (that is what `PaintRiver` refusing to
+ * write terrain buys); what the GENERATOR leaves behind is measured rather than
+ * asserted away, and `tests/unit/editorCommands.spec.ts` pins both halves.
+ */
+export function standingWaterAboveSeaLevel(map: TileMap): number {
+  let count = 0;
+  for (let y = 0; y < map.size; y++) {
+    for (let x = 0; x < map.size; x++) {
+      if (map.terrain[map.tileIndex(x, y)] !== Terrain.Water) continue;
+      if (!map.isSubmerged(x, y)) count++;
+    }
+  }
+  return count;
+}
+
 /** Recompute water, coast and the derived layers after the shoreline moved. */
 function refreshShoreline(map: TileMap, corners: readonly number[]): boolean {
   const stride = map.size + 1;
@@ -384,6 +447,191 @@ export function levelTile(
         return changedCorners > 0
           ? { ok: true, costCt, changedCorners, changedShoreline }
           : { ok: false, reasonKey: result.reasonKey, costCt, changedCorners, changedShoreline };
+      }
+      costCt += result.costCt;
+      changedCorners += result.changedCorners;
+      changedShoreline = changedShoreline || result.changedShoreline;
+    }
+  }
+  return { ok: true, costCt, changedCorners, changedShoreline };
+}
+
+/**
+ * The scenario workshop's bulk terraform (SPEC2 M22).
+ *
+ * ONE function for the preview and for the command, which is D-119's rule
+ * applied to the dearest edit in the game: `commit: false` runs the WHOLE
+ * operation against the real map and then puts every byte it touched back, so
+ * the figure the palette quotes is not computed by a second implementation
+ * that agrees with this one today. Restoring the two revision counters is part
+ * of that - a preview that bumped them would make the renderer rebuild the
+ * world on every pointer move, and a preview must be observable in nothing but
+ * its answer.
+ *
+ * The region is the square of CORNERS of half width `radius` around (x, y),
+ * walked row-major, which is a total order no two corners tie on (law #3). Each
+ * corner runs the ordinary single-corner cascade - so the invariant, the
+ * obstruction guard of E-11 and the pricing are all exactly the ones a single
+ * click obeys - and the sweep afterwards is SPEC2 M22's own second half: the
+ * cascade holds the invariant per corner, `enforceSlopeInvariant` proves it for
+ * the region, and anything it pulls down asks the shoreline question again.
+ *
+ * A corner that refuses does NOT refuse the brush: a bulk tool that stopped at
+ * the first boulder would be unusable on real ground. The behaviour is
+ * `levelTile`'s, one instrument up - what moved is applied and paid for, and a
+ * brush that moved NOTHING answers with the first concrete reason it met
+ * (section 17.3) rather than a generic no.
+ *
+ * `budgetCt` is checked before every corner, so the operation can never move
+ * ground the caller cannot pay for.
+ */
+export function terraformBrush(
+  map: TileMap,
+  x: number,
+  y: number,
+  radius: number,
+  direction: TerraformDirection,
+  actor: number,
+  budgetCt: number,
+  commit: boolean,
+): TerraformResult {
+  if (radius < 0 || x < 0 || y < 0 || x > map.size || y > map.size) return REJECTED_OUT_OF_RANGE;
+
+  const savedHeights = commit ? null : Uint8Array.from(map.cornerHeight);
+  const savedTerrain = commit ? null : Uint8Array.from(map.terrain);
+  const savedRevision = map.revision;
+  const savedTrackRevision = map.trackRevision;
+
+  let costCt = 0;
+  let changedCorners = 0;
+  let changedShoreline = false;
+  let firstRefusal: string | null = null;
+
+  for (let cy = y - radius; cy <= y + radius; cy++) {
+    if (cy < 0 || cy > map.size) continue;
+    for (let cx = x - radius; cx <= x + radius; cx++) {
+      if (cx < 0 || cx > map.size) continue;
+
+      const estimate = estimateTerraform(map, cx, cy, direction, actor);
+      if (!estimate.ok) {
+        if (firstRefusal === null) firstRefusal = estimate.reasonKey ?? '';
+        continue;
+      }
+      if (costCt + estimate.costCt > budgetCt) {
+        if (firstRefusal === null) firstRefusal = TerraformReason.TooExpensive;
+        continue;
+      }
+
+      const result = applyTerraform(map, cx, cy, direction, actor);
+      if (!result.ok) {
+        if (firstRefusal === null) firstRefusal = result.reasonKey ?? '';
+        continue;
+      }
+      costCt += result.costCt;
+      changedCorners += result.changedCorners;
+      changedShoreline = changedShoreline || result.changedShoreline;
+    }
+  }
+
+  // SPEC2 M22 asks for the cascade AND the sweep, and the sweep is not
+  // decoration: it is the proof that a bulk edit cannot leave the map in a
+  // state the sixteen slopes cannot express. In practice the cascades have
+  // already held it and this moves nothing - which is an assertion in
+  // `tests/unit/editorCommands.spec.ts`, not an assumption here.
+  if (changedCorners > 0 && map.enforceSlopeInvariant() > 0) {
+    map.noteChange();
+    changedShoreline = refreshShorelineEverywhere(map) || changedShoreline;
+  }
+
+  if (savedHeights !== null && savedTerrain !== null) {
+    map.cornerHeight.set(savedHeights);
+    if (changedShoreline) {
+      map.terrain.set(savedTerrain);
+      markOcean(map);
+      computeLandmasses(map);
+    }
+    map.revision = savedRevision;
+    map.trackRevision = savedTrackRevision;
+  }
+
+  if (changedCorners === 0) {
+    return {
+      ok: false,
+      reasonKey: firstRefusal ?? TerraformReason.AtLimit,
+      costCt: 0,
+      changedCorners: 0,
+      changedShoreline: false,
+    };
+  }
+  return { ok: true, costCt, changedCorners, changedShoreline };
+}
+
+/**
+ * Dig one tile down until the sea covers it, or refuse the tile whole.
+ *
+ * The engine behind `PaintRiver` and the reason that command writes no terrain
+ * at all (SPEC2 M22's "formalised or refused", decided as REFUSED): the game
+ * has exactly ONE water surface - "a tile is water when even its highest corner
+ * is at or below `SEA_LEVEL`" - and D-097 already recorded that there is no
+ * second level for a lock to connect. So the workshop may not paint standing
+ * water at height X; what it may do is take the ground away until the sea is
+ * there by the game's own rule, after which the water is as stable as any other
+ * coast and no later terraform can revert it.
+ *
+ * Atomic per tile: the caller passes `commit: false` first if it wants to know,
+ * and this function never leaves a tile half dug - a corner it cannot lower
+ * refuses before anything below it is written, exactly as `collectAffected`
+ * refuses a cascade.
+ */
+export function digTileToSeaLevel(
+  map: TileMap,
+  x: number,
+  y: number,
+  budgetCt: number,
+  actor: number,
+): TerraformResult {
+  if (!map.contains(x, y)) return REJECTED_OUT_OF_RANGE;
+
+  const stride = map.size + 1;
+  const corners = [
+    y * stride + x,
+    y * stride + x + 1,
+    (y + 1) * stride + x,
+    (y + 1) * stride + x + 1,
+  ];
+
+  let costCt = 0;
+  let changedCorners = 0;
+  let changedShoreline = false;
+
+  for (const corner of corners) {
+    while (map.cornerHeight[corner]! > SEA_LEVEL) {
+      const cx = corner % stride;
+      const cy = (corner / stride) | 0;
+
+      const estimate = estimateTerraform(map, cx, cy, TerraformDirection.Lower, actor);
+      if (!estimate.ok) {
+        return {
+          ok: false,
+          reasonKey: estimate.reasonKey,
+          costCt,
+          changedCorners,
+          changedShoreline,
+        };
+      }
+      if (costCt + estimate.costCt > budgetCt) {
+        return {
+          ok: false,
+          reasonKey: TerraformReason.TooExpensive,
+          costCt,
+          changedCorners,
+          changedShoreline,
+        };
+      }
+
+      const result = applyTerraform(map, cx, cy, TerraformDirection.Lower, actor);
+      if (!result.ok) {
+        return { ok: false, reasonKey: result.reasonKey, costCt, changedCorners, changedShoreline };
       }
       costCt += result.costCt;
       changedCorners += result.changedCorners;

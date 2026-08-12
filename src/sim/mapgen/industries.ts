@@ -116,6 +116,35 @@ function farEnoughFromOthers(placed: readonly Industry[], x: number, y: number):
   return true;
 }
 
+/**
+ * Why this exact spot will not take this works - the generator's own three
+ * placement questions, asked at ONE named tile instead of at a dart it threw
+ * (SPEC2 M22's `PlaceIndustryAt`).
+ *
+ * Exported rather than reimplemented so a hand-placed works and a generated one
+ * stand on the same rules by construction; `findSpot` below is these same three
+ * predicates behind a search loop, and a fourth answer here would be a second
+ * placement rule with nothing holding it to the first (the D-119 argument one
+ * subsystem along).
+ *
+ * Returns null when the spot is legal, or a stable tag naming which question
+ * refused - the caller turns it into its own rejection key.
+ */
+export function industrySiteRefusal(
+  map: TileMap,
+  spec: IndustrySpec,
+  towns: readonly Town[],
+  placed: readonly Industry[],
+  x: number,
+  y: number,
+): 'ground' | 'nearTerrain' | 'nearTown' | 'tooClose' | null {
+  if (!footprintFits(map, spec, x, y)) return 'ground';
+  if (!nearTerrainSatisfied(map, spec, x, y)) return 'nearTerrain';
+  if (!nearTownSatisfied(spec, towns, x, y)) return 'nearTown';
+  if (!farEnoughFromOthers(placed, x, y)) return 'tooClose';
+  return null;
+}
+
 /** Search a valid spot for one industry type. Returns null if none was found. */
 export function findSpot(
   map: TileMap,

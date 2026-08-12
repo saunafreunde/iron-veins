@@ -1,8 +1,8 @@
 {
-  "saveVersion": 32,
+  "saveVersion": 33,
   "seed": 424242,
   "ticks": 10000,
-  "hash": "29f227b0d3cf3db1",
+  "hash": "f1349c9b9c922981",
   "recordedOn": {
     "platform": "win32",
     "arch": "x64"

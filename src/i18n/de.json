@@ -1053,5 +1053,20 @@
   "ui.tooltip.vehicle.earned": "Lebenszeit-Ertrag, daneben die Jahresrate - gegen den Jahresunterhalt darüber halten: Eine Linie, die ihren Unterhalt nicht schlägt, ist ein Hobby.",
   "ui.tooltip.finance.valueGraph": "Firmenwert = Kasse plus Buchwert der Flotte minus Kredit - ein Punkt je abgeschlossenem Jahr, der letzte ist heute. Ein Fahrzeugkauf allein bewegt ihn nicht (Geld wird Buchwert); Abschreibung und Gewinn bewegen ihn.",
   "ui.tooltip.line.networkValue": "Verdienter Ertrag dieser Linie geteilt durch die Obergrenze ihrer Fahrzeuge: Kapazität × Tarif × Höchstgeschwindigkeit - was sie einbrächten, wenn sie ohne Ladezeit in beide Richtungen voll führen. Weil die Obergrenze nicht an der Trasse hängt, misst der Prozentsatz das Netzdesign und nicht die Flottengröße. Bisher {earned} von {ceiling}.",
-  "ui.tooltip.finance.networkValue": "Verdienter Ertrag der ganzen Flotte geteilt durch ihre Obergrenze: Kapazität × Tarif × Höchstgeschwindigkeit - was die Fahrzeuge einbrächten, wenn sie ohne Ladezeit in beide Richtungen voll führen. Die Obergrenze hängt nur an den Fahrzeugen, nie an der Trasse: der ganze Unterschied zwischen einer glatten, signalisierten Strecke und einer hingerotzten steht im Zähler. Abgestelltes Gerät zählt mit. Bisher {earned} von {ceiling}."
+  "ui.tooltip.finance.networkValue": "Verdienter Ertrag der ganzen Flotte geteilt durch ihre Obergrenze: Kapazität × Tarif × Höchstgeschwindigkeit - was die Fahrzeuge einbrächten, wenn sie ohne Ladezeit in beide Richtungen voll führen. Die Obergrenze hängt nur an den Fahrzeugen, nie an der Trasse: der ganze Unterschied zwischen einer glatten, signalisierten Strecke und einer hingerotzten steht im Zähler. Abgestelltes Gerät zählt mit. Bisher {earned} von {ceiling}.",
+  "cmd.reject.brushTooLarge": "Dieser Pinsel ist größer als eine Werkstatt-Aktion sein darf.",
+  "cmd.reject.invalidRegion": "Diese Angaben ergeben keine Region.",
+  "cmd.reject.nothingToPaint": "In dieser Region liegt nichts, worauf dieses Werkzeug schreiben darf.",
+  "cmd.reject.badTownSite": "Hier kann keine Stadt stehen: zu steil, zu nass oder zu nah am Kartenrand.",
+  "cmd.reject.townTooClose": "Die nächste Stadt liegt zu nah.",
+  "cmd.reject.tooManyTowns": "Die Karte trägt bereits so viele Städte, wie der Generator anlegen würde.",
+  "cmd.reject.badIndustrySite": "Dieses Gelände erfüllt die Standortregeln dieser Industrie nicht.",
+  "cmd.reject.industryTooClose": "Die nächste Industrie liegt zu nah.",
+  "cmd.reject.unknownType": "Diesen Typ gibt es nicht.",
+  "cmd.reject.riverNeedsSeaLevel": "Ein Fluss braucht Meereshöhe: Dieses Gelände lässt sich mit einem Befehl nicht so weit abtragen. Stehendes Wasser auf halber Höhe legt dieses Spiel nicht an.",
+  "editor.tool.terraformBrushRegion": "Geländepinsel",
+  "editor.tool.placeTownSeed": "Stadt gründen",
+  "editor.tool.placeIndustryAt": "Industrie setzen",
+  "editor.tool.paintForest": "Wald pflanzen",
+  "editor.tool.paintRiver": "Fluss ausheben"
 }

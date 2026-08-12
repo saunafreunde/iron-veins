@@ -1708,6 +1708,34 @@ function withMeasureSlots(entry: unknown): unknown {
 }
 
 /**
+ * M22 gave the game a scenario workshop (SPEC2 M22's one Z5 bump - v33).
+ *
+ * One field, and it enters a version 32 world as `false` for a reason that is
+ * the whole of it: `editorMode` suspends the funds check and the ownership
+ * check, and every world ever recorded by this game was played by a company
+ * that paid for what it built and owned the ground it stood on. Entering `true`
+ * would hand a loaded save a world in which nothing costs anything - not merely
+ * a different balance, a different set of ACCEPTED commands, which is law #3
+ * broken in the file (Fehlerkatalog 24).
+ *
+ * The five new command kinds of the same milestone need nothing here: a command
+ * kind is a number in a log, and a log written by an older build cannot contain
+ * one that did not exist. History is judged only by a build of its own version
+ * (D-131, E-11).
+ *
+ * A field already present is kept, for the reason `v30_to_v31` gives: the
+ * corpus trick wraps a CURRENT state in an old container, and a workshop world
+ * must not be told it is a game.
+ */
+const v32_to_v33: SaveMigration = (payload) => {
+  const inner = state(payload);
+  return {
+    ...payload,
+    state: { ...inner, editorMode: inner['editorMode'] ?? false },
+  };
+};
+
+/**
  * Registry keyed by the version a migration reads (section 19.1).
  *
  * There is deliberately no entry for 1 -> 2: a version 1 world had no map at
@@ -1745,6 +1773,7 @@ export const SAVE_MIGRATIONS: ReadonlyMap<number, SaveMigration> = new Map<numbe
   [29, v29_to_v30],
   [30, v30_to_v31],
   [31, v31_to_v32],
+  [32, v32_to_v33],
 ]);
 
 /**

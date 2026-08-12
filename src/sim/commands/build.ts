@@ -1,4 +1,4 @@
-import { bookExpense } from '../economy/company';
+import { affordable, chargeBuild, ownershipWaived, refundBuild } from './editorRule';
 import {
   AUTO_SIGNAL_STATION_RADIUS,
   CANOPY_COST_CT,
@@ -111,6 +111,11 @@ function reject(reasonKey: string): CommandOutcome {
  * own streets public for ever: extending one does not buy it.
  */
 function mayBuildOn(world: World, tile: number): boolean {
+  // The ONE ownership question in the build layer, and therefore the one place
+  // the workshop rule of SPEC2 M22 answers it: inside an editor world every
+  // tile is the author's, because a workshop that refused to move a
+  // competitor's ground would be refusing to edit the world it exists to edit.
+  if (ownershipWaived(world)) return true;
   const owner = world.map.owner[tile]!;
   return owner === TILE_PUBLIC || owner === world.company.id;
 }
@@ -255,7 +260,7 @@ export function buildRoad(
 
   const cost = newTiles * ROAD_COST_PER_TILE_CT;
   const chargeCt = world.costCt(cost);
-  if (chargeCt > world.company.cashCt) return reject(RejectReason.InsufficientFunds);
+  if (!affordable(world, chargeCt)) return reject(RejectReason.InsufficientFunds);
   // A run that lays no NEW tile may still be work: two roads that meet without
   // being joined are two roads, and joining them is what the drag NAMES. The
   // guard used to ask only about tiles and stood in front of the connect loop
@@ -275,7 +280,7 @@ export function buildRoad(
     if (i > 0) connect(world, tiles[i - 1]!, tile);
   }
 
-  bookExpense(world.company, chargeCt);
+  chargeBuild(world, chargeCt);
   world.company.infrastructureUpkeepPerYearCt += newTiles * ROAD_UPKEEP_PER_TILE_CT;
   world.company.fixedAssetsCt += cost;
   world.map.noteChange();
@@ -311,7 +316,7 @@ export function demolishRoad(world: World, x: number, y: number): CommandOutcome
   if (world.map.waypoint[tile] === WaypointKind.Road) clearWaypoint(world, tile);
   releaseIfBare(world, tile);
 
-  world.company.cashCt += Math.round(ROAD_COST_PER_TILE_CT * DEMOLITION_REFUND);
+  refundBuild(world, Math.round(ROAD_COST_PER_TILE_CT * DEMOLITION_REFUND));
   world.company.infrastructureUpkeepPerYearCt -= ROAD_UPKEEP_PER_TILE_CT;
   world.map.noteChange();
   return ACCEPTED;
@@ -351,7 +356,7 @@ export function buildTrack(
   // down first.
   const grantShare = railType === RailType.Electrified ? electrificationGrantShare(world) : 0;
   const chargeCt = Math.round(world.costCt(route.costCt) * (1 - grantShare));
-  if (chargeCt > world.company.cashCt) return reject(RejectReason.InsufficientFunds);
+  if (!affordable(world, chargeCt)) return reject(RejectReason.InsufficientFunds);
 
   const map = world.map;
 
@@ -406,7 +411,7 @@ export function buildTrack(
     if (trackDegree(map.trackBits[tile]!) !== SIGNAL_TRACK_DEGREE) clearSignal(world, tile);
   }
 
-  bookExpense(world.company, chargeCt);
+  chargeBuild(world, chargeCt);
   world.company.infrastructureUpkeepPerYearCt += upkeepDelta;
   world.company.fixedAssetsCt += route.costCt;
   map.noteChange();
@@ -495,7 +500,7 @@ export function demolishTrack(world: World, x: number, y: number): CommandOutcom
     map.structureHeight[tile] = 0;
   }
 
-  world.company.cashCt += Math.round(RAIL_TYPE_COST_CT[railType]! * DEMOLITION_REFUND);
+  refundBuild(world, Math.round(RAIL_TYPE_COST_CT[railType]! * DEMOLITION_REFUND));
   world.company.infrastructureUpkeepPerYearCt -= RAIL_TYPE_UPKEEP_CT[railType]!;
   map.noteChange();
   return ACCEPTED;
@@ -539,10 +544,10 @@ export function buildSignal(
   if (permission !== null) return reject(permission);
   if (signalKind(map.signal[tile]!) !== SignalKind.None) return reject(RejectReason.SignalExists);
   const chargeCt = world.costCt(SIGNAL_COST_CT);
-  if (chargeCt > world.company.cashCt) return reject(RejectReason.InsufficientFunds);
+  if (!affordable(world, chargeCt)) return reject(RejectReason.InsufficientFunds);
 
   map.signal[tile] = packSignal(kind, direction);
-  bookExpense(world.company, chargeCt);
+  chargeBuild(world, chargeCt);
   world.company.infrastructureUpkeepPerYearCt += SIGNAL_UPKEEP_CT_PER_YEAR;
   world.company.fixedAssetsCt += SIGNAL_COST_CT;
   map.noteChange();
@@ -565,7 +570,7 @@ export function demolishSignal(world: World, x: number, y: number): CommandOutco
 function clearSignal(world: World, tile: number): void {
   if (signalKind(world.map.signal[tile]!) === SignalKind.None) return;
   world.map.signal[tile] = SignalKind.None;
-  world.company.cashCt += Math.round(SIGNAL_COST_CT * DEMOLITION_REFUND);
+  refundBuild(world, Math.round(SIGNAL_COST_CT * DEMOLITION_REFUND));
   world.company.infrastructureUpkeepPerYearCt -= SIGNAL_UPKEEP_CT_PER_YEAR;
   world.company.fixedAssetsCt -= SIGNAL_COST_CT;
 }
@@ -605,7 +610,7 @@ export function buildWaypoint(world: World, x: number, y: number): CommandOutcom
   if (permission !== null) return reject(permission);
 
   const chargeCt = world.costCt(WAYPOINT_COST_CT);
-  if (chargeCt > world.company.cashCt) return reject(RejectReason.InsufficientFunds);
+  if (!affordable(world, chargeCt)) return reject(RejectReason.InsufficientFunds);
 
   // A buoy takes its open-water tile, exactly as a station module takes its
   // ground - that claim is what the terraform guard and competing builders
@@ -613,7 +618,7 @@ export function buildWaypoint(world: World, x: number, y: number): CommandOutcom
   if (map.owner[tile] === TILE_PUBLIC) map.owner[tile] = world.company.id;
   map.waypoint[tile] = kind;
 
-  bookExpense(world.company, chargeCt);
+  chargeBuild(world, chargeCt);
   world.company.infrastructureUpkeepPerYearCt += WAYPOINT_UPKEEP_CT_PER_YEAR;
   world.company.fixedAssetsCt += WAYPOINT_COST_CT;
   map.noteChange();
@@ -643,7 +648,7 @@ function clearWaypoint(world: World, tile: number): void {
   if (map.waypoint[tile] === WaypointKind.None) return;
   map.waypoint[tile] = WaypointKind.None;
   releaseIfBare(world, tile);
-  world.company.cashCt += Math.round(WAYPOINT_COST_CT * DEMOLITION_REFUND);
+  refundBuild(world, Math.round(WAYPOINT_COST_CT * DEMOLITION_REFUND));
   world.company.infrastructureUpkeepPerYearCt -= WAYPOINT_UPKEEP_CT_PER_YEAR;
   world.company.fixedAssetsCt -= WAYPOINT_COST_CT;
 }
@@ -755,7 +760,7 @@ export function buildRoadStop(
   if (permission !== null) return reject(permission);
 
   const chargeCt = world.costCt(plan.costCt);
-  if (chargeCt > world.company.cashCt) return reject(RejectReason.InsufficientFunds);
+  if (!affordable(world, chargeCt)) return reject(RejectReason.InsufficientFunds);
 
   if (plan.shape === RoadStopShape.Bay) {
     // The spur is ROAD, laid by the road command's own two writes, so
@@ -773,7 +778,7 @@ export function buildRoadStop(
 
   attachModule(world, { kind, tileIndex: tile, x, y });
 
-  bookExpense(world.company, chargeCt);
+  chargeBuild(world, chargeCt);
   world.company.infrastructureUpkeepPerYearCt += plan.upkeepCtPerYear;
   world.company.fixedAssetsCt += plan.costCt;
   world.map.noteChange();
@@ -808,11 +813,11 @@ export function buildRailStop(
   const cost = kind === ModuleKind.RailDepot ? RAIL_DEPOT_COST_CT : RAIL_PLATFORM_COST_CT;
   const upkeep = kind === ModuleKind.RailDepot ? RAIL_DEPOT_UPKEEP_CT : RAIL_PLATFORM_UPKEEP_CT;
   const chargeCt = world.costCt(cost);
-  if (chargeCt > world.company.cashCt) return reject(RejectReason.InsufficientFunds);
+  if (!affordable(world, chargeCt)) return reject(RejectReason.InsufficientFunds);
 
   attachModule(world, { kind, tileIndex: tile, x, y });
 
-  bookExpense(world.company, chargeCt);
+  chargeBuild(world, chargeCt);
   world.company.infrastructureUpkeepPerYearCt += upkeep;
   world.company.fixedAssetsCt += cost;
   world.map.noteChange();
@@ -851,11 +856,11 @@ export function buildWaterStop(
   const cost = kind === ModuleKind.ShipDepot ? SHIP_DEPOT_COST_CT : QUAY_COST_CT;
   const upkeep = kind === ModuleKind.ShipDepot ? SHIP_DEPOT_UPKEEP_CT : QUAY_UPKEEP_CT;
   const chargeCt = world.costCt(cost);
-  if (chargeCt > world.company.cashCt) return reject(RejectReason.InsufficientFunds);
+  if (!affordable(world, chargeCt)) return reject(RejectReason.InsufficientFunds);
 
   attachModule(world, { kind, tileIndex: tile, x, y });
 
-  bookExpense(world.company, chargeCt);
+  chargeBuild(world, chargeCt);
   world.company.infrastructureUpkeepPerYearCt += upkeep;
   world.company.fixedAssetsCt += chargeCt;
   map.noteChange();
@@ -912,11 +917,11 @@ export function buildAirport(world: World, x: number, y: number, kind: ModuleKin
   if (map.slopeAt(x, y) !== 0) return reject(RejectReason.TooSteep);
 
   const chargeCt = world.costCt(AIRPORT_COST_CT[size]!);
-  if (chargeCt > world.company.cashCt) return reject(RejectReason.InsufficientFunds);
+  if (!affordable(world, chargeCt)) return reject(RejectReason.InsufficientFunds);
 
   attachModule(world, { kind, tileIndex: tile, x, y });
 
-  bookExpense(world.company, chargeCt);
+  chargeBuild(world, chargeCt);
   world.company.infrastructureUpkeepPerYearCt += AIRPORT_UPKEEP_CT[size]!;
   world.company.fixedAssetsCt += chargeCt;
   map.noteChange();
@@ -947,12 +952,12 @@ export function buyAircraft(
   // Exactly the inflated list price in a world without the levy and before its
   // own year, so nothing before 2000 moves by a cent.
   const chargeCt = grantedPriceCt(world, spec.priceCt, vehiclePowerCode(spec.power));
-  if (chargeCt > world.company.cashCt) return reject(RejectReason.InsufficientFunds);
+  if (!affordable(world, chargeCt)) return reject(RejectReason.InsufficientFunds);
 
   const id = world.vehicles.create(specId, world.company.id, tile, world.tick, defaultCargo(spec));
   if (id === -1) return reject(RejectReason.TooManyVehicles);
 
-  bookExpense(world.company, chargeCt);
+  chargeBuild(world, chargeCt);
   world.company.vehicleUpkeepPerYearCt += spec.upkeepCtPerYear;
   world.company.fixedAssetsCt += chargeCt;
   return ACCEPTED;
@@ -990,12 +995,12 @@ export function buyShip(
   // Exactly the inflated list price in a world without the levy and before its
   // own year, so nothing before 2000 moves by a cent.
   const chargeCt = grantedPriceCt(world, spec.priceCt, vehiclePowerCode(spec.power));
-  if (chargeCt > world.company.cashCt) return reject(RejectReason.InsufficientFunds);
+  if (!affordable(world, chargeCt)) return reject(RejectReason.InsufficientFunds);
 
   const id = world.vehicles.create(specId, world.company.id, tile, world.tick, defaultCargo(spec));
   if (id === -1) return reject(RejectReason.TooManyVehicles);
 
-  bookExpense(world.company, chargeCt);
+  chargeBuild(world, chargeCt);
   world.company.vehicleUpkeepPerYearCt += spec.upkeepCtPerYear;
   world.company.fixedAssetsCt += chargeCt;
   return ACCEPTED;
@@ -1036,11 +1041,11 @@ export function buildStationModule(
 
   const cost = SUPPORT_MODULE_COST_CT[kind]!;
   const chargeCt = world.costCt(cost);
-  if (chargeCt > world.company.cashCt) return reject(RejectReason.InsufficientFunds);
+  if (!affordable(world, chargeCt)) return reject(RejectReason.InsufficientFunds);
 
   attachModule(world, { kind, tileIndex: tile, x, y });
 
-  bookExpense(world.company, chargeCt);
+  chargeBuild(world, chargeCt);
   world.company.infrastructureUpkeepPerYearCt += SUPPORT_MODULE_UPKEEP_CT[kind]!;
   world.company.fixedAssetsCt += cost;
   map.noteChange();
@@ -1098,7 +1103,7 @@ export function buyTrain(
   // what it cost in the money of its own year, and moving that here would
   // re-band every game this milestone did not touch).
   const assetCt = Math.round(aggregate.priceCt * (1 - cleanVehicleGrantShare(world, power)));
-  if (chargeCt > world.company.cashCt) return reject(RejectReason.InsufficientFunds);
+  if (!affordable(world, chargeCt)) return reject(RejectReason.InsufficientFunds);
 
   const id = world.vehicles.create(
     specIds[0]!,
@@ -1113,7 +1118,7 @@ export function buyTrain(
   world.vehicles.reliability[id] = aggregate.reliability0;
   world.vehicles.state[id] = VehicleState.Stopped;
 
-  bookExpense(world.company, chargeCt);
+  chargeBuild(world, chargeCt);
   world.company.vehicleUpkeepPerYearCt += aggregate.upkeepCtPerYear;
   world.company.fixedAssetsCt += assetCt;
   return ACCEPTED;
@@ -1145,7 +1150,7 @@ export function buyRoadVehicle(
   // Exactly the inflated list price in a world without the levy and before its
   // own year, so nothing before 2000 moves by a cent.
   const chargeCt = grantedPriceCt(world, spec.priceCt, vehiclePowerCode(spec.power));
-  if (chargeCt > world.company.cashCt) return reject(RejectReason.InsufficientFunds);
+  if (!affordable(world, chargeCt)) return reject(RejectReason.InsufficientFunds);
 
   const id = world.vehicles.create(specId, world.company.id, tile, world.tick, defaultCargo(spec));
   if (id === -1) return reject(RejectReason.TooManyVehicles);
@@ -1153,7 +1158,7 @@ export function buyRoadVehicle(
   world.vehicles.reliability[id] = spec.reliability0;
   world.vehicles.state[id] = VehicleState.Stopped;
 
-  bookExpense(world.company, chargeCt);
+  chargeBuild(world, chargeCt);
   world.company.vehicleUpkeepPerYearCt += spec.upkeepCtPerYear;
   // The list price less the same grant, for the reason `buyTrain` gives.
   world.company.fixedAssetsCt += Math.round(
@@ -1209,11 +1214,11 @@ export function refitVehicle(world: World, vehicleId: number, cargo: Cargo): Com
   if (refitCapacity(vehicles, vehicleId, cargo) <= 0) return reject(RejectReason.CannotCarry);
 
   const chargeCt = world.costCt(refitPriceCt(vehicles, vehicleId));
-  if (chargeCt > world.company.cashCt) return reject(RejectReason.InsufficientFunds);
+  if (!affordable(world, chargeCt)) return reject(RejectReason.InsufficientFunds);
 
   vehicles.refitCargo[vehicleId] = cargo;
   vehicles.refreshAggregate(vehicleId);
-  bookExpense(world.company, chargeCt);
+  chargeBuild(world, chargeCt);
   return ACCEPTED;
 }
 
@@ -1235,7 +1240,7 @@ export function demolishBuilding(world: World, x: number, y: number): CommandOut
   if (refusal !== null) return reject(refusal);
 
   const chargeCt = world.costCt(BUILDING_DEMOLITION_COST_CT);
-  if (chargeCt > world.company.cashCt) return reject(RejectReason.InsufficientFunds);
+  if (!affordable(world, chargeCt)) return reject(RejectReason.InsufficientFunds);
 
   map.buildingKind[tile] = 0;
   map.buildingLevel[tile] = 0;
@@ -1249,7 +1254,7 @@ export function demolishBuilding(world: World, x: number, y: number): CommandOut
     if (!inCatchment(station, x, y)) continue;
     refreshCommercialShare(map, station);
   }
-  bookExpense(world.company, chargeCt);
+  chargeBuild(world, chargeCt);
   bookDemolition(world, tile);
   map.noteChange();
   return ACCEPTED;
@@ -1276,7 +1281,7 @@ export function sellVehicle(world: World, vehicleId: number): CommandOutcome {
   const wear = Math.min(1, ageYears / spec.lifetimeYears);
   const refund = Math.round(priceCt * (1 - wear) * RESALE_SHARE);
 
-  world.company.cashCt += refund;
+  refundBuild(world, refund);
   world.company.vehicleUpkeepPerYearCt -= upkeepCt;
   world.company.fixedAssetsCt -= priceCt;
   // The store holds no reference to the world, so the track it claimed has to
