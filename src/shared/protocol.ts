@@ -2,6 +2,7 @@ import type { Command } from '../sim/commands/types';
 import type { Difficulty, MapClimate, WeatherRule } from '../sim/constants';
 import type { GoalSpec } from '../sim/goals/types';
 import type { MapGenPhase } from '../sim/mapgen';
+import type { ReliefImport } from '../sim/mapgen/heightmap';
 import type { ReplayVerification } from '../sim/save/replay';
 import type { ReplayMeta } from '../sim/save/replaySession';
 import type { ScenarioMeta } from '../sim/save/scenarioMeta';
@@ -551,8 +552,19 @@ export type MainToWorkerMessage =
   | { readonly type: 'requestScenario'; readonly meta: ScenarioMeta }
   /** Load a save from bytes the main thread read. */
   | { readonly type: 'loadSave'; readonly bytes: Uint8Array }
-  /** Throw the world away and generate a new one with these parameters. */
-  | { readonly type: 'newGame'; readonly options: NewGameOptions }
+  /**
+   * Throw the world away and generate a new one with these parameters.
+   *
+   * `relief` is the imported heightmap of SPEC2 M22 and rides BESIDE the
+   * options rather than inside them: everything in `NewGameOptions` is a world
+   * rule that ends up in the save and the hash, and a picture is not one. It is
+   * consumed by mapgen and dropped; what the world keeps is its corner grid.
+   */
+  | {
+      readonly type: 'newGame';
+      readonly options: NewGameOptions;
+      readonly relief?: ReliefImport;
+    }
   /**
    * Turn a file into a `.ironreplay` and describe it (SPEC2 M16). The bytes
    * may be a save - that is the "export replay from save" button - or a

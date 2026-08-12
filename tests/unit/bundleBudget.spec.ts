@@ -144,8 +144,30 @@ const DIST = join(REPO_ROOT, 'dist');
  * import chain that decodes, serialises or steps a world**: probed on the built
  * entry chunk, which contains no `decodeSave`, no `hashWorld`, no save magic
  * and no `streamFor`. 998,000 is the new measurement plus ~0.7 %.
+ *
+ * **Raised again for SPEC2 M22 bundle 3** (the heightmap import), and it caught
+ * the same class of thing a third time. **991,118 B -> 997,787 B, +6,669 B**,
+ * against 882 B of headroom under the old number. Split by deleting exactly the
+ * twenty-eight new catalogue lines from both languages and rebuilding
+ * (994,259 B): **+3,528 B are the i18n keys in two languages** - the import
+ * button and its two paragraphs, the contrast label and its paragraph, and the
+ * seven refusals a picture can earn - and the remaining **+3,141 B are the
+ * interface**: the new-game screen's import row, the contrast slider, the
+ * platform file dialog and the four contrast constants.
+ *
+ * **The finding**: the first build was 1,010,092 B, 12,092 B over, and the
+ * 11 kB was the PNG DECODER sitting in the entry chunk although the panel
+ * imports it dynamically. Vite says so in as many words - "dynamically imported
+ * by NewGameDialog.tsx but also statically imported by mapgen/index.ts, dynamic
+ * import will not move module into another chunk" - because `App.tsx` takes
+ * `MAPGEN_PHASE_COUNT` out of that barrel, so the whole of `mapgen` is in the
+ * entry chunk's graph and a dynamic import into it moves nothing. The reader
+ * moved to `src/sim/mapgen/heightmapFile.ts`, which NOTHING under `src/sim`
+ * imports, and it is a 3,133 B chunk of its own now - the D-192 pattern, found
+ * by the number rather than by review. 1,006,000 is the new measurement plus
+ * ~0.8 %.
  */
-const MAIN_CHUNK_BUDGET_BYTES = 998_000;
+const MAIN_CHUNK_BUDGET_BYTES = 1_006_000;
 
 /** The verdict, separated from the measuring so a planted size can be judged. */
 interface BudgetVerdict {

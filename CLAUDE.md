@@ -3286,3 +3286,75 @@ no saved field.
   Netzdesign 3.75, hard winter -4.36 %), determinism 33 green, unit 1,689 green
   - run rather than assumed, because two functions moved files and "identical
   arithmetic" is a claim until the digest agrees.
+
+## M22 bundle 3 - a picture as mapgen input (D-242)
+
+The heightmap import, and the second half of the sentence D-240 started. **No
+save bump** - v33 is bundle 1's and there was nothing to extend, which is a
+FINDING rather than a saving: the corner grid has been saved since there were
+maps, and an imported relief is a corner grid. Zero hashed bytes, zero RNG
+draws, zero snapshot bytes, zero atlas cells, zero new command kinds; all three
+pins unmoved and every band identical to D-241 to the euro.
+
+- **There are exactly TWO paths into a world's relief and this is the second**
+  (D-242). A company does not build a continent: the ground is what the game is
+  played on and the command log begins the moment it exists - `generateMap`'s
+  own standing since M2. The import replaces step 1 of section 6 and **nothing
+  else**; water, rivers, climate, towns and industries still grow from the SEED
+  on the imported ground, which is what makes an imported map a map rather than
+  a picture with no game on it. **The PNG is not kept**: read once, turned into
+  a Float32 corner field, sent through `erode`/`quantise`/`enforceSlopeInvariant`
+  and dropped. `erode` and `quantise` are EXPORTED from `heightfield.ts` rather
+  than copied, or the two chains would have parted at the first edit.
+- **The picture's edge decides the map size, and interpolation is refused.**
+  1025 px is the exact reading (one pixel per corner), 1024 px the one every
+  terrain tool exports (one per tile, last row and column clamped). No pixel is
+  ever interpolated - that invents relief the author did not draw. A power of
+  two and its successor are never both powers of two, so the rule is total and
+  the size buttons lock as soon as a picture is loaded.
+- **The contrast control turns around the grey at which the SEA ends, not
+  around mid grey, and the comparison is the argument.** Land share on one
+  256 ramp at contrast 0.25/0.5/1/2/4: **0.8779 five times** on the sea pivot
+  against 1.0000 / 1.0000 / 0.8779 / 0.7231 / 0.6223 on mid grey. Around mid
+  grey the slider is a sea-level control in disguise. What it DOES move is the
+  terracing: levels used **5 / 9 / 16 / 16**, step share **0.0156 / 0.0312 /
+  0.0623 / 0.0818** - **factor 5.2**. **Its limit is stated**: past saturation
+  more contrast makes flat sea floor and flat summit, so 4x falls back to
+  0.0730, and that reversal is a green assertion rather than a surprise.
+- **Erosion is what makes an imported picture PLAYABLE**, and the two cases are
+  told apart: on a ramp the talus already holds and the sweep pulls **0 corners**
+  (it is the proof, D-240's argument one bundle on); on per-pixel noise it is
+  the repair and pulls 16,829.
+- **Measured, and the number is the acceptance clause**: a 1024 PNG decodes and
+  generates in **2.46-2.53 s** (8 bit, pixel per tile) and **2.45-2.50 s**
+  (16 bit, pixel per corner) against the 8 s promise, with 140 towns, 165/169
+  industries and `worstTileSlope` **1**. The ORDINARY generated 1024 map costs
+  **2.62-2.74 s** on the same machine - the import is cheaper than the path that
+  already existed, because the noise field becomes a read and the chain runs once
+  instead of per seed attempt. Deliberately not a CI gate, for the reason the
+  frame-rate budgets are not one.
+- **A second PNG decoder, and a coupling test instead of a shared module**
+  (`src/sim/mapgen/png.ts`). `tools/bake-lib.ts` has one and cannot be reused -
+  `node tools/assets-bake.ts` runs on type stripping and cannot resolve `src/`'s
+  extensionless imports, the same wall that made the baker restate the 16.1
+  camera. So both decode the same bytes in a test and are compared pixel for
+  pixel. The new one reads **16-bit** samples (throwing away the low byte before
+  quantising into sixteen levels would be the terracing complaint self-inflicted)
+  and answers with **translation keys**. A browser decoder is refused by name:
+  `createImageBitmap` applies colour management, so one picture would become two
+  different maps on two machines - and a map is world state.
+- **The picture rides BESIDE the options**, never inside `NewGameParams`: every
+  field of that record is a world rule, and a picture is consumed once. In the
+  record it would have handed `scenarioCoupling.spec.ts` a rule with no saved
+  field, which is the shape Z2 refuses.
+- **The bundle budget caught the third one of these, which is what it is for.**
+  First build 1,010,092 B, 12,092 B over, and the 11 kB was the decoder sitting
+  in the ENTRY chunk although the panel imports it dynamically - `App.tsx` takes
+  `MAPGEN_PHASE_COUNT` out of the `mapgen` barrel, so the whole of mapgen is in
+  the entry graph and a dynamic import into it moves nothing (Vite says so out
+  loud). The reader moved to `src/sim/mapgen/heightmapFile.ts`, which nothing
+  under `src/sim` imports, and is a 3,133 B chunk of its own. Booked:
+  **991,118 -> 997,787 B**, of which +3,528 B are the 28 i18n lines in two
+  languages; budget 998,000 -> **1,006,000**.
+- Still owed by M22: the four benchmark maps and the milestone's own 6.1.1
+  ledger row.

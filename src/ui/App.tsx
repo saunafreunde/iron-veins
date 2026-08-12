@@ -323,8 +323,8 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
           )}
           {overlay === 'newGame' && (
             <NewGameDialog
-              onStart={(options) => {
-                client.newGame(options);
+              onStart={(options, relief) => {
+                client.newGame(options, relief);
                 setOverlay(null);
               }}
               onCancel={ready ? () => setOverlay('menu') : null}

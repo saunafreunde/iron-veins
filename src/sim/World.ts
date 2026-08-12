@@ -94,6 +94,7 @@ import { TileMap } from './map/TileMap';
 import { isLegalMapSize, mapSizeRefusal } from './map/size';
 import { computeLandmasses, markOcean } from './mapgen/hydrology';
 import { generateMap, type GeneratedWorld, type MapGenProgress } from './mapgen';
+import type { ReliefImport } from './mapgen/heightmap';
 import { Rng, streamSalt } from './rng';
 import { WeatherField } from './weather/field';
 import { updateWeather } from './weather/update';
@@ -638,13 +639,32 @@ export class World {
     return world;
   }
 
-  /** Start a new game: generates the map, then builds the world around it. */
-  static create(params: NewGameParams, report: MapGenProgress | null = null): World {
+  /**
+   * Start a new game: generates the map, then builds the world around it.
+   *
+   * `relief` is the imported heightmap of SPEC2 M22, and it is deliberately an
+   * ARGUMENT rather than a `NewGameParams` field. Every field of that record is
+   * a world RULE - saved, hashed, migrated, pinnable by a scenario - and a
+   * picture is none of those things: it is consumed here, once, and what
+   * survives is the corner grid every other world also carries. Putting it in
+   * the record would have handed `scenarioCoupling.spec.ts` a "rule" with no
+   * saved field behind it, which is the shape Z2 exists to refuse.
+   */
+  static create(
+    params: NewGameParams,
+    report: MapGenProgress | null = null,
+    relief: ReliefImport | null = null,
+  ): World {
     // Before mapgen, not after it: an illegal size must be refused BY the size
     // rule rather than by whatever mapgen happens to fail at first (D-198).
     World.refuseIllegalMapSize(params.mapSize);
     const generated = generateMap(
-      { size: params.mapSize, seed: params.seed, climate: params.climate },
+      {
+        size: params.mapSize,
+        seed: params.seed,
+        climate: params.climate,
+        ...(relief === null ? {} : { relief }),
+      },
       report,
     );
     return World.born(params, generated);

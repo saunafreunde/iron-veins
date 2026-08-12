@@ -295,6 +295,11 @@ body {
   font-size: 12px;
 }
 
+/* A refused file, an unusable choice: the same hint, in the colour that says so. */
+.panel__hint--warning {
+  color: var(--warning);
+}
+
 .readout {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

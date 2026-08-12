@@ -66,7 +66,7 @@ function sampleNoise(field: Float32Array, size: number, rng: Rng): void {
  * collected for a whole pass and applied afterwards, so the result does not
  * depend on the order in which corners are visited.
  */
-function erode(field: Float32Array, size: number, passes: number): void {
+export function erode(field: Float32Array, size: number, passes: number): void {
   const stride = size + 1;
   const delta = new Float32Array(field.length);
 
@@ -135,8 +135,16 @@ function erode(field: Float32Array, size: number, passes: number): void {
   }
 }
 
-/** Quantise the continuous field into the 16 height levels of the game. */
-function quantise(field: Float32Array, map: TileMap): void {
+/**
+ * Quantise the continuous field into the 16 height levels of the game.
+ *
+ * Exported since SPEC2 M22 so the heightmap import runs THIS chain rather than
+ * a second copy of it: `erode` and `quantise` are what decide what a relief
+ * looks like once it is a map, and an imported picture that went through a
+ * private twin would drift away from generated terrain the first time either
+ * was touched.
+ */
+export function quantise(field: Float32Array, map: TileMap): void {
   const heights = map.cornerHeight;
   for (let i = 0; i < heights.length; i++) {
     const level = Math.floor(field[i]! * HEIGHT_LEVELS);

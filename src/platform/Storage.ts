@@ -585,6 +585,57 @@ export async function exportCrashBundle(name: string, bytes: Uint8Array): Promis
   return true;
 }
 
+/** A file an author picked, with the name to show them beside the bytes. */
+export interface PickedFile {
+  readonly name: string;
+  readonly bytes: Uint8Array;
+}
+
+/**
+ * Take a heightmap PNG from wherever the author keeps it (SPEC2 M22).
+ *
+ * Deliberately no shelf, no index and no copy: a heightmap is read once, turned
+ * into a corner grid and forgotten (the picture is not part of the world), so
+ * there is nothing here for the game to list or keep. The NAME travels back
+ * only so the new-game screen can say which file it is holding - a file dialog
+ * that forgets what it opened is one an author cannot check.
+ *
+ * The dialog's filter is a courtesy and never the guard: a filter can be
+ * overridden in every file picker there is, so what decides whether these bytes
+ * are a heightmap is `readHeightmap`, which answers with a reason.
+ */
+export async function importHeightmap(): Promise<PickedFile | null> {
+  if (hasTauriRuntime()) {
+    const { open } = await import('@tauri-apps/plugin-dialog');
+    const path = await open({
+      multiple: false,
+      filters: [{ name: 'PNG', extensions: ['png'] }],
+    });
+    if (typeof path !== 'string') return null;
+    const { readFile } = await import('@tauri-apps/plugin-fs');
+    const bytes = await readFile(path);
+    const cut = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
+    return { name: path.slice(cut + 1), bytes };
+  }
+
+  return await new Promise<PickedFile | null>((resolve) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.png,image/png';
+    input.addEventListener('change', () => {
+      const file = input.files?.[0];
+      if (file === undefined) {
+        resolve(null);
+        return;
+      }
+      void file
+        .arrayBuffer()
+        .then((buffer) => resolve({ name: file.name, bytes: new Uint8Array(buffer) }));
+    });
+    input.click();
+  });
+}
+
 /** Take a save file from wherever the player keeps it. Null means they cancelled. */
 export async function importSave(): Promise<Uint8Array | null> {
   if (hasTauriRuntime()) {

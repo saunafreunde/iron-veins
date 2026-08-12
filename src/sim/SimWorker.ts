@@ -50,6 +50,7 @@ import {
   stationWaitingUnits,
 } from './lines/metrics';
 import type { NewGameOptions, SaveSlotKind } from '../shared/protocol';
+import type { ReliefImport } from './mapgen/heightmap';
 import { worldParamsFor } from './newGame';
 import { bookValueCt, companyValueCt, monthsInOrder } from './economy/ledger';
 import { contractProgress, isOpen } from './economy/contracts';
@@ -812,14 +813,25 @@ function loadSave(bytes: Uint8Array): void {
   adoptWorld(world, sink);
 }
 
-/** Throw the world away and generate a new one (section 20, M9). */
-function restart(options: NewGameOptions): void {
+/**
+ * Throw the world away and generate a new one (section 20, M9).
+ *
+ * `relief` is the imported heightmap of SPEC2 M22 - the SECOND and last
+ * sanctioned non-command path into a world, beside `generateMap` itself. It
+ * replaces the noise field and nothing else, and it is not kept: the picture
+ * ends here, the corner grid is what is saved.
+ */
+function restart(options: NewGameOptions, relief: ReliefImport | null): void {
   const sink = writer;
   if (sink === null) return;
 
-  world = World.create(worldParamsFor(options), (phase, seedAttempt) => {
-    scope.postMessage({ type: 'generating', phase, seedAttempt });
-  });
+  world = World.create(
+    worldParamsFor(options),
+    (phase, seedAttempt) => {
+      scope.postMessage({ type: 'generating', phase, seedAttempt });
+    },
+    relief,
+  );
   queue = new CommandQueue();
   checkpoints = new CheckpointRing();
   checkpoints.record(world, queue);
@@ -1095,7 +1107,7 @@ function handleMessage(message: MainToWorkerMessage): void {
 
     case 'newGame':
       abandonReplay();
-      restart(message.options);
+      restart(message.options, message.relief ?? null);
       return;
 
     case 'makeReplay':

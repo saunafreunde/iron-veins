@@ -15,6 +15,7 @@ import {
   type VehicleFrame,
 } from '../shared/snapshot';
 import type { Command } from '../sim/commands/types';
+import type { ReliefImport } from '../sim/mapgen/heightmap';
 import type { ScenarioMeta } from '../sim/save/scenarioMeta';
 import type { Difficulty, MapClimate } from '../sim/constants';
 import { handleWorkerCrash, recordCommand, recordWorldReplaced } from './crashReporter';
@@ -269,12 +270,20 @@ export class SimClient {
     this.post({ type: 'loadSave', bytes });
   }
 
-  /** Throw the world away and generate a new one. */
-  newGame(options: NewGameOptions): void {
+  /**
+   * Throw the world away and generate a new one.
+   *
+   * `relief` is an imported heightmap (SPEC2 M22). It travels once, is consumed
+   * by mapgen and is never held on this side: the world that comes back carries
+   * its corner grid like any other, and the picture has no further part in it.
+   */
+  newGame(options: NewGameOptions, relief: ReliefImport | null = null): void {
     const store = useSimStore.getState();
     store.resetWorld();
     recordWorldReplaced('newGame');
-    this.post({ type: 'newGame', options });
+    this.post(
+      relief === null ? { type: 'newGame', options } : { type: 'newGame', options, relief },
+    );
     // "Der Editor laeuft gegen eine pausierte Vor-Start-Welt" (SPEC2 M22).
     // Set HERE rather than on the screen that offered the checkbox, because
     // every door into a workshop world goes through this method and a clock

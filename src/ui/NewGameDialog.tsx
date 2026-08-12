@@ -1,16 +1,23 @@
 import { useState, type ReactElement } from 'react';
 import { t } from '../i18n';
+import { importHeightmap } from '../platform/Storage';
 import { COMPANY_COLORS } from '../shared/palette';
 import type { NewGameOptions } from '../shared/protocol';
 import {
   COMPANY_COLOR_COUNT,
   DEFAULT_MAP_SIZE,
   Difficulty,
+  HEIGHTMAP_CONTRAST_DEFAULT,
+  HEIGHTMAP_CONTRAST_MAX,
+  HEIGHTMAP_CONTRAST_MIN,
+  HEIGHTMAP_CONTRAST_STEP,
   MAP_SIZES,
   MAX_AI_COMPANIES,
   MapClimate,
   WeatherRule,
 } from '../sim/constants';
+import type { HeightmapImage, ReliefImport } from '../sim/mapgen/heightmap';
+import type { PngRefusal } from '../sim/mapgen/png';
 import { useSimStore } from './store';
 
 /**
@@ -52,11 +59,19 @@ function rollSeed(): number {
   return Math.floor(Math.random() * 0x1_0000_0000);
 }
 
+/** A heightmap this screen is holding: the picture, its file name and its map. */
+interface LoadedHeightmap {
+  readonly name: string;
+  readonly image: HeightmapImage;
+  /** The map edge length the picture's size dictates. */
+  readonly mapSize: number;
+}
+
 export function NewGameDialog({
   onStart,
   onCancel,
 }: {
-  readonly onStart: (options: NewGameOptions) => void;
+  readonly onStart: (options: NewGameOptions, relief: ReliefImport | null) => void;
   readonly onCancel: (() => void) | null;
 }): ReactElement {
   useSimStore((s) => s.locale);
@@ -87,6 +102,37 @@ export function NewGameDialog({
   // to be a map the game can play. What the flag adds is who is allowed to ask
   // for what (D-240): funds and ownership stop refusing, and nothing else does.
   const [editorMode, setEditorMode] = useState(false);
+  // The heightmap import of SPEC2 M22. It rides on this screen because it is a
+  // mapgen INPUT: the picture replaces the noise field and nothing else, so it
+  // is chosen exactly where a seed is chosen and at the same moment.
+  const [heightmap, setHeightmap] = useState<LoadedHeightmap | null>(null);
+  const [heightmapRefusal, setRefusal] = useState<PngRefusal | null>(null);
+  const [contrast, setContrast] = useState(HEIGHTMAP_CONTRAST_DEFAULT);
+
+  // The picture DECIDES the size: a 1025 square is a 1024 map corner for
+  // corner, a 1024 square is the same map read pixel per tile. Offering the
+  // size buttons beside it would be offering a choice that cannot be honoured
+  // without inventing or throwing away relief.
+  const effectiveMapSize = heightmap === null ? mapSize : heightmap.mapSize;
+
+  /**
+   * Read a file the author picked. The decoder lives in `src/sim` and is
+   * reached through a DYNAMIC import (D-191): a static one would pull mapgen
+   * and fflate into the entry chunk for a button most sessions never press.
+   */
+  async function pickHeightmap(): Promise<void> {
+    const picked = await importHeightmap();
+    if (picked === null) return;
+    const { readHeightmap } = await import('../sim/mapgen/heightmapFile');
+    const result = readHeightmap(picked.bytes);
+    if (!result.ok) {
+      setHeightmap(null);
+      setRefusal(result.refusal);
+      return;
+    }
+    setRefusal(null);
+    setHeightmap({ name: picked.name, image: result.image, mapSize: result.mapSize });
+  }
 
   return (
     <section className="panel panel--wide">
@@ -123,13 +169,66 @@ export function NewGameDialog({
           <button
             key={size}
             type="button"
-            className={size === mapSize ? 'button button--active' : 'button'}
+            disabled={heightmap !== null}
+            className={size === effectiveMapSize ? 'button button--active' : 'button'}
             onClick={() => setMapSize(size)}
           >
             {size}
           </button>
         ))}
       </div>
+
+      <span className="field__label field__label--spaced">{t('ui.newGame.heightmap')}</span>
+      <div className="button-row">
+        <button type="button" className="button" onClick={() => void pickHeightmap()}>
+          {t('ui.newGame.heightmapImport')}
+        </button>
+        {heightmap !== null && (
+          <button
+            type="button"
+            className="button"
+            onClick={() => {
+              setHeightmap(null);
+              setRefusal(null);
+            }}
+          >
+            {t('ui.newGame.heightmapClear')}
+          </button>
+        )}
+      </div>
+      {heightmapRefusal !== null && (
+        <p className="panel__hint panel__hint--warning">
+          {t(heightmapRefusal.reasonKey, heightmapRefusal.params)}
+        </p>
+      )}
+      {heightmap === null ? (
+        <p className="panel__hint">{t('ui.newGame.heightmapHint')}</p>
+      ) : (
+        <>
+          <p className="panel__hint">
+            {t('ui.newGame.heightmapLoaded', {
+              name: heightmap.name,
+              width: heightmap.image.width,
+              height: heightmap.image.height,
+              size: heightmap.mapSize,
+            })}
+          </p>
+          <label className="field">
+            <span className="field__label">
+              {t('ui.newGame.heightmapContrast', { value: contrast.toFixed(2) })}
+            </span>
+            <input
+              type="range"
+              min={HEIGHTMAP_CONTRAST_MIN}
+              max={HEIGHTMAP_CONTRAST_MAX}
+              step={HEIGHTMAP_CONTRAST_STEP}
+              value={contrast}
+              onChange={(event) => setContrast(Number(event.target.value))}
+            />
+          </label>
+          <p className="panel__hint">{t('ui.newGame.heightmapContrastHint')}</p>
+        </>
+      )}
 
       <span className="field__label field__label--spaced">{t('ui.newGame.difficulty')}</span>
       <div className="button-row">
@@ -279,24 +378,27 @@ export function NewGameDialog({
           className="button button--active"
           disabled={companyName.trim().length === 0}
           onClick={() =>
-            onStart({
-              seed,
-              difficulty,
-              climate,
-              mapSize,
-              companyName: companyName.trim(),
-              companyColorIndex,
-              inflation,
-              emissions,
-              occupancyPenalty,
-              signalPenalty,
-              roadCongestion,
-              weather,
-              elections,
-              economy,
-              aiCompanies,
-              editorMode,
-            })
+            onStart(
+              {
+                seed,
+                difficulty,
+                climate,
+                mapSize: effectiveMapSize,
+                companyName: companyName.trim(),
+                companyColorIndex,
+                inflation,
+                emissions,
+                occupancyPenalty,
+                signalPenalty,
+                roadCongestion,
+                weather,
+                elections,
+                economy,
+                aiCompanies,
+                editorMode,
+              },
+              heightmap === null ? null : { image: heightmap.image, contrast },
+            )
           }
         >
           {t('ui.newGame.start')}

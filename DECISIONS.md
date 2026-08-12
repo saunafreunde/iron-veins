@@ -16,11 +16,11 @@ no entry below. A number may appear under several topics.
   D-196, D-200, D-201, D-202, D-204, D-232, D-233, D-236, D-240
 - **Commands, snapshot & worker boundary:** D-004, D-005, D-006, D-011, D-032,
   D-100, D-111, D-145, D-146, D-148, D-162, D-174, D-176, D-179, D-187, D-189,
-  D-192, D-193, D-196, D-200, D-202, D-218, D-240, D-241
+  D-192, D-193, D-196, D-200, D-202, D-218, D-240, D-241, D-242
 - **Lines & timetables:** D-145, D-146, D-147, D-148, D-149, D-150, D-151,
   D-152, D-155, D-159
 - **Map generation & terrain:** D-018, D-019, D-020, D-021, D-022, D-023,
-  D-025, D-027, D-197, D-198, D-199, D-216, D-231, D-234, D-240
+  D-025, D-027, D-197, D-198, D-199, D-216, D-231, D-234, D-240, D-242
 - **Terraforming & structures:** D-028, D-034, D-050, D-051, D-052, D-124,
   D-141, D-240
 - **Save format, migrations & replays:** D-007, D-025, D-026, D-027, D-048,
@@ -64,21 +64,21 @@ no entry below. A number may appear under several topics.
 - **UI & input:** D-011, D-013, D-015, D-035, D-110, D-113, D-114, D-119,
   D-126, D-148, D-165, D-166, D-177, D-179, D-180, D-181, D-182, D-183, D-184,
   D-186, D-187, D-189, D-191, D-192, D-193, D-194, D-195, D-196, D-200, D-202,
-  D-210, D-241
+  D-210, D-241, D-242
 - **Performance & measurement:** D-002, D-120, D-135, D-136, D-161, D-162,
   D-163, D-164, D-167, D-170, D-171, D-172, D-173, D-174, D-176, D-177, D-184,
   D-185, D-186, D-187, D-191, D-192, D-193, D-196, D-200, D-201, D-202, D-205,
-  D-206, D-209, D-214, D-231, D-234, D-235, D-241
+  D-206, D-209, D-214, D-231, D-234, D-235, D-241, D-242
 - **Platform, tooling & build:** D-012, D-014, D-015, D-016, D-017, D-029,
   D-030, D-031, D-160, D-168, D-169, D-170, D-172, D-175, D-192, D-206, D-208,
-  D-227
+  D-227, D-242
 - **Crash safety:** D-132, D-139, D-190
 - **Testing method & fixtures:** D-010, D-038, D-072, D-074, D-084, D-133,
   D-167, D-183, D-186, D-188, D-189, D-190, D-191, D-192, D-193, D-194,
   D-195, D-196, D-197, D-198, D-199, D-200, D-201, D-202, D-203, D-204,
   D-205, D-207, D-206, D-208, D-209, D-210, D-212, D-213, D-215, D-216,
   D-217, D-219, D-220, D-221, D-222, D-228, D-229, D-230, D-231, D-233,
-  D-234, D-235, D-236, D-241
+  D-234, D-235, D-236, D-241, D-242
 - **Process & specification:** D-070, D-123, D-129, D-133, D-138, D-140,
   D-185, D-191, D-197, D-198, D-199, D-203, D-204, D-205, D-206, D-215,
   D-222, D-225, D-226, D-227, D-228, D-229, D-235
@@ -14414,3 +14414,167 @@ Farbe je Landmasse mit klarem Wasser, das Einzugsgebiet Zelle fuer Zelle gegen
 Welt exportiert und wieder eingelesen) - plus die geleerte `NO_UI_ISSUER` in
 `tests/unit/commandCoupling.spec.ts`, deren Meta-Tests unveraendert beweisen,
 dass der Audit noch feuert.
+
+### D-242 Das Bild als Mapgen-Eingabe: der zweite und letzte sanktionierte Nicht-Command-Pfad, mit einem Kontrastregler, der das Relief bewegt und nicht die Kueste
+
+SPEC2 M22, Bundle 3: Heightmap-Import. **Kein Save-Bump** - v33 gehoert Bundle 1,
+und dieser Bundle hatte nichts zu erweitern, was eine Feststellung ist und keine
+Ersparnis: das Eckengitter wird gespeichert, seit es Karten gibt, und ein
+importiertes Relief ist ein Eckengitter. Kein gehashtes Byte, kein RNG-Zug, kein
+Snapshot-Byte, keine Atlas-Zelle, kein neuer CommandKind; alle drei Pins
+unveraendert, jedes Balance-Band auf den Euro identisch mit D-241.
+
+**Warum das kein Command ist, und warum das der wichtigste Satz hier ist.**
+D-240 hat die Werkstatt auf Commands verpflichtet, weil eine gebaute Karte ein
+Befehlslog IST und ein Befehlslog der Beweiskette aus M16 vorgelegt werden kann.
+Der Import bricht das nicht, er liegt davor: eine Firma baut keinen Kontinent.
+Der Boden ist das, worauf gespielt wird, und das Log beginnt in dem Moment, in
+dem es ihn gibt - genau die Stellung, die `generateMap` seit M2 hat. Es gibt
+deshalb **exakt zwei** Wege in das Relief einer Welt, und der zweite tut
+buchstaeblich, was der erste tut: er ersetzt Schritt 1 aus Abschnitt 6 und
+**nichts sonst**. Wasser, Fluesse, Klima, Staedte und Industrien wachsen weiter
+aus dem Startwert auf dem importierten Boden, was der Grund ist, dass eine
+importierte Karte eine KARTE ist und nicht ein Bild ohne Spiel darauf.
+
+**Das PNG wird nicht behalten, und das ist pruefbar formuliert.** Gelesen,
+einmal, in ein Float32-Eckenfeld verwandelt, durch die eigene
+`erode`/`quantise`/`enforceSlopeInvariant`-Kette des Generators geschickt,
+verworfen. Kein zweites Dateiformat, kein Asset im Save, keine Welt, die von
+einem Bild abhaengt, das jemand inzwischen geloescht hat. `erode` und `quantise`
+sind dafuer aus `heightfield.ts` EXPORTIERT statt kopiert worden: ein Import, der
+durch einen privaten Zwilling liefe, waere beim ersten Edit an einem der beiden
+von erzeugtem Gelaende weggedriftet (Fehlerkatalog 26 eine Ebene tiefer).
+
+**Die Bildkante bestimmt die Kartengroesse, und es sind genau zwei Lesarten.**
+Eine Karte mit `n` Feldern hat ein `(n+1)^2`-Eckengitter, also ist `1025` die
+exakte Lesart (ein Pixel je Ecke) und `1024` die, die jedes Terrain-Werkzeug
+exportiert (ein Pixel je Feld, letzte Spalte und Zeile geklemmt). **Interpoliert
+wird nie** - das wuerde Relief erfinden, das der Autor nicht gezeichnet hat, und
+das Ergebnis von einer Rundungsregel abhaengig machen, die niemand sieht. Beide
+Lesarten koennen nie gleichzeitig gelten (eine Zweierpotenz und ihr Nachfolger
+sind nie beide Zweierpotenzen), also ist `mapSizeForHeightmap` total und die
+Groessenknoepfe des Startbildschirms werden gesperrt, sobald ein Bild liegt.
+
+**Der Kontrastregler dreht um die Graustufe, an der das Meer endet - nicht um
+Mittelgrau -, und die Messung ist das Argument.** `quantise` macht aus einem Grau
+`v` die Stufe `floor(v * 16)`, also faengt trockenes Land exakt bei
+`(SEA_LEVEL + 1) / HEIGHT_LEVELS` = 0,25 an. Gemessen auf derselben 256er-Rampe,
+Landanteil je Kontrast 0,25x / 0,5x / 1x / 2x / 4x:
+
+* Pivot auf dem Grau des Meeres: **0,8779 / 0,8779 / 0,8779 / 0,8779 / 0,8779**
+* Pivot auf Mittelgrau: 1,0000 / 1,0000 / 0,8779 / 0,7231 / 0,6223
+
+Um Mittelgrau ist derselbe Regler ein verkleideter Meeresspiegel-Regler: ganz
+links hat die Karte gar kein Meer, ganz rechts stehen 38 % unter Wasser. Um das
+Grau des Meeres bewegt sich die Kueste **um keine einzige Kachel**.
+
+**Was er dafuer bewegt, ist die Terrassierung, und "messbar" ist eine Zahl.**
+Eine Terrasse ist flacher Boden, also ist das Mass der STUFEN-Anteil. Auf
+derselben Rampe: Kontrast 0,25 / 0,5 / 1 / 2 - genutzte Hoehenstufen **5 / 9 / 16
+/ 16**, Stufenanteil **0,0156 / 0,0312 / 0,0623 / 0,0818**, also **Faktor 5,2**
+zwischen dem schwaechsten Wert und 2x. Das ist der Unterschied zwischen
+Hochzeitstorte und Hang. **Und die Grenze steht dabei statt versteckt zu werden**:
+ab dem Punkt, an dem das Bild saettigt, macht mehr Kontrast flachen Meeresboden
+und flache Gipfel statt mehr Relief - bei 4x faellt der Stufenanteil auf 0,0730
+zurueck. Die Heilung waere ein Auto-Levels-Durchgang, also ein zweiter Regler,
+den niemand bestellt hat und den der Autor nicht sieht; sie ist abgelehnt und der
+Rueckgang ist eine gruene Testzusicherung.
+
+**Die Erosion ist keine nachtraeglich angeschraubte Weichzeichnung, sie ist der
+Grund, dass ein Bild ueberhaupt spielbar ist**, und die beiden Faelle sind
+auseinandergehalten: auf einer Rampe ist der Talus schon eingehalten und der
+Sweep zieht **0 Ecken** - er ist der Beweis (D-240s Argument einen Bundle
+weiter); auf Pixelrauschen ist er die REPARATUR und zieht 16.829. Beide Haelften
+stehen als eigener Testfall da, damit keine von beiden als redundant
+wegargumentiert wird.
+
+**Die Abnahmemessung: 1024er-PNG, gueltige Karte, intakte Slope-Invariante.**
+Referenzmaschine, drei Laeufe je Variante, Dekodieren PLUS vollstaendiger
+`generateMap` mit den echten 40 Erosionsdurchlaeufen:
+
+| Eingabe | PNG | Dekodieren | Erzeugen | **Gesamt** | Ergebnis |
+| --- | --- | --- | --- | --- | --- |
+| 1024 px, 8 Bit (Pixel je Feld) | 247.085 B | 40-43 ms | 2.419-2.492 ms | **2,46-2,53 s** | 1024er-Karte, 140 Staedte, 165 Industrien, worstSlope **1** |
+| 1025 px, 16 Bit (Pixel je Ecke) | 1.550.188 B | 52-56 ms | 2.395-2.440 ms | **2,45-2,50 s** | 1024er-Karte, 140 Staedte, 169 Industrien, worstSlope **1** |
+
+Gegen die 8 s der Fertig-wenn-Klausel, also mit Faktor 3,2 Luft. Zum Vergleich
+auf derselben Maschine gemessen und nicht geschaetzt: die **gewoehnliche**
+erzeugte 1024er-Karte kostet **2,62-2,74 s** - der Import ist billiger als der
+Weg, den es schon gab, weil das Rauschfeld durch einen Lesevorgang ersetzt ist
+und die Kette einmal statt je Seed-Versuch laeuft (`generateMap` haelt das
+quantisierte Eckengitter fest und kopiert es je Versuch). Die Messung ist
+**keine CI-Schranke**, aus dem Grund, aus dem die Bildraten-Budgets keine sind:
+eine 1024er-Erzeugung in jedem Unit-Lauf waere zweieinhalb Sekunden fuer eine
+Zahl, die diese Suite nicht haelt.
+
+**16 Bit werden gelesen, und das ist der Grund, warum es einen zweiten Dekoder
+gibt.** `tools/bake-lib.ts` hat seit M12 einen PNG-Dekoder; er kann nicht
+wiederverwendet werden, weil `node tools/assets-bake.ts` auf Type-Stripping
+laeuft und die endungslosen `src/`-Importe nicht aufloest - dieselbe Wand, die
+den Baecker schon die 16.1-Kamerakonstanten wiederholen liess. Also dieselbe
+Antwort: **ein Kopplungstest** dekodiert dieselben Bytes durch beide und
+vergleicht Pixel fuer Pixel (Graustufen, RGB, Palette), so dass eine Divergenz
+ein roter Build ist. Was der neue kann und der alte nicht: 16-Bit-Samples (jedes
+Terrain-Werkzeug exportiert sie, und das niedrige Byte wegzuwerfen, bevor in 16
+Stufen quantisiert wird, waere die Terrassen-Enttaeuschung selbst verschuldet),
+Graustufen mit Alpha, und **Ablehnungen mit Uebersetzungsschluessel** statt
+geworfener englischer Saetze. Ein Browser-Dekoder (`createImageBitmap`) ist
+ausdruecklich abgelehnt: er wendet Farbmanagement an, dasselbe Bild wuerde auf
+zwei Maschinen zwei verschiedene Karten ergeben - und eine Karte ist Weltzustand.
+
+**Sieben Ablehnungen, jede mit den Zahlen darin, jede in beiden Katalogen.**
+`notPng`, `broken`, `interlaced`, `unsupportedDepth` (`{depth}`),
+`unsupportedColour` (`{colour}`), `notSquare` (`{width}x{height}`), `wrongSize`
+(`{width}`, mit den acht erlaubten Kantenlaengen im Satz). "Falsche Groesse" ohne
+Zahlen ist ein Satz, mit dem ein Autor nichts anfangen kann. Der Dateidialog
+filtert auf `.png` und das ist eine Hoeflichkeit und nie der Waechter - jeder
+Dateiauswaehler laesst sich uebersteuern, also entscheidet `readHeightmap`.
+
+**Das Bild reist NEBEN den Optionen, nicht darin** (`newGame`-Nachricht,
+`World.create`s dritter Parameter). Jedes Feld von `NewGameParams` ist eine
+Weltregel - gespeichert, gehasht, migriert, von einem Szenario pinnbar -, und ein
+Bild ist nichts davon: es wird hier einmal verbraucht, und was ueberlebt, ist das
+Eckengitter, das jede andere Welt auch hat. Im Record haette es
+`scenarioCoupling.spec.ts` eine "Regel" ohne gespeichertes Feld vorgesetzt, also
+genau die Form, fuer deren Ablehnung Z2 geschrieben wurde.
+
+**Das Bundle-Budget hat zum dritten Mal etwas gefangen, und zwar genau das,
+wofuer es da ist.** Der erste Build lag bei **1.010.092 B**, 12.092 B drueber,
+und die 11 kB waren der PNG-Dekoder im Entry-Chunk, obwohl das Panel ihn dynamisch
+importiert. Vite sagt es woertlich: "dynamically imported by NewGameDialog.tsx but
+also statically imported by mapgen/index.ts, dynamic import will not move module
+into another chunk" - weil `App.tsx` sich `MAPGEN_PHASE_COUNT` aus demselben
+Barrel holt, liegt ganz `mapgen` im Graphen des Entry-Chunks und ein dynamischer
+Import dorthinein verschiebt nichts. Die Lesehaelfte ist deshalb
+`src/sim/mapgen/heightmapFile.ts`, die **nichts unter `src/sim` importiert**, und
+ist jetzt ein eigener 3.133-B-Chunk. Gebucht mit der Messung: **991.118 ->
+997.787 B (+6.669)**, davon **+3.528 B die 28 i18n-Zeilen in zwei Sprachen**
+(gemessen, indem exakt diese Zeilen geloescht und neu gebaut wurde: 994.259 B) und
+**+3.141 B die Oberflaeche** (Import-Zeile, Kontrastregler, Dateidialog, vier
+Konstanten). Budget 998.000 -> **1.006.000**.
+
+**Nachgefahren statt behauptet**: `npm run test:balance:full` gruen bei 101 -
+Szenario 5 1.022.084 / 1.802.165 / 2.153.604 EUR, Punktzahl 5.889, Netzdesign
+3,75, Harter Winter -4,36 %, aiGame-Sweep 7.293.303 EUR -, Determinismus 33
+gruen (die acht ausgelieferten Szenarien hashen unveraendert, also hat sich kein
+erzeugtes Byte bewegt), Unit 1.739 gruen. `SAVE_VERSION` bleibt **33**,
+kanonischer Pin `f1349c9b9c922981`, Soak `1f1ac33ffed6afe9` bei 35 Kommandos,
+Korpus unveraendert.
+
+**Nicht geliefert und benannt**: die vier Benchmark-Karten aus M22s MUSS-Liste
+und die Ledger-Zeile 6.1.1 des Meilensteins sind Bundle 4. Und der Import kennt
+kein Auto-Levels und keine Bildskalierung - beides waere ein zweiter Regler
+hinter dem ersten, und die Groessenregel oben ist die Antwort auf die Frage, die
+eine Skalierung stellen wuerde.
+
+**Tests:** `tests/unit/heightmapImport.spec.ts` (25 Faelle: der Kopplungstest
+gegen `tools/bake-lib.ts` auf RGBA, Graustufen und Palette; 16-Bit-Praezision an
+einem Wert, den acht Bit nicht darstellen; sieben Ablehnungen, ihre Parameter und
+ihre Praesenz in de UND en; die acht erlaubten Kantenlaengen und vier abgelehnte;
+die Slope-Invariante auf Rauschen, Rampe und photoaehnlichem RGB bei drei
+Kontrasten, plus die Trennung von Sweep-als-Beweis und Sweep-als-Reparatur; die
+Kontrastkurve am Pivot und an ihren Klemmen; Terrassierung monoton mit Faktor >
+4; die Saettigungsgrenze; die unbewegte Kueste; eine importierte Welt mit
+Staedten und Industrien; Reproduzierbarkeit; und dass ein anderer Kontrast eine
+andere Karte ist). Jedes Bild in dieser Datei wird ERZEUGT - ein eingechecktes
+PNG waere genau der Bruch, den der Glob-Test aus E-14 bewacht.

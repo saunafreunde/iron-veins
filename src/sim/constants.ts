@@ -85,6 +85,43 @@ export const EROSION_TALUS = 1 / HEIGHT_LEVELS;
 /** Fraction of the excess height moved downhill per erosion pass. */
 export const EROSION_RATE = 0.5;
 
+// ------------------------------------------------------- heightmap import
+
+/**
+ * Grey value the import contrast turns AROUND. [1] - a fraction of full white
+ *
+ * Not mid-grey, and the difference is the whole point of the control. `quantise`
+ * turns a grey `v` into `floor(v * HEIGHT_LEVELS)`, so the first level that is
+ * dry land begins exactly at `(SEA_LEVEL + 1) / HEIGHT_LEVELS`. Pivoting there
+ * means the slider moves RELIEF and never the coastline: an author who wants
+ * more mountain does not have to watch half of their continent drown to get it.
+ * Around mid-grey the same slider is a sea-level control wearing a disguise.
+ */
+export const HEIGHTMAP_CONTRAST_PIVOT = (SEA_LEVEL + 1) / HEIGHT_LEVELS;
+
+/**
+ * Weakest import contrast: a quarter of the picture's own relief. [1]
+ *
+ * Below this a 16-level quantisation leaves at most four of them in use, which
+ * is a map that is flat rather than a map that is gentle.
+ */
+export const HEIGHTMAP_CONTRAST_MIN = 0.25;
+
+/**
+ * Strongest import contrast. [1]
+ *
+ * Four is where a picture using the full range saturates: the pivot sits at
+ * 0.25, so a factor of four already maps grey 0.5 onto white and every darker
+ * quarter onto the sea floor. Anything above it is the same map.
+ */
+export const HEIGHTMAP_CONTRAST_MAX = 4;
+
+/** The picture as it is - the neutral position of the slider. [1] */
+export const HEIGHTMAP_CONTRAST_DEFAULT = 1;
+
+/** Step of the contrast slider, so the value stays a short decimal. [1] */
+export const HEIGHTMAP_CONTRAST_STEP = 0.05;
+
 // -------------------------------------------------------------- climate
 
 /**

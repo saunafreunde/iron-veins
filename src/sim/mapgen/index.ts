@@ -11,6 +11,7 @@ import { Rng } from '../rng';
 import type { Town } from '../town/types';
 import { assignBiomes } from './climate';
 import { generateRelief } from './heightfield';
+import { applyHeightmapRelief, type ReliefImport } from './heightmap';
 import {
   computeLandmasses,
   floodSeaLevel,
@@ -50,6 +51,16 @@ export interface MapGenParams {
   readonly climate: MapClimate;
   /** Lower values make generation faster; only tests change this. */
   readonly erosionPasses?: number;
+  /**
+   * A relief the author imported instead of one the seed drew (SPEC2 M22).
+   *
+   * It replaces step 1 of section 6 and NOTHING else: water, rivers, climate,
+   * towns and industries are the seed's work on the imported ground, which is
+   * what makes an imported map a map this game can play rather than a picture
+   * with nothing on it. Absent means the noise field, i.e. every world before
+   * this milestone.
+   */
+  readonly relief?: ReliefImport;
 }
 
 export interface GeneratedWorld {
@@ -102,6 +113,7 @@ function generateOnce(
   params: MapGenParams,
   seed: number,
   report: MapGenProgress | null,
+  importedRelief: Uint8Array | null,
 ): {
   world: GeneratedWorld;
   playable: boolean;
@@ -111,7 +123,15 @@ function generateOnce(
   const attempt = seed - params.seed;
 
   report?.(MapGenPhase.Relief, attempt);
-  generateRelief(map, rng, params.erosionPasses ?? EROSION_PASSES);
+  if (importedRelief !== null) {
+    // The imported chain ran once, in `generateMap`. A retry changes the SEED,
+    // and the seed has nothing to do with an imported relief - re-eroding a
+    // million corners per attempt would be the same answer at twenty times the
+    // price, on the one path that has an eight-second promise over it.
+    map.cornerHeight.set(importedRelief);
+  } else {
+    generateRelief(map, rng, params.erosionPasses ?? EROSION_PASSES);
+  }
 
   report?.(MapGenPhase.Water, attempt);
   floodSeaLevel(map);
@@ -146,8 +166,15 @@ export function generateMap(
   params: MapGenParams,
   report: MapGenProgress | null = null,
 ): GeneratedWorld {
+  let importedRelief: Uint8Array | null = null;
+  if (params.relief !== undefined) {
+    const scratch = new TileMap(params.size);
+    applyHeightmapRelief(scratch, params.relief, params.erosionPasses ?? EROSION_PASSES);
+    importedRelief = new Uint8Array(scratch.cornerHeight);
+  }
+
   for (let attempt = 0; attempt < MAPGEN_MAX_SEED_RETRIES; attempt++) {
-    const result = generateOnce(params, (params.seed + attempt) | 0, report);
+    const result = generateOnce(params, (params.seed + attempt) | 0, report, importedRelief);
     if (result.playable) return result.world;
   }
   throw new MapGenerationError(
