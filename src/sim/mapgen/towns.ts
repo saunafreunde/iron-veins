@@ -415,17 +415,35 @@ export function placeBuildings(map: TileMap, town: Town, radius: number, wanted:
  * command, the industry pass and every future rule that clears a tile, and a
  * counter that drifts silently is the very thing the M14 x-ray was written
  * about. A square of at most 21x21 read once a game day is the cheaper answer.
+ *
+ * The square is CLAMPED to the map once instead of asking `map.contains` per
+ * tile, and the row offset is hoisted instead of calling `map.tileIndex` per
+ * tile. The visited set is identical by construction - `contains(x, y)` is
+ * exactly `0 <= x < size && 0 <= y < size`, which is what the clamp computes -
+ * and `tests/unit/townGrowth.spec.ts` holds the clamped walk against the naive
+ * one on a town whose square overhangs two edges. It is worth doing because
+ * the census below is the same walk over EVERY town once a game month, and
+ * measured at 140 towns the two calls cost 13 ns a tile against 1.2 (D-234).
  */
 export function countTownBuildings(map: TileMap, town: Town, radius: number): number {
+  const size = map.size;
+  const x0 = town.x - radius > 0 ? town.x - radius : 0;
+  const x1 = town.x + radius < size - 1 ? town.x + radius : size - 1;
+  const y0 = town.y - radius > 0 ? town.y - radius : 0;
+  const y1 = town.y + radius < size - 1 ? town.y + radius : size - 1;
+  const townIds = map.townId;
+  const kinds = map.buildingKind;
+  const id = town.id;
+  const none = BuildingKind.None;
+
   let count = 0;
-  for (let dy = -radius; dy <= radius; dy++) {
-    const y = town.y + dy;
-    for (let dx = -radius; dx <= radius; dx++) {
-      const x = town.x + dx;
-      if (!map.contains(x, y)) continue;
-      const index = map.tileIndex(x, y);
-      if (map.townId[index] !== town.id) continue;
-      if (map.buildingKind[index] !== BuildingKind.None) count++;
+  for (let y = y0; y <= y1; y++) {
+    const row = y * size;
+    const end = row + x1;
+    for (let index = row + x0; index <= end; index++) {
+      if (kinds[index] === none) continue;
+      if (townIds[index] !== id) continue;
+      count++;
     }
   }
   return count;
@@ -446,6 +464,10 @@ export function countTownBuildings(map: TileMap, town: Town, radius: number): nu
  * goes up is a DAILY question about one town and this is a MONTHLY question
  * about every town, and merging them would make the cheap one pay for the
  * dear one every game day.
+ *
+ * Clamped and hoisted exactly as {@link countTownBuildings} is, and for this
+ * function's sake: it is the monthly walk over every town, and it was the
+ * whole of M20's month-tick cost before the clamp (D-234).
  */
 export function countTownZones(map: TileMap, town: Town, radius: number, out: Int32Array): void {
   out[BuildingKind.None] = 0;
@@ -453,15 +475,23 @@ export function countTownZones(map: TileMap, town: Town, radius: number, out: In
   out[BuildingKind.Commercial] = 0;
   out[BuildingKind.Industrial] = 0;
 
-  for (let dy = -radius; dy <= radius; dy++) {
-    const y = town.y + dy;
-    for (let dx = -radius; dx <= radius; dx++) {
-      const x = town.x + dx;
-      if (!map.contains(x, y)) continue;
-      const index = map.tileIndex(x, y);
-      if (map.townId[index] !== town.id) continue;
-      const kind = map.buildingKind[index]!;
-      if (kind === BuildingKind.None) continue;
+  const size = map.size;
+  const x0 = town.x - radius > 0 ? town.x - radius : 0;
+  const x1 = town.x + radius < size - 1 ? town.x + radius : size - 1;
+  const y0 = town.y - radius > 0 ? town.y - radius : 0;
+  const y1 = town.y + radius < size - 1 ? town.y + radius : size - 1;
+  const townIds = map.townId;
+  const kinds = map.buildingKind;
+  const id = town.id;
+  const none = BuildingKind.None;
+
+  for (let y = y0; y <= y1; y++) {
+    const row = y * size;
+    const end = row + x1;
+    for (let index = row + x0; index <= end; index++) {
+      const kind = kinds[index]!;
+      if (kind === none) continue;
+      if (townIds[index] !== id) continue;
       out[kind] = out[kind]! + 1;
     }
   }

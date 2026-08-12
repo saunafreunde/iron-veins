@@ -20,7 +20,7 @@ no entry below. A number may appear under several topics.
 - **Lines & timetables:** D-145, D-146, D-147, D-148, D-149, D-150, D-151,
   D-152, D-155, D-159
 - **Map generation & terrain:** D-018, D-019, D-020, D-021, D-022, D-023,
-  D-025, D-027, D-197, D-198, D-199, D-216, D-231
+  D-025, D-027, D-197, D-198, D-199, D-216, D-231, D-234
 - **Terraforming & structures:** D-028, D-034, D-050, D-051, D-052, D-124,
   D-141
 - **Save format, migrations & replays:** D-007, D-025, D-026, D-027, D-048,
@@ -40,14 +40,14 @@ no entry below. A number may appear under several topics.
 - **Industry & production:** D-022, D-062, D-063, D-064, D-069, D-071, D-079,
   D-085, D-086, D-174, D-201, D-202, D-205, D-225, D-232
 - **Towns, council & ownership:** D-101, D-102, D-103, D-104, D-205, D-207,
-  D-206, D-213, D-216, D-217, D-231, D-232, D-233
+  D-206, D-213, D-216, D-217, D-231, D-232, D-233, D-234
 - **Economy, finance & emissions:** D-008, D-090, D-091, D-092, D-105, D-154,
   D-180, D-193, D-196, D-228, D-229
 - **Balancing & scenarios:** D-038, D-039, D-040, D-041, D-066, D-087, D-088,
   D-116, D-151, D-152, D-156, D-158, D-159, D-187, D-190, D-194, D-195,
   D-196, D-197, D-198, D-199, D-200, D-203, D-204, D-207, D-211, D-213,
   D-215, D-216, D-220, D-221, D-222, D-224, D-225, D-226, D-228, D-229,
-  D-232, D-233
+  D-232, D-233, D-234
 - **Vehicles & fleet:** D-043, D-044, D-045, D-068, D-076, D-089, D-093,
   D-096, D-142, D-143, D-145, D-146, D-155, D-157, D-171, D-174, D-181, D-185,
   D-201, D-207
@@ -67,7 +67,7 @@ no entry below. A number may appear under several topics.
 - **Performance & measurement:** D-002, D-120, D-135, D-136, D-161, D-162,
   D-163, D-164, D-167, D-170, D-171, D-172, D-173, D-174, D-176, D-177, D-184,
   D-185, D-186, D-187, D-191, D-192, D-193, D-196, D-200, D-201, D-202, D-205,
-  D-206, D-209, D-214, D-231
+  D-206, D-209, D-214, D-231, D-234
 - **Platform, tooling & build:** D-012, D-014, D-015, D-016, D-017, D-029,
   D-030, D-031, D-160, D-168, D-169, D-170, D-172, D-175, D-192, D-206, D-208,
   D-227
@@ -76,7 +76,8 @@ no entry below. A number may appear under several topics.
   D-167, D-183, D-186, D-188, D-189, D-190, D-191, D-192, D-193, D-194,
   D-195, D-196, D-197, D-198, D-199, D-200, D-201, D-202, D-203, D-204,
   D-205, D-207, D-206, D-208, D-209, D-210, D-212, D-213, D-215, D-216,
-  D-217, D-219, D-220, D-221, D-222, D-228, D-229, D-230, D-231, D-233
+  D-217, D-219, D-220, D-221, D-222, D-228, D-229, D-230, D-231, D-233,
+  D-234
 - **Process & specification:** D-070, D-123, D-129, D-133, D-138, D-140,
   D-185, D-191, D-197, D-198, D-199, D-203, D-204, D-205, D-206, D-215,
   D-222, D-225, D-226, D-227, D-228, D-229
@@ -13070,4 +13071,172 @@ re-records; `npm run test:balance:full` **12 files / 101 tests** green;
 `npm run test:soak` **4** green at the re-recorded hash; `npm run test:perf`
 green. `npm run format:check` stays red on the files D-227 names; the two new
 test files and the new simulation file were formatted before they were
+committed.
+
+### D-234 M20 measured and closed - the month tick priced on two instruments, and a census that read two map layers when one was enough
+
+**SPEC2 M20 bundle 4, the milestone's last.** It answers exactly one open
+question - "der Monats-Tick p99 waechst um < 0,15 ms gegenueber der
+Grundlinie" - re-runs everything a growing world can reach, and writes the
+ledger row. **No save bump, no migration edit, no hashed byte, no RNG draw, no
+i18n string, no atlas cell, no constant.** The one file under `src/` is
+`mapgen/towns.ts`, and what changed there is how two counting walks are
+written, not what they count: every hash, every band and every scenario figure
+below is bit-identical across the change.
+
+**The clause is met on the instrument Z6 names, and that instrument turned out
+to be a 120-town world already.** `tests/perf/fixture1500.ts` builds 120 towns
+through `flatScenario`, which calls `placeTown` for each of them - claimed
+ground, a street cross, houses either side - so M20's growth pass is not
+dormant there, and "the 1500-vehicle fixture" and "a 120-town world" are the
+same measurement. Three clean `npm run test:perf` runs on the final tree:
+
+| run | tick p50 | tick p99 | max over 6,500 ticks |
+| --- | --- | --- | --- |
+| 1 | 1.464 ms | 2.927 ms | 19.411 ms |
+| 2 | 1.384 ms | 2.770 ms | 19.984 ms |
+| 3 | 1.382 ms | 2.705 ms | 19.431 ms |
+
+against the M10 baseline of **1.45 / 3.26**: p50 +0.014 / -0.066 / -0.068 and
+**p99 -0.333 / -0.490 / -0.555 - all three below the baseline**, against a
+ledger budget line of +0.10 ms. The max in that window IS the month boundary,
+and M10's own row records 39.4 ms there.
+
+**The month-boundary tick was then isolated and measured on its own, because
+"Monats-Tick" deserves the literal reading too.** A harness timed every tick of
+a run crossing whole months and split the boundary ticks from the rest, run in
+a `git worktree` at `c8b9e48` - the commit before M20 bundle 1 - and at HEAD,
+alternating.
+
+On fixture1500 the answer is **not separable from the fixture's own noise**:
+month-tick medians over n=12-16 samples read 13.993 / 13.171 / 13.346 / 13.224
+on the baseline and 13.569 / 13.539 / 13.821 / 14.010 at HEAD, so the
+baseline's own spread is 0.82 ms and the difference of the means is 0.30. The
+ORDINARY ticks of the same runs are clean and say the milestone costs nothing
+per tick: p50 1.312 / 1.476 / 1.331 baseline against 1.328 / 1.340 / 1.455, p99
+2.554 / 3.048 / 2.640 against 2.611 / 2.757 / 2.772.
+
+So the number was taken on a quiet instrument instead: **a generated 1024 world
+with 140 towns, mapgen's own street networks, and no player network at all** -
+where the month tick is 0.5-1.1 ms and the town work is nearly all of it.
+Seven interleaved pairs, n=40 month samples each, on the final tree:
+
+| | 1 | 2 | 3 | 4 | 5 | 6 | 7 | mean |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| pre-M20 | 0.549 | 0.557 | 0.612 | 0.745 | 0.523 | 0.598 | 0.715 | **0.614 ms** |
+| M20 | 0.786 | 0.764 | 0.815 | 0.780 | 0.808 | 0.794 | 0.867 | **0.802 ms** |
+
+**+0.188 ms at 140 towns**, i.e. 1.34 us a town, i.e. **+0.161 ms scaled to the
+120 the clause names** - seven per cent over 0.15, and inside the +-0.12 ms
+spread of the pairs themselves. That is the honest edge this milestone closes
+on, and the next paragraph is why it is not the 0.63 it started at.
+
+**Two probes, not a guess.** Neutralising the census call alone took the M20
+month tick from 1.02 to 0.671 ms, landing inside the pre-M20 range: the zone
+census of D-233 was the WHOLE of the delta, and nothing else M20 added to the
+monthly block is measurable. A census micro-benchmark over the same 140 towns
+(17,300 tiles inside the squares) then priced it at **225.9 us, i.e. 13.06 ns a
+tile** - two orders of magnitude off what a scan of two typed arrays costs.
+Three changes, each measured:
+
+1. **The square is clamped to the map once instead of asking `map.contains` per
+   tile**, and the row offset is hoisted instead of calling `map.tileIndex` per
+   tile. 225.9 -> 178.9 us. The visited set is identical by construction, since
+   `contains(x, y)` is exactly `0 <= x < size && 0 <= y < size`, which is what
+   the clamp computes.
+2. **`BuildingKind.None` is read once into a local instead of per tile.**
+   178.9 -> **39.8 us**, which is 85 % of the whole cost and the finding worth
+   keeping: an identical body written as a LOCAL function in the test file ran
+   at 25.2 us against the imported one's 176.3, and calling the import through
+   a local BINDING was still 178.1 - so it was never the module-namespace
+   access, it was the ENUM MEMBER inside the inner loop, which the test
+   runner's SSR transform turns into a namespace property load on every tile.
+   The shipped bundle does not pay that; the project's own measurements do, and
+   any future hot loop with a bare `SomeEnum.Member` in it will read the same
+   way.
+3. **The one-byte layer is asked before the two-byte one.** `buildingKind` is
+   non-zero on 14 % of the square's tiles, so testing it first means `townId`
+   is touched only where a building actually stands - the cold cache lines are
+   the cost here, and this removes most of the second layer's. Measured on the
+   generated world: month tick 1.02 -> 0.79 ms median.
+
+Together, against **M20 bundle 3** (`3281bfd`) on the same world: month tick
+median **1.067 -> 0.79 ms**, `growTowns` timed directly **301.4 -> 115 us**, and
+the shipped `townGrowth.spec.ts` figure for the DAILY pass - which walks the
+same square through `countTownBuildings` - **0.62 -> 0.20 us per game day** on
+40 towns of a 512 map. Everything else that test prints is unchanged to the
+digit (28 -> 60 buildings, 22 -> 34 street tiles, 8,000 -> 10,355 inhabitants
+at 120.1 % passenger supply), which is what proves the walks still count what
+they counted.
+
+**What is left, named rather than dressed up.** The floor for a WALKED census
+is the cold traffic over `buildingKind`: about eleven rows a town, one cache
+line each, 140 towns a game month. Getting under it means CARRYING the census
+instead of counting it - which D-233 refused for a stated reason (a carried
+count has to be kept in step with the growth, the shrinkage, the demolition
+command and every future rule that clears a tile) and which is save state under
+Z4, so it is a bundle of its own with a migration and a re-recorded pin, not a
+line in a closing bundle. **The clause is met on the Z6 instrument and on the
+ledger's budget line; on the quiet 140-town world it lands 0.011 ms over at the
+clause's own town count.** No constant was tuned to make any of this read
+better - the only thing that moved is how a loop is written.
+
+**Both new guards were falsified in the real source and the red build watched**
+(D-198's discipline). `tests/unit/townGrowth.spec.ts` now holds both clamped
+walks against a verbatim copy of the pre-clamp naive walk, on a town at (1, 2)
+whose radius-4 square hangs over two map edges and on two towns four tiles
+apart whose squares overlap. Removing the owner check from the clamped walk
+fails with "Ostheim: total: expected 40 to be 21"; dropping the low clamp so
+the walk starts at `town.x - radius` fails the corner town with a count taken
+from the wrong rows. Both were reverted. The tests assert their own
+non-vacuity too - the corner town really has buildings, its square really
+overhangs both edges, and the two squares really overlap.
+
+**Everything a growing world touches, re-run rather than quoted.**
+
+- **The eight shipped scenarios hash-identically** and their briefing guards
+  hold: `tests/determinism/scenarios.spec.ts` green (11 tests),
+  `tests/unit/shippedScenarios.spec.ts` green (**53 tests**) -
+  `SCENARIO_WORLD_CLAIMS` (D-197), `SCENARIO_BRIEFING_FIGURES` (D-198) and
+  `briefingTowns` (D-199) all still true of the worlds the seeds make, town
+  populations and counts included. **Nothing was re-measured because nothing
+  moved**: the claims are taken at GENESIS and this bundle changes no generated
+  byte, which the unchanged canonical pin proves independently.
+- **All three pins stand where D-233 left them**: canonical
+  `5f4c022bef5b94d1`, soak `9aac5ef0864d5c69` at unchanged 35 commands, corpus
+  manifest unchanged and all nine frozen fixtures still decoding to one world.
+  `SAVE_VERSION` **31**. The soak fixture was NOT re-recorded, because no
+  command changed and the replay reaches the recorded hash.
+- **Every 19.4 band and every SPEC2 scenario, measured on the final tree**:
+  scenario 1 payback **year 3** (485,735 / 493,316 / 501,669 / 509,938 /
+  518,793 / 521,260 EUR), scenario 2 investment 249,980 EUR and payback
+  **year 6**, scenario 3 **159,516 EUR/yr**, scenario 4 bankrupt in **year 9**,
+  scenario 6 closure in **month 25**, Netzdesign **3.75** (alignment 2.01x,
+  capacity 1.87x), Takt **-8.3 %** and delivery-variance ratio **0.57**, Harter
+  Winter **-4.36 %** over six seeds, Punktzahl **5,889** with the 36/26/24/13
+  split and the dogleg control at 7.8 % against 19.8 %, scenario 5 **1,022,084
+  / 1,802,165 / 2,153,604 EUR**, and the `aiGame` sweep 12 competitors over 4
+  seeds, 0 wound up, 4 took the field, 3 own a vehicle, total value 7,293,303
+  EUR. The AI refusal profile prints on every run that has one. **Twelve files,
+  101 tests, both costly desync twins included** (`npm run test:balance:full`).
+- **Two figures the documentation carried had drifted, and the bisect says
+  where.** Run at `c8b9e48` the bus line reads 485,738 / 494,144 / 501,718 /
+  509,262 / 515,863 / 520,024 with return shares 0.113 % / 0.139 %, and
+  Netzdesign reads **3.73** with the capacity split at 1.86x - D-215's figures
+  to the digit. So **M20 moved both, and neither is this bundle**: both worlds
+  are hand-built with `placeTown`, so D-232's shrinkage and its corrected 13.2
+  weights reach them. Scenario 1 stays payback year 3 with MORE margin than
+  before (521,260 against 520,024 after six years), Netzdesign stays far above
+  its `>= 3` band, and CLAUDE.md's two stale numbers are corrected in the same
+  edit rather than left to be found later. The same is true of D-231's digest
+  line "8,000 -> 10,538 at 96.5 % passenger supply": measured at `3281bfd` it
+  was already 10,355 at 120.1 %, so bundle 2's formula moved it and the digest
+  was not carried along.
+
+**Cost.** Zero sim behaviour, zero constants, zero save bump, zero migration
+edit, zero snapshot bytes, zero atlas cells, zero i18n strings, zero RNG draws,
+zero new files under `src/`. `npm run typecheck` and `npm run lint` clean; unit
+**120 files / 1,551 tests** (+2 cases); determinism 33, corpus 5, soak 4,
+balance:full 101 - all green. `npm run format:check` stays red on the files
+D-227 names; the two files this bundle touched were formatted before they were
 committed.

@@ -15,7 +15,12 @@ import type { TileMap } from '../../src/sim/map/TileMap';
 import { Structure } from '../../src/sim/map/structures';
 import { Terrain } from '../../src/sim/map/terrain';
 import { RailType } from '../../src/sim/map/track';
-import { buildingsWantedFor, continuesStreet } from '../../src/sim/mapgen/towns';
+import {
+  buildingsWantedFor,
+  continuesStreet,
+  countTownBuildings,
+  countTownZones,
+} from '../../src/sim/mapgen/towns';
 import { growTownFabric } from '../../src/sim/town/growth';
 import { BuildingKind, RoadBit, type Town } from '../../src/sim/town/types';
 import { hashWorld, World } from '../../src/sim/World';
@@ -354,6 +359,84 @@ describe('continuesStreet', () => {
     expect(continuesStreet(map, town.x + 5, town.y + 1)).toBe(false);
     // A tile that already carries road is nobody's continuation.
     expect(continuesStreet(map, town.x + 4, town.y)).toBe(false);
+  });
+});
+
+// ------------------------------ the two census walks, clamped instead of asked
+
+describe('the census walks (D-234)', () => {
+  /** The pre-D-234 walk, verbatim: ask `contains` per tile, index per tile. */
+  function naive(map: TileMap, town: Town, radius: number): [number, number[]] {
+    let count = 0;
+    const zones = [0, 0, 0, 0];
+    for (let dy = -radius; dy <= radius; dy++) {
+      const y = town.y + dy;
+      for (let dx = -radius; dx <= radius; dx++) {
+        const x = town.x + dx;
+        if (!map.contains(x, y)) continue;
+        const index = map.tileIndex(x, y);
+        if (map.townId[index] !== town.id) continue;
+        const kind = map.buildingKind[index]!;
+        if (kind === BuildingKind.None) continue;
+        count++;
+        zones[kind] = zones[kind]! + 1;
+      }
+    }
+    return [count, zones];
+  }
+
+  /**
+   * The clamp replaces a per-tile `map.contains` with four comparisons taken
+   * once. That is only true if the clamped rectangle is exactly the set
+   * `contains` admits, and the case where the two could differ is a town whose
+   * square hangs over an edge - which no GENERATED town does (mapgen keeps a
+   * border margin), so the proof has to be built by hand.
+   */
+  it('counts what the naive walk counted, on a town whose square overhangs two edges', () => {
+    const radius = 4;
+    const corner = makeTown(0, 1, 2, 1_000, 'Eckstadt');
+    const inland = makeTown(1, 40, 40, 1_000, 'Binnenstadt');
+    const scenario = flatScenario(SCENARIO_SIZE, [corner, inland], []);
+    const map = scenario.world.map;
+
+    // `placeTown` already put houses around both centres; the corner town's
+    // square runs from x = -3 to x = 5 and y = -2 to y = 6, so a third of it
+    // is off the map.
+    const out = new Int32Array(8);
+    for (const town of [corner, inland]) {
+      const [wanted, wantedZones] = naive(map, town, radius);
+      expect(countTownBuildings(map, town, radius), `${town.name}: total`).toBe(wanted);
+      countTownZones(map, town, radius, out);
+      expect([out[0], out[1], out[2], out[3]], `${town.name}: by zone`).toEqual(wantedZones);
+    }
+    // Non-vacuous: the corner town really does have buildings to count, and
+    // its square really does overhang.
+    expect(countTownBuildings(map, corner, radius)).toBeGreaterThan(0);
+    expect(corner.x - radius).toBeLessThan(0);
+    expect(corner.y - radius).toBeLessThan(0);
+  });
+
+  /**
+   * The other half of the clamp: a neighbour's houses inside the square are
+   * still refused by the owner check, which the reordered inner loop asks
+   * SECOND now (D-234 reads the one-byte layer before the two-byte one).
+   */
+  it('still refuses a neighbouring town the buildings inside the same square', () => {
+    const radius = 6;
+    const a = makeTown(0, 30, 30, 1_000, 'Westheim');
+    const b = makeTown(1, 34, 30, 1_000, 'Ostheim');
+    const scenario = flatScenario(SCENARIO_SIZE, [a, b], []);
+    const map = scenario.world.map;
+    const out = new Int32Array(8);
+
+    for (const town of [a, b]) {
+      const [wanted, wantedZones] = naive(map, town, radius);
+      expect(countTownBuildings(map, town, radius), `${town.name}: total`).toBe(wanted);
+      countTownZones(map, town, radius, out);
+      expect([out[0], out[1], out[2], out[3]], `${town.name}: by zone`).toEqual(wantedZones);
+    }
+    // Non-vacuous: the squares overlap, so the owner check has work to do.
+    expect(Math.abs(a.x - b.x)).toBeLessThan(2 * radius);
   });
 });
 

@@ -227,9 +227,12 @@ the rest is its own session with its own diff.
   measures the NETWORK rather than a tariff: identical traffic over a
   botched and a well designed railway, compared by network value (earned
   revenue over the closed-form ceiling of D-066). Band: factor >= 3,
-  measured 3.73, and it prints the split - alignment 2.01x, capacity
-  1.86x. It owns no constant; if it ever leaves its band, something about
+  measured **3.75**, and it prints the split - alignment 2.01x, capacity
+  **1.87x**. It owns no constant; if it ever leaves its band, something about
   signalling, the curve table or the payment formula moved (D-187).
+  (3.73 / 1.86x until M20: this world is hand-built with `placeTown`, so
+  D-232's shrinkage and its corrected 13.2 weights reach it. Bisected in
+  D-234 - the pre-M20 commit still measures 3.73 to the digit.)
 
   Scenario "Harter Winter" is SPEC2 M18's own
   (`tests/balance/hardWinter.spec.ts`) and it is the only one that measures
@@ -2536,7 +2539,9 @@ council elections are those later bundles.
   by the station scan, by the growth and by the demolition.
 - **Measured** (`tests/unit/townGrowth.spec.ts`): a fully served town over ten
   game years **28 -> 60 buildings, 22 -> 34 street tiles, population 8,000 ->
-  10,538 at 96.5 % passenger supply**, with the three-a-month cap BINDING. A
+  10,355 at 120.1 % passenger supply** (10,538 at 96.5 % until bundle 2 put the
+  twelve-month window and the company rating into the formula - re-measured in
+  D-234, where the bisect is), with the three-a-month cap BINDING. A
   generated 256 world (seed 4,711, 40 towns, nobody serving anything) moves
   **661 -> 695 buildings, 872 -> 881 street tiles** over ten years. Cost:
   **0.990 B per game day** (control 1,621 B) and **0.75 us per game day**, i.e.
@@ -2681,6 +2686,80 @@ fields joined the digest.
   corpus re-recorded (the nine frozen fixtures still decode to ONE world).
   Main bundle 955,606 -> **959,448 B**, budget raised to 966,000 with the split
   measured (+1,505 B i18n, +2,337 B interface and constant tables).
+
+## M20 bundle 4 - measured, and the census read one layer too many (D-234)
+
+**The milestone's last bundle: one open question, everything a growing world
+touches re-run, and the ledger row written.** No save bump, no migration edit,
+no hashed byte, no RNG draw, no i18n string, no atlas cell, no constant - the
+one file under `src/` is `mapgen/towns.ts`, and what changed there is how two
+counting walks are WRITTEN, not what they count. Every hash, every band and
+every scenario figure is bit-identical across it.
+
+- **The Z6 instrument was a 120-town world all along.** `fixture1500` builds
+  its towns through `flatScenario`, which calls `placeTown` for each - claimed
+  ground, a street cross, houses either side - so M20's growth pass is not
+  dormant there and "the 1500-vehicle fixture" and "a 120-town world" are the
+  same measurement. Three clean `npm run test:perf` runs: tick **p50 1.464 /
+  1.384 / 1.382 ms**, **p99 2.927 / 2.770 / 2.705 ms** against the M10 baseline
+  1.45 / 3.26 - **all three p99 BELOW it**, against a budget line of +0.10 ms.
+  The max in that window is the month boundary and reads 19.4-20.0 ms, where
+  M10's own row records 39.4.
+- **The isolated month-boundary tick was measured too, because "Monats-Tick"
+  deserves the literal reading.** On fixture1500 it is not separable from the
+  fixture's own noise (baseline medians 13.99 / 13.17 / 13.35 / 13.22 against
+  13.57 / 13.54 / 13.82 / 14.01 - the baseline's own spread is 0.82 ms). On a
+  quiet generated 1024 world with **140 towns** and no player network, seven
+  interleaved A/B pairs against `c8b9e48` give **0.614 -> 0.802 ms, +0.188 ms**,
+  which scaled to the clause's 120 towns is **+0.161 ms against 0.15**. Seven
+  per cent over, inside the pairs' own +-0.12 ms spread, and **named rather
+  than smoothed**.
+- **It started at +0.63 ms, and two probes said why.** Neutralising the zone
+  census alone put the M20 month tick back inside the pre-M20 range, so
+  D-233's census was the WHOLE delta and nothing else M20 added to the monthly
+  block is measurable. A micro-benchmark then priced the census at **13.06 ns
+  a tile** - two orders off a scan of two typed arrays.
+- **Three measured changes, and the middle one is the finding.** The square is
+  clamped to the map ONCE instead of asking `map.contains` per tile (225.9 ->
+  178.9 us over 140 towns); **`BuildingKind.None` is read once into a local
+  instead of per tile (178.9 -> 39.8 us, 85 % of the cost)**; and the one-byte
+  `buildingKind` layer is asked before the two-byte `townId` one, so the second
+  layer's cold cache lines are only touched where a building stands. The middle
+  one generalises: an identical body written as a LOCAL function ran at 25.2 us
+  against the import's 176.3, and through a local BINDING still 178.1 - so it
+  was never the module namespace, it was **the enum member in the inner loop**,
+  which the test runner's SSR transform turns into a namespace property load on
+  every tile. The shipped bundle does not pay it; every measurement this
+  project takes does.
+- **Against bundle 3 (`3281bfd`) on the same world**: month tick median 1.067
+  -> 0.79 ms, `growTowns` timed directly 301.4 -> 115 us, and the SHIPPED
+  figure in `townGrowth.spec.ts` for the daily pass **0.62 -> 0.20 us per game
+  day**. Everything else that test prints is unchanged to the digit, which is
+  what proves the walks still count what they counted.
+- **What is left is named**: the floor for a WALKED census is the cold traffic
+  over `buildingKind`, and under it means CARRYING the census - which D-233
+  refused for a stated reason and which is save state under Z4, so it is a
+  bundle with a migration and a re-recorded pin, not a line in a closing one.
+- **Guards falsified before they were kept** (D-198): both clamped walks are
+  held against a verbatim copy of the pre-clamp naive walk, on a town whose
+  radius-4 square hangs over two map edges and on two towns whose squares
+  overlap; removing the owner check fails with "expected 40 to be 21", and both
+  tests assert their own non-vacuity.
+- **Re-run, not quoted**: eight shipped scenarios hash-identical (11 tests),
+  their briefing and place-name guards green (53 tests, `SCENARIO_WORLD_CLAIMS`
+  / `SCENARIO_BRIEFING_FIGURES` / `briefingTowns` unmoved - the claims are taken
+  at GENESIS and no generated byte changed, which the unchanged canonical pin
+  proves), scenario 1 payback year 3, scenario 2 249,980 EUR / year 6,
+  scenario 3 159,516 EUR/yr, scenario 4 year 9, scenario 6 month 25, Netzdesign
+  **3.75**, Takt -8.3 % / 0.57, Harter Winter -4.36 %, Punktzahl 5,889,
+  scenario 5 **1,022,084 / 1,802,165 / 2,153,604 EUR**, the `aiGame` sweep
+  7,293,303 EUR over four seeds with the refusal profile printing. Pins stand
+  where B3 left them: canonical `5f4c022bef5b94d1`, soak `9aac5ef0864d5c69` at
+  35 commands, corpus unchanged, `SAVE_VERSION` **31**.
+- **Two documented figures had drifted and are corrected here with the
+  bisect**: Netzdesign 3.73 -> 3.75 (capacity 1.86x -> 1.87x) and D-231's
+  "8,000 -> 10,538 at 96.5 %" -> 10,355 at 120.1 %. Both moved in bundle 2, not
+  in this one - the pre-M20 commit still measures D-215's figures to the digit.
 
 ## Still outstanding
 
