@@ -3924,3 +3924,219 @@ export const TerraformDirection = {
   Raise: 1,
 } as const;
 export type TerraformDirection = (typeof TerraformDirection)[keyof typeof TerraformDirection];
+
+// ------------------------------------- difficulty: what a level buys the AI
+
+/**
+ * The ceiling of a council rating, and therefore the value that means NEVER in
+ * {@link DifficultyAiTraits.exclusiveRightsRating}. [rating points]
+ *
+ * `ratingFor` clamps to 0..100 (section 13.3), so a threshold of 101 is one no
+ * council can ever reach - which is how the two lower levels say "this company
+ * does not buy building rights" without a second boolean beside a number that
+ * already carries the answer.
+ */
+export const COUNCIL_RATING_NEVER = 101;
+
+/**
+ * Shortest deadline a competitor will take a 14.4 tender on. [months]
+ *
+ * A tender is a bet with a penalty at the far end (D-107), so a competitor only
+ * takes one it can still lose slowly: under two months a line that misses a
+ * single round trip has already failed, and the deliverable estimate the
+ * decision rests on is a MONTHLY rate.
+ */
+export const AI_TENDER_MIN_MONTHS = 2;
+
+/**
+ * How much more than a tender asks for the line has to be able to carry before
+ * a competitor takes the bet on. [1]
+ *
+ * The estimate is the same arithmetic `projectLine` uses - fleet lift times
+ * rounds a month at {@link AI_LIFT_REAL_SHARE} - and that arithmetic is
+ * measured to over-state what a line really delivers (D-229: the median line
+ * realises 0.603 of its projection). Twice the quota is therefore roughly "as
+ * sure as this simulation can be about its own forecasts", and the asymmetry
+ * says which way to err: refusing a tender costs exactly nothing, missing one
+ * costs {@link CONTRACT_PENALTY_SHARE} of the bonus and a rating malus.
+ */
+export const AI_TENDER_SAFETY = 2;
+
+/**
+ * **What a difficulty level buys a competitor** (SPEC.md 15, SPEC2 M24).
+ *
+ * SPEC.md 15 is explicit about the boundary: "Verboten sind Ressourcen-Boni;
+ * erlaubt sind bessere Bewertungsfunktionen auf hoeheren Stufen." Until this
+ * table existed that boundary was honoured by there being no difference at
+ * all - `evaluate.ts` never read `world.difficulty` once, and the level moved
+ * the PLAYER'S start capital ({@link START_CAPITAL_CT}) and loan interest
+ * ({@link LOAN_INTEREST_RATE_PER_YEAR}) and nothing else. Every field below
+ * changes how well a competitor JUDGES, never what it is charged, what it is
+ * allowed to build, or which commands it issues (D-109: a competitor enqueues
+ * the player's own commands, and that is what makes "no cheating" structural).
+ *
+ * **The Normal row is the exact identity of every AI measurement this project
+ * has ever taken**, which is the D-201 device applied to a difficulty: every
+ * band of section 19.4, scenario 5, the `aiGame` sweep, the soak fixture and
+ * the canonical pin are Normal worlds, so a Normal row that reproduced today's
+ * behaviour only approximately would re-band the lot inside the milestone that
+ * introduces the table (Fehlerkatalog 34). Each field is therefore BRANCHED on
+ * its identity value rather than multiplied through it, and
+ * `tests/unit/aiDifficulty.spec.ts` holds that equality by construction.
+ */
+export interface DifficultyAiTraits {
+  /**
+   * How far down the ranked opportunity list ONE build cycle looks.
+   * [candidates]
+   *
+   * Normal is {@link AI_CANDIDATES_TRIED}, whose own comment carries the
+   * measurement it comes from. Easy is deliberately shallow but not blind -
+   * that same comment records a competitor which gave up after the first EIGHT
+   * sitting on its capital for twenty-four game years while a hundred cheaper
+   * opportunities went past - so 20 reaches the affordable head of a ranking
+   * sorted by return per euro and misses the cheap tail. Hard is twice Normal,
+   * which is "look at all of it".
+   *
+   * **All three values are measured INERT on the worlds this game is balanced
+   * on, and that is a finding rather than a caveat** (D-252). The longest
+   * candidate list that occurs over eight seeds x twenty-five years x five
+   * personalities is **FIVE**: the drain gate and the profitability floor of
+   * D-221/D-229 leave a competitor a handful of pairs, so a depth of 60 has
+   * never bound and 20 and 120 cannot either - both ablations reproduce the
+   * Normal run to the euro. The field stays because it is what SPEC2 M24 asks
+   * for and because the list is a property of the map, not of the code: a
+   * 1024 map with three hundred industries is where a depth of 20 starts
+   * costing something.
+   */
+  readonly candidatesTried: number;
+  /**
+   * How many legs past a producing sink the chain test looks. [legs]
+   *
+   * Normal is 1: D-109's fourth finding, that a pair ending at a works which
+   * has to be collected FROM is only worth building when the next leg exists
+   * to be built. Easy is 0 - no test at all, which is the pre-D-109 AI and
+   * builds lines that die with the works they feed. Hard is 2, which is the
+   * failure D-225 measured written down as a rule: seed 918273's steel mill
+   * woke when the AI's second line brought it ore, nobody ever carried the
+   * steel away, and the 7.3 closure clock took the sink of BOTH lines with it
+   * in 1958. A depth-2 test refuses the pair whose chain stalls one works
+   * further out than a depth-1 test can see.
+   *
+   * **Company value at year twenty-five is ANTI-correlated with this field, in
+   * both directions, and it is shipped in the semantic order anyway** (D-252).
+   * Measured one knob at a time over eight seeds at each level's own capital:
+   * depth 0 is **+3,360,849 EUR of 19,878,907 (+16.9 %) and 16 lines against
+   * 11**, depth 2 is **-249,391 of 5,790,628 (-4.3 %) and 3 lines against 4**.
+   * What a deeper test buys is a line that is still there in ten years -
+   * D-225's steel mill closed in 1958 and took the sink of two lines with it -
+   * and a balance sheet at year twenty-five cannot tell a line that was never
+   * built from a line that died, only count the money. So the ordering here is
+   * the ordering of JUDGEMENT, the price is recorded rather than tuned away,
+   * and measuring the chain collapse directly is its own instrument and its
+   * own bundle.
+   */
+  readonly chainLookahead: number;
+  /**
+   * How many of the top-ranked candidates get their way MEASURED by the very
+   * planner the build command runs, instead of estimated as a straight line.
+   * [candidates]
+   *
+   * Zero at Normal and Easy, which is the identity: the ranking prices
+   * `tileDistance`, a rounded Euclidean straight line, and the way that is
+   * really laid is longer - measured on seed 4711, a pair 72 tiles apart is
+   * laid as 119 tiles of track around the hills between them (D-228), and a
+   * road is laid as an L and driven as one. Hard probes the top eight, and
+   * eight is chosen against the COST rather than against the benefit: the
+   * probe is `planTrack` for a railway and `planRoadRuns` for a road - the two
+   * searches the builder already runs per tried candidate in its dry run - so
+   * eight of them is a fraction of what one build cycle spends anyway. Priced
+   * per candidate in `tests/unit/aiDifficulty.spec.ts` against SPEC2 M24's
+   * 1 ms clause.
+   */
+  readonly terrainProbes: number;
+  /**
+   * Multiplier on the fleet the 12.3 advisor sizes for a line. [1]
+   *
+   * Exactly 1 at Normal, and `fleetFor` branches on that rather than
+   * multiplying, so no existing world buys a different number of vehicles.
+   * Hard buys a quarter more than the demand interval asks for, which is a
+   * JUDGEMENT and not a resource: it pays the upkeep of every extra vehicle
+   * out of the same books, and what it buys is a queue drained faster - the
+   * 7.3 collection gate is capped by the station rating, the rating is raised
+   * by visits, and oldest-first loading means a pile a fleet merely MATCHES
+   * pays the decay floor for ever (the wall D-158 names). Easy under-crews by
+   * a quarter and walks into it.
+   *
+   * **Measured, and both ends are small** (D-252): over eight seeds Hard's
+   * 1.25 reproduces the Normal run TO THE EURO, because the advisor's own
+   * figure already reaches the cap the drain gate and the profitability floor
+   * are quoted for on every line these worlds offer, and Easy's 0.75 moves
+   * eight seeds by **+132,506 EUR of 19,878,907 (+0.7 %)** - in the wrong
+   * direction, and inside what one bus line's chaos is worth (D-203).
+   */
+  readonly fleetHeadroom: number;
+  /**
+   * Whether this level takes on the tenders of section 14.4.
+   *
+   * False at Normal and Easy, which is the identity - no competitor has ever
+   * accepted one, so "a tender is a race with an AI rather than a private task
+   * list" (`economy/contracts.ts`) has been prose since M8. Hard takes the ones
+   * it can already serve: `tenderWorthTaking` asks only about lines that are
+   * running and cargo they are already refitted to, so the bet is on a business
+   * that exists rather than on one the company hopes to build.
+   *
+   * **And on today's worlds it never fires** (D-252): over eight seeds and
+   * twenty-five years the Hard arm is identical to the Normal arm to the euro,
+   * because a 14.4 tender asks for Goods, Food, Steel or Planks delivered to a
+   * TOWN and a competitor's lines are bus lines between towns and hauls into a
+   * works. The rule is the conservative one on purpose, so "inert" is the
+   * expected reading of it until the AI runs a finished-goods line into a town
+   * - which is what D-225's onward leg is about, one bundle over.
+   */
+  readonly tenders: boolean;
+  /**
+   * Council rating from which this level buys the exclusive building rights of
+   * section 13.3. [rating points]
+   *
+   * {@link COUNCIL_RATING_NEVER} at Normal and Easy - the identity. Hard uses
+   * the game's own {@link COUNCIL_EXCLUSIVE_MIN_RATING}, i.e. it buys them as
+   * soon as the council would sell them, which is the earliest a PLAYER could:
+   * the command refuses anything lower, so a threshold below it would buy
+   * nothing but refusals.
+   *
+   * **Measured: it fires, and it costs a little** (D-252) - over eight seeds
+   * the Hard arm ends **10,028 EUR** below the same arm with the threshold at
+   * NEVER, on identical lines and vehicles. That is the price of the rights it
+   * bought; what they buy back is a rival kept out of a town for twelve
+   * months, which a three-competitor sweep of this size cannot price.
+   */
+  readonly exclusiveRightsRating: number;
+}
+
+/** The three rows of {@link DifficultyAiTraits}, indexed by {@link Difficulty}. */
+export const DIFFICULTY_AI_TRAITS: readonly DifficultyAiTraits[] = [
+  {
+    candidatesTried: 20,
+    chainLookahead: 0,
+    terrainProbes: 0,
+    fleetHeadroom: 0.75,
+    tenders: false,
+    exclusiveRightsRating: COUNCIL_RATING_NEVER,
+  },
+  {
+    candidatesTried: AI_CANDIDATES_TRIED,
+    chainLookahead: 1,
+    terrainProbes: 0,
+    fleetHeadroom: 1,
+    tenders: false,
+    exclusiveRightsRating: COUNCIL_RATING_NEVER,
+  },
+  {
+    candidatesTried: AI_CANDIDATES_TRIED * 2,
+    chainLookahead: 2,
+    terrainProbes: 8,
+    fleetHeadroom: 1.25,
+    tenders: true,
+    exclusiveRightsRating: COUNCIL_EXCLUSIVE_MIN_RATING,
+  },
+];

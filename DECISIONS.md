@@ -83,10 +83,10 @@ no entry below. A number may appear under several topics.
   D-195, D-196, D-197, D-198, D-199, D-200, D-201, D-202, D-203, D-204,
   D-205, D-207, D-206, D-208, D-209, D-210, D-212, D-213, D-215, D-216,
   D-217, D-219, D-220, D-221, D-222, D-228, D-229, D-230, D-231, D-233,
-  D-234, D-235, D-236, D-241, D-242, D-248, D-249, D-250, D-251
+  D-234, D-235, D-236, D-241, D-242, D-248, D-249, D-250, D-251, D-252
 - **Process & specification:** D-070, D-123, D-129, D-133, D-138, D-140,
   D-185, D-191, D-197, D-198, D-199, D-203, D-204, D-205, D-206, D-215,
-  D-222, D-225, D-226, D-227, D-228, D-229, D-235
+  D-222, D-225, D-226, D-227, D-228, D-229, D-235, D-252
 
 ---
 
@@ -15849,3 +15849,181 @@ richtigen Versionsnummer und den falschen Hashes ist genauso schal, und das sagt
 nur das nachgespielte Vierteljahrhundert. Was der Test kauft, ist die BILLIGE
 Haelfte von "das Fixture ist aktuell" bei jedem Push - ein Save-Bump kann nicht
 mehr mit einem nie neu aufgenommenen Fixture ausgeliefert werden.
+
+### D-252 Difficulty with teeth: the data table `evaluate.ts` finally reads - and the measurement that says the START CAPITAL decides a level, not the judgement
+
+**SPEC.md 15 has promised three difficulty levels with better evaluation
+functions since the brief was written, and `evaluate.ts` never read
+`world.difficulty` once.** The level moved two things and both of them belong to
+the balance sheet rather than to the opponent: `START_CAPITAL_CT` (800,000 /
+500,000 / 250,000 EUR) and `LOAN_INTEREST_RATE_PER_YEAR` (4 % / 4 % / 6.5 %).
+All three levels played the identical competitor. `DIFFICULTY_AI_TRAITS` in
+`constants.ts` is the data table SPEC2 M24 asks for and `aiTraits` in
+`evaluate.ts` is the ONE place it is read.
+
+**Six knobs, every one of them about judgement and none about resources**
+(SPEC.md 15: "Verboten sind Ressourcen-Boni; erlaubt sind bessere
+Bewertungsfunktionen auf hoeheren Stufen"), Easy / Normal / Hard:
+
+| knob                    | Easy  | Normal | Hard | what it changes                                     |
+| ----------------------- | ----- | ------ | ---- | --------------------------------------------------- |
+| `candidatesTried`       | 20    | 60     | 120  | how far down the ranked list one build cycle looks  |
+| `chainLookahead`        | 0     | 1      | 2    | legs past a producing sink the chain test checks    |
+| `terrainProbes`         | 0     | 0      | 8    | top-N candidates priced on the way REALLY laid      |
+| `fleetHeadroom`         | 0.75  | 1      | 1.25 | multiplier on the fleet the 12.3 advisor sizes      |
+| `tenders`               | false | false  | true | whether the 14.4 tender board is played             |
+| `exclusiveRightsRating` | never | never  | 75   | council rating from which 13.3 rights are bought    |
+
+Not one of them touches a price, a credit line, a permission or a command. A
+competitor still enqueues the player's own commands (D-109), and the two boards
+the Hard level opens are `AcceptContract` and `BuyExclusiveRights` - two
+commands the player's own interface has issued since M8.
+
+**The Normal row is the exact identity of the pre-M24 competitor, and it is
+proved four ways rather than argued.** Every AI measurement in this project is
+a Normal world, so an approximate identity would re-band the lot inside the
+milestone that introduces the table (Fehlerkatalog 34). Each field is BRANCHED
+on its identity value rather than multiplied through it - `fleetFor` returns the
+advised number unmultiplied at headroom 1, `probeTop` returns the ranking
+untouched at zero probes, `chainCompletable` is the old `onwardLegExists` at
+depth 1, and `reviewBoards` returns without reading the world at all. Verified
+by running: the canonical cross-OS pin `b7e632a7124e67ce`, the corpus manifest
+`a00868b9911f12d6` and the soak fixture `64fec78d6bf0cd5e` at 35 commands and
+16 checkpoints are all unmoved, and the four-seed `aiGame` total measured
+through the new file is **7,293,303 EUR to the euro** - the figure D-248
+recorded for that sweep.
+
+**One arithmetic trap was found on the way and is why `Opportunity.scoreFlags`
+is a bitmask.** The terrain probe has to re-price a candidate at its measured
+way length, which needs the verdicts `rate` reached about the two ENDS (a rival
+at either, a producing sink, a chain we already feed). Carrying them as a
+PRODUCT and multiplying once is a different float from multiplying the four
+factors in sequence: `base * p1 * p2 * p3` is evaluated left to right and
+`base * (p1 * p2 * p3)` is not the same number. Every band in this project would
+have moved on a re-association. The flags travel and `scoredWith` multiplies
+them in the one order they have been multiplied in since M8.
+
+#### What the levels are worth, measured over sixteen seeds - and the Fertig-wenn is NOT met
+
+SPEC2 M24 asks that "ein Hard-KI-Lauf auf der Referenzkarte bei gleichem Seed
+messbar hoeheren Firmenwert erreicht als Normal". **It does not, on 16 of 16
+seeds, and the reason is not the table.** Sixteen acceptance seeds, 25 years,
+three competitors, 256 temperate map:
+
+| level  | start capital | value at year 25 | created    | per euro | wound up | crewed | seeds crewed | lines | vehicles |
+| ------ | ------------- | ---------------- | ---------- | -------- | -------- | ------ | ------------ | ----- | -------- |
+| Easy   |    38,400,000 |       40,803,531 | +2,403,531 |   1.0626 |        0 |     20 |        14/16 |    28 |      162 |
+| Normal |    24,000,000 |       26,215,097 | +2,215,097 |   1.0923 |        0 |     12 |        10/16 |    17 |      102 |
+| Hard   |    12,000,000 |       10,520,991 | -1,479,009 |   0.8767 |        2 |      7 |         7/16 |     7 |       42 |
+
+**The dominant term is `START_CAPITAL_CT`, and it points the other way.**
+`company/roster.ts` hands `createCompany` the world's difficulty for every
+company, so an AI competitor starts on the LEVEL'S capital exactly as the player
+does: 250,000 EUR at Hard against 500,000 at Normal. Three competitors are
+750,000 EUR poorer per seed at Hard - 12,000,000 over the sweep - before a
+single judgement is made. That is not a defect to fix here: handing the Hard AI
+more than the player is precisely the resource bonus SPEC.md 15 forbids.
+
+**What the traits are worth is measured at CONSTANT capital, one knob at a
+time**, which is the only comparison that says anything about judgement. Eight
+seeds, 25 years, three competitors, every arm played at the level's own capital
+with all other knobs at their Normal value:
+
+| arm (from the Normal baseline)   | value          | delta               | lines |
+| -------------------------------- | -------------- | ------------------- | ----- |
+| Hard baseline (Normal knobs)     |  5,790,628 EUR |                   - |     4 |
+| `terrainProbes` 8                |  6,117,194 EUR | **+326,566 (+5.6 %)** | 5   |
+| `chainLookahead` 2               |  5,541,237 EUR | -249,391 (-4.3 %)   |     3 |
+| `exclusiveRightsRating` 75       |  5,780,600 EUR | -10,028 (-0.2 %)    |     4 |
+| `candidatesTried` 120            |  5,790,628 EUR | **0, to the euro**  |     4 |
+| `fleetHeadroom` 1.25             |  5,790,628 EUR | **0, to the euro**  |     4 |
+| `tenders` on                     |  5,790,628 EUR | **0, to the euro**  |     4 |
+| Easy baseline (Normal knobs)     | 19,878,907 EUR |                   - |    11 |
+| `chainLookahead` 0               | 23,239,756 EUR | +3,360,849 (+16.9 %) |   16 |
+| `fleetHeadroom` 0.75             | 20,011,413 EUR | +132,506 (+0.7 %)   |    12 |
+| `candidatesTried` 20             | 19,878,907 EUR | **0, to the euro**  |    11 |
+
+So the whole table is worth single-digit percent where the capital step is a
+factor of two, and **the ordering the Fertig-wenn asks for cannot be bought with
+an evaluation function.** Reported as such rather than banded on a seed that
+happens to agree - which is the exact failure D-220 exists to prevent, and no
+seed agrees anyway.
+
+#### Four findings inside that measurement, and three of them are about this game rather than about this bundle
+
+- **`AI_CANDIDATES_TRIED` has never bound, and 20 and 120 cannot either.** The
+  longest candidate list that occurs over eight seeds x twenty-five years x five
+  personalities is **FIVE**. The drain gate and the profitability floor of
+  D-221/D-229 leave a competitor a handful of pairs, so SPEC2 M24's
+  first-named knob is inert on every world this game is balanced on. The field
+  is kept because the list is a property of the MAP: a 1024 map with three
+  hundred industries is where a depth of 20 starts costing something.
+- **`fleetHeadroom` is inert at Hard because the cap binds.** The 12.3 advisor
+  already asks for `AI_MAX_VEHICLES_PER_LINE` on every line these worlds offer,
+  and a headroom above the cap is not a fleet. Easy's 0.75 does move - by
+  +0.7 %, in the wrong direction, and inside what one line's chaos is worth
+  (D-203).
+- **The tender board never fires.** A 14.4 tender asks for Goods, Food, Steel or
+  Planks delivered to a TOWN; a competitor's lines are bus lines between towns
+  and hauls into a works, and `tenderWorthTaking` only bets on a line that is
+  already running and already refitted to that cargo. "Inert" is therefore the
+  expected reading of the conservative rule, not a defect in it - and it says
+  what would change it: an AI that runs a finished-goods line into a town, which
+  is D-225's onward leg one bundle over.
+- **Company value at year twenty-five is ANTI-correlated with the chain
+  look-ahead, in both directions, and the semantic ordering ships anyway.**
+  Depth 0 is +16.9 % and depth 2 is -4.3 %. What a deeper test buys is a line
+  that is still there in ten years - D-225's steel mill closed in 1958 and took
+  the sink of two lines with it - and a balance sheet at year twenty-five cannot
+  tell a line that was never built from a line that died, it can only count the
+  money. So the table is ordered by JUDGEMENT, the price is recorded here rather
+  than tuned away, and measuring the chain collapse directly is its own
+  instrument and its own bundle.
+
+#### The terrain probe, which is the one knob that pays
+
+`probeTop` takes the top `terrainProbes` candidates of a sorted ranking and asks
+the very planner the build command runs - `planTrack` for a railway,
+`planRoadRuns` for a road - between the very tiles `stopTileNear` will put the
+stops on. Everything above it prices `tileDistance`, a rounded Euclidean
+straight line, and the way is never straight: a pair 72 tiles apart is laid as
+119 tiles of track around the hills between them (D-228), and a road is laid as
+an L by `BuildRoad` and driven as one, so a diagonal pair is about 1.41 times
+its own straight line on a billiard table. Distance is in the tariff, in the
+trips a month, in the decay and in what the way costs to build and to keep, so
+an over-stated straight line over-values a candidate in four places at once. The
+re-priced candidate goes back through the same three gates the ranking used
+(`admits`, extracted for exactly that reason - two copies of those gates is how
+a filter and the refinement of that filter drift apart, D-219).
+
+**SPEC2 M24 names `planTrack` alone and the road twin is a deliberate
+departure**: using the rail assistant on a road candidate would measure a
+railway that will never be laid, and `planRoadRuns` is this project's own
+planner for the same question (D-154).
+
+**Priced, because SPEC2 M24 bounds it**: measured over eight seeds as the delta
+between one Hard ranking and one Normal ranking on the same world, divided by
+the eight candidates the level probes, it costs **p50 0.109 ms and at worst
+0.247 ms per probed candidate** against the clause's 1 ms. It is not in the tick
+hot path and that is structural rather than measured: `opportunities` has
+exactly one caller in the simulation, `startProject`, which one competitor
+reaches at most once per `AI_DECISION_INTERVAL_TICKS` and only when it has no
+project running - held by a source walk in `tests/unit/aiDifficulty.spec.ts`.
+
+#### What ships, and what does not
+
+- No save bump. Difficulty has been a saved, hashed world rule since M9 (D-110)
+  and `SAVE_VERSION` stays **34**; the behaviour change is covered by the
+  replay-version pinning policy of E-11, which SPEC2 M24 says in as many words.
+- No snapshot byte, no protocol field, no atlas cell, no RNG draw, no i18n
+  string, no migration edit.
+- `tests/balance/aiDifficulty.spec.ts` bands each level where it is - SPEC2
+  M24's "eigene Testbaender je Stufe" - asserts that the three levels are three
+  different games at the same four seeds, asserts the confound itself so the day
+  somebody changes it the file says so, and carries the refusal profile of
+  D-220. It runs in the FULL balance job only (twelve quarter centuries), which
+  is the D-248 precedent for the climate matrix's harsh-sky arm and is per-push
+  coverage through the `soak` job rather than "eventually".
+- The bundle does NOT deliver the campaign, `profile.json`, the visible
+  personality or the achievements. Those are M24's other MUSS points and their
+  own bundles.

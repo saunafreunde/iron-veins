@@ -5,6 +5,7 @@ import {
   AI_RAIL_PROJECTED_TRAINS,
   AI_TICKS_PER_TILE,
   Difficulty,
+  DIFFICULTY_AI_TRAITS,
   MapClimate,
 } from '../../src/sim/constants';
 import { clearStopTile, pickRoadVehicle, pickTrain, stopTileNear } from '../../src/sim/ai/build';
@@ -63,6 +64,9 @@ function project(w: World, opportunity: Opportunity): number {
     // The shape the FILTER prices, which on rail is the single-track fallback
     // the builder really lays and not the oval it asks for first (D-222).
     opportunity.rail ? AI_RAIL_PROJECTED_TRAINS : AI_MAX_VEHICLES_PER_LINE,
+    // The Normal row of DIFFICULTY_AI_TRAITS, which is the identity headroom
+    // and the world every seed below is built at (SPEC2 M24).
+    DIFFICULTY_AI_TRAITS[Difficulty.Normal]!.fleetHeadroom,
   );
   return projectLine(w, opportunity, specIds, fleet).margin;
 }
@@ -106,6 +110,7 @@ describe('the AI will not build a line that cannot pay', () => {
       offeredPerMonth: 144,
       // No century in these fixtures, so no board and no offer (SPEC2 M21).
       subsidyFactor: 1,
+      scoreFlags: 0,
     };
     const one = projectLine(w, pair, [bus], 1);
     const two = projectLine(w, pair, [bus], 2);
@@ -156,6 +161,7 @@ describe('the AI will not build a line that cannot pay', () => {
       offeredPerMonth: (a.population + b.population) * 0.18,
       // No century in these fixtures, so no board and no offer (SPEC2 M21).
       subsidyFactor: 1,
+      scoreFlags: 0,
     };
     const margin = projectLine(w, pair, [bus], 2).margin;
     console.log(

@@ -82,6 +82,10 @@ export const BALANCE_SCENARIOS = [
   // one of those runs shares, and the file's own equality assertion already
   // compares four climates run for run.
   'climateMatrix',
+  // The three difficulty levels of SPEC2 M24 (D-252). Costly - twelve quarter
+  // centuries - and run in the full balance job only, so its twin belongs on
+  // the costly list beside the two quarter-century AI scenarios.
+  'aiDifficulty',
 ] as const;
 
 export type BalanceScenario = (typeof BALANCE_SCENARIOS)[number];
@@ -91,7 +95,11 @@ export type BalanceScenario = (typeof BALANCE_SCENARIOS)[number];
  * the two quarter-century AI games, measured at 143 s of the 186 s a complete
  * twin costs.
  */
-export const COSTLY_SCENARIOS: readonly BalanceScenario[] = ['aiGame', 'aiCompany'];
+export const COSTLY_SCENARIOS: readonly BalanceScenario[] = [
+  'aiGame',
+  'aiCompany',
+  'aiDifficulty',
+];
 
 /**
  * The environment variable that asks for the whole expensive half of the

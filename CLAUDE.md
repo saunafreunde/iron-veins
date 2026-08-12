@@ -3940,3 +3940,73 @@ the honest shape of each is in D-249, D-250 and D-251.
   default suite and compares - nine milliseconds. It does not replace the soak
   run, and says so: a fixture with the right version and the wrong hashes is
   just as stale.
+
+## M24 bundle 1 - difficulty with teeth, and the measurement that says the start capital decides a level (D-252)
+
+**SPEC.md 15 has promised three difficulty levels with better evaluation
+functions since the brief was written, and `evaluate.ts` never read
+`world.difficulty` once.** `DIFFICULTY_AI_TRAITS` in `constants.ts` is the data
+table SPEC2 M24 asks for and `aiTraits` in `evaluate.ts` is the ONE place it is
+read (source walk). Six knobs, Easy / Normal / Hard: candidate depth 20/60/120,
+chain look-ahead 0/1/2 legs, terrain probes 0/0/8, fleet headroom 0.75/1/1.25,
+the 14.4 tender board off/off/on, the 13.3 building rights never/never/75. Not
+one of them touches a price, a credit line, a permission or a command - the
+competitor still enqueues the player's own commands (D-109), and the two boards
+the Hard level opens are `AcceptContract` and `BuyExclusiveRights`, which the
+player's interface has issued since M8. **No save bump** (difficulty has been a
+saved, hashed world rule since D-110): v34 stands, zero snapshot bytes, zero RNG
+draws, zero i18n lines, zero atlas cells.
+
+- **The Normal row is the exact identity of the pre-M24 competitor**, branched
+  rather than multiplied - `fleetFor` returns the advised number unmultiplied at
+  headroom 1, `probeTop` returns the ranking untouched at zero probes,
+  `chainCompletable` is the old `onwardLegExists` at depth 1, `reviewBoards`
+  returns without reading the world. Verified by running: canonical pin
+  `b7e632a7124e67ce`, corpus `a00868b9911f12d6`, soak `64fec78d6bf0cd5e` at 35
+  commands, and the four-seed `aiGame` total **7,293,303 EUR to the euro** -
+  D-248's own figure, measured through the new file.
+- **One arithmetic trap, and it is why `Opportunity.scoreFlags` is a bitmask.**
+  The probe re-prices a candidate at its measured way length and needs the
+  verdicts `rate` reached about the two ENDS; carrying them as a PRODUCT is a
+  different float from multiplying the four factors in sequence, and every band
+  in this project would have moved on the re-association.
+- **The Fertig-wenn's ordering is NOT met, on 16 of 16 seeds, and the reason is
+  not the table.** Sixteen acceptance seeds, 25 years, three competitors:
+  Easy 40,803,531 EUR on 38,400,000 of start capital, Normal 26,215,097 on
+  24,000,000, Hard 10,520,991 on **12,000,000**. `company/roster.ts` hands every
+  company the world's difficulty, so a Hard competitor starts on 250,000 EUR
+  against a Normal one's 500,000 - three competitors are 750,000 poorer per seed
+  before a judgement is made, and giving the Hard AI more is exactly the
+  resource bonus SPEC.md 15 forbids.
+- **What the traits are worth is measured at CONSTANT capital, one knob at a
+  time** (eight seeds, 25 years): terrain probe **+5.6 %**, chain look-ahead
+  **-4.3 %** at depth 2 and **+16.9 %** at depth 0, building rights -0.2 %, and
+  **candidate depth, fleet headroom and the tender board are EXACTLY inert**.
+  Single-digit percent against a capital step of a factor two.
+- **Three findings about this game rather than about this bundle.**
+  `AI_CANDIDATES_TRIED` has never bound: the longest candidate list over eight
+  seeds x twenty-five years x five personalities is **FIVE**, because the drain
+  gate and the D-221/D-229 floor leave a competitor a handful of pairs. The
+  fleet headroom is inert because the advisor already asks for the cap. The
+  tender board never fires because a 14.4 tender wants Goods, Food, Steel or
+  Planks delivered to a TOWN and a competitor runs bus lines and hauls into a
+  works. **And company value at year twenty-five is ANTI-correlated with the
+  chain look-ahead in both directions** - what a deeper test buys is a line that
+  is still there in ten years (D-225), and a year-25 balance sheet cannot tell a
+  line that was never built from a line that died. The table is ordered by
+  judgement and the price is recorded rather than tuned away.
+- **The terrain probe is the one knob that pays.** `probeTop` asks the very
+  planner the build command runs - `planTrack` for a railway, `planRoadRuns` for
+  a road, a named departure from SPEC2's `planTrack`-only clause - between the
+  very tiles `stopTileNear` will use, because the ranking prices a straight line
+  and the way is never straight (119 tiles of track for a 72-tile pair, D-228;
+  a road is laid as an L and driven as one). Measured **p50 0.109 ms, worst
+  0.247 ms per probed candidate** against SPEC2 M24's 1 ms clause, and it is not
+  in the tick hot path structurally: `opportunities` has exactly one caller,
+  `startProject`, behind the decision and retry intervals.
+- `tests/balance/aiDifficulty.spec.ts` bands each level where it is (SPEC2 M24's
+  "eigene Testbänder je Stufe"), asserts the three levels are three different
+  games at the same four seeds, asserts the capital confound itself so the day
+  somebody changes it the file says so, and carries D-220's refusal profile - no
+  loop, no undeclared pair, `NoRoute` 0 at all three levels. **Full balance job
+  only** (twelve quarter centuries, measured 194 s), the D-248 precedent.

@@ -2,7 +2,6 @@ import { CommandKind } from '../commands/types';
 import { CommandQueue } from '../commands/queue';
 import {
   AI_BUILD_CAPITAL_FACTOR,
-  AI_CANDIDATES_TRIED,
   AI_LIFT_REAL_SHARE,
   AI_CASH_RESERVE_CT,
   AI_DECISION_INTERVAL_TICKS,
@@ -37,11 +36,14 @@ import {
   stopTileNear,
 } from './build';
 import {
+  aiTraits,
+  exclusiveRightsTown,
   fleetFor,
   loadUnitsOf,
   opportunities,
   roadFleetCap,
   stationMonthlyOutput,
+  tenderWorthTaking,
 } from './evaluate';
 import { Personality, type AiState } from './types';
 import type { World } from '../World';
@@ -81,6 +83,14 @@ export function updateAi(world: World, queue: CommandQueue): void {
 }
 
 function decide(world: World, queue: CommandQueue, state: AiState): void {
+  // The two boards a difficulty level opens (SPEC2 M24), and deliberately NOT
+  // inside `optimise`: neither costs a decision cycle, because neither builds
+  // anything - one takes on a bet the running network can already win and the
+  // other buys twelve months of building rights. Both return without looking
+  // at the world at all below the level that uses them, which is the identity
+  // every AI band in this project was measured at.
+  reviewBoards(world, queue, state);
+
   if (state.project !== null) {
     advanceProject(world, queue, state);
     return;
@@ -89,6 +99,35 @@ function decide(world: World, queue: CommandQueue, state: AiState): void {
   // only ever expands ends up with a network it cannot crew.
   if (optimise(world, queue, state)) return;
   startProject(world, queue, state);
+}
+
+/**
+ * The 14.4 tender board and the 13.3 building rights, at the levels that use
+ * them (SPEC2 M24, `DIFFICULTY_AI_TRAITS`).
+ *
+ * At most ONE of each per decision cycle, lowest id first: both are ordinary
+ * player commands, and a competitor that accepted six tenders in one tick would
+ * be making six bets on one fleet.
+ */
+function reviewBoards(world: World, queue: CommandQueue, state: AiState): void {
+  const traits = aiTraits(world);
+
+  if (traits.tenders) {
+    for (const contract of world.contracts) {
+      if (!tenderWorthTaking(world, state.companyId, contract, traits)) continue;
+      queue.enqueue(
+        { kind: CommandKind.AcceptContract, contractId: contract.id },
+        world.tick + 1,
+        state.companyId,
+      );
+      break;
+    }
+  }
+
+  const townId = exclusiveRightsTown(world, state.companyId, traits);
+  if (townId >= 0) {
+    queue.enqueue({ kind: CommandKind.BuyExclusiveRights, townId }, world.tick + 1, state.companyId);
+  }
 }
 
 // ---------------------------------------------------------------- new lines
@@ -134,8 +173,12 @@ function startProject(world: World, queue: CommandQueue, state: AiState): void {
   if (world.tick - state.lastBuildTick < AI_RETRY_TICKS) return;
 
   const company = world.companyOf(state.companyId);
+  const traits = aiTraits(world);
   const candidates = opportunities(world, state.personality, state.companyId);
-  const tried = Math.min(candidates.length, AI_CANDIDATES_TRIED);
+  // How deep this level looks (SPEC2 M24). `AI_CANDIDATES_TRIED` is the Normal
+  // row of the table, so the number itself is unchanged for every world this
+  // project has measured.
+  const tried = Math.min(candidates.length, traits.candidatesTried);
 
   for (let index = 0; index < tried; index++) {
     const opportunity = candidates[index]!;
@@ -171,6 +214,7 @@ function startProject(world: World, queue: CommandQueue, state: AiState): void {
       loadUnitsOf(specIds, opportunity.cargo),
       opportunity.monthlyOutput,
       opportunity.rail ? AI_RAIL_MAX_TRAINS : roadFleetCap(opportunity.cargo, specIds),
+      traits.fleetHeadroom,
     );
 
     // WILL IT PAY? - the question this cycle never asked - is settled BEFORE
@@ -348,6 +392,7 @@ function advanceProject(world: World, queue: CommandQueue, state: AiState): void
       loadUnitsOf(project.specIds, project.cargo),
       output,
       project.rail ? project.railTrains : roadFleetCap(project.cargo, project.specIds),
+      aiTraits(world).fleetHeadroom,
     );
     buyVehicles(
       world,

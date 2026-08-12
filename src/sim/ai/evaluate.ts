@@ -23,7 +23,13 @@ import {
   AI_TICKS_PER_TILE,
   AI_TILES_PER_MONTH,
   AI_TOWN_OUTPUT_SHARE,
+  AI_TENDER_MIN_MONTHS,
+  AI_TENDER_SAFETY,
   AI_TRAIN_PRICE_CT,
+  AI_CASH_RESERVE_CT,
+  COUNCIL_RATING_NEVER,
+  DIFFICULTY_AI_TRAITS,
+  type DifficultyAiTraits,
   MONTHS_PER_YEAR,
   RAIL_DEPOT_COST_CT,
   RAIL_DEPOT_UPKEEP_CT,
@@ -36,13 +42,24 @@ import {
   ROAD_COST_PER_TILE_CT,
   ROAD_UPKEEP_PER_TILE_CT,
   CARGO_MAX_WAIT_DAYS,
+  Difficulty,
   STATION_CATCHMENT_SCAN_RADIUS,
   START_YEAR,
   MapClimate,
   TICKS_PER_DAY,
 } from '../constants';
-import { adviseFleet } from '../lines/metrics';
-import { pickRoadVehicle, pickTrain } from './build';
+import { adviseFleet, lineVehicles } from '../lines/metrics';
+import { pickRoadVehicle, pickTrain, planRoadRuns, stopTileNear } from './build';
+import { planTrack } from '../net/trackBuilder';
+import { isOpen, type Contract } from '../economy/contracts';
+import {
+  councilRating,
+  exclusiveRightsCostCt,
+  mayBuyExclusiveRights,
+  stationsInTown,
+} from '../town/council';
+import { OrderTarget } from '../vehicles/VehicleStore';
+import type { Station } from '../station/types';
 import { availableVehicles, capacityFor, VehicleKind, vehicleSpec } from '../vehicles/catalog';
 import { industryBaseOutput, industrySpec, type Industry } from '../industry/types';
 import type { Town } from '../town/types';
@@ -59,6 +76,19 @@ import type { World } from '../World';
  * the best one is what the company tries to build. The scoring is the ONLY
  * thing a difficulty level is allowed to change - the prices, the credit limit
  * and the commands are the player's.
+ *
+ * **Since SPEC2 M24 that sentence is true rather than aspirational.** It stood
+ * at the head of this file from M8 while nothing here read `world.difficulty`
+ * at all: the level moved the player's start capital and loan interest and
+ * left all three levels playing the identical opponent.
+ * {@link DIFFICULTY_AI_TRAITS} is the data table SPEC2 M24 asks for and
+ * {@link aiTraits} is the one place it is read - six knobs, every one of them
+ * about JUDGEMENT (how many candidates are considered, how far down a chain the
+ * evaluator looks, whether the way is measured or estimated, how much fleet
+ * headroom a line is given, whether the 14.4 tenders are taken on, and from
+ * what council rating the 13.3 building rights are bought). Not one of them
+ * touches a price, a credit line or a permission, and the Normal row is the
+ * exact identity of the pre-M24 competitor.
  */
 
 export interface Opportunity {
@@ -105,6 +135,28 @@ export interface Opportunity {
    * won the race for it.
    */
   readonly subsidyFactor: number;
+  /**
+   * What `rate` found out about the two ENDS of this pair: a rival serving
+   * either of them, a sink that has to be collected from, a chain we already
+   * feed. A `ScoreFlag` bitmask.
+   *
+   * Carried so that the terrain probe of SPEC2 M24 can re-price a candidate at
+   * its MEASURED way length without re-deriving verdicts it no longer has -
+   * the D-219 rule about a filter and the builder it filters for, applied to
+   * the ranking and its own refinement. Zero when nothing modified the score.
+   */
+  readonly scoreFlags: number;
+}
+
+/**
+ * **The one place {@link DIFFICULTY_AI_TRAITS} is read** (SPEC2 M24).
+ *
+ * A second reader is how a data table and the behaviour it describes drift
+ * apart, so every knob below goes through this function and
+ * `tests/unit/aiDifficulty.spec.ts` walks the sources to prove it.
+ */
+export function aiTraits(world: World): DifficultyAiTraits {
+  return DIFFICULTY_AI_TRAITS[world.difficulty] ?? DIFFICULTY_AI_TRAITS[Difficulty.Normal]!;
 }
 
 /** Tile distance the way everything else in this game measures it. */
@@ -248,10 +300,11 @@ export function stationMonthlyOutput(
  * personality, which is what they exist not to be.
  */
 export function opportunities(world: World, personality: number, companyId: number): Opportunity[] {
+  const traits = aiTraits(world);
   const prefersRail = personality === Personality.Rail || personality === Personality.Expansive;
-  const preferred = collectFor(world, personality, companyId, prefersRail);
+  const preferred = collectFor(world, personality, companyId, prefersRail, traits);
   if (preferred.length > 0 || !prefersRail) return preferred;
-  return collectFor(world, personality, companyId, false);
+  return collectFor(world, personality, companyId, false, traits);
 }
 
 function collectFor(
@@ -259,6 +312,7 @@ function collectFor(
   personality: number,
   companyId: number,
   rail: boolean,
+  traits: DifficultyAiTraits,
 ): Opportunity[] {
   const found: Opportunity[] = [];
 
@@ -273,7 +327,7 @@ function collectFor(
   // Rail and the two temperaments keep their industry focus: that is what
   // keeps the five distinguishable.
   if (personality === Personality.TownNetwork) collectTownPairs(world, found, rail, companyId);
-  else collectIndustryPairs(world, found, rail, companyId);
+  else collectIndustryPairs(world, found, rail, companyId, traits.chainLookahead);
   if (personality === Personality.Road) collectTownPairs(world, found, rail, companyId);
   collectTownDeliveries(world, found, rail, companyId);
 
@@ -319,7 +373,7 @@ function collectFor(
   // ranking's nominal figures: D-219a measured a floor built out of `rate`'s
   // own 20-unit lorry load and it stopped the AI building anything at all.
   const carriable = new Map<number, number[]>();
-  const buildable = found.filter((opportunity) => {
+  const vehicleFor = (opportunity: Opportunity): number[] => {
     const key = opportunity.cargo * 2 + (opportunity.rail ? 1 : 0);
     let specIds = carriable.get(key);
     if (specIds === undefined) {
@@ -329,48 +383,164 @@ function collectFor(
       if (specIds.length > 0 && specIds[0]! < 0) specIds = [];
       carriable.set(key, specIds);
     }
-    const liftUnits = loadUnitsOf(specIds, opportunity.cargo);
-    if (liftUnits <= 0) return false;
-    const roundsPerMonth = AI_TILES_PER_MONTH / (2 * opportunity.distance);
-    // The largest fleet the line will REALLY get, which on rail is
-    // AI_RAIL_PROJECTED_TRAINS and not AI_RAIL_MAX_TRAINS: the second train
-    // exists only on the one-way oval, and the oval does not fit on generated
-    // terrain (measured, ten railways of ten - the constant carries the
-    // count). Both the drain gate and the profitability floor below are quoted
-    // for it, because they are two halves of one question about one line.
-    const cap = opportunity.rail
-      ? AI_RAIL_PROJECTED_TRAINS
-      : roadFleetCap(opportunity.cargo, specIds);
-    const maxLift = cap * liftUnits * roundsPerMonth * AI_LIFT_REAL_SHARE;
-    // The fleet must OUT-lift a decaying source, not merely match it: a pile
-    // it can never eat pins at a month of age and pays the floor for ever
-    // (AI_DRAIN_MARGIN records the measured case).
-    if (opportunity.monthlyOutput * AI_DRAIN_MARGIN > maxLift) {
-      const staleDays =
-        CARGO_MAX_WAIT_DAYS +
-        (opportunity.distance * AI_TICKS_PER_TILE) / TICKS_PER_DAY / AI_LIFT_REAL_SHARE;
-      if (timeFactor(opportunity.cargo as Cargo, staleDays) < AI_MIN_ARRIVAL_FACTOR) return false;
-    }
-
-    const fleet = fleetFor(
-      2 * opportunity.distance * AI_TICKS_PER_TILE,
-      liftUnits,
-      opportunity.monthlyOutput,
-      cap,
-    );
-    return projectLine(world, opportunity, specIds, fleet).margin >= AI_MIN_PROFIT_MARGIN;
-  });
+    return specIds;
+  };
+  const buildable = found.filter((opportunity) =>
+    admits(world, opportunity, vehicleFor(opportunity), traits),
+  );
 
   // A total order: score first, then the tiles, so two pairs that score the
   // same are still ranked the same way in every run (law #14).
-  buildable.sort((a, b) => {
-    if (a.score !== b.score) return b.score - a.score;
-    if (a.fromX !== b.fromX) return a.fromX - b.fromX;
-    if (a.fromY !== b.fromY) return a.fromY - b.fromY;
-    if (a.toX !== b.toX) return a.toX - b.toX;
-    return a.toY - b.toY;
-  });
-  return buildable;
+  buildable.sort(byRank);
+  if (traits.terrainProbes <= 0) return buildable;
+  return probeTop(world, companyId, buildable, vehicleFor, traits);
+}
+
+/** Score first, then the tiles - the total order the ranking is read in. */
+function byRank(a: Opportunity, b: Opportunity): number {
+  if (a.score !== b.score) return b.score - a.score;
+  if (a.fromX !== b.fromX) return a.fromX - b.fromX;
+  if (a.fromY !== b.fromY) return a.fromY - b.fromY;
+  if (a.toX !== b.toX) return a.toX - b.toX;
+  return a.toY - b.toY;
+}
+
+/**
+ * The three gates a candidate has to pass before it may be ranked at all.
+ *
+ * Extracted from the filter it used to be inlined in, because the terrain probe
+ * of SPEC2 M24 has to ask exactly the same three questions of a candidate whose
+ * distance has been re-measured - and two copies of these gates is how a filter
+ * and the refinement of that filter drift apart (D-219, one function along).
+ */
+function admits(
+  world: World,
+  opportunity: Opportunity,
+  specIds: readonly number[],
+  traits: DifficultyAiTraits,
+): boolean {
+  const liftUnits = loadUnitsOf(specIds, opportunity.cargo);
+  if (liftUnits <= 0) return false;
+  const roundsPerMonth = AI_TILES_PER_MONTH / (2 * opportunity.distance);
+  // The largest fleet the line will REALLY get, which on rail is
+  // AI_RAIL_PROJECTED_TRAINS and not AI_RAIL_MAX_TRAINS: the second train
+  // exists only on the one-way oval, and the oval does not fit on generated
+  // terrain (measured, ten railways of ten - the constant carries the
+  // count). Both the drain gate and the profitability floor below are quoted
+  // for it, because they are two halves of one question about one line.
+  const cap = opportunity.rail ? AI_RAIL_PROJECTED_TRAINS : roadFleetCap(opportunity.cargo, specIds);
+  const maxLift = cap * liftUnits * roundsPerMonth * AI_LIFT_REAL_SHARE;
+  // The fleet must OUT-lift a decaying source, not merely match it: a pile
+  // it can never eat pins at a month of age and pays the floor for ever
+  // (AI_DRAIN_MARGIN records the measured case).
+  if (opportunity.monthlyOutput * AI_DRAIN_MARGIN > maxLift) {
+    const staleDays =
+      CARGO_MAX_WAIT_DAYS +
+      (opportunity.distance * AI_TICKS_PER_TILE) / TICKS_PER_DAY / AI_LIFT_REAL_SHARE;
+    if (timeFactor(opportunity.cargo as Cargo, staleDays) < AI_MIN_ARRIVAL_FACTOR) return false;
+  }
+
+  const fleet = fleetFor(
+    2 * opportunity.distance * AI_TICKS_PER_TILE,
+    liftUnits,
+    opportunity.monthlyOutput,
+    cap,
+    traits.fleetHeadroom,
+  );
+  return projectLine(world, opportunity, specIds, fleet).margin >= AI_MIN_PROFIT_MARGIN;
+}
+
+/**
+ * **The terrain probe of SPEC2 M24: the top N candidates priced on the way that
+ * would really be laid rather than on the straight line between the ends.**
+ *
+ * Everything above this point measures a pair with `tileDistance` - a rounded
+ * Euclidean straight line - and the way is never straight. A railway is planned
+ * around hills and water (measured on seed 4711: 119 tiles of track for a
+ * 72-tile pair, D-228), and a road is laid as an L by `BuildRoad` and driven as
+ * one, so even on a billiard table a diagonal pair is about 1.41 times its own
+ * straight line. Distance is in the tariff, in the trips a month, in the decay
+ * and in what the way costs to build and to keep, so a candidate whose real way
+ * is half as long again is over-valued in four places at once.
+ *
+ * The probe asks the very planner the build command runs - `planTrack` for a
+ * railway, `planRoadRuns` for a road - between the very tiles `stopTileNear`
+ * will put the stops on, which is the only way the answer can be the truth
+ * about the line that would be built (D-119's rule, and D-219's). It then
+ * re-prices the candidate at that length and puts it back through
+ * {@link admits}: a pair whose real way makes it a loss-maker leaves the list
+ * here rather than being built and reviewed to death two game years later.
+ *
+ * SPEC2 M24 names `planTrack` alone; the road twin is this project's own
+ * planner for the same question (D-154), and using `planTrack` on a road
+ * candidate would measure a railway that will never be laid. **It is never in
+ * the tick hot path**: `opportunities` is reached only from `startProject`,
+ * which one competitor reaches at most once per `AI_DECISION_INTERVAL_TICKS`
+ * and then only when it has no project running.
+ */
+function probeTop(
+  world: World,
+  companyId: number,
+  ranked: readonly Opportunity[],
+  vehicleFor: (opportunity: Opportunity) => number[],
+  traits: DifficultyAiTraits,
+): Opportunity[] {
+  const probed: Opportunity[] = [];
+  const limit = Math.min(ranked.length, traits.terrainProbes);
+  for (let index = 0; index < ranked.length; index++) {
+    const opportunity = ranked[index]!;
+    if (index >= limit) {
+      probed.push(opportunity);
+      continue;
+    }
+    const tiles = probeWayTiles(world, companyId, opportunity);
+    // No way at all is not a refusal here: the builder's own dry run answers
+    // that question with the stops and the shed in hand, and dropping the
+    // candidate on a probe that only knows two tiles would hide a pair the
+    // builder could still place one tile over.
+    if (tiles <= opportunity.distance) {
+      probed.push(opportunity);
+      continue;
+    }
+    const measured = priced(
+      world,
+      opportunity.fromX,
+      opportunity.fromY,
+      opportunity.toX,
+      opportunity.toY,
+      opportunity.cargo,
+      tiles,
+      opportunity.rail,
+      opportunity.monthlyOutput,
+      // What the ends OFFER is a property of the ends, not of the way between
+      // them: a longer road does not make a town bigger.
+      opportunity.offeredPerMonth,
+      opportunity.subsidyFactor,
+      opportunity.scoreFlags,
+    );
+    if (admits(world, measured, vehicleFor(measured), traits)) probed.push(measured);
+  }
+  probed.sort(byRank);
+  return probed;
+}
+
+/**
+ * Tiles the way between a candidate's two ends really takes, or the straight
+ * line where no planner can answer.
+ */
+function probeWayTiles(world: World, companyId: number, opportunity: Opportunity): number {
+  const from = stopTileNear(world, opportunity.fromX, opportunity.fromY);
+  const to = stopTileNear(world, opportunity.toX, opportunity.toY);
+  if (from === null || to === null) return opportunity.distance;
+  if (opportunity.rail) {
+    const planned = planTrack(world.map, from.x, from.y, to.x, to.y, RailType.Plain, true);
+    return planned.ok ? planned.route.tiles.length : opportunity.distance;
+  }
+  const runs = planRoadRuns(world, companyId, from, to);
+  if (runs === null) return opportunity.distance;
+  let tiles = 0;
+  for (const run of runs) tiles += Math.abs(run.x2 - run.x1) + Math.abs(run.y2 - run.y1);
+  return tiles;
 }
 
 /**
@@ -400,6 +570,7 @@ function collectIndustryPairs(
   into: Opportunity[],
   rail: boolean,
   companyId: number,
+  chainLookahead: number,
 ): void {
   for (const source of world.industries) {
     if (!source.open) continue;
@@ -420,7 +591,7 @@ function collectIndustryPairs(
       // nobody collects it, and takes the line feeding it with it. So a pair
       // ending at one is only offered when the NEXT leg is there to be built -
       // otherwise the competitor is choosing a line that is going to die.
-      if (!terminal && !onwardLegExists(world, sink)) continue;
+      if (!terminal && !chainCompletable(world, sink, chainLookahead)) continue;
       into.push(
         rate(
           world,
@@ -483,25 +654,60 @@ function collectTownPairs(
 }
 
 /**
- * Could the chain be carried on past this works?
+ * **Could the chain be carried on past this works, `depth` legs out?**
  *
- * Somewhere open, on the same land, inside the range a competitor builds over,
- * that accepts what this works makes. A town counts: it takes finished goods
- * and it never closes.
+ * At depth 1 - the Normal level, and what this function was until SPEC2 M24 -
+ * the question is D-109's fourth finding: somewhere open, on the same land,
+ * inside the range a competitor builds over, that accepts what this works
+ * makes. A town counts, because it takes finished goods and never closes.
+ *
+ * At depth 0 the question is not asked at all, which is the pre-D-109 AI and is
+ * the Easy level: a competitor that builds a line into a works nobody will ever
+ * collect from watches the 7.3 closure clock take its own sink away.
+ *
+ * At depth 2 - the Hard level - the answer has to hold for the leg AFTER that
+ * one too, which is D-225's measured failure written down as a rule. Seed
+ * 918273: a steel mill that had been dormant for six years started making steel
+ * the month the AI's second line brought it ore, nobody ever carried the steel
+ * away (D-085 judges a works on what left ON A VEHICLE), and the mill closed in
+ * 1958 taking the sink of BOTH the company's lines with it. The depth-1 test
+ * was satisfied at every point of that story.
+ *
+ * Iterative with an explicit frontier rather than recursive (law #8): an
+ * industry map is a graph like any other, and a depth-limited walk written as a
+ * recursion is one table edit away from being an unbounded one. The frontier is
+ * a set of ids, so a chain that fans out and rejoins is walked once.
  */
-function onwardLegExists(world: World, works: Industry): boolean {
-  const cargo = outputOf(works);
-  if (cargo < 0) return false;
-  if (cargo === Cargo.Goods || cargo === Cargo.Food) return world.towns.length > 0;
+function chainCompletable(world: World, works: Industry, depth: number): boolean {
+  if (depth <= 0) return true;
 
-  for (const next of world.industries) {
-    if (next.id === works.id || !next.open) continue;
-    if (next.landmassId !== works.landmassId) continue;
-    if (!industrySpec(next.type).inputs.includes(cargo as Cargo)) continue;
-    const distance = tileDistance(works.x, works.y, next.x, next.y);
-    if (distance >= AI_MIN_DISTANCE && distance <= AI_MAX_DISTANCE) return true;
+  let frontier: Industry[] = [works];
+  for (let level = 0; level < depth; level++) {
+    const next: Industry[] = [];
+    const seen = new Set<number>();
+    for (const source of frontier) {
+      const cargo = outputOf(source);
+      // A works with no output of its own is where a chain is ALLOWED to end.
+      if (cargo < 0) return true;
+      if (cargo === Cargo.Goods || cargo === Cargo.Food) {
+        if (world.towns.length > 0) return true;
+        continue;
+      }
+      for (const sink of world.industries) {
+        if (sink.id === source.id || !sink.open) continue;
+        if (sink.landmassId !== source.landmassId) continue;
+        if (!industrySpec(sink.type).inputs.includes(cargo as Cargo)) continue;
+        const distance = tileDistance(source.x, source.y, sink.x, sink.y);
+        if (distance < AI_MIN_DISTANCE || distance > AI_MAX_DISTANCE) continue;
+        if (seen.has(sink.id)) continue;
+        seen.add(sink.id);
+        next.push(sink);
+      }
+    }
+    if (next.length === 0) return false;
+    frontier = next;
   }
-  return false;
+  return true;
 }
 
 /**
@@ -595,6 +801,88 @@ function rate(
     cargo,
     false,
   );
+
+  // A pair somebody already serves is worth less, not nothing: section 15 asks
+  // for existing service to be taken into account, and a competitor's stop at
+  // one end of a good chain does not make the chain bad.
+  let scoreFlags = 0;
+  if (servedByAnyone(world, fromX, fromY)) scoreFlags |= ScoreFlag.RivalAtSource;
+  if (servedByAnyone(world, toX, toY)) scoreFlags |= ScoreFlag.RivalAtSink;
+  if (!terminalSink) scoreFlags |= ScoreFlag.ProducingSink;
+  // The onward leg of a chain we already feed is the most valuable thing there
+  // is to build, and the easiest thing to overlook: without it the works we
+  // supply shuts down and takes our own line with it.
+  if (flags.chain === true) scoreFlags |= ScoreFlag.OwnChain;
+
+  return priced(
+    world,
+    fromX,
+    fromY,
+    toX,
+    toY,
+    cargo,
+    distance,
+    rail,
+    monthlyOutput,
+    flags.offeredPerMonth ?? monthlyOutput,
+    subsidyFactor,
+    scoreFlags,
+  );
+}
+
+/**
+ * What `rate` found out about the two ENDS of a pair, as a bitmask.
+ *
+ * A mask rather than a product, and the reason is arithmetic rather than
+ * tidiness: the score is `base * p1 * p2 * p3` evaluated left to right, and
+ * `base * (p1 * p2 * p3)` is a different float. Every AI band in this project
+ * is a Normal world, so a re-association here would move all of them - so the
+ * flags travel and {@link scoredWith} multiplies them in the one order they
+ * have been multiplied in since M8.
+ */
+const ScoreFlag = {
+  RivalAtSource: 1,
+  RivalAtSink: 2,
+  ProducingSink: 4,
+  OwnChain: 8,
+} as const;
+
+/** The ranking ratio with the end-of-pair verdicts applied, in their own order. */
+function scoredWith(base: number, scoreFlags: number): number {
+  let score = base;
+  if ((scoreFlags & ScoreFlag.RivalAtSource) !== 0) score *= AI_RIVAL_PENALTY;
+  if ((scoreFlags & ScoreFlag.RivalAtSink) !== 0) score *= AI_RIVAL_PENALTY;
+  if ((scoreFlags & ScoreFlag.ProducingSink) !== 0) score *= AI_PRODUCING_SINK_PENALTY;
+  if ((scoreFlags & ScoreFlag.OwnChain) !== 0) score *= AI_CHAIN_BONUS;
+  return score;
+}
+
+/**
+ * The pricing half of {@link rate}, over a distance the caller states.
+ *
+ * Split out for the terrain probe of SPEC2 M24, which has to re-price a
+ * candidate at its MEASURED way length: everything above this line answers
+ * questions about the two ENDS (who else serves them, what the sink does with
+ * the cargo, whether we already feed the source) and is therefore unchanged by
+ * how long the way between them turns out to be, and everything below is a
+ * function of the distance. `scoreFactor` carries the first half's verdict
+ * across, so a re-priced candidate keeps the penalties and the bonus it earned
+ * without asking a second time.
+ */
+function priced(
+  world: World,
+  fromX: number,
+  fromY: number,
+  toX: number,
+  toY: number,
+  cargo: number,
+  distance: number,
+  rail: boolean,
+  monthlyOutput: number,
+  offeredPerMonth: number,
+  subsidyFactor: number,
+  scoreFlags: number,
+): Opportunity {
   const load = rail ? AI_RAIL_LOAD_UNITS : AI_ROAD_LOAD_UNITS;
   /*
    * Round trips a month, and this is where a competitor's judgement lives.
@@ -686,17 +974,7 @@ function rate(
     : ROAD_STOP_COST_CT * 2 + ROAD_DEPOT_COST_CT + AI_LORRY_PRICE_CT;
   const wholeCostCt = buildCostCt + world.costCt(fixedCt);
 
-  // A pair somebody already serves is worth less, not nothing: section 15 asks
-  // for existing service to be taken into account, and a competitor's stop at
-  // one end of a good chain does not make the chain bad.
-  let score = revenueCtPerMonth / Math.max(1, wholeCostCt);
-  if (servedByAnyone(world, fromX, fromY)) score *= AI_RIVAL_PENALTY;
-  if (servedByAnyone(world, toX, toY)) score *= AI_RIVAL_PENALTY;
-  if (!terminalSink) score *= AI_PRODUCING_SINK_PENALTY;
-  // The onward leg of a chain we already feed is the most valuable thing there
-  // is to build, and the easiest thing to overlook: without it the works we
-  // supply shuts down and takes our own line with it.
-  if (flags.chain === true) score *= AI_CHAIN_BONUS;
+  const score = scoredWith(revenueCtPerMonth / Math.max(1, wholeCostCt), scoreFlags);
 
   return {
     fromX,
@@ -710,8 +988,9 @@ function rate(
     score,
     rail,
     monthlyOutput,
-    offeredPerMonth: flags.offeredPerMonth ?? monthlyOutput,
+    offeredPerMonth,
     subsidyFactor,
+    scoreFlags,
   };
 }
 
@@ -831,6 +1110,7 @@ export function fleetFor(
   loadUnits: number,
   monthlyOutput: number,
   cap: number,
+  headroom: number,
 ): number {
   const realRound = roundTicks / AI_LIFT_REAL_SHARE;
   const interval = Math.max(
@@ -838,7 +1118,12 @@ export function fleetFor(
     (loadUnits * AI_TAKT_UTILISATION * TICKS_PER_MONTH) / (monthlyOutput > 1 ? monthlyOutput : 1),
   );
   const demanded = adviseFleet(realRound, interval);
-  const wanted = demanded === null ? 1 : demanded.vehiclesNeeded;
+  const advised = demanded === null ? 1 : demanded.vehiclesNeeded;
+  // The difficulty's own headroom, and the identity is a BRANCH rather than a
+  // multiplication by one (DIFFICULTY_AI_TRAITS.fleetHeadroom): every AI band
+  // in this project is a Normal world, and `Math.round(n * 1)` is only the
+  // identity for values a float can hold exactly.
+  const wanted = headroom === 1 ? advised : Math.round(advised * headroom);
   return wanted < 1 ? 1 : wanted > cap ? cap : wanted;
 }
 
@@ -951,4 +1236,112 @@ export function projectLine(
     upkeepCtPerMonth,
     margin: upkeepCtPerMonth > 0 ? revenueCtPerMonth / upkeepCtPerMonth : 0,
   };
+}
+
+// ------------------------------------- the two boards a difficulty level opens
+
+/**
+ * **Is this 14.4 tender a bet a company that runs THIS network should take?**
+ * (SPEC2 M24, {@link DifficultyAiTraits.tenders}.)
+ *
+ * Always false below the level that participates, which is the identity: no
+ * competitor has ever accepted a tender, so the sentence at the head of
+ * `economy/contracts.ts` - "the first to finish it takes the money, which is
+ * what makes a tender a race with an AI rather than a private task list" - has
+ * been prose since M8.
+ *
+ * The rule is deliberately the most conservative one that can win a race: the
+ * company must ALREADY run a line whose schedule calls in that town, crewed
+ * with vehicles ALREADY refitted to that cargo, and that fleet must be able to
+ * lift {@link AI_TENDER_SAFETY} times the quota in the time left. It never
+ * accepts a tender it would have to build for. Two reasons, both of them
+ * measured elsewhere in this file: a project takes four decision cycles plus a
+ * construction to reach its first delivery (D-108), and a competitor's own
+ * forecasts over-state what a line delivers by a third (D-229), so a bet on a
+ * business that does not exist yet is a penalty with extra steps.
+ *
+ * The lift arithmetic is `projectLine`'s own - fleet capacity times rounds a
+ * month at {@link AI_LIFT_REAL_SHARE} - rather than a second estimate beside
+ * it (the D-219 lesson).
+ */
+export function tenderWorthTaking(
+  world: World,
+  companyId: number,
+  contract: Contract,
+  traits: DifficultyAiTraits,
+): boolean {
+  if (!traits.tenders) return false;
+  if (!isOpen(world, contract)) return false;
+  if (contract.acceptedBy.includes(companyId)) return false;
+
+  const monthsLeft = (contract.deadlineTick - world.tick) / TICKS_PER_MONTH;
+  if (monthsLeft < AI_TENDER_MIN_MONTHS) return false;
+
+  for (const lineId of world.lines.ownedBy(companyId)) {
+    let first: Station | null = null;
+    let second: Station | null = null;
+    let callsInTown = false;
+    for (const order of world.lines.orders[lineId]!) {
+      if (order.target !== OrderTarget.Station) continue;
+      const station = world.stations[order.targetId];
+      if (station === undefined) continue;
+      if (first === null) first = station;
+      else if (second === null) second = station;
+      if (station.townId === contract.townId) callsInTown = true;
+    }
+    if (!callsInTown || first === null || second === null) continue;
+
+    let liftUnits = 0;
+    for (const vehicleId of lineVehicles(world, lineId)) {
+      if (world.vehicles.refitCargo[vehicleId] !== contract.cargo) continue;
+      const consist = world.vehicles.consist[vehicleId]!;
+      const specIds = consist.length > 0 ? consist : [world.vehicles.specId[vehicleId]!];
+      liftUnits += loadUnitsOf(specIds, contract.cargo);
+    }
+    if (liftUnits <= 0) continue;
+
+    const dx = second.x - first.x;
+    const dy = second.y - first.y;
+    const distance = Math.max(1, Math.round(Math.sqrt(dx * dx + dy * dy)));
+    const roundsPerMonth = (AI_TILES_PER_MONTH * AI_LIFT_REAL_SHARE) / (2 * distance);
+    if (liftUnits * roundsPerMonth * monthsLeft >= contract.amountUnits * AI_TENDER_SAFETY) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * **The town whose 13.3 building rights this company should buy, or -1**
+ * (SPEC2 M24, {@link DifficultyAiTraits.exclusiveRightsRating}).
+ *
+ * -1 for ever below the level that buys them, because the threshold is
+ * {@link COUNCIL_RATING_NEVER} there and a council rating is clamped to 100.
+ *
+ * Everything the command will ask is asked here first - the rights are free,
+ * the rating is high enough, the money is there - which is D-219's and D-230's
+ * discipline rather than politeness: a planner that orders what the command
+ * layer exists to refuse produces a loop the refusal profile then has to
+ * tolerate. Two further conditions of the AI's own: it buys rights only where
+ * it actually runs a station (rights over a town it has never served buy
+ * nothing but a bill), and never out of the reserve it keeps for its fleet.
+ *
+ * Lowest town id first, which is a total order and not a walk order (law #3).
+ */
+export function exclusiveRightsTown(
+  world: World,
+  companyId: number,
+  traits: DifficultyAiTraits,
+): number {
+  if (traits.exclusiveRightsRating >= COUNCIL_RATING_NEVER) return -1;
+
+  const company = world.companyOf(companyId);
+  for (const town of world.towns) {
+    if (councilRating(town, companyId) < traits.exclusiveRightsRating) continue;
+    if (!mayBuyExclusiveRights(world, town, companyId)) continue;
+    if (stationsInTown(world, town, companyId) === 0) continue;
+    if (company.cashCt - exclusiveRightsCostCt(world, town) < AI_CASH_RESERVE_CT) continue;
+    return town.id;
+  }
+  return -1;
 }
