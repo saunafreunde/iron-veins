@@ -255,7 +255,7 @@ describe('what the business traveller pays', () => {
       distanceTiles: 40,
       ticksInTransit: 0,
       hasCooling: false,
-      year: 1950,
+      epochYears: 0,
     };
     const commuter = deliveryRevenueCt({ ...input, cargo: Cargo.CommuterPax });
     const business = deliveryRevenueCt({ ...input, cargo: Cargo.BusinessPax });

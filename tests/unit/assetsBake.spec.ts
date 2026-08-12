@@ -37,7 +37,7 @@ import { BAKED_STATIC_MAX_LIFT_PX, PROCEDURAL_ONLY_MODULES } from '../../src/ren
 import { EMISSIVE_WINDOW_HEX } from '../../src/render/emissive';
 import { HEIGHT_PX, TILE_H, TILE_W } from '../../src/render/projection';
 import { FACE_LEFT, FACE_RIGHT, FACE_TOP } from '../../src/render/shapes';
-import { HEIGHT_STEP_M, MapClimate, TILE_SIZE_M } from '../../src/sim/constants';
+import { HEIGHT_STEP_M, MapClimate, START_YEAR, TILE_SIZE_M } from '../../src/sim/constants';
 import { IndustryType } from '../../src/sim/industry/types';
 import { MODULE_KIND_COUNT, ModuleKind } from '../../src/sim/station/types';
 import { VEHICLE_SPECS } from '../../src/sim/vehicles/catalog';
@@ -740,6 +740,7 @@ describe('tools/assets-manifest.json', () => {
     it('maps every rail, road and water catalogue entry exactly once', () => {
       for (const spec of VEHICLE_SPECS) {
         if (spec.kind === VehicleKind.Aircraft) continue;
+        if (spec.introYear < START_YEAR) continue;
         expect(vehicleTargets.has(spec.id), `vehicle:${spec.id} (${spec.nameKey})`).toBe(true);
       }
     });
@@ -748,6 +749,31 @@ describe('tools/assets-manifest.json', () => {
       for (const spec of VEHICLE_SPECS) {
         if (spec.kind !== VehicleKind.Aircraft) continue;
         expect(vehicleTargets.has(spec.id), `vehicle:${spec.id} must stay procedural`).toBe(false);
+      }
+    });
+
+    it('maps no pre-1950 generation either - the second named E-14 exemption', () => {
+      // SPEC2 M23 (D-245) added sixty entries between 1850 and 1949 as PURE
+      // CATALOGUE DATA. They draw through `shapes.ts`, the fallback floor of
+      // D-170, for two reasons that both have to hold:
+      //
+      //  - E-14 names "fruehe Aeren 1850-1920" as procedural territory in the
+      //    same sentence as aircraft and the industry specials, so this is the
+      //    decision the constitution already took rather than a new one;
+      //  - sixty models at eight facings is 480 atlas cells against the ~150
+      //    SPEC2's 6.1 books for the whole of M23, and page 0-detail has been
+      //    FULL since D-173. An unbooked expansion is Fehlerkatalog 40.
+      //
+      // The rule is `introYear < START_YEAR` and nothing softer: it is the same
+      // predicate `eraCatalog.spec.ts` uses to define the era block, so the two
+      // cannot drift into disagreeing about which sixty entries are exempt.
+      const era = VEHICLE_SPECS.filter((spec) => spec.introYear < START_YEAR);
+      expect(era.length, 'the era block is empty - the exemption is vacuous').toBe(60);
+      for (const spec of era) {
+        expect(
+          vehicleTargets.has(spec.id),
+          `vehicle:${spec.id} (${spec.nameKey}) must stay procedural until an atlas page is booked`,
+        ).toBe(false);
       }
     });
 

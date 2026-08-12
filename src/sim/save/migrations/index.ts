@@ -1,6 +1,7 @@
 import { CARGO_COUNT } from '../../cargo/types';
 import {
   LEDGER_HISTORY_MONTHS,
+  START_YEAR,
   TILE_PUBLIC,
   WEATHER_REGION_COUNT,
   WeatherRule,
@@ -1736,6 +1737,48 @@ const v32_to_v33: SaveMigration = (payload) => {
 };
 
 /**
+ * M23 gave the game two centuries (SPEC2 M23's one Z5 bump - v34, E-15).
+ *
+ * Two fields, and both enter a version 33 world as the only values that world
+ * can honestly be given:
+ *
+ *  - `startYear` becomes `START_YEAR`. Every world this game has ever recorded
+ *    began on 1 January 1950 - the calendar had no other opinion available -
+ *    so this is not a default, it is the recorded fact. Entering anything else
+ *    would move every date in the file: a vehicle bought in game year 3 would
+ *    come back built in 1853, its retirement would fall due a century early,
+ *    and a goal deadline would name a year the player never played towards.
+ *  - `endless` becomes `false`. A version 33 world stopped when its hundred
+ *    and first playable year ran out, because there was no way for it not to.
+ *
+ * The pre-1950 catalogue that arrives with the same milestone needs nothing
+ * here for the reason the five editor command kinds needed nothing at v33: a
+ * spec id is a number in a consist, and a save written by an older build
+ * cannot contain one that did not exist. What it DOES need is that no era spec
+ * is purchasable from 1950 on, which is a catalogue property held by
+ * `tests/unit/eraCatalog.spec.ts` rather than a migration.
+ *
+ * Both fields are hashed unconditionally (see `hashWorld`), so this bump moves
+ * every world digest in the game once - the designed-for event, re-recorded
+ * under the D-137/D-130 protocols.
+ *
+ * A field already present is kept, for the reason `v30_to_v31` gives: the
+ * corpus trick wraps a CURRENT state in an old container, and a world that
+ * began in 1850 must not be told it began in 1950.
+ */
+const v33_to_v34: SaveMigration = (payload) => {
+  const inner = state(payload);
+  return {
+    ...payload,
+    state: {
+      ...inner,
+      startYear: inner['startYear'] ?? START_YEAR,
+      endless: inner['endless'] ?? false,
+    },
+  };
+};
+
+/**
  * Registry keyed by the version a migration reads (section 19.1).
  *
  * There is deliberately no entry for 1 -> 2: a version 1 world had no map at
@@ -1774,6 +1817,7 @@ export const SAVE_MIGRATIONS: ReadonlyMap<number, SaveMigration> = new Map<numbe
   [30, v30_to_v31],
   [31, v31_to_v32],
   [32, v32_to_v33],
+  [33, v33_to_v34],
 ]);
 
 /**

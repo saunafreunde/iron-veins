@@ -20,7 +20,7 @@ import type {
 } from '../shared/protocol';
 import type { ReplayEntry, SaveEntry } from '../platform/Storage';
 import { DEFAULT_SETTINGS, type AppSettings } from '../shared/settings';
-import { MapClimate } from '../sim/constants';
+import { MapClimate, START_YEAR } from '../sim/constants';
 import { EconomyCurve } from '../sim/economy/curve';
 import type { MapGenPhase } from '../sim/mapgen';
 import type { ReplayVerification } from '../sim/save/replay';
@@ -153,6 +153,16 @@ export interface SimUiState extends SnapshotValues {
    * and the second input of the seasonal optics beside the published month.
    */
   climate: MapClimate;
+  /**
+   * The world's own first year and whether its clock ever stops (SPEC2 E-15).
+   *
+   * World constants announced with the map, like the climate above them: the
+   * century chart labels its axis with the first, and the status bar needs the
+   * second to tell "this game is over" from "this game is a hundred years old
+   * and still running".
+   */
+  startYear: number;
+  endless: boolean;
   /**
    * The century curve of SPEC2 M21 (E-09), row major in per mille, or empty
    * in a world whose economy rule is off.
@@ -387,6 +397,8 @@ export interface SimUiState extends SnapshotValues {
     mapSize: number;
     mapBuffer: SharedArrayBuffer;
     climate: MapClimate;
+    startYear: number;
+    endless: boolean;
     economyCurve: readonly number[];
     towns: readonly TownMarker[];
     industries: readonly IndustryMarker[];
@@ -495,8 +507,13 @@ export interface SimUiState extends SnapshotValues {
  * worth. There is one table and one set of readers (`sim/economy/curve.ts`);
  * this is the two-line adapter from the wire shape to it.
  */
-function adoptCurve(rows: readonly number[]): EconomyCurve {
+function adoptCurve(rows: readonly number[], startYear: number): EconomyCurve {
   const curve = new EconomyCurve();
+  // The century is anchored on the world's own first year (SPEC2 E-15, D-245),
+  // which is why `ready` publishes it: a chart labelled 1950 over an 1880
+  // world's curve would be the preview-and-bill disagreement of D-092 with a
+  // hundred years between the two.
+  curve.startYear = startYear;
   curve.load(rows);
   return curve;
 }
@@ -525,6 +542,8 @@ export const useSimStore = create<SimUiState>((set) => ({
   townCount: 0,
   industryCount: 0,
   climate: MapClimate.Temperate,
+  startYear: START_YEAR,
+  endless: false,
   economyCurve: new EconomyCurve(),
   mapBuffer: null,
   towns: [],
@@ -606,7 +625,9 @@ export const useSimStore = create<SimUiState>((set) => ({
       mapSize: world.mapSize,
       mapBuffer: world.mapBuffer,
       climate: world.climate,
-      economyCurve: adoptCurve(world.economyCurve),
+      startYear: world.startYear,
+      endless: world.endless,
+      economyCurve: adoptCurve(world.economyCurve, world.startYear),
       towns: world.towns,
       industries: world.industries,
       townCount: world.towns.length,
@@ -722,6 +743,8 @@ export const useSimStore = create<SimUiState>((set) => ({
       // The century belongs to the world that is going, exactly as its goals
       // do: a curve left standing would price the next game's build preview.
       economyCurve: new EconomyCurve(),
+      startYear: START_YEAR,
+      endless: false,
       flowStats: { drawn: 0, omitted: 0 },
       // The workshop belongs to the world that is going. `ready` sets the flag
       // again for the world that arrives, so the palette can never outlive the

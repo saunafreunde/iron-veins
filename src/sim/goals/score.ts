@@ -1,5 +1,4 @@
 import {
-  MAX_TICK,
   SCORE_CARGO_FULL_UNITS,
   SCORE_MEDAL_WEIGHTS,
   SCORE_NETWORK_FULL_SHARE,
@@ -46,13 +45,17 @@ import { GameEnd, GoalMedal, GoalOutcome, GoalStatus } from './types';
  *   outcome would report "still running" for a game that is unmistakably over.
  * - **Century comes last.** It is the honest answer for a sandbox game and for
  *   a scenario whose goals nobody decided: the world simply ran out of years.
+ *   An `endless` world (SPEC2 E-15) never runs out, so it never reaches this
+ *   verdict - `world.endTick` is the ONE reading of that rule and the
+ *   scheduler's clock uses the same one, which is what keeps "the game is
+ *   over" and "the clock stopped" from being two opinions (D-245).
  */
 export function gameEndOf(world: World): GameEnd {
   const outcome = goalsOutcome(world.goals);
   if (outcome === GoalOutcome.Won) return GameEnd.Won;
   if (world.playerCompany.bankrupt) return GameEnd.Bankrupt;
   if (outcome === GoalOutcome.Lost) return GameEnd.Lost;
-  if (world.tick >= MAX_TICK) return GameEnd.Century;
+  if (world.tick >= world.endTick) return GameEnd.Century;
   return GameEnd.Running;
 }
 

@@ -246,7 +246,7 @@ export function bonusCtFor(world: World, cargo: number, amountUnits: number): nu
     distanceTiles: CONTRACT_REFERENCE_DISTANCE,
     ticksInTransit: 0,
     hasCooling: false,
-    year: world.date.year,
+    epochYears: world.epochYears,
     // A tender is priced off the ordinary tariff, so it is priced off the
     // century too (SPEC2 M21): a bonus for hauling coal in 2040 that ignored
     // what coal is worth in 2040 would be the one contract in the game that

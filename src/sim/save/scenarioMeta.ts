@@ -66,6 +66,7 @@ export const SCENARIO_LOCKABLE_RULES = [
   'economy',
   'elections',
   'emissions',
+  'endless',
   'goals',
   'inflation',
   'mapSize',
@@ -73,6 +74,7 @@ export const SCENARIO_LOCKABLE_RULES = [
   'roadCongestion',
   'seed',
   'signalPenalty',
+  'startYear',
   'weather',
 ] as const;
 

@@ -4,13 +4,7 @@ import { depositAtStation } from '../../src/sim/cargo/routing';
 import { Cargo } from '../../src/sim/cargo/types';
 import { CommandQueue } from '../../src/sim/commands/queue';
 import { CommandKind, type Command } from '../../src/sim/commands/types';
-import {
-  Difficulty,
-  MapClimate,
-  SEA_LEVEL,
-  START_YEAR,
-  TICKS_PER_DAY,
-} from '../../src/sim/constants';
+import { Difficulty, MapClimate, SEA_LEVEL, TICKS_PER_DAY } from '../../src/sim/constants';
 import { INDUSTRY_SPECS, IndustryType, newIndustry } from '../../src/sim/industry/types';
 import { TileMap } from '../../src/sim/map/TileMap';
 import { Terrain } from '../../src/sim/map/terrain';
@@ -424,7 +418,7 @@ describe('the M7 acceptance case', () => {
         distanceTiles: distance,
         ticksInTransit: at - stamp,
         hasCooling: false,
-        year: START_YEAR,
+        epochYears: 0,
       });
 
     for (let id = 0; id < 4; id++) {

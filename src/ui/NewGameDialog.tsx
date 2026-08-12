@@ -14,6 +14,9 @@ import {
   MAP_SIZES,
   MAX_AI_COMPANIES,
   MapClimate,
+  PLAYABLE_YEARS,
+  START_YEAR,
+  START_YEAR_PRESETS,
   WeatherRule,
 } from '../sim/constants';
 import type { HeightmapImage, ReliefImport } from '../sim/mapgen/heightmap';
@@ -54,6 +57,17 @@ const WEATHERS: readonly { readonly value: WeatherRule; readonly key: string }[]
   { value: WeatherRule.Harsh, key: 'ui.newGame.weatherHarsh' },
 ];
 
+/**
+ * The era rules of SPEC2 E-15 (M23).
+ *
+ * Four presets rather than a free field, because each one is the head of a
+ * vehicle generation the catalogue actually carries: a world that begins in a
+ * year with no traction to buy is a world that cannot be played. The parser
+ * takes any year in the band (`save/format.ts`) so a scenario author is not
+ * held to the four - a screen choice is a convenience, not a law.
+ */
+const START_YEARS: readonly number[] = START_YEAR_PRESETS;
+
 /** A fresh seed. Main-thread randomness is fine: it becomes world state. */
 function rollSeed(): number {
   return Math.floor(Math.random() * 0x1_0000_0000);
@@ -92,6 +106,11 @@ export function NewGameDialog({
   const [roadCongestion, setRoadCongestion] = useState(false);
   const [elections, setElections] = useState(false);
   const [economy, setEconomy] = useState(false);
+  // The two era rules of M23 (E-15). 1950 and bounded are what every world
+  // this game has recorded was, so they are what the screen opens on - a rule
+  // that is on by default is a rule nobody chose (Fehlerkatalog 34).
+  const [startYear, setStartYear] = useState<number>(START_YEAR);
+  const [endless, setEndless] = useState(false);
   // And the weather rule of M18, off for the same reason: every band in the
   // game was measured by a world without weather.
   const [weather, setWeather] = useState<WeatherRule>(WeatherRule.Off);
@@ -258,6 +277,31 @@ export function NewGameDialog({
         ))}
       </div>
 
+      <span className="field__label field__label--spaced">{t('ui.newGame.startYear')}</span>
+      <div className="button-row">
+        {START_YEARS.map((year) => (
+          <button
+            key={year}
+            type="button"
+            className={year === startYear ? 'button button--active' : 'button'}
+            onClick={() => setStartYear(year)}
+          >
+            {year}
+          </button>
+        ))}
+      </div>
+      <p className="panel__hint">
+        {t('ui.newGame.startYearHint', { from: startYear, to: startYear + PLAYABLE_YEARS - 1 })}
+      </p>
+      <label className="panel__hint">
+        <input
+          type="checkbox"
+          checked={endless}
+          onChange={(event) => setEndless(event.target.checked)}
+        />{' '}
+        {t('ui.newGame.endless')}
+      </label>
+
       <span className="field__label field__label--spaced">{t('ui.newGame.weather')}</span>
       <div className="button-row">
         {WEATHERS.map((entry) => (
@@ -386,6 +430,8 @@ export function NewGameDialog({
                 mapSize: effectiveMapSize,
                 companyName: companyName.trim(),
                 companyColorIndex,
+                startYear,
+                endless,
                 inflation,
                 emissions,
                 occupancyPenalty,

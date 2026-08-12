@@ -62,11 +62,13 @@ export function goalMarkers(world: World): GoalMarker[] {
       projectedMedal:
         goals.status[at] === GoalStatus.Open ? medalFor(goals, at, world.tick) : goals.medal[at]!,
       thresholdYear:
-        goals.kind[at] === GoalKind.SurviveUntil ? calendarFromTick(goals.threshold[at]!).year : 0,
-      goldYear: calendarFromTick(goals.goldTick[at]!).year,
-      silverYear: calendarFromTick(goals.silverTick[at]!).year,
-      bronzeYear: calendarFromTick(goals.bronzeTick[at]!).year,
-      completedYear: completedTick < 0 ? 0 : calendarFromTick(completedTick).year,
+        goals.kind[at] === GoalKind.SurviveUntil
+          ? calendarFromTick(goals.threshold[at]!, world.startYear).year
+          : 0,
+      goldYear: calendarFromTick(goals.goldTick[at]!, world.startYear).year,
+      silverYear: calendarFromTick(goals.silverTick[at]!, world.startYear).year,
+      bronzeYear: calendarFromTick(goals.bronzeTick[at]!, world.startYear).year,
+      completedYear: completedTick < 0 ? 0 : calendarFromTick(completedTick, world.startYear).year,
       townAName: townName(world, goals.subjectA[at]!, towns.a),
       townBName: townName(world, goals.subjectB[at]!, towns.b),
     });

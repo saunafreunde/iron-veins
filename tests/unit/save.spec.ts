@@ -272,20 +272,23 @@ describe('save migrations', () => {
 
   it('pins the current save version', () => {
     // Bumping SAVE_VERSION has to be a conscious act, because from the first
-    // released build onwards it also requires a migration. 33 is M22's single
-    // bump (SPEC2 Z5): the scenario workshop owns it - the `editorMode` world
-    // rule, which suspends the funds and the ownership check and therefore
-    // decides whether a COMMAND is accepted. The milestone's later bundles (the
-    // tool palette, the heightmap import, the benchmark maps, the scenario
-    // export) extend that migration in place and add no numbers. The five new
-    // command kinds need no migration of their own: a kind is a number in a
-    // log, and a log written by an older build cannot contain one that did not
-    // exist (D-131, E-11).
+    // released build onwards it also requires a migration. 34 is M23's single
+    // bump (SPEC2 Z5): the two era rules of E-15 own it - `startYear`, the
+    // calendar year tick 0 falls in, and `endless`, whether the clock stops
+    // after PLAYABLE_YEARS at all. The ~60 pre-1950 vehicle generations of the
+    // same milestone need no migration of their own, for the reason v33's five
+    // command kinds did not: a spec id is a number in a consist, and a save
+    // written by an older build cannot contain one that did not exist (D-131,
+    // E-11). Later M23 bundles extend this migration in place and add no
+    // numbers.
     //
-    // 32 was M21's: the century curve of E-09 - the `economy` world rule plus
-    // the table it decides. 31 was M20's: the physical town growth of section
-    // 13.2, spent on the month's own street budget.
-    expect(SAVE_VERSION).toBe(33);
+    // 33 was M22's: the scenario workshop - the `editorMode` world rule, which
+    // suspends the funds and the ownership check and therefore decides whether
+    // a COMMAND is accepted. 32 was M21's: the century curve of E-09 - the
+    // `economy` world rule plus the table it decides. 31 was M20's: the
+    // physical town growth of section 13.2, spent on the month's own street
+    // budget.
+    expect(SAVE_VERSION).toBe(34);
   });
 
   it('has a real migration for every step from version 2 on', () => {

@@ -121,9 +121,20 @@
  * paid for what it built and owned the ground it stood on, so the migration
  * enters the rule as OFF - which is exactly what that world did. Unlike the
  * century of v32 the flag is hashed UNCONDITIONALLY, on the terms every rule
- * before v32 was, so this bump moves every world digest in the game once.
+ * before v32 was, so this bump moves every world digest in the game once. 34 is
+ * M23's one bump and it is spent on the two rules of SPEC2 E-15: `startYear`,
+ * the calendar year tick 0 falls in, and `endless`, whether the clock stops
+ * after `PLAYABLE_YEARS` at all. Both are hashed unconditionally, on the terms
+ * every rule before v32 was, because neither has an "absent" state at run time
+ * - every world has a first year and every world either stops or does not - so
+ * this bump moves every world digest once more. A version 33 world began on
+ * 1 January 1950 and stopped in its hundred and first year, because there was
+ * no way for it not to, so the migration enters exactly that. The ~60 pre-1950
+ * vehicle generations of the same milestone need no migration at all: a spec id
+ * is a number in a consist and a save written by an older build cannot contain
+ * one that did not exist (the v33 argument for the editor command kinds).
  */
-export const SAVE_VERSION = 33;
+export const SAVE_VERSION = 34;
 
 /** File extension used for manual and automatic saves. */
 export const SAVE_EXTENSION = '.ironsave';

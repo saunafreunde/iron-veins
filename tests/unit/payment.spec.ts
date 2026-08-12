@@ -16,7 +16,7 @@ describe('the payment formula of section 7.5', () => {
       distanceTiles: 60,
       ticksInTransit: 3.5 * TICKS_PER_DAY,
       hasCooling: false,
-      year: START_YEAR,
+      epochYears: 0,
     });
     expect(revenue).toBe(114_000);
   });
@@ -43,7 +43,7 @@ describe('the payment formula of section 7.5', () => {
       amount: 50,
       distanceTiles: 40,
       ticksInTransit: cargoSpec(Cargo.Food).graceDays * TICKS_PER_DAY,
-      year: START_YEAR,
+      epochYears: 0,
     };
     const cooled = deliveryRevenueCt({ ...base, hasCooling: true });
     const warm = deliveryRevenueCt({ ...base, hasCooling: false });
@@ -56,7 +56,7 @@ describe('the payment formula of section 7.5', () => {
       amount: 50,
       distanceTiles: 40,
       ticksInTransit: TICKS_PER_DAY,
-      year: START_YEAR,
+      epochYears: 0,
     };
     expect(deliveryRevenueCt({ ...base, hasCooling: true })).toBe(
       deliveryRevenueCt({ ...base, hasCooling: false }),
@@ -70,7 +70,7 @@ describe('the payment formula of section 7.5', () => {
       distanceTiles: 50,
       ticksInTransit: 3 * TICKS_PER_DAY,
       hasCooling: false,
-      year: START_YEAR,
+      epochYears: 0,
     };
     const single = deliveryRevenueCt(base);
     expect(deliveryRevenueCt({ ...base, amount: 200 })).toBe(single * 2);
@@ -85,18 +85,23 @@ describe('the payment formula of section 7.5', () => {
         distanceTiles: distance,
         ticksInTransit: TICKS_PER_DAY,
         hasCooling: false,
-        year: START_YEAR,
+        epochYears: 0,
       });
     // Two legs of 30 tiles earn the same as one direct run of 60.
     expect(leg(30) + leg(30)).toBe(leg(60));
   });
 
   it('applies inflation to later years', () => {
-    expect(epochFactor(START_YEAR)).toBe(1);
-    expect(epochFactor(START_YEAR + 1)).toBeCloseTo(1.018, 10);
-    expect(epochFactor(START_YEAR + 100)).toBeGreaterThan(5);
-    // Clamped rather than extrapolated beyond the playable span.
-    expect(epochFactor(START_YEAR + 500)).toBe(epochFactor(START_YEAR + 100));
+    // Indexed by the world's AGE since M23, not by its date (D-245): a world
+    // that has run no years at all is at price level 1 whichever century it
+    // began in, which is what stops a 200-year span stretching a table drawn
+    // for one century.
+    expect(epochFactor(0)).toBe(1);
+    expect(epochFactor(1)).toBeCloseTo(1.018, 10);
+    expect(epochFactor(100)).toBeGreaterThan(5);
+    // Clamped rather than extrapolated beyond the playable span - which is
+    // what an `endless` world runs into from its 101st year (E-15).
+    expect(epochFactor(500)).toBe(epochFactor(100));
   });
 
   it('returns whole cents', () => {
@@ -107,7 +112,7 @@ describe('the payment formula of section 7.5', () => {
         distanceTiles: distance,
         ticksInTransit: 2.5 * TICKS_PER_DAY,
         hasCooling: false,
-        year: 1994,
+        epochYears: 1994 - START_YEAR,
       });
       expect(Number.isInteger(revenue)).toBe(true);
     }

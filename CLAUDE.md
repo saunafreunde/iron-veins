@@ -185,6 +185,15 @@ the rest is its own session with its own diff.
   | 4 idle company | bankrupt yr 6-9 | year 9 | **upkeep as a share of price** |
   | 6 mine closure | 24 +/- 1 months | month 25 | the closure clock on the calendar |
 
+  Since SPEC2 M23 the first two rows have 1870s twins with bands of their own
+  (`tests/balance/eraLines.spec.ts`, D-245) - never the 1950 band stretched over
+  the era catalogue:
+
+  | Twin | Band | Measured | What it pins |
+  | --- | --- | --- | --- |
+  | 1 (1878) omnibus, 12 tiles, 4 buses | payback 3-7 yr | year 5 | the era passenger tariffs |
+  | 2 (1878) coal railway, scenario 2's own track | payback 10-14 yr | year 12 | what an era engine is worth on the same line |
+
   M6's acceptance criterion is exactly this table being in band, and it is.
   (The wood chain's row said 166 k until SPEC2 M19 bundle 1 re-read it: the
   scenario measures 159,516 EUR/yr and did so BEFORE that bundle too, verified
@@ -3525,3 +3534,78 @@ the game (D-243). **Closed on a correction bundle** (D-244): the
 preview and the refusal write nothing, the shoreline sweep is scoped to ground
 the command moved, `replayGenesis` carries every rule with an audit that makes
 the next omission a compile error, and the game opens what the workshop writes.
+
+## M23 bundle 1 - two centuries (D-245)
+
+The start year and the endless clock become world rules (SPEC2 E-15), sixty
+pre-1950 vehicle generations arrive as pure catalogue data, and the balance
+suite gets 1870s twins of scenarios 1 and 2 with bands of their own. **The one
+Z5 bump of the milestone, v33 -> v34.** Every existing band is identical to the
+euro against a worktree at `73e4c29` (144 measured lines, empty diff), tick
+p50/p99 1.444 / 3.082 ms against the M10 baseline of 1.45 / 3.26.
+
+- **The calendar moves the LABEL and nothing under it** (D-245). Tick 0 is the
+  first of January of `world.startYear`; the same tick is the same day of the
+  same month in every world and only the year differs, which is what keeps a
+  takt, a deadline and a checkpoint interval the same number of ticks in any
+  century. `calendarFromTick` moved to the import-free leaf `src/sim/calendar.ts`
+  (the `save/version.ts` pattern) because the finance panel and the connection
+  preview need the arithmetic without a `World` in their bundle. A game lasts
+  `PLAYABLE_YEARS` wherever it begins: 1950-2050, or 1850-1950, and a world that
+  wants both turns `endless` on.
+- **`world.endTick` is the ONE reading of the endless rule** - `MAX_TICK` or
+  infinity - and both the scheduler in `SimWorker` and `gameEndOf` read it, so
+  "the clock stopped" and "the game is over" cannot become two opinions.
+  Both rules are hashed UNCONDITIONALLY on `editorMode`'s terms: neither has an
+  absent state at run time, so a conditional hash would be behaviour the digest
+  cannot see.
+- **The Int32 headroom is 29,826 years, not the ~295 SPEC2 quotes** (D-245).
+  The slip is a division by `MAX_TICK` - 101 years of ticks - instead of by
+  `TICKS_PER_YEAR`, i.e. exactly a factor of `PLAYABLE_YEARS`, and
+  `tests/unit/calendar.spec.ts` does both sums. What an endless world runs out
+  of long before the counter is the two TABLES: the price level and the century
+  curve are `PLAYABLE_YEARS` long and clamp, so from year 101 it plays at a
+  frozen price level and a frozen economy.
+- **The price level counts the world's AGE, not its date**, and before M23 the
+  game had two definitions of it: `epochFactor` indexed `year - START_YEAR`
+  while `inflatedYearsBetween` had integrated the same table over
+  `tick / TICKS_PER_YEAR` since M15. They agreed only because every world began
+  in 1950. The index is `world.epochYears` now - bit-identical for every 1950
+  world - and the century curve is anchored on `EconomyCurve.startYear`, which
+  the world writes from the hashed rule and never saves.
+- **Sixty pre-1950 generations, and the block is CLOSED at 1949** (D-245). 16
+  traction units, 12 wagons, 16 road vehicles, 16 ships, at least one new
+  generation per decade per group from the 1850s to the 1940s. Era gating was
+  already data-driven (`introYear`/`retireYear` against `world.date.year` since
+  M3), so the milestone added a table rather than a mechanism. Nothing in it is
+  purchasable from 1950 on, which is what keeps every 19.4 band untouched by
+  construction: `tests/unit/eraCatalog.spec.ts` asserts that for EVERY year
+  1950-2050 and every mode the buy list is id-for-id the pre-M23 one.
+- **No baked art, and that is a ledger decision.** E-14 names the early eras as
+  procedural territory, and sixty models at eight facings would be 480 atlas
+  cells against the ~150 SPEC2 6.1 books for the whole of M23 - so the era block
+  draws through `shapes.ts` and this bundle books ZERO cells. The D-169 coupling
+  test grew one named rule (`introYear < START_YEAR`) and holds both directions
+  for everything else.
+- **The 1870s twins have their own bands, and one of them has its own
+  geometry.** The coal railway is scenario 2's tile for tile with an 1878
+  engine: payback in year 12, banded 10-14, because the line earns two fifths
+  while the track costs the same (both worlds are in their first year, and a
+  first year's price level is 1 in any century). The omnibus line is NOT
+  scenario 1's 25 tiles - that loses money at every fleet size, measured in the
+  file rather than asserted away - so the twin holds the towns, the trade and
+  the measure and moves the line to twelve tiles and four buses: payback in
+  year 5, banded 3-7.
+- **A world that is BORN now holds the same derived layers as one that is
+  LOADED** (D-245). `World.fromGenerated` never ran `markOcean` /
+  `computeLandmasses`, so every hand-built fixture had `landmassId` all -1 and
+  an industry FOUNDED during play recorded -1 live and 0 after a save and load -
+  a hashed field, so a save round trip changed the world. The fix is in
+  `World.born`, the one door, and it moved no band at all. The defect had been
+  there since M5 and nothing asked; M23's own 1850 acceptance run asked.
+
+**Save v34, pin and corpus re-recorded** (D-137/D-130): canonical hash
+`1fa54bf95cc82b40`, corpus world hash `3b797322b43b717c`. Main chunk
+1,002,746 -> 1,031,963 B, split by deletion into +21,262 B of specs, +6,160 B of
+i18n and +1,795 B of interface; budget 1,006,000 -> 1,040,000 B with no static
+`src/sim` decode chain in the entry chunk.

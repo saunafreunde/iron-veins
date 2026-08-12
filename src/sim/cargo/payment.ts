@@ -1,11 +1,10 @@
 import { cargoSpec, type Cargo } from './types';
 import {
-  END_YEAR,
   FAST_DELIVERY_BONUS,
   INFLATION_PER_YEAR,
   NO_COOLING_PENALTY,
   PAYMENT_DISTANCE_TILES,
-  START_YEAR,
+  PLAYABLE_YEARS,
   TICKS_PER_DAY,
   TICKS_PER_YEAR,
   TIME_FACTOR_MIN,
@@ -28,22 +27,38 @@ import {
  * the only safe way to get it.
  */
 const EPOCH_FACTORS: Float64Array = (() => {
-  const years = END_YEAR - START_YEAR + 1;
-  const table = new Float64Array(years);
+  const table = new Float64Array(PLAYABLE_YEARS);
   let factor = 1;
-  for (let i = 0; i < years; i++) {
+  for (let i = 0; i < PLAYABLE_YEARS; i++) {
     table[i] = factor;
     factor *= 1 + INFLATION_PER_YEAR;
   }
   return table;
 })();
 
-/** Price level of a calendar year, 1.0 in the first playable year. */
-export function epochFactor(year: number): number {
-  const index = year - START_YEAR;
-  if (index <= 0) return 1;
+/**
+ * Price level after `epochYears` of play, 1.0 in a world's FIRST year.
+ *
+ * The argument is the world's AGE, not its date, and that distinction is
+ * SPEC2 M23's (D-245). Until then the two were the same number - every world
+ * started in 1950 - and the index was `year - START_YEAR`. With the start year
+ * a world rule they part company, and an absolute anchor would be wrong in
+ * both directions at once: an 1870 world would play eighty years at a frozen
+ * price level and then start compounding, while a 200-year endless span would
+ * stretch a table calibrated for one century over two. The table is
+ * `PLAYABLE_YEARS` long and clamps at its end, so the price level of any world
+ * rises exactly as far as the 1950 world's always did, whatever century it
+ * rises in.
+ *
+ * It also makes this function agree with `inflatedYearsBetween` below, which
+ * has integrated the same table over `tick / TICKS_PER_YEAR` since M15 - i.e.
+ * over the world's age - so before M23 the game had two definitions of the
+ * price level that happened to coincide.
+ */
+export function epochFactor(epochYears: number): number {
+  if (epochYears <= 0) return 1;
   const last = EPOCH_FACTORS.length - 1;
-  return EPOCH_FACTORS[index > last ? last : index]!;
+  return EPOCH_FACTORS[epochYears > last ? last : epochYears]!;
 }
 
 /**
@@ -117,13 +132,13 @@ export function tileDistance(fromX: number, fromY: number, toX: number, toY: num
  * it off on both sides at once rather than leaving costs frozen while fares
  * climb.
  */
-export function costFactor(year: number, inflation: boolean): number {
-  return inflation ? epochFactor(year) : 1;
+export function costFactor(epochYears: number, inflation: boolean): number {
+  return inflation ? epochFactor(epochYears) : 1;
 }
 
 /** A cost at this year's price level, in whole cents. */
-export function inflatedCostCt(baseCt: number, year: number, inflation: boolean): number {
-  return Math.round(baseCt * costFactor(year, inflation));
+export function inflatedCostCt(baseCt: number, epochYears: number, inflation: boolean): number {
+  return Math.round(baseCt * costFactor(epochYears, inflation));
 }
 
 export interface PaymentInput {
@@ -134,7 +149,12 @@ export interface PaymentInput {
   /** Ticks between production and unloading. */
   readonly ticksInTransit: number;
   readonly hasCooling: boolean;
-  readonly year: number;
+  /**
+   * Whole years the paying world has been running - the price-level index
+   * (D-245). Callers hand in `world.epochYears`; a test that prices the
+   * catalogue without a world hands in 0 for "the world's first year".
+   */
+  readonly epochYears: number;
   /**
    * What the century of SPEC2 M21 (E-09) says this cargo is worth this year,
    * or 1 - which is what a world without the economy rule always passes.
@@ -167,7 +187,7 @@ export function deliveryRevenueCt(input: PaymentInput): number {
       (input.distanceTiles / PAYMENT_DISTANCE_TILES) *
       timeFactor(input.cargo, days) *
       cooling *
-      epochFactor(input.year) *
+      epochFactor(input.epochYears) *
       (input.rateFactor ?? 1),
   );
 }

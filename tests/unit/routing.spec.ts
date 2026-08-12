@@ -8,7 +8,6 @@ import {
   CARGO_MAX_WAIT_DAYS,
   Difficulty,
   MapClimate,
-  START_YEAR,
   TICKS_PER_DAY,
 } from '../../src/sim/constants';
 import { INDUSTRY_SPECS, IndustryType, newIndustry } from '../../src/sim/industry/types';
@@ -326,7 +325,7 @@ describe('a lorry feeding a freight train', () => {
       distanceTiles: first,
       ticksInTransit: lorryPaidTick - createdTick,
       hasCooling: false,
-      year: START_YEAR,
+      epochYears: 0,
     });
     // The train is paid from the TRANSFER point, not from the forest. If it
     // were paid from the origin this figure would be roughly two and a half
@@ -337,7 +336,7 @@ describe('a lorry feeding a freight train', () => {
       distanceTiles: second,
       ticksInTransit: trainPaidTick - createdTick,
       hasCooling: false,
-      year: START_YEAR,
+      epochYears: 0,
     });
 
     expect(vehicles.earnedCt[0]).toBe(expectedLorry);

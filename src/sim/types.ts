@@ -123,6 +123,30 @@ export interface NewGameParams {
   readonly companyName: string;
   readonly companyColorIndex: number;
   /**
+   * The calendar year this world's first tick falls in (SPEC2 E-15, M23).
+   *
+   * A world rule in the full Z2 sense, and the one that reaches furthest of
+   * any in this record: every vehicle's availability, every tariff, every
+   * build bill, every closure clock and every goal deadline is read off the
+   * calendar, so two worlds with the same seed and the same commands but
+   * different start years diverge on their first purchase.
+   *
+   * The screen offers `START_YEAR_PRESETS`; the parser accepts any year from
+   * `EARLIEST_START_YEAR` to `START_YEAR`, because a scenario author may want
+   * 1903 and the four presets are a convenience rather than a law. Absent
+   * means `START_YEAR`, which is what every world recorded before M23 was.
+   */
+  readonly startYear?: number;
+  /**
+   * Whether the `MAX_TICK` stop applies (SPEC2 E-15, M23).
+   *
+   * ABSENT MEANS OFF - bounded - which is what every world before M23 was: the
+   * clock stopped when the hundred and first playable year ran out. Under the
+   * rule nothing stops, and `gameEndOf` never returns `Century`; D-245 records
+   * how far the Int32 tick counter honestly carries that.
+   */
+  readonly endless?: boolean;
+  /**
    * Whether prices and costs drift upward over the century (section 14.2).
    *
    * Fixed when the game is started rather than being a preference that can be

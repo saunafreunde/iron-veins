@@ -166,8 +166,31 @@ const DIST = join(REPO_ROOT, 'dist');
  * imports, and it is a 3,133 B chunk of its own now - the D-192 pattern, found
  * by the number rather than by review. 1,006,000 is the new measurement plus
  * ~0.8 %.
+ *
+ * **Raised again for SPEC2 M23 bundle 1** (two centuries), and this time the
+ * growth is CONTENT rather than code, which the split says rather than claims.
+ * **1,002,746 B -> 1,031,963 B, +29,217 B**, against 3,254 B of headroom under
+ * the old number. Measured in three parts, each by deleting exactly that part
+ * and rebuilding:
+ *
+ *  - **+21,262 B are the sixty pre-1950 vehicle specs** (`eraCatalog.ts`,
+ *    dropping `...ERA_SPECS` from the merged list rebuilds at 1,010,701 B).
+ *    They are in the entry chunk because `vehicles/catalog.ts` is: the fleet
+ *    list, the buy dialogs and the vehicle detail panel all name specs, and a
+ *    catalogue is the one part of `src/sim` the interface is SUPPOSED to hold.
+ *  - **+6,160 B are the i18n keys in two languages** (deleting the 120 era
+ *    `veh.*` lines rebuilds at 1,025,803 B) - one name per spec per language,
+ *    plus the start-year row and the endless rule's own paragraph.
+ *  - **+1,795 B are the interface and the two world rules**: the start-year
+ *    button row, the endless checkbox, the two store fields, the two `ready`
+ *    message fields and the `calendar.ts` leaf.
+ *
+ * **No static `src/sim` import chain that decodes, serialises or steps a
+ * world**, re-probed on the built entry chunk exactly as before: it contains no
+ * `decodeSave`, no `encodeSave`, no `hashWorld`, no save magic and no
+ * `streamFor`. 1,040,000 is the new measurement plus ~0.8 %.
  */
-const MAIN_CHUNK_BUDGET_BYTES = 1_006_000;
+const MAIN_CHUNK_BUDGET_BYTES = 1_040_000;
 
 /** The verdict, separated from the measuring so a planted size can be judged. */
 interface BudgetVerdict {

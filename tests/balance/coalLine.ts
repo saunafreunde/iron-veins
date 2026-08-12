@@ -1,6 +1,6 @@
 import { Cargo } from '../../src/sim/cargo/types';
 import { CommandKind } from '../../src/sim/commands/types';
-import { WeatherRule } from '../../src/sim/constants';
+import { START_YEAR, WeatherRule } from '../../src/sim/constants';
 import { IndustryType, newIndustry } from '../../src/sim/industry/types';
 import { RailType } from '../../src/sim/map/track';
 import { ModuleKind } from '../../src/sim/station/types';
@@ -41,6 +41,33 @@ export const COAL_LINE_WAGON = 1520;
 export const COAL_LINE_WAGON_COUNT = 8;
 
 /**
+ * The same railway crewed out of the 1870s catalogue (SPEC2 M23, E-15).
+ *
+ * An 1878 "Kurier" and eight 1861 high-side wagons - the newest traction and
+ * the newest OPEN wagon the pre-1950 table offers in that decade (the 1876
+ * entry is a box van and the next tipper is 1894). The GEOMETRY is
+ * untouched: same 45 tiles, same platforms, same shed, same two orders, so the
+ * 1870s twin measures the era's economy against the 1950 one rather than a
+ * second railway (the D-187 argument this file was written for).
+ */
+export const COAL_LINE_ERA_YEAR = 1878;
+export const COAL_LINE_ERA_LOCO = 1104;
+export const COAL_LINE_ERA_WAGON = 1607;
+
+/**
+ * And the same railway at the very head of the catalogue, 1850.
+ *
+ * The determinism suite's own arm (SPEC2 M23's "eine 1850 gestartete Partie mit
+ * Dampf-Katalog"): the oldest locomotive and the oldest open wagon the game
+ * carries. It is deliberately NOT the balance twin - a 32 kN engine hauling
+ * six-tonne tubs is a railway to prove the simulation runs, not one to band a
+ * tariff on, and the 1870s triple above is where the money is measured.
+ */
+export const COAL_LINE_1850_YEAR = 1850;
+export const COAL_LINE_1850_LOCO = 1100;
+export const COAL_LINE_1850_WAGON = 1606;
+
+/**
  * Tiles of platform at each end.
  *
  * A locomotive and eight wagons is 98 m, which is exactly two tiles - so two
@@ -72,6 +99,17 @@ export const COAL_LINE_SPAN_YEARS = 9;
 export function buildCoalLine(
   weather: WeatherRule = WeatherRule.Off,
   seed: number = COAL_LINE_SEED,
+  /**
+   * The world's start year (SPEC2 E-15) and the consist that year can crew.
+   *
+   * Defaulted to 1950 and the 1950 consist, which is what scenario 2 and the
+   * winter band were measured under and go on being measured under
+   * (Fehlerkatalog 34). The 1870s twin passes the era triple and changes
+   * nothing else - that is the whole point of it living here.
+   */
+  startYear: number = START_YEAR,
+  loco: number = COAL_LINE_LOCO,
+  wagon: number = COAL_LINE_WAGON,
 ): Scenario {
   const scenario = flatScenario(
     COAL_LINE_SIZE,
@@ -84,6 +122,9 @@ export function buildCoalLine(
     0,
     true,
     weather,
+    false,
+    false,
+    startYear,
   );
 
   // The line, a platform at each end and a shed just past the mine.
@@ -133,8 +174,8 @@ export function buildCoalLine(
     ),
   )!;
 
-  const consist = [COAL_LINE_LOCO];
-  for (let i = 0; i < COAL_LINE_WAGON_COUNT; i++) consist.push(COAL_LINE_WAGON);
+  const consist = [loco];
+  for (let i = 0; i < COAL_LINE_WAGON_COUNT; i++) consist.push(wagon);
   apply(scenario, {
     kind: CommandKind.BuyTrain,
     x: COAL_LINE_MINE_X - 4,

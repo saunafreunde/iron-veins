@@ -74,6 +74,20 @@ export class EconomyCurve {
   /** Per-mille multipliers, or a zero-length array in a world with no rule. */
   rows: Int16Array = new Int16Array(0);
 
+  /**
+   * The calendar year index 0 stands for - the world's own first year.
+   *
+   * NOT a saved field: `World.startYear` is the saved and hashed rule (D-245)
+   * and the world writes it here at construction, so the century a world plays
+   * is anchored on the year that world began rather than on 1950. It is held
+   * on the curve because the curve is the one object every cost, tariff,
+   * output and energy seam already carries, and one anchor is what stops a
+   * build preview and a build bill parting company (the D-092 argument).
+   *
+   * `tests/unit/economyCurve.spec.ts` holds it against `World.startYear`.
+   */
+  startYear: number = START_YEAR;
+
   /** Whether this world has a century at all. */
   get active(): boolean {
     return this.rows.length > 0;
@@ -81,7 +95,7 @@ export class EconomyCurve {
 
   /** Draw the whole century from the named stream. Genesis only. */
   generate(stream: Rng): void {
-    this.rows = buildEconomyCurve(stream);
+    this.rows = buildEconomyCurve(stream, this.startYear);
   }
 
   /** Adopt the century a save carries. The parser has checked its shape. */
@@ -100,14 +114,15 @@ export class EconomyCurve {
 /**
  * One row's multiplier for a calendar year, or exactly 1 without a curve.
  *
- * Years outside the playable span clamp to the ends rather than throwing: the
- * span is 1950-2050 and `endless` (E-15, M23) will run past it, and a century
- * that stops having an opinion is better than one that reads past its table.
+ * Years outside the world's own span clamp to the ends rather than throwing:
+ * the span is `PLAYABLE_YEARS` from {@link EconomyCurve.startYear}, and an
+ * `endless` world (E-15, M23) runs past it - a century that stops having an
+ * opinion is better than one that reads past its table.
  */
 export function economyRowFactor(curve: EconomyCurve, row: number, year: number): number {
   const rows = curve.rows;
   if (rows.length === 0) return 1;
-  let index = year - START_YEAR;
+  let index = year - curve.startYear;
   if (index < 0) index = 0;
   else if (index >= ECONOMY_CURVE_YEARS) index = ECONOMY_CURVE_YEARS - 1;
   return rows[row * ECONOMY_CURVE_YEARS + index]! / ECONOMY_PERMILLE_ONE;
@@ -158,7 +173,12 @@ export function economyCostCt(
   inflation: boolean,
   curve: EconomyCurve,
 ): number {
-  return Math.round(baseCt * costFactor(year, inflation) * economyCostFactor(curve, year));
+  // The price level is indexed by the world's AGE and the century by its DATE,
+  // and since M23 those are two different numbers (D-245). Both come off the
+  // one anchor the curve carries, so a preview and a bill cannot be computed
+  // against two different first years.
+  const epochYears = year - curve.startYear;
+  return Math.round(baseCt * costFactor(epochYears, inflation) * economyCostFactor(curve, year));
 }
 
 /**
@@ -227,9 +247,9 @@ export function economySeries(curve: EconomyCurve, row: number): number[] {
   return out;
 }
 
-/** Calendar year of series index `index`. */
-export function economySeriesYear(index: number): number {
-  return START_YEAR + index;
+/** Calendar year of series index `index`, in the curve's own century. */
+export function economySeriesYear(curve: EconomyCurve, index: number): number {
+  return curve.startYear + index;
 }
 
 // ------------------------------------------------------------- the generator
@@ -245,7 +265,7 @@ export function economySeriesYear(index: number): number {
  * table, never `Math.sin`, because `Math.sin` is not bit exact across engines
  * (law #4) and this table is hashed.
  */
-function buildEconomyCurve(stream: Rng): Int16Array {
+function buildEconomyCurve(stream: Rng, startYear: number): Int16Array {
   const rows = new Int16Array(ECONOMY_CURVE_LENGTH);
 
   const cyclePhase = new Float64Array(ECONOMY_CYCLE_PERIOD_YEARS.length);
@@ -279,7 +299,13 @@ function buildEconomyCurve(stream: Rng): Int16Array {
 
   for (let row = 0; row < ECONOMY_ROW_COUNT; row++) {
     for (let index = 0; index < ECONOMY_CURVE_YEARS; index++) {
-      const year = START_YEAR + index;
+      // The world's OWN year, so a century drawn for an 1850 world is the
+      // hundred years that world plays. The two structural trends below are
+      // dated in absolute years - coal declines late in the twentieth century,
+      // the box trade booms from about 1970 - so an early world simply never
+      // reaches them, which is the historically true answer and needs no
+      // second table (D-245).
+      const year = startYear + index;
       const jitter = 1 + (stream.nextFloat() * 2 - 1) * ECONOMY_YEAR_JITTER;
       let value: number;
       if (row === ECONOMY_ROW_CYCLE) {

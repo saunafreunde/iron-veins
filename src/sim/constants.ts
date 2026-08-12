@@ -289,18 +289,78 @@ export const DAYS_PER_YEAR = DAYS_PER_MONTH * MONTHS_PER_YEAR; // 360
 export const TICKS_PER_MONTH = TICKS_PER_DAY * DAYS_PER_MONTH; // 6_000
 export const TICKS_PER_YEAR = TICKS_PER_DAY * DAYS_PER_YEAR; // 72_000
 
-/** First playable year. */
+/**
+ * First playable year of a world that did not choose one - the DEFAULT start
+ * year, and the anchor of every table that is written in absolute years.
+ *
+ * Since SPEC2 M23 (E-15) the start year is a world rule: `World.startYear`
+ * carries it, tick 0 is the first day of THAT year, and this constant is what
+ * an absent field means. Every world recorded before M23 started in 1950, so
+ * the default is what those worlds always were (D-245).
+ */
 export const START_YEAR = 1950;
 
-/** Last playable year (inclusive). */
+/** Last playable year (inclusive) of a world that starts in {@link START_YEAR}. */
 export const END_YEAR = 2050;
 
 /**
- * Highest tick the calendar can reach. 101 playable years fit into an Int32
- * with three orders of magnitude to spare, so `tick` stays a plain Int32
- * everywhere (snapshot buffer, save file, hash).
+ * How many calendar years one non-endless game lasts. [years]
+ *
+ * A SPAN rather than a pair of dates, because since M23 the first year is the
+ * world's own: a 1950 world plays 1950-2050, an 1850 world plays 1850-1950,
+ * and a world that wants both turns `endless` on. `MAX_TICK` is this span in
+ * ticks and is therefore the same number in every world (D-245).
  */
-export const MAX_TICK = (END_YEAR - START_YEAR + 1) * TICKS_PER_YEAR; // 7_272_000
+export const PLAYABLE_YEARS = END_YEAR - START_YEAR + 1; // 101
+
+/**
+ * The start years the new-game screen offers (SPEC2 E-15). [calendar years]
+ *
+ * Four presets rather than a free field: each one is the head of a vehicle
+ * generation the catalogue actually carries, and a start year with no traction
+ * to buy is a world that cannot be played. The parser accepts any year in
+ * `EARLIEST_START_YEAR..START_YEAR` so a scenario author is not held to the
+ * four, but a preset is what a player picks.
+ */
+export const START_YEAR_PRESETS = [1850, 1880, 1920, 1950] as const;
+
+/** Earliest year a world may begin in - the head of the M23 catalogue. */
+export const EARLIEST_START_YEAR = 1850;
+
+/**
+ * Highest tick a non-endless calendar reaches, and the tick at which the
+ * scheduler stops the clock unless the world is `endless` (SPEC2 E-15).
+ *
+ * It is a count of TICKS, not a date: 101 playable years wherever they start.
+ * Under `endless` nothing stops here at all - see `worldEndTick` in `World.ts`
+ * and the Int32 headroom argument of D-245, which is what says how far past it
+ * the counter may honestly go.
+ */
+export const MAX_TICK = PLAYABLE_YEARS * TICKS_PER_YEAR; // 7_272_000
+
+/**
+ * Largest value an Int32 tick counter can hold. [ticks]
+ *
+ * `tick` is an Int32 in the snapshot buffer, in the save container and in the
+ * hash, so this is the hard ceiling on `endless` - and it is a MEASURED
+ * ceiling rather than a remembered one: `tests/unit/calendar.spec.ts` divides
+ * it by `TICKS_PER_YEAR` and asserts the headroom D-245 states.
+ */
+export const MAX_INT32_TICK = 2_147_483_647;
+
+/**
+ * How many calendar years an Int32 tick counter can carry from a world's own
+ * first day. [years]
+ *
+ * 29,826 - not the "~295 years" SPEC2 E-15 quotes, which divides the Int32
+ * ceiling by `MAX_TICK` (101 years of ticks) instead of by `TICKS_PER_YEAR`
+ * and is therefore short by exactly that factor of 101. D-245 carries the
+ * arithmetic, and names what an endless world runs out of LONG before the
+ * counter does: the price-level table and the century curve are both
+ * `PLAYABLE_YEARS` long and CLAMP past their last entry, so from year 101 an
+ * endless world plays at a frozen price level and a frozen economy.
+ */
+export const TICK_HEADROOM_YEARS = (MAX_INT32_TICK / TICKS_PER_YEAR) | 0; // 29_826
 
 /**
  * ---------------------------------------------------------------------------

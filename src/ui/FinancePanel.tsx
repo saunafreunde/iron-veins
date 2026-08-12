@@ -404,7 +404,7 @@ function EconomyCentury(): ReactElement | null {
   // Where "now" sits along the x axis, clamped into the span the table covers -
   // the same clamp `economyRowFactor` applies, so the marker stands on the
   // value that is actually being charged (E-15's endless years included).
-  let nowIndex = year - economySeriesYear(0);
+  let nowIndex = year - economySeriesYear(curve, 0);
   if (nowIndex < 0) nowIndex = 0;
   else if (nowIndex >= ECONOMY_CURVE_YEARS) nowIndex = ECONOMY_CURVE_YEARS - 1;
   const nowX = (nowIndex / (ECONOMY_CURVE_YEARS - 1)) * CENTURY_PLOT_W;
@@ -454,14 +454,14 @@ function EconomyCentury(): ReactElement | null {
           ))}
           <line x1={nowX} x2={nowX} y1={0} y2={CENTURY_PLOT_H} className="valuechart__zero" />
           <text x={0} y={CENTURY_PLOT_H + 10} className="valuechart__label">
-            {economySeriesYear(0)}
+            {economySeriesYear(curve, 0)}
           </text>
           <text
             x={CENTURY_PLOT_W}
             y={CENTURY_PLOT_H + 10}
             className="valuechart__label valuechart__label--end"
           >
-            {economySeriesYear(ECONOMY_CURVE_YEARS - 1)}
+            {economySeriesYear(curve, ECONOMY_CURVE_YEARS - 1)}
           </text>
         </g>
       </svg>

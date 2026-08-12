@@ -325,7 +325,7 @@ export function supplyBonusCtFor(world: World, cargo: number, quotaUnits: number
     distanceTiles: CONTRACT_REFERENCE_DISTANCE,
     ticksInTransit: 0,
     hasCooling: false,
-    year: world.date.year,
+    epochYears: world.epochYears,
     rateFactor: economyRateFactor(world.economyCurve, cargo, world.date.year),
   });
   return Math.round(ordinary * SUPPLY_BONUS_FACTOR);

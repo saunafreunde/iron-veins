@@ -110,6 +110,10 @@ export function replayMeta(loaded: LoadedGame, currentGameVersion: string): Repl
   const aiCompanyIds = new Set<number>();
   for (const state of loaded.world.ai) aiCompanyIds.add(state.companyId);
   const checkpointTicks = loaded.ring.all.map((entry) => entry.tick);
+  // The recording's OWN calendar (SPEC2 E-15): a replay of an 1880 game is
+  // dated in the 1880s, and `startYear` on this record is the year the SPAN
+  // begins - a different question from the world rule the world carries.
+  const worldStartYear = loaded.world.startYear;
 
   return {
     gameVersion: loaded.gameVersion,
@@ -119,8 +123,8 @@ export function replayMeta(loaded: LoadedGame, currentGameVersion: string): Repl
     baseTick,
     finalTick,
     years: yearsBetween(baseTick, finalTick),
-    startYear: calendarFromTick(baseTick).year,
-    endYear: calendarFromTick(finalTick).year,
+    startYear: calendarFromTick(baseTick, worldStartYear).year,
+    endYear: calendarFromTick(finalTick, worldStartYear).year,
     companies: loaded.world.companies.map((company) => ({
       name: company.name,
       colorIndex: company.colorIndex,
@@ -129,7 +133,7 @@ export function replayMeta(loaded: LoadedGame, currentGameVersion: string): Repl
     checkpointTicks,
     jumps: jumpTicksOf(checkpointTicks, baseTick, finalTick).map((tick) => ({
       tick,
-      year: replayCheckpointYear(tick),
+      year: replayCheckpointYear(tick, worldStartYear),
     })),
     commandCount: loaded.queue.log.length,
     // A recording with no claim cannot be verified whatever the versions say -
@@ -291,6 +295,6 @@ export class ReplaySession {
  * game year, so this is a year boundary by construction and never a label that
  * reads "1957" for a state inside 1958.
  */
-export function replayCheckpointYear(tick: number): number {
-  return calendarFromTick(tick - (tick % CHECKPOINT_INTERVAL_TICKS)).year;
+export function replayCheckpointYear(tick: number, worldStartYear: number): number {
+  return calendarFromTick(tick - (tick % CHECKPOINT_INTERVAL_TICKS), worldStartYear).year;
 }

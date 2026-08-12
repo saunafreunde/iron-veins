@@ -455,7 +455,7 @@ describe('containers flow between two ports and are paid', () => {
         distanceTiles: distance,
         ticksInTransit: ticks,
         hasCooling: false,
-        year: world.date.year,
+        epochYears: world.epochYears,
         rateFactor: economyContainerFactor(world.economyCurve, world.date.year),
       });
     expect(earned).toBeLessThanOrEqual(priced(0));

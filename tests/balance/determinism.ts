@@ -70,6 +70,11 @@ export const BALANCE_SCENARIOS = [
   'gameScore',
   'aiGame',
   'aiCompany',
+  // The 1870s twins of scenarios 1 and 2 (SPEC2 M23, D-245). Not costly: eight
+  // and sixteen game years on 64- and 128-tile hand-built worlds, measured at
+  // about 1 s and 2.6 s for the twin run.
+  'eraBusLine',
+  'eraCoalTrain',
 ] as const;
 
 export type BalanceScenario = (typeof BALANCE_SCENARIOS)[number];

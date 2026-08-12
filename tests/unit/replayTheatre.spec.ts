@@ -10,6 +10,7 @@ import {
   Difficulty,
   LOAN_STEP_CT,
   MapClimate,
+  START_YEAR,
 } from '../../src/sim/constants';
 import { CheckpointRing } from '../../src/sim/save/checkpoints';
 import {
@@ -140,7 +141,9 @@ describe('a playback runs the recording and reaches what it claims', () => {
     // The scrub chips ARE the ring, and a chip is labelled with the year it
     // lands in rather than with a tick nobody can read.
     expect(replayJumpTicks(meta)).toEqual([0, CHECKPOINT_INTERVAL_TICKS]);
-    expect(replayCheckpointYear(CHECKPOINT_INTERVAL_TICKS)).toBe(replayCheckpointYear(0) + 1);
+    expect(replayCheckpointYear(CHECKPOINT_INTERVAL_TICKS, START_YEAR)).toBe(
+      replayCheckpointYear(0, START_YEAR) + 1,
+    );
   });
 
   it('replays a game with a competitor, whose own commands are in the log', () => {

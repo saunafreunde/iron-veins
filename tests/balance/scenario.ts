@@ -1,6 +1,12 @@
 import { CommandQueue } from '../../src/sim/commands/queue';
 import { CommandKind, type Command } from '../../src/sim/commands/types';
-import { Difficulty, MapClimate, TICKS_PER_YEAR, WeatherRule } from '../../src/sim/constants';
+import {
+  Difficulty,
+  MapClimate,
+  START_YEAR,
+  TICKS_PER_YEAR,
+  WeatherRule,
+} from '../../src/sim/constants';
 import { industrySpec, type Industry } from '../../src/sim/industry/types';
 import { TileMap } from '../../src/sim/map/TileMap';
 import { Terrain } from '../../src/sim/map/terrain';
@@ -137,6 +143,15 @@ export function flatScenario(
    * provable on a controlled world.
    */
   economy = false,
+  /**
+   * The start year of SPEC2 E-15 (M23). `START_YEAR` by default and in every
+   * band measured before M23: the calendar decides which vehicles exist, what
+   * a delivery pays and what a build costs, so a scenario that began in
+   * another century would be a different measurement of a different economy.
+   * It is a parameter because the 1870s twins of scenarios 1 and 2 have to be
+   * playable on the same controlled worlds (D-245).
+   */
+  startYear: number = START_YEAR,
 ): Scenario {
   const map = new TileMap(size);
   map.cornerHeight.fill(GROUND_HEIGHT);
@@ -160,6 +175,7 @@ export function flatScenario(
       mapSize: size,
       companyName: 'Balancing AG',
       companyColorIndex: 1,
+      startYear,
       aiCompanies,
       emissions,
       weather,
@@ -202,14 +218,38 @@ export function makeTown(id: number, x: number, y: number, population: number, n
   };
 }
 
-/** Flat map with two towns `distance` tiles apart on the same row. */
-export function twoTownScenario(population: number, distance: number): TwoTownScenario {
+/**
+ * Flat map with two towns `distance` tiles apart on the same row.
+ *
+ * `startYear` is SPEC2 E-15's rule and defaults to `START_YEAR`, which is the
+ * world every caller of this helper measured before M23. The 1870s twin of
+ * scenario 1 is the one caller that passes something else, and it passes it
+ * HERE rather than building its own two-town world - the D-187 discipline
+ * `coalLine.ts` states for scenario 2: two files that each built their own
+ * would be measuring two different towns within a game year of the first edit.
+ */
+export function twoTownScenario(
+  population: number,
+  distance: number,
+  startYear: number = START_YEAR,
+): TwoTownScenario {
   const y = SCENARIO_SIZE >> 1;
   const startX = (SCENARIO_SIZE - distance) >> 1;
   const townA = makeTown(0, startX, y, population, 'Westheim');
   const townB = makeTown(1, startX + distance, y, population, 'Ostheim');
 
-  const scenario = flatScenario(SCENARIO_SIZE, [townA, townB], [], 1);
+  const scenario = flatScenario(
+    SCENARIO_SIZE,
+    [townA, townB],
+    [],
+    1,
+    0,
+    true,
+    WeatherRule.Off,
+    false,
+    false,
+    startYear,
+  );
   return { ...scenario, townA, townB };
 }
 

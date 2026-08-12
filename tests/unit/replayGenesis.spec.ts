@@ -69,6 +69,8 @@ const GENESIS_RULES: Record<keyof Required<NewGameParams>, RuleProbe> = {
     read: (world) => world.difficulty,
   },
   climate: { value: { climate: MapClimate.Tropical }, read: (world) => world.climate },
+  startYear: { value: { startYear: 1880 }, read: (world) => world.startYear },
+  endless: { value: { endless: true }, read: (world) => world.endless },
   mapSize: { value: { mapSize: 128 }, read: (world) => world.map.size },
   companyName: {
     value: { companyName: 'Werkstatt AG' },

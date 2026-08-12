@@ -26,6 +26,8 @@ export function worldParamsFor(options: NewGameOptions): NewGameParams {
     mapSize: options.mapSize,
     companyName: options.companyName,
     companyColorIndex: options.companyColorIndex,
+    startYear: options.startYear,
+    endless: options.endless,
     inflation: options.inflation,
     emissions: options.emissions,
     occupancyPenalty: options.occupancyPenalty,

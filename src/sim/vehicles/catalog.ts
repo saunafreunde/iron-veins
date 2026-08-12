@@ -1,4 +1,5 @@
 import { Cargo } from '../cargo/types';
+import { ERA_SPECS } from './eraCatalog';
 import { RAIL_SPECS } from './railCatalog';
 import { AIRCRAFT_SPECS, SHIP_SPECS } from './waterCatalog';
 import { kmh, RailRole, VehicleKind, type VehicleSpec } from './spec';
@@ -654,6 +655,13 @@ export const VEHICLE_SPECS: readonly VehicleSpec[] = [
   ...RAIL_SPECS,
   ...SHIP_SPECS,
   ...AIRCRAFT_SPECS,
+  ...ERA_SPECS,
+  // The pre-1950 generations of SPEC2 M23 (E-15), LAST so that catalogue order
+  // - which is what the buy lists and `renewal.ts`'s total order walk - is
+  // unchanged for every world that starts in 1950. Nothing in the era block is
+  // purchasable from that year on (`eraCatalog.ts` says why, and
+  // `tests/unit/eraCatalog.spec.ts` proves it), so appending them moves no
+  // decision any existing seed ever took.
 ];
 
 const SPEC_BY_ID = new Map<number, VehicleSpec>(VEHICLE_SPECS.map((spec) => [spec.id, spec]));

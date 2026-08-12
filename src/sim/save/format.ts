@@ -10,6 +10,7 @@ import { NEWS_CATEGORY_COUNT, type NewsEntry } from '../news/log';
 import {
   CHECKPOINT_INTERVAL_TICKS,
   COMPANY_COLOR_COUNT,
+  EARLIEST_START_YEAR,
   ECONOMY_CURVE_LENGTH,
   ECONOMY_FACTOR_MAX_PERMILLE,
   ECONOMY_FACTOR_MIN_PERMILLE,
@@ -19,6 +20,7 @@ import {
   LINK_SAMPLE_COUNT,
   MapClimate,
   SCENARIO_TEXT_MAX_CHARS,
+  START_YEAR,
   WEATHER_CELL_COUNT,
   WEATHER_REGION_COUNT,
   WEATHER_RULE_COUNT,
@@ -603,6 +605,26 @@ function parseWeatherField(value: unknown, path: string): Uint8Array {
  * and "unhashed is not unchecked" applies with more force to something that IS
  * hashed.
  */
+/**
+ * The start year of SPEC2 E-15 (M23).
+ *
+ * Banded rather than held to `START_YEAR_PRESETS`, because the presets are
+ * what the SCREEN offers and a scenario author may legitimately want 1903 -
+ * but a year outside `EARLIEST_START_YEAR..START_YEAR` is a world the
+ * catalogue cannot crew and the price-level table was never drawn for, so it
+ * is refused rather than clamped (the `mapSize` precedent, D-197).
+ */
+function parseStartYear(value: unknown, path: string): number {
+  const year = asInt(value, path);
+  if (year < EARLIEST_START_YEAR || year > START_YEAR) {
+    throw new SaveFormatError(
+      `${path}: ${year} is outside the ${EARLIEST_START_YEAR}..${START_YEAR} band a world may begin in`,
+      path,
+    );
+  }
+  return year;
+}
+
 function parseEconomyCurve(value: unknown, path: string, economy: boolean): number[] {
   const entries = asArray(value, path);
   const expected = economy ? ECONOMY_CURVE_LENGTH : 0;
@@ -1464,6 +1486,13 @@ export function parseWorldState(value: unknown, path: string): WorldStateData {
     seed: asInt(stateRaw['seed'], `${path}.seed`),
     difficulty: parseDifficulty(stateRaw['difficulty'], `${path}.difficulty`),
     climate: parseClimate(stateRaw['climate'], `${path}.climate`),
+    // The two era rules of M23 (E-15), required on the same terms as every
+    // rule below them: a save that has lost its start year is a save whose
+    // every date, tariff and purchase list would be a different one after
+    // loading, and a save that has lost `endless` is one that either stops in
+    // a year it should not or refuses to.
+    startYear: parseStartYear(stateRaw['startYear'], `${path}.startYear`),
+    endless: asBoolean(stateRaw['endless'], `${path}.endless`),
     inflation: asBoolean(stateRaw['inflation'], `${path}.inflation`),
     emissions: asBoolean(stateRaw['emissions'], `${path}.emissions`),
     // The two 8.4 rules of M15. Required, like every other world rule: a save

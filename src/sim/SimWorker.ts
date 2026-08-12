@@ -27,7 +27,6 @@ import { writeGoalBlock } from './goals/snapshot';
 import { writeWeatherBlock } from './weather/snapshot';
 import {
   BANKRUPTCY_MONTHS,
-  MAX_TICK,
   MAX_TICKS_PER_FRAME,
   SPEED_FACTORS,
   STATE_HASH_INTERVAL_TICKS,
@@ -393,7 +392,7 @@ function postNews(current: World): void {
   scope.postMessage({
     type: 'newsChanged',
     news: current.news.all.map((entry) => {
-      const date = calendarFromTick(entry.tick);
+      const date = calendarFromTick(entry.tick, current.startYear);
       return {
         tick: entry.tick,
         year: date.year,
@@ -696,7 +695,12 @@ function runFrame(): void {
   // A playback stops where the recording stops. Running past it would be
   // inventing a future for a game that is over, at the exact moment the log
   // ran out - so the clock stops there and the speed buttons keep working.
-  const limit = replay === null ? MAX_TICK : Math.min(MAX_TICK, replay.finalTick);
+  // `current.endTick` is MAX_TICK, or infinity in an endless world (SPEC2
+  // E-15): the century stop is a WORLD rule now, so the scheduler reads it off
+  // the world rather than off the constant, and a recording still stops where
+  // the recording stops in either kind of world (D-245).
+  const endTick = current.endTick;
+  const limit = replay === null ? endTick : Math.min(endTick, replay.finalTick);
   let ticks = 0;
   while (accumulatorMs >= TICK_MS && ticks < MAX_TICKS_PER_FRAME && current.tick < limit) {
     current.step(queue, outcomeSink);
@@ -1028,6 +1032,8 @@ function adoptWorld(current: World, sink: SnapshotWriter): void {
     companyColorIndex: current.playerCompany.colorIndex,
     mapSize: current.map.size,
     climate: current.climate,
+    startYear: current.startYear,
+    endless: current.endless,
     mapBuffer: current.map.buffer,
     townCount: current.towns.length,
     industryCount: current.industries.length,

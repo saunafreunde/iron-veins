@@ -60,8 +60,8 @@ import { flatScenario } from '../balance/scenario';
 const SEED = 4711;
 
 /** A controlled world with the century rule on, and one without it. */
-function makeWorld(economy: boolean, seed = SEED): World {
-  return flatScenario(64, [], [], seed, 0, true, undefined, false, economy).world;
+function makeWorld(economy: boolean, seed = SEED, startYear?: number): World {
+  return flatScenario(64, [], [], seed, 0, true, undefined, false, economy, startYear).world;
 }
 
 /** Mean of one row over a closed year range, inclusive. */
@@ -226,9 +226,12 @@ describe('a world with the rule off is a pre-M21 world', () => {
   it('charges exactly what the pre-M21 cost formula charged', () => {
     const world = makeWorld(false);
     for (const base of [1, 37, 12_345, 9_999_991]) {
-      expect(world.costCt(base)).toBe(inflatedCostCt(base, world.date.year, world.inflation));
+      // The price level is indexed by the world's AGE since M23 and the
+      // century by its DATE (D-245); with no century the two collapse back
+      // into the one pre-M21 formula, which is what this asserts.
+      expect(world.costCt(base)).toBe(inflatedCostCt(base, world.epochYears, world.inflation));
       expect(economyCostCt(base, 2035, true, world.economyCurve)).toBe(
-        inflatedCostCt(base, 2035, true),
+        inflatedCostCt(base, 2035 - world.economyCurve.startYear, true),
       );
     }
   });
@@ -282,7 +285,7 @@ describe('the century reaches the four seams it is meant to', () => {
       distanceTiles: 100,
       ticksInTransit: 0,
       hasCooling: false,
-      year: 1970,
+      epochYears: 1970 - START_YEAR,
     };
     const plain = deliveryRevenueCt(base);
     expect(deliveryRevenueCt({ ...base, rateFactor: 1 })).toBe(plain);
@@ -368,7 +371,7 @@ describe('the interface can show the century', () => {
       expect(series.length).toBe(ECONOMY_CURVE_YEARS);
       for (let index = 0; index < series.length; index++) {
         expect(series[index]).toBe(
-          economyRowFactor(world.economyCurve, row, economySeriesYear(index)),
+          economyRowFactor(world.economyCurve, row, economySeriesYear(world.economyCurve, index)),
         );
       }
     }
@@ -382,8 +385,15 @@ describe('the interface can show the century', () => {
   });
 
   it('names the first and the last playable year', () => {
-    expect(economySeriesYear(0)).toBe(START_YEAR);
-    expect(economySeriesYear(ECONOMY_CURVE_YEARS - 1)).toBe(END_YEAR);
+    const world = makeWorld(true);
+    expect(economySeriesYear(world.economyCurve, 0)).toBe(START_YEAR);
+    expect(economySeriesYear(world.economyCurve, ECONOMY_CURVE_YEARS - 1)).toBe(END_YEAR);
+    // And the anchor is the WORLD's own first year since M23 (D-245), not the
+    // constant: an 1880 world's century is the 1880s to the 1980s.
+    const early = makeWorld(true, SEED, 1880);
+    expect(early.economyCurve.startYear).toBe(1880);
+    expect(economySeriesYear(early.economyCurve, 0)).toBe(1880);
+    expect(economySeriesYear(early.economyCurve, ECONOMY_CURVE_YEARS - 1)).toBe(1980);
   });
 });
 

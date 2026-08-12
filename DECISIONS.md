@@ -13,7 +13,8 @@ no entry below. A number may appear under several topics.
 - **Determinism, RNG & hashing:** D-001, D-002, D-003, D-004, D-009, D-010,
   D-024, D-093, D-106, D-128, D-137, D-142, D-145, D-146, D-149, D-153, D-178,
   D-181, D-184, D-185, D-188, D-189, D-190, D-191, D-193, D-194, D-195,
-  D-196, D-200, D-201, D-202, D-204, D-232, D-233, D-236, D-240, D-244
+  D-196, D-200, D-201, D-202, D-204, D-232, D-233, D-236, D-240, D-244,
+  D-245
 - **Commands, snapshot & worker boundary:** D-004, D-005, D-006, D-011, D-032,
   D-100, D-111, D-145, D-146, D-148, D-162, D-174, D-176, D-179, D-187, D-189,
   D-192, D-193, D-196, D-200, D-202, D-218, D-240, D-241, D-242, D-243,
@@ -28,7 +29,7 @@ no entry below. A number may appear under several topics.
   D-111, D-130, D-131, D-134, D-142, D-144, D-145, D-146, D-147, D-153, D-178,
   D-181, D-184, D-185, D-188, D-189, D-190, D-191, D-192, D-193, D-194,
   D-197, D-198, D-200, D-207, D-213, D-231, D-232, D-233, D-236, D-238,
-  D-239, D-240, D-241, D-243, D-244
+  D-239, D-240, D-241, D-243, D-244, D-245
 - **Rail & track:** D-042, D-043, D-044, D-045, D-046, D-047, D-053, D-141,
   D-153, D-157, D-184, D-230
 - **Signals & reservations:** D-054, D-055, D-056, D-057, D-058, D-059, D-060,
@@ -44,15 +45,15 @@ no entry below. A number may appear under several topics.
 - **Towns, council & ownership:** D-101, D-102, D-103, D-104, D-205, D-207,
   D-206, D-213, D-216, D-217, D-231, D-232, D-233, D-234, D-235
 - **Economy, finance & emissions:** D-008, D-090, D-091, D-092, D-105, D-154,
-  D-180, D-193, D-196, D-228, D-229, D-236, D-237, D-238, D-239
+  D-180, D-193, D-196, D-228, D-229, D-236, D-237, D-238, D-239, D-245
 - **Balancing & scenarios:** D-038, D-039, D-040, D-041, D-066, D-087, D-088,
   D-116, D-151, D-152, D-156, D-158, D-159, D-187, D-190, D-194, D-195,
   D-196, D-197, D-198, D-199, D-200, D-203, D-204, D-207, D-211, D-213,
   D-215, D-216, D-220, D-221, D-222, D-224, D-225, D-226, D-228, D-229,
-  D-232, D-233, D-234, D-235, D-236, D-237, D-238, D-239
+  D-232, D-233, D-234, D-235, D-236, D-237, D-238, D-239, D-245
 - **Vehicles & fleet:** D-043, D-044, D-045, D-068, D-076, D-089, D-093,
   D-096, D-142, D-143, D-145, D-146, D-155, D-157, D-171, D-174, D-181, D-185,
-  D-201, D-207
+  D-201, D-207, D-245
 - **Water & air:** D-094, D-095, D-096, D-097, D-098, D-099, D-237
 - **Competitors, AI & tenders:** D-107, D-108, D-109, D-115, D-116, D-121,
   D-122, D-147, D-152, D-153, D-154, D-155, D-156, D-158, D-216, D-218,
@@ -14881,3 +14882,158 @@ ausserhalb von `tick()`; `enforceSlopeInvariant` bekommt einen Null-Test je
 heruntergezogener Ecke. Die M22-Zeile bleibt bei +0,00 ms, gehalten durch
 Konstruktion und nicht durch eine Messung, und dieser Eintrag sagt das, statt
 eine Zahl zu erfinden.
+
+### D-245 Zwei Jahrhunderte: das Startjahr als Weltregel, der Endlosmodus - und das Preisniveau, das das Alter der Welt zaehlt und nicht ihr Datum
+
+**SPEC2 M23, Bundle 1 (E-15).** Zwei Weltregeln, sechzig Fahrzeuggenerationen
+vor 1950, **der EINE Z5-Bump des Meilensteins auf v34**, und ein
+Determinismus-Defekt, den erst der 1850er-Abnahmelauf sichtbar gemacht hat.
+Jedes bestehende Band steht auf den Euro (Vergleich gegen einen Worktree bei
+`73e4c29`: 144 gemessene Zeilen, Diff leer ausser den neuen Aera-Zeilen);
+Szenario 5 unveraendert bei 1.022.084 / 1.802.165 / 2.153.604 EUR, Punktzahl
+5.889, Winter 4,36 %, Netzdesign 3,75. Tick p50/p99 **1,444 / 3,082 ms** gegen
+die M10-Grundlinie 1,45 / 3,26 - im dokumentierten Laufrauschen, und es gibt
+keinen neuen Tick-Pfad.
+
+**1. `startYear` ist eine Weltregel und keine Anzeige.** Tick 0 ist der
+1. Januar des Startjahres; die Presets sind 1850/1880/1920/1950, der Parser
+nimmt jedes Jahr im Band 1850..1950 (ein Szenarioautor darf 1903 wollen). Die
+Regel ist gespeichert, gehasht, migriert - Z2 in voller Form - und sie reicht
+weiter als jede Regel vor ihr, weil sie durch die EINE Tuer geht, durch die
+alles andere auch geht: den Kalender. Welche Fahrzeuge kaufbar sind, was eine
+Lieferung zahlt, was ein Bau kostet, wann eine Grube schliesst und wann ein
+Ziel faellig wird, wird alles an `world.date` abgelesen. **Der Kalender
+verschiebt nur das ETIKETT**: derselbe Tick ist in jeder Welt derselbe Tag
+desselben Monats, nur das Jahr unterscheidet sich - was Takt, Frist und
+Checkpoint-Intervall in jedem Jahrhundert dieselbe Tick-Zahl laesst
+(`tests/unit/calendar.spec.ts` haelt genau das ueber alle vier Presets).
+
+**2. Eine Partie dauert `PLAYABLE_YEARS`, wo immer sie beginnt.** `MAX_TICK`
+ist eine TICK-Zahl, kein Datum: eine 1950er Partie spielt 1950-2050, eine
+1850er 1850-1950, und wer beides will, schaltet `endless` ein. Das ist die
+zweite Regel, und sie ist die schaerfste nach `editorMode`, weil sie
+entscheidet, ob die Simulation SCHRITTE macht. Gelesen wird sie an genau einer
+Stelle - `world.endTick` ist `MAX_TICK` oder `Infinity` -, und sowohl der
+Scheduler in `SimWorker` als auch `gameEndOf` lesen dieselbe: "die Uhr steht"
+und "das Spiel ist vorbei" koennen nicht zwei Meinungen werden (die D-187-Regel
+auf eine Uhr angewandt). Beide Regeln werden UNBEDINGT gehasht, auf denselben
+Bedingungen wie `editorMode`: keine von beiden hat zur Laufzeit einen
+"abwesenden" Zustand - jede Welt hat ein erstes Jahr und jede Welt haelt
+irgendwann an oder nicht -, also waere ein bedingter Hash Simulationsverhalten,
+das der Digest nicht sieht.
+
+**3. Der Int32-Headroom, gemessen statt zitiert.** SPEC2 E-15 verlangt, ihn
+explizit zu machen, und nennt "~295 Jahre". **Das stimmt nicht, und die
+Rechnung sagt warum**: 2.147.483.647 / 7.272.000 = 295,3 teilt die Int32-Decke
+durch `MAX_TICK`, also durch 101 JAHRE Ticks statt durch eines. Geteilt durch
+`TICKS_PER_YEAR` sind es **29.826 Jahre** - der Fehler ist exakt der Faktor
+`PLAYABLE_YEARS`, und `tests/unit/calendar.spec.ts` rechnet beide Wege vor,
+damit die Korrektur nicht als Behauptung dasteht. Jedes Tick-Feld im Spiel ist
+ein `Int32Array`-Eintrag oder ein `h.u32`, also bindet nichts frueher. Was ein
+endloses Spiel LANGE vorher aufbraucht, sind die beiden Tabellen: Preisniveau
+und Konjunkturkurve sind `PLAYABLE_YEARS` lang und KLEMMEN an ihrem Ende, ab
+Jahr 101 spielt eine endlose Welt also auf eingefrorenem Preisniveau und
+eingefrorener Konjunktur. Der Eintrag sagt das, statt eine Zahl zu nennen, die
+niemand je erreicht.
+
+**4. Das Preisniveau zaehlt das ALTER der Welt, nicht ihr Datum - und vor M23
+hatte das Spiel zwei Definitionen davon.** `epochFactor` indizierte
+`year - START_YEAR`, `inflatedYearsBetween` integrierte dieselbe Tabelle seit
+M15 ueber `tick / TICKS_PER_YEAR`. Solange jede Welt 1950 begann, waren das
+dieselbe Zahl. Mit einem Startjahr als Regel laufen sie auseinander, und ein
+absoluter Anker waere in BEIDE Richtungen falsch: eine 1870er Welt saesse
+achtzig Jahre auf Preisniveau 1 und finge dann an zu kumulieren, waehrend eine
+200-Jahre-Spanne eine fuer ein Jahrhundert kalibrierte Tabelle ueber zwei
+strecken wuerde. Also ist der Index jetzt `world.epochYears`, und fuer jede
+1950er Welt ist er bit-identisch mit dem alten - was der leere Balance-Diff
+oben beweist. Dieselbe Verschiebung trifft die Konjunkturkurve: sie wird an
+`EconomyCurve.startYear` verankert (kein gespeichertes Feld - `World.startYear`
+ist die gehashte Regel, die Welt schreibt sie beim Bau dorthin), so dass eine
+1850er Welt ihre eigenen hundert Jahre gezogen bekommt. Die beiden
+Struktur-Trends von E-09 bleiben in ABSOLUTEN Jahren datiert - Kohle sinkt spaet
+im 20. Jahrhundert, die Box boomt ab ~1970 -, also erreicht eine fruehe Welt sie
+schlicht nie. Das ist die historisch wahre Antwort und braucht keine zweite
+Tabelle.
+
+**5. Sechzig Vorkriegsgenerationen als reine Katalogdaten - und der Block ist
+1949 GESCHLOSSEN.** 16 Traktionen, 12 Wagen, 16 Strassenfahrzeuge, 16 Schiffe,
+jedes Jahrzehnt von den 1850ern bis in die 1940er mit mindestens einem
+Fortschritt je Gruppe. Die Aeren-Gatterung war schon da und schon
+datengetrieben: `build.ts`, `consist.ts` und `renewal.ts` vergleichen
+`world.date.year` seit M3 gegen `introYear`/`retireYear`. **Kein Eintrag ist ab
+1950 kaufbar**, und das ist tragend: ein 1946er Laster, der 1952 noch im Laden
+steht, kaeme in die Totalordnung von `renewal.ts` und in die Rangliste der KI
+und wuerde jedes Band aus 19.4 innerhalb des Meilensteins neu banden
+(Fehlerkatalog 34). `tests/unit/eraCatalog.spec.ts` beweist es in der
+staerksten Form: fuer JEDES Jahr 1950-2050 und jeden Modus ist die Kaufliste
+id-fuer-id dieselbe wie ohne den Block.
+
+**6. Keine gebackene Kunst, und das ist eine Ledger-Entscheidung.** E-14 nennt
+"fruehe Aeren 1850-1920" im selben Satz wie Flugzeuge als prozedurales Gebiet,
+und sechzig Modelle a acht Facings waeren **480 Atlas-Zellen** gegen die ~150,
+die 6.1 fuer das GANZE M23 bucht - bei einer Detail-Seite, die seit D-173 VOLL
+ist. Also zeichnen die sechzig ueber `shapes.ts`, den D-170-Fallback, den jeder
+Katalogeintrag immer hatte; **dieses Bundle bucht null Atlas-Zellen**. Der
+D-169-Kopplungstest wurde um genau eine benannte Regel erweitert
+(`introYear < START_YEAR`), mit derselben Praedikat-Funktion, die den Block
+definiert, und er haelt fuer alles andere weiter in beide Richtungen.
+
+**7. Die 1870er-Zwillinge, mit ihren EIGENEN Baendern - und einer Geometrie,
+die sich bewegt hat, weil die Messung es verlangt hat.** Szenario 2s Zwilling
+ist Szenario 2s Bahn Kachel fuer Kachel, nur mit einer 1878er "Kurier" und
+acht 1861er Hochbordwagen: gemessen **Amortisation im Jahr 12**, gebandet
+10-14. Der Unterschied zu 4-7 ist ganz die Aera - die Bahn verdient etwa zwei
+Fuenftel, waehrend Gleis, Bahnsteige und Schuppen dasselbe kosten, weil BEIDE
+Welten in ihrem ersten Jahr stehen und das Preisniveau eines ersten Jahres in
+jedem Jahrhundert 1 ist. Szenario 1s Zwilling ist NICHT dieselbe Linie, und der
+Grund ist gemessen und steht im Test: ueber 25 Kacheln verliert eine
+1870er-Omnibuslinie bei jeder Flottengroesse Geld (gemessen 478.880 -> 469.306
+EUR ueber acht Jahre, Amortisation nie), weil ein 34-km/h-Omnibus 13 Spieltage
+je Richtung braucht und die Geduld eines Pendlers vier Tage betraegt. Der
+Zwilling haelt also die STAEDTE, den HANDEL und das MASS von Szenario 1 und
+bewegt die LINIE auf zwoelf Kacheln und vier Wagen - **Amortisation im Jahr 5**,
+gebandet 3-7. Der verlierende 25-Kachel-Lauf steht als eigener Test daneben,
+damit die Geometrie neu entschieden wird statt aus Gewohnheit kurz zu bleiben.
+
+**8. Die Aera-Tarife sind rueckwaerts aus der Deckenformel gerechnet, nicht
+geraten.** Der erste Entwurf hatte vier Passagierschiffe unter der
+Upkeep-Decke von `tariff.spec.ts` und eine Omnibuslinie, die bei jeder
+Entfernung verlor. Ursache war nicht der Tarif, sondern das Verhaeltnis:
+Kapazitaet x Geschwindigkeit / Upkeep lag bei 1,3-20 gegen die 39 des
+1950er-Busses. Also wurden Geschwindigkeit und Kapazitaet auf eine Leiter
+gesetzt, die knapp unter dem 1950er-Eintrag derselben Gattung endet, und der
+Upkeep aus `ceilingRevenueCtPerYear / Zielverhaeltnis` geloest. **Kein
+Testschwellwert wurde bewegt** - die Tabellen gehoerten dem Test, und genau so
+wurde es gemacht.
+
+**9. Der Defekt, den erst der 1850er-Lauf gefunden hat: eine Welt, die geboren
+wird, hatte nicht dieselben abgeleiteten Schichten wie eine, die geladen
+wird.** `World.fromData` rechnet `markOcean` + `computeLandmasses` beim Laden
+neu; `generateMap` tut es fuer `World.create`; **`World.fromGenerated` tat es
+nie**. Jede handgebaute Fixture - also jedes Balance-Szenario - hatte
+`landmassId` durchgehend -1, und eine waehrend des Spiels GEGRUENDETE Industrie
+(`industry/lifecycle.ts` liest die Schicht und legt sie auf den Datensatz)
+schrieb darum -1 in der lebenden Welt und 0 in derselben Welt nach Speichern
+und Laden. Das Feld ist gehasht: ein Save-Rundlauf veraenderte die Welt. Der Fix
+steht in `World.born`, also an der EINEN Tuer, durch die jede Welt geboren wird,
+und ist fuer `World.create` idempotent. **Gemessen: kein einziges Band hat sich
+bewegt** (der leere Diff oben) - die handgebauten Welten sind flaches Gras ueber
+Meeresspiegel, also ist die neue Beschriftung fuer alle Landkacheln 0. Der
+Defekt existierte seit M5 und nichts hat gefragt; M23s eigener Abnahmetest hat
+gefragt.
+
+**Save v34, Pin und Korpus neu aufgenommen** (D-137/D-130): kanonischer Hash
+`f1349c9b9c922981` -> **`1fa54bf95cc82b40`**, Korpus-Welthash
+`d3c2c16e6d8bf6e1` -> **`3b797322b43b717c`**, `v34-played.ironsave`
+aufgenommen. `SCENARIO_WORLD_CLAIMS` NICHT neu gemessen, und das ist kein
+Versehen: die Tabelle pinnt Mapgen-AUSGABE (Staedte, Industrien, Landmassen),
+und dieses Bundle fasst mapgen nicht an - alle acht Szenarien und ihre
+Briefing-Waechter sind gruen geblieben.
+
+**Bundle-Budget:** Hauptchunk **1.002.746 -> 1.031.963 B (+29.217)**, gedrittelt
+durch Loeschen und Neubauen: **+21.262 B die sechzig Specs**, **+6.160 B die 120
+i18n-Zeilen**, **+1.795 B die Oberflaeche und die zwei Regeln. Kein statischer
+`src/sim`-Importpfad, der eine Welt dekodiert, serialisiert oder schrittet** -
+am gebauten Entry-Chunk nachgeprueft (kein `decodeSave`, kein `encodeSave`, kein
+`hashWorld`, kein Save-Magic, kein `streamFor`). Budget 1.006.000 ->
+**1.040.000 B**, die Messung plus ~0,8 %.

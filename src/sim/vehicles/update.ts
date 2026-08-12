@@ -872,7 +872,7 @@ function serveStation(world: World, id: number, station: Station): number {
         distanceTiles: distance,
         ticksInTransit: world.tick - stack.createdTick,
         hasCooling,
-        year: world.date.year,
+        epochYears: world.epochYears,
         // The tariff seam of SPEC2 M21 (E-09), and exactly 1 in a world
         // without the economy rule - so a pre-M21 world multiplies by one and
         // earns the cent it always earned.

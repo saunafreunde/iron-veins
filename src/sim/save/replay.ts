@@ -104,6 +104,12 @@ export function replayGenesis(world: World): World {
     mapSize: world.map.size,
     companyName: world.companies[0]!.name,
     companyColorIndex: world.companies[0]!.colorIndex,
+    // And the two era rules of M23. A rebuild that dropped the start year
+    // would re-simulate an 1880 recording as a 1950 one: different vehicles
+    // available, a different price level, a different closure clock - the
+    // widest-reaching omission this list could have (D-245).
+    startYear: world.startYear,
+    endless: world.endless,
     inflation: world.inflation,
     emissions: world.emissions,
     occupancyPenalty: world.occupancyPenalty,
@@ -768,6 +774,7 @@ export function verifyReplay(loaded: LoadedGame, currentGameVersion: string): Re
       checkedTicks,
       startedAtTick,
       logBreak,
+      startYear: world.startYear,
     });
 
   for (const mark of marks) {
@@ -842,6 +849,8 @@ function finish(
     checkedTicks: readonly number[];
     startedAtTick: number;
     logBreak: ReplayLogBreak | null;
+    /** The recorded world's own first year - the calendar it is dated in. */
+    startYear: number;
   },
 ): ReplayVerification {
   const ticks =
@@ -855,7 +864,7 @@ function finish(
   return {
     verdict,
     ok: verdict.kind === 'verified',
-    years: ticks.map((tick) => calendarFromTick(tick).year),
+    years: ticks.map((tick) => calendarFromTick(tick, evidence.startYear).year),
     lastMatchingTick: evidence.lastMatchingTick,
     expectedHash: evidence.expectedHash,
     actualHash: evidence.actualHash,

@@ -1,12 +1,12 @@
+import { calendarFromTick, epochYearsAt } from './calendar';
 import { executeCommand } from './commands/execute';
 import type { CommandQueue } from './commands/queue';
 import type { CommandEnvelope, CommandOutcome } from './commands/types';
 import {
   CO2_LEVY_FROM_YEAR,
-  DAYS_PER_MONTH,
-  DAYS_PER_YEAR,
   ECONOMY_STREAM_NAME,
   MAX_COMPANIES,
+  MAX_TICK,
   ROAD_CONGESTION_EPOCH_TICKS,
   START_YEAR,
   TICKS_PER_DAY,
@@ -110,6 +110,10 @@ export interface WorldStateData {
   seed: number;
   difficulty: Difficulty;
   climate: MapClimate;
+  /** The calendar year tick 0 falls in - SPEC2 E-15's first M23 world rule. */
+  startYear: number;
+  /** Whether the MAX_TICK stop applies at all - E-15's second rule. */
+  endless: boolean;
   inflation: boolean;
   emissions: boolean;
   /** The two 8.4 route-cost rules of M15. Saved and hashed like inflation. */
@@ -219,6 +223,36 @@ export class World {
   readonly seed: number;
   readonly difficulty: Difficulty;
   readonly climate: MapClimate;
+  /**
+   * The calendar year tick 0 falls in (SPEC2 E-15, M23).
+   *
+   * A world rule in the full Z2 sense - saved, hashed, migrated, fixed at
+   * genesis - and it reaches money and physics through the one door every
+   * other rule reaches them through: the CALENDAR. Which vehicles may be
+   * bought, what a delivery pays, what a build costs, when a works closes and
+   * what a goal's deadline means are all read off `world.date`, so two worlds
+   * with the same seed and the same commands but different start years are
+   * different worlds from their first tick.
+   *
+   * ABSENT MEANS {@link START_YEAR}, and that is the same load-bearing default
+   * every rule above it has in its own currency: every world this game has
+   * ever recorded - every save, every balancing scenario, every determinism
+   * fixture, all eight shipped scenarios - began on 1 January 1950.
+   */
+  readonly startYear: number;
+  /**
+   * Whether this world ignores the `MAX_TICK` stop (SPEC2 E-15, M23).
+   *
+   * A world rule and not a setting, for the sharpest reason in the file after
+   * `editorMode`: it decides whether the simulation STEPS. A world that stops
+   * in its 101st year and one that does not have different states from that
+   * year on, and the goal machine reads the same flag - `gameEndOf` never
+   * returns `Century` for an endless world, so the medals of D-193 are decided
+   * by the goals or by nothing.
+   *
+   * ABSENT MEANS OFF: every world recorded before M23 stopped at MAX_TICK.
+   */
+  readonly endless: boolean;
   /** Whether costs and fares drift upward over the century (section 14.2). */
   readonly inflation: boolean;
   /** Whether the carbon levy and its grants of section 14.3 apply. */
@@ -544,6 +578,15 @@ export class World {
     this.seed = params.seed | 0;
     this.difficulty = params.difficulty;
     this.climate = params.climate;
+    // Absent means 1950 and absent means bounded (SPEC2 E-15, M23): every
+    // world this game recorded before M23 began on 1 January 1950 and stopped
+    // when its hundred and first year ran out.
+    this.startYear = params.startYear ?? START_YEAR;
+    this.endless = params.endless ?? false;
+    // The century is anchored on the world's own first year, here and nowhere
+    // else - the curve is the object every cost, tariff, output and energy
+    // seam already holds (D-245).
+    this.economyCurve.startYear = this.startYear;
     this.inflation = params.inflation ?? true;
     this.emissions = params.emissions ?? true;
     // Absent means OFF for both 8.4 rules - see NewGameParams for why the
@@ -635,6 +678,23 @@ export class World {
    */
   private static born(params: NewGameParams, generated: GeneratedWorld): World {
     const world = new World(params, generated);
+    // The derived layers, on exactly the terms `fromData` computes them: a
+    // world that is BORN must hold the same `oceanMask` and `landmassId` a
+    // world LOADED from its own save holds, or the two are different worlds
+    // the moment anything reads them.
+    //
+    // `generateMap` already does this, so for `World.create` the call is
+    // idempotent - both functions are pure recomputations from the height and
+    // terrain bytes. What it fixes is `fromGenerated`, the door every
+    // hand-built fixture comes through: those maps had `landmassId` all -1,
+    // and an industry FOUNDED during play (`industry/lifecycle.ts` reads the
+    // layer and stores it on the record) therefore recorded -1 in the live
+    // world and 0 in the same world after a save and load. The field is
+    // hashed, so that was a save round trip that changed the world - found by
+    // M23's own 1850 determinism arm, on a fixture that had been quietly
+    // unable to round-trip since M5 (D-245).
+    markOcean(world.map);
+    computeLandmasses(world.map);
     if (world.economy) world.economyCurve.generate(world.streamFor(ECONOMY_STREAM_NAME));
     return world;
   }
@@ -896,12 +956,38 @@ export class World {
 
   /** This year's price level for costs, 1 when inflation is off. */
   get costFactor(): number {
-    return costFactor(this.date.year, this.inflation);
+    return costFactor(this.epochYears, this.inflation);
+  }
+
+  /**
+   * Whole years this world has been running. [years]
+   *
+   * The index of the price level of section 14.2, and it is the world's AGE
+   * rather than its date on purpose: the inflation table is 101 entries long,
+   * so anchoring it on an absolute year would leave an 1870 world flat for
+   * eighty years and then compound - the "1950 band stretched over a
+   * two-century span" M23 exists not to do (D-245).
+   */
+  get epochYears(): number {
+    return epochYearsAt(this.tick);
   }
 
   /** Current calendar position. */
   get date(): GameDate {
-    return calendarFromTick(this.tick);
+    return calendarFromTick(this.tick, this.startYear);
+  }
+
+  /**
+   * The tick at which this world's clock stops, or `Number.POSITIVE_INFINITY`
+   * when it does not (SPEC2 E-15).
+   *
+   * The ONE place the endless rule is read, so the scheduler's stop and the
+   * goal machine's `Century` verdict can never disagree about whether a game
+   * is over - which is the D-187 rule ("the number that calibrated and the
+   * number that divides must be one number") applied to a clock.
+   */
+  get endTick(): number {
+    return this.endless ? Number.POSITIVE_INFINITY : MAX_TICK;
   }
 
   /** Capture the state for serialisation. */
@@ -911,6 +997,8 @@ export class World {
       seed: this.seed,
       difficulty: this.difficulty,
       climate: this.climate,
+      startYear: this.startYear,
+      endless: this.endless,
       inflation: this.inflation,
       emissions: this.emissions,
       occupancyPenalty: this.occupancyPenalty,
@@ -1002,6 +1090,8 @@ export class World {
         seed: data.seed,
         difficulty: data.difficulty,
         climate: data.climate,
+        startYear: data.startYear,
+        endless: data.endless,
         inflation: data.inflation,
         emissions: data.emissions,
         occupancyPenalty: data.occupancyPenalty,
@@ -1107,16 +1197,15 @@ function rebuildReservations(world: World): void {
   }
 }
 
-/** Calendar position for a tick count. Months and days are zero based. */
-export function calendarFromTick(tick: number): GameDate {
-  const totalDays = (tick / TICKS_PER_DAY) | 0;
-  const dayOfYear = totalDays % DAYS_PER_YEAR;
-  return {
-    year: START_YEAR + ((totalDays / DAYS_PER_YEAR) | 0),
-    month: (dayOfYear / DAYS_PER_MONTH) | 0,
-    day: dayOfYear % DAYS_PER_MONTH,
-  };
-}
+/**
+ * The calendar's one door, re-exported from the leaf it moved to in M23.
+ *
+ * It lives in `./calendar.ts` now because two consumers outside the simulation
+ * need the arithmetic without wanting a `World` in their bundle (D-191's
+ * argument, D-245's occasion). Every call site inside the simulation still
+ * imports it from here.
+ */
+export { calendarFromTick, epochYearsAt };
 
 /** Fields that change every tick, hashed by both the full and the live digest. */
 function hashDynamicState(h: Fnv1a64, world: World): void {
@@ -1124,6 +1213,17 @@ function hashDynamicState(h: Fnv1a64, world: World): void {
   h.u32(world.seed);
   h.u32(world.difficulty);
   h.u32(world.climate);
+  // The two era rules of M23 (E-15), hashed UNCONDITIONALLY and on exactly the
+  // terms `editorMode` is: neither has an "absent" state at run time - every
+  // world has a start year and every world either stops or does not - so a
+  // conditional hash would be simulation behaviour the digest cannot see. An
+  // 1850 world and a 1950 world differ in which vehicles exist, what a
+  // delivery pays and when a goal falls due; an endless world and a bounded
+  // one differ in whether the clock runs at all. Adding them moved every world
+  // hash once, which is the designed-for event with a written protocol
+  // (D-137/D-130).
+  h.u32(world.startYear);
+  h.u32(world.endless ? 1 : 0);
   h.u32(world.inflation ? 1 : 0);
   h.u32(world.emissions ? 1 : 0);
   // The two 8.4 route-cost rules of M15. Hashed UNCONDITIONALLY, false

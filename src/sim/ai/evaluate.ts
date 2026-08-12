@@ -636,7 +636,7 @@ function rate(
      */
     ticksInTransit: 0,
     hasCooling: false,
-    year: world.date.year,
+    epochYears: world.epochYears,
     // The century (SPEC2 M21): a competitor that ranked a coal line in 2035
     // by 1950's coal price would build the one line the world has stopped
     // paying for. Exactly 1 in a world without the rule.
@@ -846,7 +846,7 @@ export function projectLine(
     distanceTiles: opportunity.distance,
     ticksInTransit: oneWayTicks,
     hasCooling: false,
-    year: world.date.year,
+    epochYears: world.epochYears,
     // The century, at the second of this file's two payment estimates - and
     // the subsidy the ranking already looked up, read off the opportunity
     // rather than asked again.

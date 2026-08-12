@@ -625,6 +625,16 @@ export interface NewGameOptions {
   readonly mapSize: number;
   readonly companyName: string;
   readonly companyColorIndex: number;
+  /**
+   * The two era rules of SPEC2 E-15 (M23): which year tick 0 falls in, and
+   * whether the clock stops after `PLAYABLE_YEARS`.
+   *
+   * Optional here for the same reason `editorMode` is: absence is decided in
+   * `World`'s own constructor (1950, bounded), so nothing that starts an
+   * ordinary game has to mention them.
+   */
+  readonly startYear?: number;
+  readonly endless?: boolean;
   readonly inflation: boolean;
   readonly emissions: boolean;
   /** The route-cost rules of SPEC.md 8.4 (M15): saved, hashed, off by default. */
@@ -690,6 +700,16 @@ export type WorkerToMainMessage =
        * asking the simulation anything (Z1, E-01).
        */
       readonly climate: MapClimate;
+      /**
+       * The two era rules of SPEC2 E-15 (M23), published for exactly the
+       * reason `climate` is: world constants fixed at genesis that the
+       * interface needs and no per-tick block carries. The century chart
+       * labels its axis with the world's OWN first year, and the status bar
+       * has to know whether a clock that reached its hundred and first year is
+       * finished or merely old.
+       */
+      readonly startYear: number;
+      readonly endless: boolean;
       /** Shared tile layers - the renderer reads them in place, never a copy. */
       readonly mapBuffer: SharedArrayBuffer;
       readonly townCount: number;
