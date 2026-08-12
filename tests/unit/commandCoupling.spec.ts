@@ -189,6 +189,7 @@ const SAMPLES: Record<keyof typeof CommandKind, Command> = {
   ApplyTownMeasure: { kind: CommandKind.ApplyTownMeasure, townId: 4, measure: 1 },
   DemolishBuilding: { kind: CommandKind.DemolishBuilding, x: 35, y: 36 },
   AcceptContract: { kind: CommandKind.AcceptContract, contractId: 9 },
+  AcceptSupplyContract: { kind: CommandKind.AcceptSupplyContract, contractId: 11 },
   BuildWaypoint: { kind: CommandKind.BuildWaypoint, x: 37, y: 38 },
   DemolishWaypoint: { kind: CommandKind.DemolishWaypoint, x: 39, y: 40 },
   CreateLine: { kind: CommandKind.CreateLine },

@@ -50,6 +50,7 @@ import { releaseAll } from '../vehicles/reservations';
 import { divertToDepot, startVehicle } from '../vehicles/update';
 import { applyTerraform, estimateTerraform, levelTile, TerraformDirection } from '../map/terraform';
 import { acceptContract, isOpen } from '../economy/contracts';
+import { acceptSupply, isSupplyOpen } from '../economy/supply';
 import { applyTownMeasure, buyExclusiveRights } from '../town/measures';
 import type { TownMeasure } from '../town/council';
 import type { World } from '../World';
@@ -154,6 +155,21 @@ export function executeCommand(world: World, command: Command): CommandOutcome {
         return { ok: false, reasonKey: RejectReason.AlreadyAccepted };
       }
       acceptContract(contract, world.company.id);
+      return ACCEPTED;
+    }
+
+    case CommandKind.AcceptSupplyContract: {
+      const contract = world.supplyContracts.find((entry) => entry.id === command.contractId);
+      if (contract === undefined) {
+        return { ok: false, reasonKey: RejectReason.NoSuchSupplyContract };
+      }
+      if (!isSupplyOpen(world, contract)) {
+        return { ok: false, reasonKey: RejectReason.SupplyContractClosed };
+      }
+      if (contract.acceptedBy.includes(world.company.id)) {
+        return { ok: false, reasonKey: RejectReason.AlreadyAccepted };
+      }
+      acceptSupply(contract, world.company.id);
       return ACCEPTED;
     }
 

@@ -12,6 +12,7 @@ import {
   CONTRACT_RATING_MALUS,
   TICKS_PER_MONTH,
 } from '../constants';
+import { Account } from './ledger';
 import { Cargo } from '../cargo/types';
 import { deliveryRevenueCt } from '../cargo/payment';
 import { economyRateFactor } from './curve';
@@ -140,7 +141,11 @@ function settleExpired(world: World): void {
     const penaltyCt = Math.round(contract.bonusCt * CONTRACT_PENALTY_SHARE);
     for (const companyId of contract.acceptedBy) {
       if ((contract.progress[companyId] ?? 0) >= contract.amountUnits) continue;
-      bookExpense(world.companyOf(companyId), penaltyCt);
+      // The 14.1 gap SPEC2 M21 names by line number: this charge used to take
+      // `bookExpense`'s default and land in `Construction`, so a player reading
+      // the books saw a build bill they had never authorised. A broken promise
+      // is not a building.
+      bookExpense(world.companyOf(companyId), penaltyCt, Account.ContractPenalties);
 
       const town = world.towns[contract.townId];
       if (town !== undefined) addGoodwill(town, companyId, -CONTRACT_RATING_MALUS);
@@ -251,5 +256,12 @@ export function bonusCtFor(world: World, cargo: number, amountUnits: number): nu
   return Math.round(ordinary * CONTRACT_BONUS_FACTOR);
 }
 
-/** The haul a contract's bonus is priced against. [tiles] */
-const CONTRACT_REFERENCE_DISTANCE = 40;
+/**
+ * The haul a contract's bonus is priced against. [tiles]
+ *
+ * Exported since SPEC2 M21: the supply board prices its monthly bonus over the
+ * same reference haul, so the two premiums stay comparable to each other
+ * however the freight rates are balanced later - two copies of this number is
+ * how they would come apart.
+ */
+export const CONTRACT_REFERENCE_DISTANCE = 40;

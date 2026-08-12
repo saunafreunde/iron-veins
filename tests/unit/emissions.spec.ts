@@ -7,12 +7,14 @@ import {
   CO2_LEVY_CT_PER_TONNE,
   CO2_LEVY_FROM_YEAR,
   CO2_LEVY_RISE_FROM_YEAR,
+  CO2_VEHICLE_GRANT_MAX_SHARE,
+  RESALE_SHARE,
   START_YEAR,
   TICKS_PER_MONTH,
   TICKS_PER_YEAR,
 } from '../../src/sim/constants';
 import { Account } from '../../src/sim/economy/ledger';
-import { levyCtPerTonne } from '../../src/sim/economy/emissions';
+import { cleanVehicleGrantShare, levyCtPerTonne } from '../../src/sim/economy/emissions';
 import { RailType } from '../../src/sim/map/track';
 import { ModuleKind } from '../../src/sim/station/types';
 import { PowerCode } from '../../src/sim/vehicles/spec';
@@ -29,6 +31,17 @@ import { apply, flatScenario, makeTown, type Scenario } from '../balance/scenari
 
 const SIZE = 64;
 const ROW = 20;
+
+/**
+ * `veh.bus_battery` and the year it can be bought in.
+ *
+ * The grant starts in 2000 and the catalogue's first low-emission ROAD vehicle
+ * arrives in 2026, so the purchase half of these tests plays in 2030. That gap
+ * is the catalogue's and not the grant's: the wires and the electric traction
+ * behind them are what a company electrifies with before then.
+ */
+const CLEAN_BUS_SPEC = 205;
+const CLEAN_BUS_YEAR = 2030;
 
 function scenario(emissions = true): Scenario {
   const s = flatScenario(SIZE, [makeTown(0, 30, 40, 1_200, 'Kohlheim')], [], 9, 0, emissions);
@@ -219,5 +232,83 @@ describe('the switch', () => {
       signalSpacing: 0,
     });
     expect(cashOn - on.world.playerCompany.cashCt).toBeLessThan(paidWithout);
+  });
+});
+
+/**
+ * The low-emission purchase grant (SPEC.md 14.3, SPEC2 M21).
+ *
+ * The third arm of D-105's one policy: the levy charges for the carbon a
+ * vehicle turns into work, the wires grant pays for the infrastructure, and
+ * this pays for the machine that uses it. It is a function of the SAME
+ * `CO2_KG_PER_MJ` table the levy is charged from, so nothing in the catalogue
+ * can be dirty for one and clean for the other.
+ */
+describe('the low-emission purchase grant', () => {
+  /** What one battery-electric bus costs the company, in cash, this year. */
+  function paidForCleanBus(s: Scenario): number {
+    apply(s, { kind: CommandKind.BuildRoad, x1: 5, y1: ROW + 12, x2: 8, y2: ROW + 12 });
+    apply(s, {
+      kind: CommandKind.BuildRoadStop,
+      x: 5,
+      y: ROW + 12,
+      moduleKind: ModuleKind.RoadDepot,
+    });
+    const cash = s.world.playerCompany.cashCt;
+    apply(s, { kind: CommandKind.BuyRoadVehicle, x: 5, y: ROW + 12, specId: CLEAN_BUS_SPEC });
+    return cash - s.world.playerCompany.cashCt;
+  }
+
+  it('is scaled by how clean the traction really is, against diesel', () => {
+    const s = startInYear(CO2_GRANT_FROM_YEAR);
+    const diesel = CO2_KG_PER_MJ[PowerCode.Diesel]!;
+
+    // Steam is dirtier than the datum, so there is nothing to pay for.
+    expect(cleanVehicleGrantShare(s.world, PowerCode.Steam)).toBe(0);
+    expect(cleanVehicleGrantShare(s.world, PowerCode.Diesel)).toBe(0);
+    // And the three that are cleaner are paid in the order they are clean.
+    const electric = cleanVehicleGrantShare(s.world, PowerCode.Electric);
+    const battery = cleanVehicleGrantShare(s.world, PowerCode.Battery);
+    const hydrogen = cleanVehicleGrantShare(s.world, PowerCode.Hydrogen);
+    expect(electric).toBeGreaterThan(battery);
+    expect(battery).toBeGreaterThan(hydrogen);
+    expect(hydrogen).toBeGreaterThan(0);
+    expect(electric).toBeCloseTo(
+      ((diesel - CO2_KG_PER_MJ[PowerCode.Electric]!) / diesel) * CO2_VEHICLE_GRANT_MAX_SHARE,
+      12,
+    );
+    expect(electric).toBeLessThanOrEqual(CO2_VEHICLE_GRANT_MAX_SHARE);
+  });
+
+  it('can never be traded for a profit against the resale price', () => {
+    // A vehicle bought at the largest possible discount and sold the same day
+    // still loses money: RESALE_SHARE is the ceiling this constant lives under.
+    expect(CO2_VEHICLE_GRANT_MAX_SHARE).toBeLessThan(1 - RESALE_SHARE);
+  });
+
+  it('is nothing before its year, and nothing without the levy beside it', () => {
+    const early = startInYear(CO2_GRANT_FROM_YEAR - 1);
+    expect(cleanVehicleGrantShare(early.world, PowerCode.Battery)).toBe(0);
+
+    const noLevy = startInYear(CO2_GRANT_FROM_YEAR, false);
+    expect(cleanVehicleGrantShare(noLevy.world, PowerCode.Battery)).toBe(0);
+  });
+
+  it('makes the company actually pay less for the vehicle', () => {
+    const granted = startInYear(CLEAN_BUS_YEAR);
+    const paidWith = paidForCleanBus(granted);
+
+    const noLevy = startInYear(CLEAN_BUS_YEAR, false);
+    const paidWithout = paidForCleanBus(noLevy);
+
+    expect(paidWith).toBeGreaterThan(0);
+    expect(paidWith).toBeLessThan(paidWithout);
+    const share = cleanVehicleGrantShare(granted.world, PowerCode.Battery);
+    expect(paidWith).toBe(Math.round(paidWithout * (1 - share)));
+    // And the books carry the asset at what was paid for it, not at the list
+    // price: a subsidy may not become book value.
+    expect(granted.world.playerCompany.fixedAssetsCt).toBeLessThan(
+      noLevy.world.playerCompany.fixedAssetsCt,
+    );
   });
 });

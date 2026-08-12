@@ -39,12 +39,18 @@ import { industryBaseOutput, industrySpec, industryStockCap, type Industry } fro
  * a second train pay for itself in tonnage rather than only in trips.
  */
 
-/** Stock of one input slot. Two slots is the whole catalogue's arity. */
-function inputStock(industry: Industry, slot: number): number {
+/**
+ * Stock of one input slot. Two slots is the whole catalogue's arity.
+ *
+ * Exported for the supply contracts of SPEC2 M21, which are the only thing
+ * outside this file that may touch an input shed - and they touch it through
+ * these two and never through the fields, so the slot rule stays in one place.
+ */
+export function inputStock(industry: Industry, slot: number): number {
   return slot === 0 ? industry.inputStock0 : industry.inputStock1;
 }
 
-function setInputStock(industry: Industry, slot: number, value: number): void {
+export function setInputStock(industry: Industry, slot: number, value: number): void {
   if (slot === 0) industry.inputStock0 = value;
   else industry.inputStock1 = value;
 }

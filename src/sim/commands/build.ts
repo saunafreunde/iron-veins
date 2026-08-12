@@ -76,11 +76,16 @@ import { assignStationCatchment } from '../town/update';
 import { RoadBit } from '../town/types';
 import type { Cargo } from '../cargo/types';
 import { defaultCargo, vehicleSpec, VehicleKind } from '../vehicles/catalog';
+import { powerCode as vehiclePowerCode } from '../vehicles/spec';
 import { aggregateConsist, consistDefaultCargo, validateConsist } from '../vehicles/consist';
 import { refitCapacity, refitPriceCt } from '../vehicles/refit';
 import { releaseAll } from '../vehicles/reservations';
 import { VehicleState } from '../vehicles/VehicleStore';
-import { electrificationGrantShare } from '../economy/emissions';
+import {
+  cleanVehicleGrantShare,
+  electrificationGrantShare,
+  grantedPriceCt,
+} from '../economy/emissions';
 import { bookDemolition, councilRefusal } from '../town/council';
 import type { World } from '../World';
 import { ACCEPTED, RejectReason, type CommandOutcome } from './types';
@@ -937,7 +942,11 @@ export function buyAircraft(
 
   const year = world.date.year;
   if (year < spec.introYear || year > spec.retireYear) return reject(RejectReason.NotAvailableYet);
-  const chargeCt = world.costCt(spec.priceCt);
+  // The low-emission purchase grant of section 14.3 (SPEC2 M21): what the
+  // company really pays, through the ONE function all four buy commands share.
+  // Exactly the inflated list price in a world without the levy and before its
+  // own year, so nothing before 2000 moves by a cent.
+  const chargeCt = grantedPriceCt(world, spec.priceCt, vehiclePowerCode(spec.power));
   if (chargeCt > world.company.cashCt) return reject(RejectReason.InsufficientFunds);
 
   const id = world.vehicles.create(specId, world.company.id, tile, world.tick, defaultCargo(spec));
@@ -976,7 +985,11 @@ export function buyShip(
 
   const year = world.date.year;
   if (year < spec.introYear || year > spec.retireYear) return reject(RejectReason.NotAvailableYet);
-  const chargeCt = world.costCt(spec.priceCt);
+  // The low-emission purchase grant of section 14.3 (SPEC2 M21): what the
+  // company really pays, through the ONE function all four buy commands share.
+  // Exactly the inflated list price in a world without the levy and before its
+  // own year, so nothing before 2000 moves by a cent.
+  const chargeCt = grantedPriceCt(world, spec.priceCt, vehiclePowerCode(spec.power));
   if (chargeCt > world.company.cashCt) return reject(RejectReason.InsufficientFunds);
 
   const id = world.vehicles.create(specId, world.company.id, tile, world.tick, defaultCargo(spec));
@@ -1073,7 +1086,18 @@ export function buyTrain(
   if (problem !== null) return reject(problem);
 
   const aggregate = aggregateConsist(specIds);
-  const chargeCt = world.costCt(aggregate.priceCt);
+  // The low-emission purchase grant of section 14.3 (SPEC2 M21): what the
+  // company really pays, through the ONE function all four buy commands share.
+  // The traction unit decides it, which is the same spec the vehicle store
+  // caches its power code from. Exactly the inflated list price in a world
+  // without the levy and before its own year.
+  const power = vehiclePowerCode(vehicleSpec(specIds[0]!).power);
+  const chargeCt = grantedPriceCt(world, aggregate.priceCt, power);
+  // The book value is the LIST price less the same grant - never the inflated
+  // charge, which is what this line has always booked (an asset is carried at
+  // what it cost in the money of its own year, and moving that here would
+  // re-band every game this milestone did not touch).
+  const assetCt = Math.round(aggregate.priceCt * (1 - cleanVehicleGrantShare(world, power)));
   if (chargeCt > world.company.cashCt) return reject(RejectReason.InsufficientFunds);
 
   const id = world.vehicles.create(
@@ -1091,7 +1115,7 @@ export function buyTrain(
 
   bookExpense(world.company, chargeCt);
   world.company.vehicleUpkeepPerYearCt += aggregate.upkeepCtPerYear;
-  world.company.fixedAssetsCt += aggregate.priceCt;
+  world.company.fixedAssetsCt += assetCt;
   return ACCEPTED;
 }
 
@@ -1116,7 +1140,11 @@ export function buyRoadVehicle(
 
   const year = world.date.year;
   if (year < spec.introYear || year > spec.retireYear) return reject(RejectReason.NotAvailableYet);
-  const chargeCt = world.costCt(spec.priceCt);
+  // The low-emission purchase grant of section 14.3 (SPEC2 M21): what the
+  // company really pays, through the ONE function all four buy commands share.
+  // Exactly the inflated list price in a world without the levy and before its
+  // own year, so nothing before 2000 moves by a cent.
+  const chargeCt = grantedPriceCt(world, spec.priceCt, vehiclePowerCode(spec.power));
   if (chargeCt > world.company.cashCt) return reject(RejectReason.InsufficientFunds);
 
   const id = world.vehicles.create(specId, world.company.id, tile, world.tick, defaultCargo(spec));
@@ -1127,7 +1155,10 @@ export function buyRoadVehicle(
 
   bookExpense(world.company, chargeCt);
   world.company.vehicleUpkeepPerYearCt += spec.upkeepCtPerYear;
-  world.company.fixedAssetsCt += spec.priceCt;
+  // The list price less the same grant, for the reason `buyTrain` gives.
+  world.company.fixedAssetsCt += Math.round(
+    spec.priceCt * (1 - cleanVehicleGrantShare(world, vehiclePowerCode(spec.power))),
+  );
   return ACCEPTED;
 }
 

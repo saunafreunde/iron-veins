@@ -1,5 +1,7 @@
 import type { AiProject, AiState } from '../ai/types';
 import type { Contract } from '../economy/contracts';
+import type { SupplyContract } from '../economy/supply';
+import type { Subsidy } from '../economy/subsidies';
 import { CommandKind, type Command, type CommandEnvelope } from '../commands/types';
 import type { CargoLinkSave } from '../cargo/linkGraph';
 import { CARGO_COUNT } from '../cargo/types';
@@ -350,6 +352,55 @@ function parseContracts(value: unknown, path: string): Contract[] {
       acceptedBy: parseNumbers(raw['acceptedBy'], `${path}[${i}].acceptedBy`),
       progress: parseNumbers(raw['progress'], `${path}[${i}].progress`),
       completedBy: asInt(raw['completedBy'], `${path}[${i}].completedBy`),
+    };
+  });
+}
+
+/**
+ * The standing supply orders of SPEC2 M21.
+ *
+ * Every field is required, exactly as the tender board's are: an order the
+ * parser would silently default is an order two builds can disagree about, and
+ * both the quota and the month counters decide money next month.
+ */
+function parseSupplyContracts(value: unknown, path: string): SupplyContract[] {
+  return asArray(value, path).map((entry, i) => {
+    const raw = asRecord(entry, `${path}[${i}]`);
+    return {
+      id: asInt(raw['id'], `${path}[${i}].id`),
+      industryId: asInt(raw['industryId'], `${path}[${i}].industryId`),
+      cargo: asInt(raw['cargo'], `${path}[${i}].cargo`),
+      quotaUnits: asFinite(raw['quotaUnits'], `${path}[${i}].quotaUnits`),
+      offeredTick: asInt(raw['offeredTick'], `${path}[${i}].offeredTick`),
+      endTick: asInt(raw['endTick'], `${path}[${i}].endTick`),
+      bonusCt: asInt(raw['bonusCt'], `${path}[${i}].bonusCt`),
+      acceptedBy: parseNumbers(raw['acceptedBy'], `${path}[${i}].acceptedBy`),
+      deliveredThisMonth: parseNumbers(
+        raw['deliveredThisMonth'],
+        `${path}[${i}].deliveredThisMonth`,
+      ),
+      monthsMissed: asInt(raw['monthsMissed'], `${path}[${i}].monthsMissed`),
+      monthsMet: asInt(raw['monthsMet'], `${path}[${i}].monthsMet`),
+    };
+  });
+}
+
+/** The subsidised relations of SPEC2 M21, on the same terms. */
+function parseSubsidies(value: unknown, path: string): Subsidy[] {
+  return asArray(value, path).map((entry, i) => {
+    const raw = asRecord(entry, `${path}[${i}]`);
+    return {
+      id: asInt(raw['id'], `${path}[${i}].id`),
+      cargo: asInt(raw['cargo'], `${path}[${i}].cargo`),
+      fromX: asInt(raw['fromX'], `${path}[${i}].fromX`),
+      fromY: asInt(raw['fromY'], `${path}[${i}].fromY`),
+      toX: asInt(raw['toX'], `${path}[${i}].toX`),
+      toY: asInt(raw['toY'], `${path}[${i}].toY`),
+      rateFactor: asFinite(raw['rateFactor'], `${path}[${i}].rateFactor`),
+      offeredTick: asInt(raw['offeredTick'], `${path}[${i}].offeredTick`),
+      expiresTick: asInt(raw['expiresTick'], `${path}[${i}].expiresTick`),
+      claimedBy: asInt(raw['claimedBy'], `${path}[${i}].claimedBy`),
+      deliveredUnits: asFinite(raw['deliveredUnits'], `${path}[${i}].deliveredUnits`),
     };
   });
 }
@@ -858,6 +909,12 @@ export function parseCommand(value: unknown, path: string): Command {
     case CommandKind.AcceptContract:
       return {
         kind: CommandKind.AcceptContract,
+        contractId: asInt(raw['contractId'], `${path}.contractId`),
+      };
+
+    case CommandKind.AcceptSupplyContract:
+      return {
+        kind: CommandKind.AcceptSupplyContract,
         contractId: asInt(raw['contractId'], `${path}.contractId`),
       };
 
@@ -1374,6 +1431,10 @@ export function parseWorldState(value: unknown, path: string): WorldStateData {
     news: parseNews(stateRaw['news'], `${path}.news`),
     contracts: parseContracts(stateRaw['contracts'], `${path}.contracts`),
     nextContractId: asInt(stateRaw['nextContractId'], `${path}.nextContractId`),
+    supplyContracts: parseSupplyContracts(stateRaw['supplyContracts'], `${path}.supplyContracts`),
+    nextSupplyContractId: asInt(stateRaw['nextSupplyContractId'], `${path}.nextSupplyContractId`),
+    subsidies: parseSubsidies(stateRaw['subsidies'], `${path}.subsidies`),
+    nextSubsidyId: asInt(stateRaw['nextSubsidyId'], `${path}.nextSubsidyId`),
     ai: parseAi(stateRaw['ai'], `${path}.ai`),
   };
 }

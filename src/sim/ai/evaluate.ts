@@ -44,6 +44,7 @@ import { capacityFor, vehicleSpec } from '../vehicles/catalog';
 import { industryBaseOutput, industrySpec, type Industry } from '../industry/types';
 import type { Town } from '../town/types';
 import { RAIL_TYPE_COST_CT, RAIL_TYPE_UPKEEP_CT, RailType } from '../map/track';
+import { subsidyRateFor } from '../economy/subsidies';
 import { Personality } from './types';
 import type { World } from '../World';
 
@@ -91,6 +92,16 @@ export interface Opportunity {
    * there is one source and the two figures are the same number.
    */
   readonly offeredPerMonth: number;
+  /**
+   * What the state pays for this relation, as a multiple of the tariff (SPEC2
+   * M21), or exactly 1 where nothing is on offer.
+   *
+   * Carried on the opportunity rather than looked up twice, so `rate`'s ranking
+   * and `projectLine`'s floor are quoted for the SAME offer. It is asked
+   * without claiming - a competitor that merely considered a relation has not
+   * won the race for it.
+   */
+  readonly subsidyFactor: number;
 }
 
 /** Tile distance the way everything else in this game measures it. */
@@ -258,9 +269,9 @@ function collectFor(
   // "Lorries and buses, short hauls" is the personality's own definition.
   // Rail and the two temperaments keep their industry focus: that is what
   // keeps the five distinguishable.
-  if (personality === Personality.TownNetwork) collectTownPairs(world, found, rail);
+  if (personality === Personality.TownNetwork) collectTownPairs(world, found, rail, companyId);
   else collectIndustryPairs(world, found, rail, companyId);
-  if (personality === Personality.Road) collectTownPairs(world, found, rail);
+  if (personality === Personality.Road) collectTownPairs(world, found, rail, companyId);
   collectTownDeliveries(world, found, rail, companyId);
 
   // Drop anything nothing on the market can carry. In 1950 there is no
@@ -417,14 +428,19 @@ function collectIndustryPairs(
           rail,
           terminal,
           expectedOutput(world, source),
-          { chain: weSupply(world, source, companyId) },
+          { chain: weSupply(world, source, companyId), companyId },
         ),
       );
     }
   }
 }
 
-function collectTownPairs(world: World, into: Opportunity[], rail: boolean): void {
+function collectTownPairs(
+  world: World,
+  into: Opportunity[],
+  rail: boolean,
+  companyId: number,
+): void {
   for (let a = 0; a < world.towns.length; a++) {
     for (let b = a + 1; b < world.towns.length; b++) {
       const from = world.towns[a]!;
@@ -454,7 +470,7 @@ function collectTownPairs(world: World, into: Opportunity[], rail: boolean): voi
           // earns is the sum of the two towns; what its fleet has to keep
           // drained is the larger one alone. Two different questions, two
           // different figures - see `Opportunity.offeredPerMonth`.
-          { offeredPerMonth: townOutput(from) + townOutput(to) },
+          { offeredPerMonth: townOutput(from) + townOutput(to), companyId },
         ),
       );
     }
@@ -520,7 +536,7 @@ function collectTownDeliveries(
           rail,
           true,
           expectedOutput(world, source),
-          { chain: weSupply(world, source, companyId) },
+          { chain: weSupply(world, source, companyId), companyId },
         ),
       );
     }
@@ -554,8 +570,26 @@ function rate(
   rail: boolean,
   terminalSink: boolean,
   monthlyOutput: number,
-  flags: { readonly chain?: boolean; readonly offeredPerMonth?: number } = {},
+  flags: {
+    readonly chain?: boolean;
+    readonly offeredPerMonth?: number;
+    readonly companyId?: number;
+  } = {},
 ): Opportunity {
+  // Looked up ONCE and carried on the opportunity, so the ranking estimate and
+  // the profitability floor below cannot see two different offers for the same
+  // relation - the D-219 lesson about a filter and the builder it filters for.
+  // `claim` is false: looking at a subsidy may never win it.
+  const subsidyFactor = subsidyRateFor(
+    world,
+    flags.companyId ?? -1,
+    fromX,
+    fromY,
+    toX,
+    toY,
+    cargo,
+    false,
+  );
   const load = rail ? AI_RAIL_LOAD_UNITS : AI_ROAD_LOAD_UNITS;
   /*
    * Round trips a month, and this is where a competitor's judgement lives.
@@ -606,7 +640,12 @@ function rate(
     // The century (SPEC2 M21): a competitor that ranked a coal line in 2035
     // by 1950's coal price would build the one line the world has stopped
     // paying for. Exactly 1 in a world without the rule.
-    rateFactor: economyRateFactor(world.economyCurve, cargo, world.date.year),
+    //
+    // And the subsidy board beside it, at the same seam and asking WITHOUT
+    // claiming: a relation the state is paying double for has to rank as what
+    // it would really earn, or the one lever that can move a competitor which
+    // refuses unprofitable work (D-221, D-229) would be invisible to it.
+    rateFactor: economyRateFactor(world.economyCurve, cargo, world.date.year) * subsidyFactor,
   });
 
   /*
@@ -667,6 +706,7 @@ function rate(
     rail,
     monthlyOutput,
     offeredPerMonth: flags.offeredPerMonth ?? monthlyOutput,
+    subsidyFactor,
   };
 }
 
@@ -807,8 +847,12 @@ export function projectLine(
     ticksInTransit: oneWayTicks,
     hasCooling: false,
     year: world.date.year,
-    // The century, at the second of this file's two payment estimates.
-    rateFactor: economyRateFactor(world.economyCurve, opportunity.cargo, world.date.year),
+    // The century, at the second of this file's two payment estimates - and
+    // the subsidy the ranking already looked up, read off the opportunity
+    // rather than asked again.
+    rateFactor:
+      economyRateFactor(world.economyCurve, opportunity.cargo, world.date.year) *
+      opportunity.subsidyFactor,
   });
 
   const modulesCt = opportunity.rail

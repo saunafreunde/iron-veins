@@ -48,6 +48,8 @@ export const CommandKind = {
   SetTransferNode: 40,
   /** Divert a vehicle to its home shed and park it there (SPEC2 M14). */
   SendVehicleToDepot: 41,
+  /** Take on one of the standing supply orders of SPEC2 M21. */
+  AcceptSupplyContract: 42,
 } as const;
 export type CommandKind = (typeof CommandKind)[keyof typeof CommandKind];
 
@@ -236,6 +238,19 @@ export interface BuyTrainCommand {
  */
 export interface AcceptContractCommand {
   readonly kind: typeof CommandKind.AcceptContract;
+  readonly contractId: number;
+}
+
+/**
+ * Promise a consuming works its monthly quota (SPEC2 M21).
+ *
+ * Free to take on, like a tender, and binding in the same way: every month the
+ * company is judged on its share of the quota and paid or charged for it.
+ * Several companies may hold the same order - a works does not care whose coal
+ * it is - and each is then judged on an equal share of it.
+ */
+export interface AcceptSupplyContractCommand {
+  readonly kind: typeof CommandKind.AcceptSupplyContract;
   readonly contractId: number;
 }
 
@@ -446,6 +461,7 @@ export interface RefitVehicleCommand {
 
 export type Command =
   | AcceptContractCommand
+  | AcceptSupplyContractCommand
   | BuildWaypointCommand
   | DemolishWaypointCommand
   | CreateLineCommand
@@ -562,6 +578,8 @@ export const RejectReason = {
   NoSuchTown: 'cmd.reject.noSuchTown',
   NoSuchContract: 'cmd.reject.noSuchContract',
   ContractClosed: 'cmd.reject.contractClosed',
+  NoSuchSupplyContract: 'cmd.reject.noSuchSupplyContract',
+  SupplyContractClosed: 'cmd.reject.supplyContractClosed',
   AlreadyAccepted: 'cmd.reject.alreadyAccepted',
   UnknownMeasure: 'cmd.reject.unknownMeasure',
   MeasureNotReady: 'cmd.reject.measureNotReady',

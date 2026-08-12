@@ -2,6 +2,8 @@ import type {
   CompanyMarker,
   ContractMarker,
   MainToWorkerMessage,
+  SubsidyMarker,
+  SupplyMarker,
   TownMarker,
   WorkerToMainMessage,
 } from '../shared/protocol';
@@ -51,6 +53,9 @@ import type { NewGameOptions, SaveSlotKind } from '../shared/protocol';
 import { worldParamsFor } from './newGame';
 import { bookValueCt, companyValueCt, monthsInOrder } from './economy/ledger';
 import { contractProgress, isOpen } from './economy/contracts';
+import { isSupplyOpen, supplyProgress } from './economy/supply';
+import { isSubsidyOpen } from './economy/subsidies';
+import { industrySpec } from './industry/types';
 import { refusedTile } from './vehicles/reservations';
 import { writeVehicleBlock } from './vehicles/snapshot';
 import { VehicleKind } from './vehicles/spec';
@@ -271,6 +276,56 @@ function contractMarkers(current: World): ContractMarker[] {
   return markers;
 }
 
+/** The standing supply orders of SPEC2 M21 the player can still act on. */
+function supplyMarkers(current: World): SupplyMarker[] {
+  const player = current.playerCompanyId;
+  const markers: SupplyMarker[] = [];
+
+  for (const contract of current.supplyContracts) {
+    if (!isSupplyOpen(current, contract)) continue;
+    const works = current.industries[contract.industryId];
+    if (works === undefined) continue;
+    markers.push({
+      id: contract.id,
+      cargo: contract.cargo,
+      industryNameKey: industrySpec(works.type).nameKey,
+      x: works.x,
+      y: works.y,
+      quotaUnits: contract.quotaUnits,
+      monthsLeft: Math.ceil((contract.endTick - current.tick) / TICKS_PER_MONTH),
+      bonusCt: contract.bonusCt,
+      progress: supplyProgress(contract, player),
+      accepted: contract.acceptedBy.includes(player),
+      rivals: contract.acceptedBy.filter((id) => id !== player).length,
+      monthsMissed: contract.monthsMissed,
+    });
+  }
+  return markers;
+}
+
+/** The subsidised relations of SPEC2 M21, open and just won alike. */
+function subsidyMarkers(current: World): SubsidyMarker[] {
+  const markers: SubsidyMarker[] = [];
+
+  for (const subsidy of current.subsidies) {
+    if (!isSubsidyOpen(current, subsidy)) continue;
+    markers.push({
+      id: subsidy.id,
+      cargo: subsidy.cargo,
+      fromX: subsidy.fromX,
+      fromY: subsidy.fromY,
+      toX: subsidy.toX,
+      toY: subsidy.toY,
+      ratePercent: Math.round(subsidy.rateFactor * 100),
+      monthsLeft: Math.ceil((subsidy.expiresTick - current.tick) / TICKS_PER_MONTH),
+      claimedBy: subsidy.claimedBy,
+      claimedByName:
+        subsidy.claimedBy < 0 ? '' : (current.companies[subsidy.claimedBy]?.name ?? ''),
+    });
+  }
+  return markers;
+}
+
 /** Every company, for the council panel and the competitor list. */
 function companyMarkers(current: World): CompanyMarker[] {
   return current.companies.map((company) => ({
@@ -313,7 +368,12 @@ function postMonthly(current: World): void {
   });
   scope.postMessage({ type: 'townsChanged', towns: townMarkers(current) });
   scope.postMessage({ type: 'companiesChanged', companies: companyMarkers(current) });
-  scope.postMessage({ type: 'contractsChanged', contracts: contractMarkers(current) });
+  scope.postMessage({
+    type: 'contractsChanged',
+    contracts: contractMarkers(current),
+    supply: supplyMarkers(current),
+    subsidies: subsidyMarkers(current),
+  });
 }
 
 /**

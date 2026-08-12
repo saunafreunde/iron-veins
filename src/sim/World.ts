@@ -72,6 +72,8 @@ import { updateAi } from './ai/ai';
 import { createAiStates } from './ai/roster';
 import type { AiState } from './ai/types';
 import { reviewContracts, type Contract } from './economy/contracts';
+import { reviewSupply, type SupplyContract } from './economy/supply';
+import { reviewSubsidies, type Subsidy } from './economy/subsidies';
 import { reviewCouncils } from './town/council';
 import { runElections } from './town/elections';
 import { growTownFabric } from './town/growth';
@@ -149,6 +151,12 @@ export interface WorldStateData {
   /** Tenders, open and recently settled (section 14.4). */
   contracts: Contract[];
   nextContractId: number;
+  /** Standing supply orders, open and recently expired (SPEC2 M21). */
+  supplyContracts: SupplyContract[];
+  nextSupplyContractId: number;
+  /** The subsidised relations of SPEC2 M21, open and recently expired. */
+  subsidies: Subsidy[];
+  nextSubsidyId: number;
   /** The AI competitors and what they have built (section 15). */
   ai: AiState[];
 }
@@ -390,6 +398,20 @@ export class World {
    */
   contracts: Contract[] = [];
   /**
+   * The standing supply orders of SPEC2 M21: what the consuming industries of
+   * this world want every month, and who promised it to them.
+   *
+   * Empty for ever in a world whose `economy` rule is off - `reviewSupply`
+   * returns on its first line - which is the milestone's off-anchor and what
+   * keeps every band measured before it exactly where it was.
+   */
+  supplyContracts: SupplyContract[] = [];
+  /**
+   * The subsidised relations of SPEC2 M21, and the race for each of them.
+   * Empty for ever in a world without a century, exactly like the board above.
+   */
+  subsidies: Subsidy[] = [];
+  /**
    * One entry per AI competitor (section 15). Empty in a single company game,
    * which is what makes the whole subsystem cost nothing when it is not used.
    */
@@ -400,6 +422,10 @@ export class World {
    * player never saw.
    */
   nextContractId = 0;
+  /** Next supply-order id, monotonic and never reused, for the same reason. */
+  nextSupplyContractId = 0;
+  /** Next subsidy id, monotonic and never reused, for the same reason. */
+  nextSubsidyId = 0;
 
   /** The company the local player controls. */
   readonly playerCompanyId = 0;
@@ -697,6 +723,12 @@ export class World {
         closeMonth(this.companies[index]!);
       }
       reviewContracts(this);
+      // The two boards of SPEC2 M21, beside the tenders they are cousins of
+      // and after the books were closed, so a bonus and a penalty land in the
+      // month that starts now rather than in the one being judged. Both return
+      // on their first line in a world without a century.
+      reviewSupply(this);
+      reviewSubsidies(this);
       // Last, so the month it judges is the one that has just been booked.
       for (let index = 0; index < this.companies.length; index++) {
         reviewBankruptcy(this, this.companies[index]!);
@@ -856,6 +888,14 @@ export class World {
         progress: [...contract.progress],
       })),
       nextContractId: this.nextContractId,
+      supplyContracts: this.supplyContracts.map((contract) => ({
+        ...contract,
+        acceptedBy: [...contract.acceptedBy],
+        deliveredThisMonth: [...contract.deliveredThisMonth],
+      })),
+      nextSupplyContractId: this.nextSupplyContractId,
+      subsidies: this.subsidies.map((subsidy) => ({ ...subsidy })),
+      nextSubsidyId: this.nextSubsidyId,
       ai: this.ai.map((state) => ({
         ...state,
         reviews: state.reviews.map((review) => ({ ...review })),
@@ -937,6 +977,14 @@ export class World {
       progress: [...contract.progress],
     }));
     world.nextContractId = data.nextContractId;
+    world.supplyContracts = data.supplyContracts.map((contract) => ({
+      ...contract,
+      acceptedBy: [...contract.acceptedBy],
+      deliveredThisMonth: [...contract.deliveredThisMonth],
+    }));
+    world.nextSupplyContractId = data.nextSupplyContractId;
+    world.subsidies = data.subsidies.map((subsidy) => ({ ...subsidy }));
+    world.nextSubsidyId = data.nextSubsidyId;
     world.ai = data.ai.map((state) => ({
       ...state,
       reviews: state.reviews.map((review) => ({ ...review })),
@@ -1126,6 +1174,35 @@ function hashDynamicState(h: Fnv1a64, world: World): void {
     for (const done of contract.progress) h.f64(done);
   }
   h.u32(world.nextContractId);
+
+  // The two boards of SPEC2 M21. Both are state the simulation writes and
+  // reads back - a quota half delivered decides next month's penalty, and an
+  // unclaimed subsidy decides who is paid double for the next delivery - so
+  // both are hashed like every other saved figure (D-134, Z4). A world with the
+  // century off carries two empty lists, which costs the digest two zeroes and
+  // is the same two zeroes for every such world.
+  h.u32(world.supplyContracts.length);
+  for (let i = 0; i < world.supplyContracts.length; i++) {
+    const contract = world.supplyContracts[i]!;
+    h.u32(contract.id).int(contract.industryId).u32(contract.cargo);
+    h.f64(contract.quotaUnits).u32(contract.offeredTick).u32(contract.endTick);
+    h.int(contract.bonusCt).u32(contract.monthsMissed).u32(contract.monthsMet);
+    h.u32(contract.acceptedBy.length);
+    for (const companyId of contract.acceptedBy) h.u32(companyId);
+    h.u32(contract.deliveredThisMonth.length);
+    for (const done of contract.deliveredThisMonth) h.f64(done);
+  }
+  h.u32(world.nextSupplyContractId);
+
+  h.u32(world.subsidies.length);
+  for (let i = 0; i < world.subsidies.length; i++) {
+    const subsidy = world.subsidies[i]!;
+    h.u32(subsidy.id).u32(subsidy.cargo);
+    h.u32(subsidy.fromX).u32(subsidy.fromY).u32(subsidy.toX).u32(subsidy.toY);
+    h.f64(subsidy.rateFactor).u32(subsidy.offeredTick).u32(subsidy.expiresTick);
+    h.int(subsidy.claimedBy).f64(subsidy.deliveredUnits);
+  }
+  h.u32(world.nextSubsidyId);
 
   // Every competitor's plan is state the simulation writes, so it is hashed
   // like any other. An AI left out of the digest is an AI the determinism

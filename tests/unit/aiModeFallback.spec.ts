@@ -181,6 +181,8 @@ describe('the projection is quoted for the railway the builder lays', () => {
       rail: true,
       monthlyOutput: 300,
       offeredPerMonth: 300,
+      // No century in these fixtures, so no board and no offer (SPEC2 M21).
+      subsidyFactor: 1,
     });
 
     // The way is the only term that scales with distance, so the slope of the

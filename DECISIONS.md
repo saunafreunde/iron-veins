@@ -26,7 +26,7 @@ no entry below. A number may appear under several topics.
 - **Save format, migrations & replays:** D-007, D-025, D-026, D-027, D-048,
   D-111, D-130, D-131, D-134, D-142, D-144, D-145, D-146, D-147, D-153, D-178,
   D-181, D-184, D-185, D-188, D-189, D-190, D-191, D-192, D-193, D-194,
-  D-197, D-198, D-200, D-207, D-213, D-231, D-232, D-233, D-236
+  D-197, D-198, D-200, D-207, D-213, D-231, D-232, D-233, D-236, D-238
 - **Rail & track:** D-042, D-043, D-044, D-045, D-046, D-047, D-053, D-141,
   D-153, D-157, D-184, D-230
 - **Signals & reservations:** D-054, D-055, D-056, D-057, D-058, D-059, D-060,
@@ -42,12 +42,12 @@ no entry below. A number may appear under several topics.
 - **Towns, council & ownership:** D-101, D-102, D-103, D-104, D-205, D-207,
   D-206, D-213, D-216, D-217, D-231, D-232, D-233, D-234, D-235
 - **Economy, finance & emissions:** D-008, D-090, D-091, D-092, D-105, D-154,
-  D-180, D-193, D-196, D-228, D-229, D-236, D-237
+  D-180, D-193, D-196, D-228, D-229, D-236, D-237, D-238
 - **Balancing & scenarios:** D-038, D-039, D-040, D-041, D-066, D-087, D-088,
   D-116, D-151, D-152, D-156, D-158, D-159, D-187, D-190, D-194, D-195,
   D-196, D-197, D-198, D-199, D-200, D-203, D-204, D-207, D-211, D-213,
   D-215, D-216, D-220, D-221, D-222, D-224, D-225, D-226, D-228, D-229,
-  D-232, D-233, D-234, D-235, D-236, D-237
+  D-232, D-233, D-234, D-235, D-236, D-237, D-238
 - **Vehicles & fleet:** D-043, D-044, D-045, D-068, D-076, D-089, D-093,
   D-096, D-142, D-143, D-145, D-146, D-155, D-157, D-171, D-174, D-181, D-185,
   D-201, D-207
@@ -55,7 +55,7 @@ no entry below. A number may appear under several topics.
 - **Competitors, AI & tenders:** D-107, D-108, D-109, D-115, D-116, D-121,
   D-122, D-147, D-152, D-153, D-154, D-155, D-156, D-158, D-216, D-218,
   D-219, D-220, D-221, D-222, D-223, D-224, D-225, D-226, D-228, D-229,
-  D-230
+  D-230, D-238
 - **Rendering & art:** D-013, D-014, D-033, D-035, D-112, D-117, D-125, D-127,
   D-136, D-140, D-160, D-161, D-162, D-163, D-164, D-165, D-166, D-169, D-170,
   D-171, D-172, D-173, D-174, D-175, D-177, D-179, D-186, D-202, D-205, D-206,
@@ -13744,3 +13744,193 @@ Angebot selbst (Formel, Tageshook, Ueberlauf an der vollen Tuer), der Fluss
 zwischen zwei Haefen mit der Preisprobe gegen `deliveryRevenueCt` und dem
 gemessenen Jahr, sowie Erhaltung und D-065. Dazu der dritte Arm in
 `tests/unit/deliveries.spec.ts`.
+
+### D-238 Liefervertraege, das Subventions-Board und das elfte Konto - und die ehrliche Messung, dass der Hebel die KI fast nie erreicht
+
+SPEC2 M21 Bundle 3. **Kein zweiter Z5-Bump: `SAVE_VERSION` bleibt 32**; die
+`v31_to_v32`-Migration ist an Ort und Stelle erweitert, wie Z5 es fuer die
+spaeteren Bundles eines Meilensteins vorsieht.
+
+**Was gebaut wurde.** Drei Dinge, die SPEC2 M21 namentlich bestellt:
+
+1. **Liefervertraege** (`src/sim/economy/supply.ts`): eine verbrauchende
+   Industrie ordert eine Monatsquote - SPEC2s eigenes Beispiel, 200 t Kohle im
+   Monat fuer ein Stahlwerk. Opt-in per `AcceptSupplyContract`, monatlich
+   abgerechnet, Bonus fuer die erfuellte Quote, anteilige Strafe fuer den
+   Fehlbetrag, und bei Dauerbruch Input-Hunger.
+2. **Das Subventions-Board** (`src/sim/economy/subsidies.ts`), ein Klon von
+   `contracts.ts` in der Form und etwas anderes in der Sache: der Staat bietet
+   das 1,5- bis 2-Fache der Rate fuer N Monate auf einer UNBEDIENTEN
+   (Quelle, Ziel)-Relation, und **das erste liefernde Unternehmen gewinnt sie**
+   (D-107). Es gibt kein Kommando dazu - die einzige Art teilzunehmen ist, die
+   Linie zu bauen.
+3. **`Account.ContractPenalties`**, das elfte Konto, plus die Foerdergelder fuer
+   emissionsarme Fahrzeugkaeufe (SPEC.md 14.3) als Rabatt im Buy-Kommando.
+
+**Das elfte Konto schliesst die 14.1-Luecke, die SPEC2 mit Zeilennummer
+nennt.** `settleExpired` (`economy/contracts.ts`) buchte seine
+Konventionalstrafe ueber `bookExpense`s Vorgabewert nach `Construction`: wer die
+Buecher las, sah eine Baurechnung, die er nie beauftragt hatte. Beide Strafen -
+die verfehlte Ausschreibung und die verfehlte Monatsquote - buchen jetzt dorthin
+und nirgends sonst.
+
+**Der Preis dafuer ist der einzige Grund, warum dieser Bundle Pins bewegt.**
+`ACCOUNT_COUNT` 10 -> 11 verbreitert jede Zeile jeder Firmenbuchhaltung, und
+`hashWorld` hasht die ganze Buchhaltung. Also bewegt sich JEDER Welt-Digest
+dieses Spiels, in jeder Welt, ob sie ein Jahrhundert hat oder nicht. Neu
+aufgezeichnet nach D-137-Protokoll: kanonischer Cross-OS-Pin
+`5f4c022bef5b94d1` -> **`5fc5168993e38191`**, Soak `9aac5ef0864d5c69` ->
+**`cc491b59f6bfc729`** bei **unveraendert 35 Kommandos und 16 Checkpoints**
+(genau das ist der Beleg, dass sich nur der Digest bewegt hat und nicht das
+Spiel), Korpus-Manifest `1dd5bb6255a236a9` -> **`c1df3e4dfb1558a9`** (v22-v30)
+und `63ea4f0ca2506741` -> **`a5f594cc0bc76901`** (v31, v32). Der Zwei-Hash-Split
+des Korpus ist aelter als dieser Bundle und unveraendert.
+
+**Ein v32-Spielstand des VORIGEN Builds ist von diesem Build nicht mehr
+lesbar, und das steht hier statt in einer Fussnote.** Migrationen laufen nur
+UNTER `SAVE_VERSION`; ein v32, das Bundle 1 geschrieben hat, traegt
+zehnspaltige Konten und keine der beiden neuen Tafeln, und der Parser weist es
+zurueck. Z5 erlaubt genau einen Bump je Meilenstein und verlangt, dass spaetere
+Bundles ihn erweitern - die Kehrseite ist, dass v32 bis zum Ende des
+Meilensteins keine eingefrorene Zusage ist. Die Korpus-Fixture
+`v32-played.ironsave` wurde deshalb **neu aufgezeichnet**; die zehn aelteren
+Fixtures (v22-v31) laden unveraendert durch die erweiterte Migration.
+
+**Zwei Migrationen bemassen sich an einer LEBENDEN Konstante - D-207s Regel,
+hier noch offen.** `v12_to_v13` schrieb `zeros(ACCOUNT_COUNT)` und
+`v19_to_v20` nahm `ACCOUNT_COUNT - 1` als alte Breite. Beide schreiben damit die
+HEUTIGE Kontenzahl in einen Spielstand, der auf dem Weg zu einer Version ist,
+die sie nicht hatte: seit M8 das zehnte Konto einfuehrte, migriert ein v12 auf
+elf Spalten und wird vom Parser abgewiesen. Aufgefallen ist es nie, weil der
+Korpus bei v22 anfaengt - oberhalb beider Schritte. Jetzt Literale
+(`ACCOUNT_COUNT_V13 = 9`, `ACCOUNT_COUNT_V20 = 10`, `ACCOUNT_COUNT_V32 = 11`)
+und **eine** gemeinsame `widenAccounts`, weil das flache 24-Monats-Ringlager
+Zeile fuer Zeile neu gelegt werden muss und ein Fehler dabei nicht wirft,
+sondern jeden historischen Monat um ein Konto verschiebt. Der Fix ist
+arithmetisch richtig und **durch keine Fixture belegt** - der Korpus hat keine
+v12.
+
+**Beide Tafeln haengen an der Weltregel `economy`, und das ist eine
+Entscheidung.** SPEC2 M21 nennt genau EINEN Balance-Anker fuer diesen
+Meilenstein ("Weltregel Konjunktur: aus pinnt alle Referenzlaeufe"), und D-237
+hat den Ueberseehandel bereits zur Folge derselben Regel gemacht. Eine zweite
+Regel waere eine zweite Antwort auf dieselbe Frage und wuerde "Konjunktur: aus"
+das Pinnen der Referenzlaeufe wegnehmen. `reviewSupply` und `reviewSubsidies`
+kehren ohne die Regel auf ihrer ersten Zeile zurueck - kein Stream, kein Zug,
+kein Datensatz - und `subsidyRateFor` gibt exakt 1 zurueck. Folge, gemessen
+statt gehofft: **jedes Band identisch mit D-237 auf den Euro** (Szenario 5
+1.022.084 / 1.802.165 / 2.153.604 EUR, Punktzahl 5.889, Netzdesign 3,75, Harter
+Winter -4,36 %), `npm run test:balance:full` gruen bei 101 Tests.
+
+**Erfuellung ist, was das WERK genommen hat.** `creditSupply` wird aus dem
+Zustellpfad mit dem Betrag gerufen, den `deliverToIndustry` angenommen hat -
+D-085s Mass eine Station weiter: eine Ladung, die ein volles Eingangslager
+abgewiesen hat, hat nicht geliefert, und sie gutzuschreiben hiesse, eine Quote
+liesse sich durch Abkippen auf einem Bahnsteig erfuellen. Die Quote teilt sich
+gleichmaessig auf die Halter (zwei Lieferanten schulden je die Haelfte),
+gemessen wird die Firma an IHREM Anteil und das Werk an der SUMME.
+
+**Input-Hunger fasst genau ein Eingangslager an.** Nach
+`SUPPLY_BREACH_MONTHS` = 3 aufeinanderfolgenden Monaten unter Quote verliert das
+Werk die Haelfte dessen, was es von genau dieser Fracht noch hat. Nicht das
+Produktionsniveau, nicht die Schliessuhr, nichts sonst: **nichts schrumpft eine
+Industrie** (D-086), und ein Liefervertrag darf keine Hintertuer zur
+Niedergangsregel werden, die gemessen und entfernt wurde. Der Test beweist das
+gegen eine KONTROLLE - dasselbe Werk mit erfuellter Quote -, denn ein Stahlwerk
+frisst seine Kohle ohnehin, und ein gefallener Bestand ist kein Beleg fuer
+Hunger; ein WEITER gefallener ist einer.
+
+**Das Wettrennen geht an genau ein Unternehmen, und Hinsehen gewinnt es nicht.**
+`subsidyRateFor(..., claim)` ist die einzige Schreibstelle ausserhalb des
+Monatsreviews. Mit `claim: true` (nur der Zustellpfad, nur eine echte
+Zustellung, nie ein Transfer) faellt der Anspruch an die erste liefernde Firma
+und gilt fuer den Rest der Laufzeit; mit `claim: false` fragen die beiden
+KI-Schaetzungen und die Oberflaeche. Der Faktor reist auf der `Opportunity`
+(`subsidyFactor`), damit die Rangfolge und die Rentabilitaetsschwelle
+DIESELBE Zahl sehen - die D-219-Lehre, dass ein Filter und der Bauer, fuer den
+er filtert, nicht auseinanderlaufen duerfen.
+
+**Der Hebel auf die KI ist bewiesen - und er erreicht sie in erzeugten Welten
+fast nie. Beides ist gemessen.**
+
+* **Bewiesen, kontrolliert** (`tests/unit/subsidies.spec.ts`): eine Kohlegrube
+  auf Produktionsniveau 10, das Stahlwerk 60 Kacheln weiter, die Maschinenfabrik
+  dahinter als Weiterleitung. Ohne Subvention ist die Kandidatenliste des
+  Strassen-Konkurrenten **leer** und er baut in drei Jahren **nichts** - keine
+  Station, kein Fahrzeug. Mit der Subvention (2,0) erscheint genau dieses Paar
+  in der Liste, er baut **zwei Stationen und sechs Lastwagen**, faehrt sie, und
+  **gewinnt das Wettrennen durch Liefern** (`claimedBy = 1`, 119 Einheiten in
+  drei Jahren). Das Niveau 10 ist nicht gewaehlt, sondern gefegt: bei 15 baut er
+  die Linie ohne Hilfe, bei 10 verweigert er sie.
+* **Die Sechzehn-Seed-Messung sagt etwas anderes.** 16 Seeds x 25 Jahre x 3
+  Konkurrenten, Jahrhundert an, zwei Arme auf denselben Welten (der
+  Kontrollarm leert die Tafel zu Beginn jedes Ticks, das Monatsreview laeuft
+  also weiter und zieht weiter aus seinem eigenen Stream): **312 Angebote,
+  davon von einem Konkurrenten gewonnen: 2.** Auf **14 von 16 Seeds sind beide
+  Arme auf den Euro identisch** - die Tafel aendert nichts. Auf den beiden
+  anderen aendert sie viel und in beide Richtungen: Seed 12345 6 Fahrzeuge / 1
+  Linie -> 0/0 bei +494.423 EUR, Seed 918273 0/0 -> 18 Fahrzeuge / 3 Linien bei
+  -894.280 EUR. Gesamt **23.290.860 -> 22.891.003 EUR (-1,7 %)**, Fahrzeuge
+  102 -> 114, abgewickelt 0 zu 0.
+* **Warum, ohne Beschoenigung**: ein Konkurrent baut in einem Vierteljahrhundert
+  ein bis drei Linien; ein Angebot steht 12-36 Monate auf einem zufaelligen
+  unbedienten Kettenpaar. Dass ein Entscheidungszyklus auf ein Angebot trifft,
+  das genau dieses Unternehmen bauen kann, ist selten - und wo die Tafel doch
+  wirkt, wirkt sie als chaotische Divergenz (eine andere Rangfolge, eine andere
+  Linie), nicht als gerichtete Verbesserung. **Das ist nicht nachgestellt
+  worden**: eine Konstante zu drehen, bis die Zahl gefaellt, waere Tuning gegen
+  eine Messung, und es gehoert in einen eigenen Bundle mit eigener Messung.
+* **Ein Zaehlfehler wurde dabei gefunden und korrigiert.** Der erste Lauf zaehlte
+  die Ansprueche auf der Tafel, wie sie im Jahr 25 dastand - abgelaufene
+  Angebote werden aber geloescht, also war er blind fuer jeden frueheren
+  Gewinn und meldete 0. Gezaehlt wird jetzt monatlich mitlaufend. Deshalb
+  beansprucht `SUBSIDY_MIN_DISTANCE`/`_MAX_DISTANCE` (das Fenster, in dem eine
+  Linie ueberhaupt traegt - dieselben Zahlen wie die KI-Kandidatenliste) auch
+  KEINE gemessene Verbesserung, sondern nur sein Argument.
+
+**Foerdergeld fuer emissionsarme Kaeufe: eine Funktion derselben Tabelle, aus
+der die Abgabe geschoepft wird.** `cleanVehicleGrantShare` = (Diesel-Wert minus
+dieser Antrieb) / Diesel-Wert x `CO2_VEHICLE_GRANT_MAX_SHARE` (0,25), geklemmt
+bei null - also Dampf und Diesel nichts, Elektro 0,786 der Decke, Batterie
+0,714, Wasserstoff 0,262. Kein zweites Sauberkeits-Mass, das aus dem Tritt
+geraten koennte. `grantedPriceCt` ist die EINE Funktion, die alle vier
+Kauf-Kommandos rufen. Die Decke ist gegen `RESALE_SHARE` = 0,6 gewaehlt: wer
+mit 25 % Rabatt kauft und am selben Tag verkauft, verliert 15 % - unter 0,4 kann
+das Foerdergeld nie zum Arbitragegeschaeft werden, und der Test haelt genau das
+fest. **Der Buchwert ist der Listenpreis MINUS demselben Foerdergeld** und nicht
+die inflationierte Rechnung: was diese Zeilen immer gebucht haben, bleibt
+gebucht - eine Aenderung dort haette jede Firmenbewertung dieses Spiels bewegt.
+
+**Was die Oberflaeche NICHT quotiert, ehrlich benannt.** Das Flottenpanel zeigt
+`spec.priceCt` roh - den Katalogpreis - und weicht damit seit M6 um die ganze
+Inflation von der Rechnung ab, jetzt zusaetzlich um das Foerdergeld. Das ist
+eine echte Luecke in D-119s Regel; sie wird hier benannt statt halb geschlossen,
+denn das Panel braucht dafuer die `emissions`-Regel und den Kostenfaktor der
+Welt, und eine zweite Preisformel im Panel ist genau der Weg, auf dem Vorschau
+und Rechnung auseinanderlaufen.
+
+**Ledger.** SAVE_VERSION 32 (erweitert, kein Bump); Snapshot-Layout
+unveraendert - die beiden Tafeln reisen im `contractsChanged`-Monatskanal neben
+den Ausschreibungen und kosten null Stride-Bytes (Fehlerkatalog 37); null
+Atlas-Zellen. Hauptbundle 968.190 -> **972.824 B (+4.634)**, davon **+1.979 B
+die neunzehn i18n-Schluessel in zwei Sprachen** (gemessen, indem genau diese
+neunzehn Zeilen aus beiden Katalogen geloescht und neu gebaut wurde: 970.845 B)
+und **+2.655 B die Oberflaeche**; Budget 972.000 -> **978.000** mit der Messung
+daneben (D-192s Regel). Kein `npm run test:perf`-Lauf wird fuer diesen Bundle
+beansprucht: die beiden Monatsreviews laufen in der Monatskadenz, und der
+einzige Zusatz im Tick-Pfad ist ein Listendurchlauf ueber hoechstens drei
+Angebote je Zustellung, der in jeder Welt ohne Jahrhundert auf der ersten Zeile
+zurueckkehrt.
+
+**Tests:** `tests/unit/supplyContracts.spec.ts` (11 Faelle: das elfte Konto, die
+Tafel als Eigenschaft der Regel, Annahme und Ablehnung, die 200-t-Quote mit
+Bonus UND Strafe ueber `Account.ContractPenalties`, die anteilige Strafe, das
+Mass am Werk, der Hunger gegen eine Kontrolle und sein Zuruecksetzen),
+`tests/unit/subsidies.spec.ts` (9 Faelle: die Tafel, das Wettrennen an genau
+eines, Hinsehen gewinnt nicht, falsche Fracht/Richtung/Frist, Inertheit ohne
+Jahrhundert, der Hebel auf die Kandidatenliste, der gebaute Betrieb gegen die
+Kontrolle, und dass jeder andere Kandidat exakt zum Tarif quotiert bleibt), vier
+neue Faelle in `tests/unit/emissions.spec.ts` fuer das Foerdergeld.
+
+**Was M21 noch schuldet**: die Industrie-Events aus `streams.events`
+(Rekordernte, Streik) mit ihren `postOnce`-Meldungen.

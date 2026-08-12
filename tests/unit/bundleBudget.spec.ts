@@ -103,8 +103,23 @@ const DIST = join(REPO_ROOT, 'dist');
  * `math.ts` and `cargo/payment.ts`, all three of which the interface already
  * pulled in, plus a TYPE-only `rng.ts` that erases. 972,000 is the new
  * measurement plus ~0.6 %.
+ *
+ * **Raised again for SPEC2 M21 bundle 3** (supply contracts, the subsidy board
+ * and the eleventh ledger account): measured **968,190 B -> 972,824 B,
+ * +4,634 B**, of which **+1,979 B are the nineteen new i18n keys in two
+ * languages** (the account's own name, two reject reasons, ten supply and
+ * subsidy captions and the two news sentences - measured by deleting exactly
+ * those nineteen lines from both catalogues and rebuilding: 970,845 B) and the
+ * remaining **+2,655 B are the interface** - the two new boards in
+ * `ContractPanel`, the two marker lists in the store and the client's own
+ * three-argument setter. **No new
+ * static `src/sim` import chain that decodes, serialises or steps a world**:
+ * the panel gained no import at all, and `economy/supply.ts` and
+ * `economy/subsidies.ts` are reached only from `World.ts` and `SimWorker.ts`,
+ * both of which are already the worker's chunk. 978,000 is the new measurement
+ * plus ~0.5 %.
  */
-const MAIN_CHUNK_BUDGET_BYTES = 972_000;
+const MAIN_CHUNK_BUDGET_BYTES = 978_000;
 
 /** The verdict, separated from the measuring so a planted size can be judged. */
 interface BudgetVerdict {

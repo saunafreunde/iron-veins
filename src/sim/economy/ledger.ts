@@ -31,10 +31,22 @@ export const Account = {
   Construction: 8,
   /** The carbon levy of section 14.3, and nothing else. */
   Emissions: 9,
+  /**
+   * What broken contracts cost (section 14.1, SPEC2 M21).
+   *
+   * The eleventh account, and the one 14.1 named while nothing booked to it:
+   * a failed 14.4 tender and a missed supply quota both used to land in
+   * `Construction` through `bookExpense`'s default, where a player reading the
+   * books saw a build bill they had never authorised. A penalty is not a
+   * building, and it is the one cost in this game a company can stop paying by
+   * changing what it does - which is exactly why it has to be visible on its
+   * own line.
+   */
+  ContractPenalties: 10,
 } as const;
 export type Account = (typeof Account)[keyof typeof Account];
 
-export const ACCOUNT_COUNT = 10;
+export const ACCOUNT_COUNT = 11;
 
 /** Translation keys, indexed by account. */
 export const ACCOUNT_NAME_KEYS: readonly string[] = [
@@ -48,6 +60,7 @@ export const ACCOUNT_NAME_KEYS: readonly string[] = [
   'account.interest',
   'account.construction',
   'account.emissions',
+  'account.contractPenalties',
 ];
 
 /** True for the three accounts that bring money in. */

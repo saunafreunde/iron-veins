@@ -104,6 +104,8 @@ describe('the AI will not build a line that cannot pay', () => {
       rail: false,
       monthlyOutput: 72,
       offeredPerMonth: 144,
+      // No century in these fixtures, so no board and no offer (SPEC2 M21).
+      subsidyFactor: 1,
     };
     const one = projectLine(w, pair, [bus], 1);
     const two = projectLine(w, pair, [bus], 2);
@@ -152,6 +154,8 @@ describe('the AI will not build a line that cannot pay', () => {
       rail: false,
       monthlyOutput: a.population * 0.18,
       offeredPerMonth: (a.population + b.population) * 0.18,
+      // No century in these fixtures, so no board and no offer (SPEC2 M21).
+      subsidyFactor: 1,
     };
     const margin = projectLine(w, pair, [bus], 2).margin;
     console.log(

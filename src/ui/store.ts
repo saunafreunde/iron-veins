@@ -6,6 +6,8 @@ import type {
   FinanceReport,
   CompanyMarker,
   ContractMarker,
+  SubsidyMarker,
+  SupplyMarker,
   GameEndMarker,
   GoalMarker,
   IndustryMarker,
@@ -177,6 +179,9 @@ export interface SimUiState extends SnapshotValues {
   news: readonly NewsMarker[];
   companies: readonly CompanyMarker[];
   contracts: readonly ContractMarker[];
+  /** The standing supply orders and subsidised relations of SPEC2 M21. */
+  supplyOrders: readonly SupplyMarker[];
+  subsidies: readonly SubsidyMarker[];
   /** The world's goals, in slot order (SPEC2 M17). Empty in a plain game. */
   goals: readonly GoalMarker[];
   /**
@@ -351,7 +356,11 @@ export interface SimUiState extends SnapshotValues {
   setFinances: (report: FinanceReport) => void;
   setNews: (news: readonly NewsMarker[]) => void;
   setCompanies: (companies: readonly CompanyMarker[]) => void;
-  setContracts: (contracts: readonly ContractMarker[]) => void;
+  setContracts: (
+    contracts: readonly ContractMarker[],
+    supplyOrders: readonly SupplyMarker[],
+    subsidies: readonly SubsidyMarker[],
+  ) => void;
   setGoals: (goals: readonly GoalMarker[], end: GameEndMarker) => void;
   setGoalProgress: (progress: readonly number[]) => void;
   dismissEnd: (reason: number) => void;
@@ -477,6 +486,8 @@ export const useSimStore = create<SimUiState>((set) => ({
   news: [],
   companies: [],
   contracts: [],
+  supplyOrders: [],
+  subsidies: [],
   goals: [],
   goalProgress: [],
   gameEnd: null,
@@ -561,7 +572,7 @@ export const useSimStore = create<SimUiState>((set) => ({
   setFinances: (finances) => set({ finances }),
   setNews: (news) => set({ news }),
   setCompanies: (companies) => set({ companies }),
-  setContracts: (contracts) => set({ contracts }),
+  setContracts: (contracts, supplyOrders, subsidies) => set({ contracts, supplyOrders, subsidies }),
   setGoals: (goals, gameEnd) => set({ goals, gameEnd }),
   setGoalProgress: (goalProgress) => set({ goalProgress }),
   dismissEnd: (dismissedEnd) => set({ dismissedEnd }),
@@ -614,6 +625,8 @@ export const useSimStore = create<SimUiState>((set) => ({
       lines: [],
       companies: [],
       contracts: [],
+      supplyOrders: [],
+      subsidies: [],
       news: [],
       // The goals belong to the world that is going, and so does its ending:
       // a "Sieg" banner surviving into the next game would be a lie about a

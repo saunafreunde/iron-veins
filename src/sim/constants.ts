@@ -969,6 +969,138 @@ export const CONTRACT_PENALTY_SHARE = 0.3;
 /** Council goodwill lost in the destination town for failing a contract. */
 export const CONTRACT_RATING_MALUS = 10;
 
+// ------------------------------------------- supply contracts (SPEC2 M21)
+
+/**
+ * The named RNG stream the supply board draws from (Z3, D-106/D-128).
+ *
+ * Its own, like every stochastic subsystem's: a draw taken from the gameplay
+ * stream moves every later breakdown roll in the game, which is the incident
+ * D-106 was written about.
+ */
+export const SUPPLY_STREAM_NAME = 'supply';
+
+/** How many standing supply orders a world keeps on the board at once. */
+export const SUPPLY_MIN_OPEN = 1;
+export const SUPPLY_MAX_OPEN = 3;
+
+/**
+ * The monthly quota a consuming works orders, and the step it is drawn in.
+ * [units/month]
+ *
+ * The band is centred on SPEC2 M21's own worked example - "Stahlwerk: 200 t
+ * Kohle/Monat" - and a steel mill's own recipe is what makes 200 the middle of
+ * it rather than an invented figure: `INDUSTRY_BASE_OUTPUT_PER_MONTH` gives a
+ * coal mine 300 units a month, so a quota of 200 is two thirds of one pit and a
+ * quota of 400 is more than one pit can offer.
+ */
+export const SUPPLY_MIN_QUOTA = 100;
+export const SUPPLY_MAX_QUOTA = 400;
+export const SUPPLY_QUOTA_STEP = 100;
+
+/** How long a standing order runs before it is retired. [months] */
+export const SUPPLY_MONTHS_MIN = 12;
+export const SUPPLY_MONTHS_MAX = 36;
+
+/**
+ * What a met quota pays on top of the freight, as a share of the ordinary
+ * revenue for the same tonnage over `CONTRACT_REFERENCE_DISTANCE`.
+ *
+ * Deliberately UNDER `CONTRACT_BONUS_FACTOR`: a 14.4 tender is a one-off bet
+ * with a deadline and a penalty for taking it on at all, and a supply contract
+ * is a standing order that pays every month for the same work. The same premium
+ * on a monthly rhythm would be the best business in the game by a wide margin.
+ */
+export const SUPPLY_BONUS_FACTOR = 0.25;
+
+/**
+ * What a missed month costs, as a share of the bonus that was on offer, scaled
+ * by how much of the quota was missed.
+ *
+ * A company that delivers nine tenths pays a tenth of the penalty. A flat
+ * penalty at any shortfall makes the last ton worth more than the line.
+ */
+export const SUPPLY_PENALTY_SHARE = 0.4;
+
+/**
+ * Months of unmet quota, consecutive, before the works goes hungry.
+ *
+ * Three: two is a bad quarter and four is half a game year, and the works has
+ * to be able to say something about its supply while the player can still act
+ * on it.
+ */
+export const SUPPLY_BREACH_MONTHS = 3;
+
+/**
+ * What a hungry works loses of the input it is short of, per breached month.
+ *
+ * The reserve it has been running on, and nothing else: this touches an INPUT
+ * stock and never the production level, because nothing shrinks an industry
+ * (D-086) and a supply contract may not become a back door to a decline rule.
+ * A works that is fed again keeps the level it had.
+ */
+export const SUPPLY_HUNGER_SHARE = 0.5;
+
+// ------------------------------------------------- subsidies (SPEC2 M21)
+
+/** The named RNG stream the subsidy board draws from (Z3, D-106). */
+export const SUBSIDY_STREAM_NAME = 'subsidy';
+
+/** How many subsidised relations the state offers at once. */
+export const SUBSIDY_MIN_OPEN = 1;
+export const SUBSIDY_MAX_OPEN = 3;
+
+/**
+ * What the state pays, as a multiple of the ordinary rate, and the step it is
+ * drawn in. [1]
+ *
+ * SPEC2 M21 says "1,5-2x Rate" and this is that sentence: 1.5, 1.75 or 2.0.
+ */
+export const SUBSIDY_RATE_MIN = 1.5;
+export const SUBSIDY_RATE_MAX = 2;
+export const SUBSIDY_RATE_STEP = 0.25;
+
+/** How long a subsidised relation stands. [months] */
+export const SUBSIDY_MONTHS_MIN = 12;
+export const SUBSIDY_MONTHS_MAX = 36;
+
+/**
+ * How far apart the two ends of a subsidised relation may be. [tiles]
+ *
+ * The same window the competitors' candidate list uses (`AI_MIN_DISTANCE` and
+ * `AI_MAX_DISTANCE`), and DELIBERATELY the same numbers rather than a second
+ * pair that can drift: an offer on a relation nobody can build a line over is
+ * an offer nobody can take, and the first version of this board drew from every
+ * chain pair on the map however far apart the two works stood.
+ *
+ * **No improvement is CLAIMED for it**, and that is deliberate: the run that
+ * motivated it counted claims off the board as it stood at year twenty-five,
+ * and an expired offer is pruned, so that count was blind to every claim made
+ * before the last few months. The window is justified by the argument above
+ * and by nothing else; what the corrected counter measures is in D-238.
+ */
+export const SUBSIDY_MIN_DISTANCE = AI_MIN_DISTANCE;
+export const SUBSIDY_MAX_DISTANCE = AI_MAX_DISTANCE;
+
+/**
+ * How close a station has to be to an endpoint for a delivery to count as
+ * running the subsidised relation. [tiles]
+ *
+ * The station catchment's own scan radius, because that is the distance at
+ * which a station can actually collect from the works the offer names - a
+ * looser radius would pay a company for serving something else.
+ */
+export const SUBSIDY_ENDPOINT_RADIUS = 6;
+
+/**
+ * Council goodwill the winner of a subsidised relation gains in the towns at
+ * either end.
+ *
+ * The mirror of `CONTRACT_RATING_MALUS`: the state pays for a line nobody was
+ * running, and the town it finally connects notices.
+ */
+export const SUBSIDY_RATING_BONUS = 5;
+
 // -------------------------------------------------------- environment (14.3)
 
 /**
@@ -1011,6 +1143,24 @@ export const CO2_GRANT_FROM_YEAR = 2000;
 
 /** Share of an electrification bill the state pays back. */
 export const CO2_ELECTRIFICATION_GRANT_SHARE = 0.4;
+
+/**
+ * The most the state pays of a LOW-EMISSION VEHICLE's price (SPEC.md 14.3,
+ * SPEC2 M21). [1]
+ *
+ * The other half of D-105's policy, one purchase further along: the levy makes
+ * dirty work expensive, the wires grant pays for the infrastructure, and this
+ * pays for the machine that uses it. It is scaled by how clean the traction
+ * really is - `cleanVehicleGrantShare` reads `CO2_KG_PER_MJ` against the diesel
+ * figure, so the grant is a FUNCTION of the same table the levy is charged from
+ * and there is no second cleanliness number to keep in step.
+ *
+ * A quarter, and the ceiling is what stops the grant becoming an arbitrage:
+ * `RESALE_SHARE` is 0.6, so a vehicle bought at 0.25 off and sold the same day
+ * still loses 0.2 of its price, and no share under 0.4 can ever be traded for a
+ * profit.
+ */
+export const CO2_VEHICLE_GRANT_MAX_SHARE = 0.25;
 
 /**
  * A fleet at or below this carbon intensity is treated as clean by a town

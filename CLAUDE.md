@@ -2936,9 +2936,8 @@ bundle extends `v31_to_v32` in place.
   chain. The old budget had 63 bytes of headroom, which is a coincidence and
   not headroom, so it is raised to 972,000 with the measurement beside it.
 
-**Still owed by M21** (after bundle 2 below): the delivery contracts with
-`Account.ContractPenalties`, the subsidy board, the low-emission purchase grants
-and the industry events from `streams.events`.
+**Still owed by M21** (after bundle 3 below): the industry events from
+`streams.events` - a record harvest and a strike, with their `postOnce` news.
 
 ## M21 bundle 2 - the dead cargo type lives (D-237)
 
@@ -3003,3 +3002,80 @@ saving: everything the trade is made of is already saved.
   Tick p50 1.532 / p99 2.823 ms against the M10 baseline 1.45 / 3.26 - the p99
   UNDER it. Main bundle 965,937 -> **968,190 B (+2,253)**, of which +1,422 B are
   the four i18n keys in two languages; budget 972,000 unchanged.
+
+
+## M21 bundle 3 - contracts, subsidies and the eleventh account (D-238)
+
+Three of the four things M21 still owed, and the milestone's **only pin
+movement**: `Account.ContractPenalties` is an eleventh ledger account, every
+company's books grow a column, and `hashWorld` hashes the whole ledger - so
+every world digest in this game moved, in worlds with a century and without.
+`SAVE_VERSION` stays **32**, extended in place (Z5).
+
+- **The eleventh account closes the 14.1 gap SPEC2 names by line number**
+  (D-238). `settleExpired` booked its penalty through `bookExpense`'s default
+  into `Construction`, so a player reading the books saw a build bill they never
+  authorised. Both penalties - the missed tender and the missed monthly quota -
+  book there and nowhere else. Re-recorded under the D-137 protocol: canonical
+  `5f4c022bef5b94d1` -> **`5fc5168993e38191`**, soak `9aac5ef0864d5c69` ->
+  **`cc491b59f6bfc729`** at **unchanged 35 commands and 16 checkpoints** (which
+  is the evidence that only the digest moved), corpus manifest re-recorded for
+  all eleven fixtures. **A v32 save written by the bundle-1 build cannot be read
+  by this build** - migrations run only BELOW `SAVE_VERSION`, and v32 is not a
+  frozen promise until the milestone closes; `v32-played.ironsave` was
+  re-recorded and the ten older fixtures load unaltered.
+- **Two migrations sized themselves from a LIVE constant** (D-207's rule, still
+  open there): `v12_to_v13` wrote `zeros(ACCOUNT_COUNT)` and `v19_to_v20` took
+  `ACCOUNT_COUNT - 1`, so since M8 a v12 save migrated to eleven columns and the
+  parser refused it. Literals now (9 / 10 / 11) and ONE shared `widenAccounts` -
+  the flat 24-month ring has to be re-laid row by row, and getting it wrong does
+  not throw, it shears every historical month by one account. Arithmetically
+  right, **proved by no fixture**: the corpus starts at v22.
+- **Both new boards hang off the `economy` world rule, and that is a decision.**
+  SPEC2 M21 names exactly ONE balance anchor ("Konjunktur: aus pins the
+  reference runs") and D-237 already made the overseas trade a consequence of
+  the same rule; a second rule would be a second answer to one question.
+  `reviewSupply` and `reviewSubsidies` return on their first line without it and
+  `subsidyRateFor` returns exactly 1 - so **every band is identical to D-237 to
+  the euro** and `npm run test:balance:full` is green at 101.
+- **A supply contract is measured on what the WORKS took** (D-085's measure one
+  recipient along): `creditSupply` rides the delivery path with what
+  `deliverToIndustry` accepted, so a load a full shed refused is not fulfilment.
+  The quota splits evenly over the holders; each is judged on its share and the
+  works on the total. **Persistent breach touches exactly one input shed** -
+  half of what is left of that cargo after three consecutive months short, and
+  never the production level or the closure clock, because nothing shrinks an
+  industry (D-086). The test proves it against a CONTROL (the same works with
+  the quota met), because a steel mill eats its coal anyway.
+- **A subsidy is a race and looking at one cannot win it** (D-107).
+  `subsidyRateFor(..., claim)` is the only writer outside the monthly review:
+  with `claim: true` - the delivery path, a real delivery, never a transfer -
+  the relation falls to the first company that delivers on it and stays theirs;
+  the AI's two estimates and the panel ask with `claim: false`. The factor rides
+  on the `Opportunity` so the ranking and the profitability floor quote the same
+  offer (the D-219 lesson).
+- **The lever on the AI is proved, and it reaches the AI in generated worlds
+  almost never - both measured** (D-238). Controlled: a mine pinned at
+  production level 10, the works sixty tiles away; without the offer the road
+  competitor's candidate list is EMPTY and it builds nothing in three years,
+  with it (2.0x) it builds two stations and six lorries, runs them, and wins the
+  race by delivering. On the **sixteen-seed bar** (25 years, 3 competitors,
+  century on, control arm empties the board every tick): **312 offers, 2 won by
+  a competitor**, fourteen of sixteen seeds identical to the euro, total
+  23,290,860 -> 22,891,003 EUR (-1.7 %) with the two moved seeds going in
+  opposite directions. Where it acts it acts as chaotic divergence, not as
+  improvement - and no constant was turned until the number improved.
+- **The low-emission purchase grant is a function of the levy's own table.**
+  `cleanVehicleGrantShare` = (diesel less this traction) / diesel x 0.25, so
+  steam and diesel get nothing, electric 0.786 of the ceiling, battery 0.714,
+  hydrogen 0.262 - no second cleanliness number. `grantedPriceCt` is the ONE
+  function all four buy commands call, and the ceiling is chosen against
+  `RESALE_SHARE` = 0.6 so the grant can never be traded for a profit. **The
+  fleet panel still quotes the raw catalogue price** - it has disagreed with the
+  bill by the whole of inflation since M6 and now by the grant too, and D-238
+  names that gap rather than half-closing it.
+
+Main bundle 968,190 -> **972,824 B**, budget raised to 978,000 with the
+measurement (+1,979 B of it the nineteen i18n keys in two languages, measured by
+deleting exactly those lines and rebuilding). Zero snapshot bytes - both boards
+ride the monthly `contractsChanged` message - and zero atlas cells.

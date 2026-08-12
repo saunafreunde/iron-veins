@@ -5,7 +5,6 @@ import {
   WEATHER_REGION_COUNT,
   WeatherRule,
 } from '../../constants';
-import { ACCOUNT_COUNT } from '../../economy/ledger';
 import { GoalKind } from '../../goals/types';
 import { STATION_HISTORY_SIZE, STATION_MONTH_COUNTER_SIZE } from '../../station/history';
 import { SaveFormatError, SAVE_VERSION } from '../format';
@@ -321,6 +320,22 @@ const v11_to_v12: SaveMigration = (payload) => {
  * flat years and then real data is honest; one that shows fabricated data is
  * not.
  */
+/**
+ * How wide a row of accounts is at each version that changed the width, as
+ * LITERALS - D-207's rule, and this pair is where it was still broken.
+ *
+ * Both account migrations below sized themselves from the LIVE `ACCOUNT_COUNT`,
+ * so every milestone that adds an account silently rewrites what an old save is
+ * migrated INTO: with ten accounts live, `v12_to_v13` wrote a ten-wide row into
+ * a version 13 world that had nine, `v19_to_v20` then widened it to eleven, and
+ * the parser - which wants exactly `ACCOUNT_COUNT` - refused the result. That
+ * has been true since M8 added the tenth account; nothing caught it because the
+ * save corpus starts at v22, above both steps. SPEC2 M21's eleventh account is
+ * what made it worth writing down rather than deepening.
+ */
+const ACCOUNT_COUNT_V13 = 9;
+const ACCOUNT_COUNT_V20 = 10;
+
 const v12_to_v13: SaveMigration = (payload) => {
   const inner = state(payload);
   const company = inner['company'];
@@ -342,10 +357,10 @@ const v12_to_v13: SaveMigration = (payload) => {
         ...next,
         vehicleUpkeepPerYearCt: 0,
         infrastructureUpkeepPerYearCt: upkeep,
-        accounts: zeros(ACCOUNT_COUNT),
-        yearAccounts: zeros(ACCOUNT_COUNT),
-        lastYearAccounts: zeros(ACCOUNT_COUNT),
-        monthHistory: zeros(LEDGER_HISTORY_MONTHS * ACCOUNT_COUNT),
+        accounts: zeros(ACCOUNT_COUNT_V13),
+        yearAccounts: zeros(ACCOUNT_COUNT_V13),
+        lastYearAccounts: zeros(ACCOUNT_COUNT_V13),
+        monthHistory: zeros(LEDGER_HISTORY_MONTHS * ACCOUNT_COUNT_V13),
         historyCursor: 0,
         valueHistory: [],
         accumulatedDepreciationCt: 0,
@@ -534,7 +549,7 @@ const v19_to_v20: SaveMigration = (payload) => {
   if (!Array.isArray(companies)) {
     throw new SaveFormatError('save.state.companies: expected an array');
   }
-  const oldCount = ACCOUNT_COUNT - 1;
+  const oldCount = ACCOUNT_COUNT_V13;
 
   const widen = (value: unknown, path: string): number[] => {
     if (!Array.isArray(value)) throw new SaveFormatError(`${path}: expected an array`);
@@ -1524,19 +1539,99 @@ const v30_to_v31: SaveMigration = (payload) => {
  * corpus trick wraps a CURRENT state in an old container, and a world that says
  * it has a century must not be told it has none - which here would not merely
  * flatten it, it would make the pair inconsistent and the load would be refused.
+ *
+ * **Bundle 3 EXTENDS this step in place** (Z5: one bump per milestone, and the
+ * milestone's later bundles extend the migration the first one owns). Three
+ * more things enter a version 31 world as nothing:
+ *
+ *  - an ELEVENTH ledger account, `ContractPenalties`, which widens every row of
+ *    every company's books - including the flat twenty-four month ring, which
+ *    has to be re-laid row by row exactly as `v19_to_v20` re-laid it for the
+ *    tenth. A version 31 world booked its broken tenders to `Construction`, so
+ *    entering zero is the truth about the account and not a rounding: nothing
+ *    that was ever charged is moved out of the account it was charged to, which
+ *    would rewrite a history the player has already read.
+ *  - the SUPPLY board and the SUBSIDY board, both empty. Both exist only in a
+ *    world whose `economy` rule is on, and the monthly review puts the first
+ *    offers up within a game month of a load - so a century world that is
+ *    reloaded gets its boards back, and a world without a century never has
+ *    them at all.
  */
 const v31_to_v32: SaveMigration = (payload) => {
   const inner = state(payload);
   const economy = inner['economy'] ?? false;
+  const companies = inner['companies'];
+  if (!Array.isArray(companies)) {
+    throw new SaveFormatError('save.state.companies: expected an array');
+  }
+
   return {
     ...payload,
     state: {
       ...inner,
       economy,
       economyCurve: Array.isArray(inner['economyCurve']) ? inner['economyCurve'] : [],
+      supplyContracts: inner['supplyContracts'] ?? [],
+      nextSupplyContractId: inner['nextSupplyContractId'] ?? 0,
+      subsidies: inner['subsidies'] ?? [],
+      nextSubsidyId: inner['nextSubsidyId'] ?? 0,
+      companies: companies.map((entry, index) =>
+        widenAccounts(entry as Record<string, unknown>, index, ACCOUNT_COUNT_V20),
+      ),
     },
   };
 };
+
+/** Row width of a company's books at version 32 - a literal, per D-207. */
+const ACCOUNT_COUNT_V32 = 11;
+
+/**
+ * Add one zero account to every row of one company's books, re-laying the flat
+ * monthly ring rather than padding it at the end.
+ *
+ * Written once because `v19_to_v20` and `v31_to_v32` do exactly the same thing
+ * eleven versions apart, and getting the ring wrong does not throw - it shears
+ * every historical month by one account and the finance panel shows plausible
+ * nonsense.
+ */
+function widenAccounts(
+  company: Record<string, unknown>,
+  index: number,
+  oldCount: number,
+): Record<string, unknown> {
+  const widen = (value: unknown, path: string): number[] => {
+    if (!Array.isArray(value)) throw new SaveFormatError(`${path}: expected an array`);
+    return [...(value as number[]), 0];
+  };
+  const history = company['monthHistory'];
+  if (!Array.isArray(history)) {
+    throw new SaveFormatError(`save.state.companies[${index}].monthHistory: expected an array`);
+  }
+  // A state that already carries the new width is a corpus fixture: the trick
+  // that writes them wraps a CURRENT state in an old container, and widening
+  // one of those would produce a twelve-wide row the parser refuses.
+  const accounts = company['accounts'];
+  if (Array.isArray(accounts) && accounts.length === ACCOUNT_COUNT_V32) return company;
+
+  const months = history.length / oldCount;
+  const relaid: number[] = [];
+  for (let month = 0; month < months; month++) {
+    for (let account = 0; account < oldCount; account++) {
+      relaid.push((history as number[])[month * oldCount + account] ?? 0);
+    }
+    relaid.push(0);
+  }
+  return {
+    ...company,
+    accounts: widen(company['accounts'], `save.state.companies[${index}].accounts`),
+    yearAccounts: widen(company['yearAccounts'], `save.state.companies[${index}].yearAccounts`),
+    lastYearAccounts: widen(
+      company['lastYearAccounts'],
+      `save.state.companies[${index}].lastYearAccounts`,
+    ),
+    monthHistory: relaid,
+  };
+}
 
 /**
  * The measure count on each side of this migration, as LITERALS.

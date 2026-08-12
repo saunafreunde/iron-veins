@@ -1,5 +1,6 @@
 import { bookExpense } from './company';
 import { Account } from './ledger';
+import { PowerCode } from '../vehicles/spec';
 import {
   CO2_ELECTRIFICATION_GRANT_SHARE,
   CO2_GRANT_FROM_YEAR,
@@ -8,6 +9,7 @@ import {
   CO2_LEVY_FROM_YEAR,
   CO2_LEVY_RISE_FROM_YEAR,
   CO2_LEVY_RISE_PER_YEAR,
+  CO2_VEHICLE_GRANT_MAX_SHARE,
   JOULES_PER_MJ,
   KG_PER_TONNE,
 } from '../constants';
@@ -100,6 +102,53 @@ export function electrificationGrantShare(world: World): number {
   if (!world.emissions) return 0;
   if (world.date.year < CO2_GRANT_FROM_YEAR) return 0;
   return CO2_ELECTRIFICATION_GRANT_SHARE;
+}
+
+/**
+ * The share of a VEHICLE's price the state pays back (SPEC.md 14.3, SPEC2 M21).
+ *
+ * D-105's policy, one purchase further along: the levy charges for the carbon a
+ * vehicle turns into work, the wires grant pays for the infrastructure, and
+ * this pays for the machine. It is a FUNCTION of `CO2_KG_PER_MJ` and not a
+ * second table - the grant is the diesel figure less this traction's, over the
+ * diesel figure, times the ceiling - so a catalogue entry can never be dirty
+ * for the levy and clean for the grant.
+ *
+ * Diesel is the datum because it is what a 1950s operator would otherwise buy.
+ * Steam scores negative and is clamped to nothing; electric reaches 0.786 of
+ * the ceiling, battery 0.714 and hydrogen 0.262.
+ *
+ * Zero without the `emissions` rule and zero before `CO2_GRANT_FROM_YEAR`, on
+ * the same two lines the electrification grant uses: a grant with no levy
+ * beside it would be the state paying for something it has not asked for.
+ */
+export function cleanVehicleGrantShare(world: World, powerCode: number): number {
+  if (!world.emissions) return 0;
+  if (world.date.year < CO2_GRANT_FROM_YEAR) return 0;
+
+  const datum = CO2_KG_PER_MJ[PowerCode.Diesel] ?? 0;
+  const here = CO2_KG_PER_MJ[powerCode] ?? datum;
+  if (datum <= 0 || here >= datum) return 0;
+  return ((datum - here) / datum) * CO2_VEHICLE_GRANT_MAX_SHARE;
+}
+
+/**
+ * What a company really pays for a vehicle after the grant. [cent]
+ *
+ * The ONE function all four buy commands call, so a grant can never exist for
+ * a lorry and not for a train. `world.costCt` is applied first, because the
+ * grant is a share of the bill as it stands in this year's money.
+ *
+ * **What the fleet panel quotes is the catalogue's LIST price and always has
+ * been** - it shows `spec.priceCt` raw, so it has disagreed with the bill by
+ * the whole of inflation since M6 and now by the grant as well. That is a real
+ * gap in D-119's rule and it is named here rather than half-closed: the panel
+ * needs the world's `emissions` flag and its cost factor to quote the true
+ * figure, neither of which reaches the interface today, and inventing a second
+ * price formula in the panel is exactly how a preview and a bill come apart.
+ */
+export function grantedPriceCt(world: World, priceCt: number, powerCode: number): number {
+  return Math.round(world.costCt(priceCt) * (1 - cleanVehicleGrantShare(world, powerCode)));
 }
 
 /**

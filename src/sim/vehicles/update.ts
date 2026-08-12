@@ -73,6 +73,8 @@ import {
   type Station,
 } from '../station/types';
 import { creditDelivery } from '../economy/contracts';
+import { creditSupply } from '../economy/supply';
+import { subsidyRateForDelivery } from '../economy/subsidies';
 import { scheduleOf } from '../lines/LineStore';
 import {
   beginConnectionHold,
@@ -848,6 +850,22 @@ function serveStation(world: World, id: number, station: Station): number {
       // this parcel was last paid up to. Feeder chains therefore add up to
       // exactly one direct payment (section 7.4).
       const distance = tileDistance(stack.paidFromX, stack.paidFromY, station.x, station.y);
+      // The subsidy board of SPEC2 M21, at the SAME seam the century uses: the
+      // state pays 1.5 to 2 times the rate for a relation nobody was running,
+      // and this delivery is where the race for it is won. Only a real delivery
+      // counts - a transfer is a leg of somebody's journey, not the arrival the
+      // offer names - and it is exactly 1 in a world without a century.
+      const subsidyFactor =
+        disposition === CargoDisposition.Deliver
+          ? subsidyRateForDelivery(
+              world,
+              vehicles.ownerId[id]!,
+              stack.originStationId,
+              station.x,
+              station.y,
+              stack.cargo,
+            )
+          : 1;
       const revenue = deliveryRevenueCt({
         cargo: stack.cargo,
         amount: paidFor,
@@ -858,14 +876,15 @@ function serveStation(world: World, id: number, station: Station): number {
         // The tariff seam of SPEC2 M21 (E-09), and exactly 1 in a world
         // without the economy rule - so a pre-M21 world multiplies by one and
         // earns the cent it always earned.
-        rateFactor: economyRateFactor(world.economyCurve, stack.cargo, world.date.year),
+        rateFactor:
+          economyRateFactor(world.economyCurve, stack.cargo, world.date.year) * subsidyFactor,
       });
 
       bookRevenue(world.companyOf(vehicles.ownerId[id]!), revenue, stack.cargo);
       vehicles.earnedCt[id] = vehicles.earnedCt[id]! + revenue;
 
       if (disposition === CargoDisposition.Deliver) {
-        deliverCargo(world, station, stack.cargo, paidFor);
+        deliverCargo(world, vehicles.ownerId[id]!, station, stack.cargo, paidFor);
         // A contract is satisfied by cargo that actually REACHED the town, so
         // it is credited on the delivery path and nowhere else.
         creditDelivery(world, vehicles.ownerId[id]!, station.townId, stack.cargo, paidFor);
@@ -973,7 +992,13 @@ function seatSpace(
  * passengers into overflow and, through the overflow penalty, drag down the
  * rating of the very station that is working well.
  */
-function deliverCargo(world: World, station: Station, cargo: Cargo, amount: number): void {
+function deliverCargo(
+  world: World,
+  companyId: number,
+  station: Station,
+  cargo: Cargo,
+  amount: number,
+): void {
   // The M14 history ring: cargo that arrived here as its destination.
   recordStationCargo(station, StationHistoryField.Delivered, cargo, amount);
   // And, for a passenger, the return-journey ledger of SPEC2 M19: this is the
@@ -996,6 +1021,11 @@ function deliverCargo(world: World, station: Station, cargo: Cargo, amount: numb
     if (industry === undefined) continue;
     const taken = deliverToIndustry(industry, cargo, left);
     left -= taken;
+    // The standing supply orders of SPEC2 M21, measured on what the WORKS took
+    // and not on what the vehicle unloaded: a full input shed accepts nothing,
+    // and a quota is about what arrived in the shed. `creditDelivery`'s twin,
+    // on the same delivery path and one recipient further along.
+    creditSupply(world, companyId, industry.id, cargo, taken);
     // SPEC.md 13.2's `versorgungBau`, which is what finally makes 7.2's
     // "Baustoffhandel (Senke, treibt Stadtwachstum)" drive something: what a
     // builders' merchant took is building material for the town it stands

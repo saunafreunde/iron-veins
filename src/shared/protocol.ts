@@ -67,6 +67,44 @@ export interface ContractMarker {
   readonly rivals: number;
 }
 
+/** One standing supply order, as the contract panel shows it (SPEC2 M21). */
+export interface SupplyMarker {
+  readonly id: number;
+  readonly cargo: number;
+  /** The works that placed the order, and where it stands. */
+  readonly industryNameKey: string;
+  readonly x: number;
+  readonly y: number;
+  /** What it wants every month. [units/month] */
+  readonly quotaUnits: number;
+  readonly monthsLeft: number;
+  readonly bonusCt: number;
+  /** How far the PLAYER has got with THIS month's share, 0..1. */
+  readonly progress: number;
+  readonly accepted: boolean;
+  /** How many other companies hold the same order. */
+  readonly rivals: number;
+  /** Consecutive months the works has gone short of its quota. */
+  readonly monthsMissed: number;
+}
+
+/** One subsidised relation, as the contract panel shows it (SPEC2 M21). */
+export interface SubsidyMarker {
+  readonly id: number;
+  readonly cargo: number;
+  readonly fromX: number;
+  readonly fromY: number;
+  readonly toX: number;
+  readonly toY: number;
+  /** What the state pays, as a percentage of the ordinary rate. */
+  readonly ratePercent: number;
+  readonly monthsLeft: number;
+  /** The company that won the race, or -1 while it is still open. */
+  readonly claimedBy: number;
+  /** The winner's name, empty while the race is open. */
+  readonly claimedByName: string;
+}
+
 /** A company as the interface names it. */
 export interface CompanyMarker {
   readonly id: number;
@@ -627,8 +665,17 @@ export type WorkerToMainMessage =
   | { readonly type: 'townsChanged'; readonly towns: readonly TownMarker[] }
   /** Every company in the game, the player first. */
   | { readonly type: 'companiesChanged'; readonly companies: readonly CompanyMarker[] }
-  /** The open tenders of section 14.4. */
-  | { readonly type: 'contractsChanged'; readonly contracts: readonly ContractMarker[] }
+  /**
+   * The open tenders of section 14.4, and beside them the two boards of SPEC2
+   * M21 - one message, because all three change on the same monthly cadence
+   * and one panel shows them.
+   */
+  | {
+      readonly type: 'contractsChanged';
+      readonly contracts: readonly ContractMarker[];
+      readonly supply: readonly SupplyMarker[];
+      readonly subsidies: readonly SubsidyMarker[];
+    }
   /** The books, sent when the game month rolls over. */
   | { readonly type: 'financesChanged'; readonly report: FinanceReport }
   /** The news log, sent whenever something was posted to it. */
