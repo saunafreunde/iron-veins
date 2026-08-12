@@ -1,5 +1,6 @@
 import { CARGO_COUNT, PORT_OVERSEAS_CARGO, type Cargo } from '../cargo/types';
 import { MapClimate } from '../constants';
+import { Terrain, TERRAIN_COUNT } from '../map/terrain';
 import { TOWN_OUTPUTS } from '../town/types';
 import { INDUSTRY_TYPE_COUNT, IndustryType, industrySpec } from './types';
 
@@ -134,6 +135,98 @@ export function climateIndustryTypes(climate: MapClimate): readonly IndustryType
 export function industryAllowedIn(climate: MapClimate, type: IndustryType): boolean {
   const row = MEMBERSHIP[climate] ?? MEMBERSHIP[MapClimate.Temperate]!;
   return row[type] === 1;
+}
+
+/**
+ * Ground of this climate that STANDS IN for a temperate terrain, indexed by
+ * climate: `[local terrain, the terrains a placement rule may name instead]`.
+ *
+ * **The table exists because the placement rules of `industry/types.ts` were
+ * written for the temperate palette and M23 shipped four of them.** A rule
+ * names the terrain a works may stand on - `NEAR_TOWN` is grass, field and
+ * coast; the oil well is desert, coast and marsh - and those are the SIX
+ * terrains a temperate map is mostly made of. Measured on the four generated
+ * 1024 worlds of seed 4711 (land tiles, water and town ground left out):
+ *
+ * | climate | what the map is actually made of |
+ * | --- | --- |
+ * | temperate | grass 270,779 · rock 196,111 · forest 173,903 · field 40,887 · snow 36,814 · marsh 4,673 |
+ * | arctic | **snow 723,786** · coast 7,317 · nothing else at all |
+ * | tropical | forest 325,482 · marsh 309,139 · rock 46,580 · grass 42,331 · no field |
+ * | desert | field 566,913 · grass 90,443 · rock 46,664 · desert 19,079 |
+ *
+ * An arctic map is snow from shore to summit, and of the nine industries the
+ * arctic set offers, only the two MINES stand on a rule that names snow. The
+ * measured funnel on that world: 175 draws, 5,700 attempted sites for the oil
+ * well and 4,500 for the power station, **every one of them refused for the
+ * ground**, and a map with 49 coal mines, 27 iron ore mines and not one works
+ * that takes either - a shipped climate on which nothing can be delivered
+ * anywhere. Tropical lost its terminal works the same way: a NEAR_TOWN rule
+ * reaches 5.8 % of that map, so the furniture factory drew nine times and
+ * placed none.
+ *
+ * **The rules are widened per climate rather than rewritten.** Naming snow in
+ * `NEAR_TOWN` would move the temperate world, which carries 36,814 snow tiles,
+ * the canonical cross-OS hash, the soak fixture, five shipped scenarios and
+ * every band of section 19.4 - the D-246 argument, one table along. A climate
+ * row instead says what that world's OWN ground is the equivalent of, and the
+ * temperate row is EMPTY, so a temperate map admits exactly the tiles it
+ * always did, tile for tile.
+ *
+ * The desert row is empty too, and that is a measurement rather than an
+ * omission: four fifths of a desert map is `Field` and another eighth is
+ * `Grass`, so the temperate rules already admit it, and all eight industries
+ * of the desert set place on the generated world. A row there would move
+ * Ueberleben's pinned industry count and the numeral its briefing quotes in
+ * both languages, for nothing that was refused.
+ *
+ * It widens the FOOTPRINT question only - what a works may stand on - and
+ * never `nearTerrain`, which asks what has to be NEARBY: the forestry needs a
+ * real forest within eight tiles, and a climate that has none should not grow
+ * one by equivalence. No climate that owns the timber arm lacks forest.
+ */
+export const CLIMATE_GROUND_SUBSTITUTES: readonly (readonly (readonly [
+  number,
+  readonly number[],
+])[])[] = [
+  // Temperate - the palette every placement rule was written for.
+  [],
+  // Arctic - the tundra IS the pasture, the ploughed land and the frozen bog.
+  [[Terrain.Snow, [Terrain.Grass, Terrain.Field, Terrain.Marsh]]],
+  // Tropical - the flood plain is where a rainforest town's works stand.
+  [[Terrain.Marsh, [Terrain.Field, Terrain.Grass]]],
+  // Desert - measured: nothing is refused for want of ground.
+  [],
+];
+
+/** `[climate][local * TERRAIN_COUNT + stands-in-for] = 1`, built once. */
+const GROUND: readonly Uint8Array[] = CLIMATE_GROUND_SUBSTITUTES.map((rows) => {
+  const table = new Uint8Array(TERRAIN_COUNT * TERRAIN_COUNT);
+  for (const [local, standsFor] of rows) {
+    for (const other of standsFor) table[local * TERRAIN_COUNT + other] = 1;
+  }
+  return table;
+});
+
+/**
+ * May a works whose rule names `allowed` stand on `terrain` in this climate?
+ *
+ * The rule's own list first - so a temperate world, whose row is empty, asks
+ * exactly the question it asked before M23 - and then the climate's own
+ * stand-ins.
+ */
+export function terrainAdmitted(
+  climate: MapClimate,
+  allowed: readonly number[],
+  terrain: number,
+): boolean {
+  if (allowed.includes(terrain)) return true;
+  const table = GROUND[climate] ?? GROUND[MapClimate.Temperate]!;
+  const base = terrain * TERRAIN_COUNT;
+  for (let i = 0; i < allowed.length; i++) {
+    if (table[base + allowed[i]!] === 1) return true;
+  }
+  return false;
 }
 
 /**

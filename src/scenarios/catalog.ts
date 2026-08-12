@@ -329,9 +329,18 @@ const PASSAGIERNETZ: ShippedScenario = {
  * 8,000) to Nettlewick (18, 2,500) is 60 tiles long, climbs and falls through
  * 27 height levels, spans heights 2 to 13 - eleven levels, 88 m - and crosses
  * eight tiles of water. The steepest long corridor between two real towns in
- * two hundred scanned seeds. At this climate the map grows three coal mines,
- * two iron ore mines and nothing that accepts either, so the tonnage goal here
- * is passengers.
+ * two hundred scanned seeds. The tonnage goal here is passengers, because a
+ * mountain scenario is about the corridor.
+ *
+ * **That sentence used to give a different reason and the reason was a defect
+ * (D-249).** It read "at this climate the map grows three coal mines, two iron
+ * ore mines and nothing that accepts either", and it was true: an arctic map
+ * is snow from shore to summit, and until D-249 only the two MINES stood on a
+ * placement rule that named snow. This world grows ELEVEN works now - one coal
+ * mine, five iron ore mines, two oil wells, a power station, a steel mill and a
+ * machine works - and the corridor, the towns and every figure the briefing
+ * quotes are exactly what they were, because the climate table decides what may
+ * stand somewhere and never where a town goes.
  *
  * The two towns are named in English since SPEC2 M23 (D-246): an arctic world
  * names its places from the English syllable set that closes SPEC.md 6.5. The
@@ -435,10 +444,14 @@ const GEBIRGSLOGISTIK: ShippedScenario = {
  * "island hopping" means here - no bridge can span it, so the connection is a
  * ship or it is nothing.
  *
- * Both towns are named in English since SPEC2 M23 (D-246), and the map now
- * grows the tropical industry set: nine works, of which three forestries and
- * two sawmills are the timber arm no other climate but the temperate one has.
- * The islands, the distances and the populations are the same world.
+ * Both towns are named in English since SPEC2 M23 (D-246), and the map grows
+ * the tropical industry set: twelve works, among them the forestry, the sawmill
+ * and the FURNITURE FACTORY that are the timber arm no other climate but the
+ * temperate one has. Nine works until D-249, and the three that were missing
+ * are the point of that entry - a `NEAR_TOWN` rule reaches 5.8 % of a
+ * rainforest map, so the arm this climate is recognised by had no terminal
+ * works on it. The islands, the distances and the populations are the same
+ * world.
  */
 const INSELHUEPFEN: ShippedScenario = {
   id: 'inselhuepfen',

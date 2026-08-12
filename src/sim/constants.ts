@@ -960,7 +960,43 @@ export const AI_TILES_PER_MONTH =
  * earn - which is exactly what it did.
  */
 export const AI_TICKS_PER_TILE = TILE_SIZE_M / AI_NOMINAL_SPEED_MS / (TICK_MS / 1000);
+
+/**
+ * Road vehicles a competitor puts on ONE line, measured on the 1950 catalogue.
+ * [vehicles]
+ *
+ * Six is the figure every AI band in the project was measured with, and it had
+ * no comment until D-250 - which is where its ORIGIN belongs, because six
+ * vehicles is a LIFT only while the vehicle is the one it was measured on. The
+ * 1950 omnibus carries 150, so this cap is 900 units of lift per round, and
+ * that is what the drain gate ({@link AI_DRAIN_MARGIN}) and the profitability
+ * floor ({@link AI_MIN_PROFIT_MARGIN}) are both quoted for.
+ *
+ * The pre-1950 catalogue's omnibus carries 45, and six of those cannot drain a
+ * town of eight thousand at any distance - measured on seed 987,654: at 1850
+ * every large town pair failed the drain gate and every small one projected
+ * 0.834 against the 1.25 floor, so three competitors issued **zero commands in
+ * six game years** while the same world started in 1950 played normally. The
+ * cap is therefore scaled by lift for an era vehicle; see `roadFleetCap` in
+ * `ai/evaluate.ts`, which is the only place that reads either constant.
+ */
 export const AI_MAX_VEHICLES_PER_LINE = 6;
+
+/**
+ * Ceiling on the era correction to the cap above. [vehicles]
+ *
+ * The scaled cap is what gives the SAME lift as six of the 1950 vehicle for the
+ * same cargo, and the smallest era vehicle would ask for far more than a road
+ * can hold: the 1862 horse dray carries 12 goods against the 1950 lorry's 40,
+ * and the 1850 mail cart 14 against 44. Twenty-four is four times the measured
+ * cap and it is a ROAD limit rather than an economic one - the AI puts its
+ * whole fleet on one alignment, and a convoy longer than that is congestion
+ * rather than throughput (the takt de-bunches it, it does not widen the road).
+ * The 1850 omnibus asks for 20 and is the only vehicle in the era catalogue
+ * that reaches the ceiling's neighbourhood; everything below it is clamped and
+ * the clamp is stated rather than hidden.
+ */
+export const AI_MAX_VEHICLES_PER_LINE_ERA = 24;
 
 /**
  * Most trains a competitor puts on one railway.

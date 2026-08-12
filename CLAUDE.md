@@ -3891,3 +3891,52 @@ Tick re-measured although the bundle lays no tick path: p50 1.638 / p99
 machine that had just run the whole balance suite. Main chunk 1,039,413 ->
 **1,041,208 B** against an unchanged 1,048,000 B budget, 6,792 B of headroom -
 no raise needed and none requested.
+
+
+## The correction pass after the independent verification at fcb0cd0
+
+Three defects an outside verifier measured, and the fourth thing they found -
+the honest shape of each is in D-249, D-250 and D-251.
+
+- **A climate that may not build on its own ground** (D-249). A 1024 arctic
+  map, seed 4711, grew 76 industries and every one was a coal mine (49) or an
+  iron ore mine (27) - a shipped, playable climate on which nothing could be
+  delivered anywhere. The cause is not the climate SET, which is closed: an
+  arctic map is snow from shore to summit, and only the two MINES stand on a
+  placement rule that names snow, so 5,700 of 5,700 attempted oil-well sites
+  and 4,500 of 4,500 power-station sites were refused for the GROUND. Tropical
+  lost the furniture factory the same way (a `NEAR_TOWN` rule reaches 5.8 % of
+  a rainforest map). `CLIMATE_GROUND_SUBSTITUTES` now says per climate what its
+  own ground stands in for; the temperate AND desert rows are empty, the first
+  by construction and the second by measurement, so no temperate pin, hash or
+  band moved. **The D-118 walk runs over a GENERATED world per climate now** -
+  every offered works really placed, every produced cargo taken on the map, and
+  a legal site for every offered works on a small map too - verified red on the
+  pre-fix behaviour. Two pinned world claims moved and were re-measured, not
+  adjusted: gebirgslogistik 5 -> 11 industries (and `cargoWithoutAcceptor` is
+  deleted, because that map now burns its own coal), inselhuepfen 9 -> 12.
+- **Six vehicles is a lift, not a count** (D-250). At start year 1850 three
+  competitors issued ZERO commands in six game years on all sixteen swept
+  seeds, while the identical world at 1950 played normally. The D-220 outcome
+  sink is EMPTY there - nothing reaches the command layer - so the defect is
+  the candidate list, and the trace says the catalogue is not empty and no era
+  gate fires: the drain gate and the profitability floor refuse everything.
+  Inside that, one real defect: `AI_MAX_VEHICLES_PER_LINE = 6` had no comment
+  and no origin and is a COUNT, so an 1850 fleet lifts 270 units where the 1950
+  fleet it was measured on lifts 900, and every town pair worth serving failed
+  the drain gate before its margin was ever computed. `roadFleetCap` scales it
+  by lift for an era vehicle and CANNOT reach a 1950 world (the era catalogue
+  closes in 1949). **The AI still builds nothing at 1850 and the floor was not
+  lowered to make a number green**: the best candidate rises to a priced 1.702
+  against D-231's measured 2.00, and two independent measurements say the floor
+  is right - the projection quotes 14 m/s where the omnibus does 6.7, and the
+  era balance twin already records that scenario 1's geometry loses money at
+  every fleet size over the era catalogue. Era economics is named as the open
+  work, with the number the next measurement starts from.
+- **The soak fixture is checked where it cannot hide** (D-251). Two M23 commits
+  (`ac42a57`, `a2436e6`) shipped with the fixture recording saveVersion 33
+  against SAVE_VERSION 34; the check that would have caught it lives in the
+  two-minute `soak` job. `tests/unit/soakFixture.spec.ts` reads the file in the
+  default suite and compares - nine milliseconds. It does not replace the soak
+  run, and says so: a fixture with the right version and the wrong hashes is
+  just as stale.

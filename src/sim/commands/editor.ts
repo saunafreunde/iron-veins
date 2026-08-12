@@ -266,7 +266,15 @@ export function planIndustryAt(
     }
   }
 
-  const site = industrySiteRefusal(world.map, spec, world.towns, world.industries, x, y);
+  const site = industrySiteRefusal(
+    world.map,
+    world.climate,
+    spec,
+    world.towns,
+    world.industries,
+    x,
+    y,
+  );
   if (site !== null) return refused(INDUSTRY_SITE_KEYS[site]!);
   return {
     reasonKey: null,

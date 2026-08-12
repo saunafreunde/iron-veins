@@ -1,6 +1,6 @@
 import { INDUSTRY_MIN_DISTANCE, type MapClimate, TILES_PER_INDUSTRY } from '../constants';
 import type { Cargo } from '../cargo/types';
-import { climateIndustryTypes, industryAllowedIn } from '../industry/climateSets';
+import { climateIndustryTypes, industryAllowedIn, terrainAdmitted } from '../industry/climateSets';
 import {
   INDUSTRY_SPECS,
   industrySpec,
@@ -40,8 +40,21 @@ export interface Candidate {
   readonly y: number;
 }
 
-/** All footprint tiles must be flat, dry, free and at the same height. */
-function footprintFits(map: TileMap, spec: IndustrySpec, x: number, y: number): boolean {
+/**
+ * All footprint tiles must be flat, dry, free and at the same height.
+ *
+ * The terrain question is asked through `terrainAdmitted` since SPEC2 M23
+ * bundle 5: a placement rule names the temperate palette, and what a climate's
+ * own ground stands in for is the climate's affair (D-249). For a temperate
+ * world that function is `terrains.includes` and nothing else.
+ */
+function footprintFits(
+  map: TileMap,
+  climate: MapClimate,
+  spec: IndustrySpec,
+  x: number,
+  y: number,
+): boolean {
   const size = spec.footprint;
   if (x < 1 || y < 1 || x + size >= map.size || y + size >= map.size) return false;
 
@@ -60,7 +73,7 @@ function footprintFits(map: TileMap, spec: IndustrySpec, x: number, y: number): 
       if (map.roadBits[index] !== 0) return false;
       if (map.slopeAt(tx, ty) !== 0) return false;
       if (map.baseHeight(tx, ty) !== baseHeight) return false;
-      if (!spec.placement.terrains.includes(map.terrain[index]!)) return false;
+      if (!terrainAdmitted(climate, spec.placement.terrains, map.terrain[index]!)) return false;
     }
   }
   return true;
@@ -133,13 +146,14 @@ function farEnoughFromOthers(placed: readonly Industry[], x: number, y: number):
  */
 export function industrySiteRefusal(
   map: TileMap,
+  climate: MapClimate,
   spec: IndustrySpec,
   towns: readonly Town[],
   placed: readonly Industry[],
   x: number,
   y: number,
 ): 'ground' | 'nearTerrain' | 'nearTown' | 'tooClose' | null {
-  if (!footprintFits(map, spec, x, y)) return 'ground';
+  if (!footprintFits(map, climate, spec, x, y)) return 'ground';
   if (!nearTerrainSatisfied(map, spec, x, y)) return 'nearTerrain';
   if (!nearTownSatisfied(spec, towns, x, y)) return 'nearTown';
   if (!farEnoughFromOthers(placed, x, y)) return 'tooClose';
@@ -149,6 +163,7 @@ export function industrySiteRefusal(
 /** Search a valid spot for one industry type. Returns null if none was found. */
 export function findSpot(
   map: TileMap,
+  climate: MapClimate,
   rng: Rng,
   spec: IndustrySpec,
   towns: readonly Town[],
@@ -165,7 +180,7 @@ export function findSpot(
     const x = rng.nextInt(map.size);
     const y = rng.nextInt(map.size);
 
-    if (!footprintFits(map, spec, x, y)) continue;
+    if (!footprintFits(map, climate, spec, x, y)) continue;
     if (requiredLandmass !== -1 && map.landmassId[map.tileIndex(x, y)] !== requiredLandmass) {
       continue;
     }
@@ -283,6 +298,7 @@ function repairChains(
         for (const producerType of producersOf(input, climate)) {
           const spot = findSpot(
             map,
+            climate,
             rng,
             industrySpec(producerType),
             towns,
@@ -365,7 +381,16 @@ export function generateIndustries(
   for (let i = 0; i < wanted; i++) {
     const type = drawType(rng, table);
     const spec = industrySpec(type);
-    const spot = findSpot(map, rng, spec, towns, placed, PLACEMENT_ATTEMPTS_PER_INDUSTRY, -1);
+    const spot = findSpot(
+      map,
+      climate,
+      rng,
+      spec,
+      towns,
+      placed,
+      PLACEMENT_ATTEMPTS_PER_INDUSTRY,
+      -1,
+    );
     if (spot === null) continue;
 
     const industry: Industry = newIndustry(

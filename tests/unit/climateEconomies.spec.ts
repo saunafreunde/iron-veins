@@ -8,6 +8,7 @@ import {
   TOWN_CARGO,
 } from '../../src/sim/industry/catchment';
 import {
+  CLIMATE_GROUND_SUBSTITUTES,
   CLIMATE_INDUSTRY_SETS,
   CLIMATE_SIGNATURE_ARM,
   climateIndustryTypes,
@@ -18,10 +19,14 @@ import {
   INDUSTRY_ARM_STONE,
   INDUSTRY_ARM_WOOD,
   INDUSTRY_CORE,
+  terrainAdmitted,
 } from '../../src/sim/industry/climateSets';
 import type { IndustryType } from '../../src/sim/industry/types';
 import { INDUSTRY_SPECS, INDUSTRY_TYPE_COUNT, industrySpec } from '../../src/sim/industry/types';
+import { generateMap, type GeneratedWorld } from '../../src/sim/mapgen';
+import { findSpot } from '../../src/sim/mapgen/industries';
 import { CLIMATE_PLACE_NAMES, PlaceNameGenerator } from '../../src/sim/mapgen/names';
+import { TERRAIN_COUNT, TERRAIN_NAME_KEYS } from '../../src/sim/map/terrain';
 import { Rng } from '../../src/sim/rng';
 import { TOWN_OUTPUTS } from '../../src/sim/town/update';
 import { climateAllowsSpec, specAvailable } from '../../src/sim/vehicles/availability';
@@ -224,6 +229,152 @@ describe('the four climate sets are four economies', () => {
       expect(climateProducesCargo(MapClimate.Temperate, cargo as Cargo), `temperate/${cargo}`).toBe(
         true,
       );
+    }
+  });
+});
+
+/**
+ * The same walk over GENERATED GROUND - the guard the table-only version could
+ * not be (D-249).
+ *
+ * Everything above asks the CLIMATE SET. It is green on a set that is perfect
+ * and a map that is empty, and that is exactly what shipped: an arctic 1024
+ * world of seed 4711 held 76 industries, 49 coal mines and 27 iron ore mines,
+ * and NOT ONE works that takes either. The set was closed; the ground refused
+ * seven of the nine industries in it, because a placement rule names the
+ * temperate palette and an arctic map is snow from shore to summit.
+ *
+ * So the question is asked of a world the generator really built. Two claims,
+ * and the second is the one that fails first when a rule and a palette drift
+ * apart:
+ *
+ *  1. **every cargo produced on the map has an acceptor ON THE MAP** - D-118
+ *     at the scale of a world rather than of a table.
+ *  2. **every industry the climate's table offers is really PLACED** - the
+ *     sharper claim, and the one that catches a single works going missing
+ *     (tropical grew forestry x36 and sawmill x19 and furniture factory x0).
+ *
+ * 1024 tiles because that is the size the defect was measured at and the size
+ * whose 175 draws can hold every type of every set; eight erosion passes
+ * because the relief only has to be a relief (the mapgen suite's own
+ * shortcut), and the four worlds together cost about 4.5 s.
+ */
+const GUARD_SIZE = 1024;
+const GUARD_SEED = 4_711;
+const GUARD_EROSION = 8;
+
+const guarded = new Map<MapClimate, GeneratedWorld>();
+function guardWorld(climate: MapClimate): GeneratedWorld {
+  let world = guarded.get(climate);
+  if (world === undefined) {
+    world = generateMap({
+      size: GUARD_SIZE,
+      seed: GUARD_SEED,
+      climate,
+      erosionPasses: GUARD_EROSION,
+    });
+    guarded.set(climate, world);
+  }
+  return world;
+}
+
+describe('the four climate economies stand on the ground the generator makes', () => {
+  it('places every industry its own table offers', () => {
+    for (const climate of CLIMATES) {
+      const world = guardWorld(climate);
+      const placed = new Set<number>(world.industries.map((industry) => industry.type));
+      const missing = climateIndustryTypes(climate)
+        .filter((type) => !placed.has(type))
+        .map((type) => industrySpec(type).nameKey);
+      expect(missing, `${NAME_OF[climate]} offers works the ground refuses`).toEqual([]);
+    }
+  });
+
+  it('finds a taker on the map for every cargo the map produces', () => {
+    for (const climate of CLIMATES) {
+      const world = guardWorld(climate);
+      const placed = new Set<number>(world.industries.map((industry) => industry.type));
+      const takenOnMap = (cargo: number): boolean => {
+        for (const type of placed) {
+          if (industrySpec(type as IndustryType).inputs.includes(cargo as Cargo)) return true;
+        }
+        return (
+          TOWN_CARGO.includes(cargo as Cargo) ||
+          STATION_ALWAYS_ACCEPTED.includes(cargo as Cargo) ||
+          PORT_OVERSEAS_CARGO.includes(cargo as Cargo)
+        );
+      };
+      for (const type of placed) {
+        for (const cargo of industrySpec(type as IndustryType).outputs) {
+          expect(
+            takenOnMap(cargo),
+            `${NAME_OF[climate]}: nothing on the map takes cargo ${cargo} from industry ${type}`,
+          ).toBe(true);
+        }
+      }
+    }
+  });
+
+  it('admits a legal site for every offered works on a SMALL map too', () => {
+    // The size-independent half. A 256 map holds a dozen works and cannot
+    // carry a whole set, so "is it there" is the dice - but "could it stand
+    // anywhere at all" is the GROUND, and that is the question the shipped
+    // defect answered with no, five thousand seven hundred times in a row.
+    for (const climate of CLIMATES) {
+      for (const seed of [4_711, 148, 67]) {
+        const world = generateMap({ size: 256, seed, climate, erosionPasses: GUARD_EROSION });
+        for (const type of climateIndustryTypes(climate)) {
+          const spot = findSpot(
+            world.map,
+            climate,
+            Rng.fromSeed(seed),
+            industrySpec(type),
+            world.towns,
+            world.industries,
+            20_000,
+            -1,
+          );
+          expect(
+            spot,
+            `${NAME_OF[climate]}/${seed}: no ground anywhere for ${industrySpec(type).nameKey}`,
+          ).not.toBeNull();
+        }
+      }
+    }
+  });
+});
+
+describe('the ground a climate stands in for', () => {
+  it('leaves the temperate palette exactly as every rule was written for it', () => {
+    // The identity claim, and the reason the canonical hash, the soak fixture
+    // and five shipped scenarios did not move: a temperate map admits the
+    // tiles `terrains.includes` admits and no others.
+    expect(CLIMATE_GROUND_SUBSTITUTES[MapClimate.Temperate]).toEqual([]);
+    for (const spec of INDUSTRY_SPECS) {
+      for (let terrain = 0; terrain < TERRAIN_COUNT; terrain++) {
+        expect(
+          terrainAdmitted(MapClimate.Temperate, spec.placement.terrains, terrain),
+          `${spec.nameKey}/${TERRAIN_NAME_KEYS[terrain]}`,
+        ).toBe(spec.placement.terrains.includes(terrain));
+      }
+    }
+  });
+
+  it('only ever widens a rule, and never for a terrain the rule already names', () => {
+    expect(CLIMATE_GROUND_SUBSTITUTES).toHaveLength(MAP_CLIMATE_COUNT);
+    for (const climate of CLIMATES) {
+      for (const [local, standsFor] of CLIMATE_GROUND_SUBSTITUTES[climate]!) {
+        expect(standsFor.includes(local), `${NAME_OF[climate]} maps a terrain to itself`).toBe(
+          false,
+        );
+        for (const spec of INDUSTRY_SPECS) {
+          for (let terrain = 0; terrain < TERRAIN_COUNT; terrain++) {
+            if (!spec.placement.terrains.includes(terrain)) continue;
+            // Widening only: whatever the rule already named stays named.
+            expect(terrainAdmitted(climate, spec.placement.terrains, terrain)).toBe(true);
+          }
+        }
+      }
     }
   });
 });

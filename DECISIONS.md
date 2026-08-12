@@ -23,7 +23,7 @@ no entry below. A number may appear under several topics.
   D-152, D-155, D-159
 - **Map generation & terrain:** D-018, D-019, D-020, D-021, D-022, D-023,
   D-025, D-027, D-197, D-198, D-199, D-216, D-231, D-234, D-240, D-242,
-  D-246, D-247
+  D-246, D-247, D-249
 - **Terraforming & structures:** D-028, D-034, D-050, D-051, D-052, D-124,
   D-141, D-240, D-244
 - **Save format, migrations & replays:** D-007, D-025, D-026, D-027, D-048,
@@ -42,7 +42,8 @@ no entry below. A number may appear under several topics.
   D-078, D-118, D-142, D-151, D-176, D-178, D-187, D-207, D-211, D-213,
   D-215, D-233, D-237
 - **Industry & production:** D-022, D-062, D-063, D-064, D-069, D-071, D-079,
-  D-085, D-086, D-174, D-201, D-202, D-205, D-225, D-232, D-239, D-246, D-248
+  D-085, D-086, D-174, D-201, D-202, D-205, D-225, D-232, D-239, D-246, D-248,
+  D-249
 - **Towns, council & ownership:** D-101, D-102, D-103, D-104, D-205, D-207,
   D-206, D-213, D-216, D-217, D-231, D-232, D-233, D-234, D-235
 - **Economy, finance & emissions:** D-008, D-090, D-091, D-092, D-105, D-154,
@@ -52,7 +53,7 @@ no entry below. A number may appear under several topics.
   D-196, D-197, D-198, D-199, D-200, D-203, D-204, D-207, D-211, D-213,
   D-215, D-216, D-220, D-221, D-222, D-224, D-225, D-226, D-228, D-229,
   D-232, D-233, D-234, D-235, D-236, D-237, D-238, D-239, D-245, D-246,
-  D-247, D-248
+  D-247, D-248, D-249, D-250
 - **Vehicles & fleet:** D-043, D-044, D-045, D-068, D-076, D-089, D-093,
   D-096, D-142, D-143, D-145, D-146, D-155, D-157, D-171, D-174, D-181, D-185,
   D-201, D-207, D-245, D-246
@@ -60,7 +61,7 @@ no entry below. A number may appear under several topics.
 - **Competitors, AI & tenders:** D-107, D-108, D-109, D-115, D-116, D-121,
   D-122, D-147, D-152, D-153, D-154, D-155, D-156, D-158, D-216, D-218,
   D-219, D-220, D-221, D-222, D-223, D-224, D-225, D-226, D-228, D-229,
-  D-230, D-238
+  D-230, D-238, D-250
 - **Rendering & art:** D-013, D-014, D-033, D-035, D-112, D-117, D-125, D-127,
   D-136, D-140, D-160, D-161, D-162, D-163, D-164, D-165, D-166, D-169, D-170,
   D-171, D-172, D-173, D-174, D-175, D-177, D-179, D-186, D-202, D-205, D-206,
@@ -82,7 +83,7 @@ no entry below. A number may appear under several topics.
   D-195, D-196, D-197, D-198, D-199, D-200, D-201, D-202, D-203, D-204,
   D-205, D-207, D-206, D-208, D-209, D-210, D-212, D-213, D-215, D-216,
   D-217, D-219, D-220, D-221, D-222, D-228, D-229, D-230, D-231, D-233,
-  D-234, D-235, D-236, D-241, D-242, D-248
+  D-234, D-235, D-236, D-241, D-242, D-248, D-249, D-250, D-251
 - **Process & specification:** D-070, D-123, D-129, D-133, D-138, D-140,
   D-185, D-191, D-197, D-198, D-199, D-203, D-204, D-205, D-206, D-215,
   D-222, D-225, D-226, D-227, D-228, D-229, D-235
@@ -15585,3 +15586,266 @@ Einheit und Herkunft annotiert. Hauptchunk **1.039.413 -> 1.041.208 B** gegen
 unveraenderte 1.048.000 B, **Restluft 6.792 B** - keine Anhebung noetig und
 keine beantragt. `SimWorker` 408.714 -> 408.787 B, `replay` 227.191 ->
 227.201 B, Szenario-Katalog 13.542 -> 13.611 B, CSS 13.470 B unveraendert.
+
+---
+
+## Korrekturen nach der unabhaengigen Pruefung an fcb0cd0 (2026-08-12)
+
+### D-249 Ein Klima, das seinen eigenen Boden nicht bebauen darf
+
+**Eine 1024er Arktiskarte, Seed 4711, traegt 76 Industrien, und jede einzelne
+ist eine Kohlegrube (49) oder eine Eisenerzgrube (27).** Kein Kraftwerk, kein
+Stahlwerk, kein Abnehmer, keine Kette, die sich schliesst - auf einem Klima,
+das seit M23 Bundle 2 im Neues-Spiel-Dialog steht und gespielt werden kann.
+Wer es waehlt, bekommt eine Welt, in der nichts irgendwohin geliefert werden
+kann.
+
+**Der Trichter, gemessen statt vermutet** (175 Ziehungen, je 300 Platzversuche,
+gezaehlt nach der Frage, die abgelehnt hat):
+
+| Werk | gezogen -> gesetzt | wo die Ablehnung sitzt |
+| --- | --- | --- |
+| arktisch Bohrturm | 19 -> **0** | 5.700 Versuche, **5.700 x `ground`** |
+| arktisch Kraftwerk | 15 -> **0** | 4.500 x `ground` |
+| arktisch Stahlwerk | 18 -> **0** | 5.400 x `ground` |
+| arktisch Maschinenwerk | 12 -> **0** | 3.600 x `ground` |
+| arktisch Elektronik | 7 -> **0** | 2.100 x `ground` |
+| arktisch Raffinerie | 16 -> **0** | 4.800 x `ground` |
+| arktisch Kunststoff | 12 -> **0** | 3.600 x `ground` |
+| tropisch Moebelwerk | 9 -> **0** | 2.640 x `ground`, 60 x `nearTown` |
+
+Nicht eine dieser Ablehnungen kommt von der Auswahltabelle, von der Stadtnaehe
+oder vom Mindestabstand. Sie kommen alle vom BODEN, und der Grund ist eine
+Zeile in `industry/types.ts`, die vier Klimata alt geworden ist: **eine
+Platzierungsregel nennt die temperierte Palette.** `NEAR_TOWN` ist Gras, Acker,
+Kueste; der Bohrturm ist Wueste, Kueste, Sumpf. Was die vier Karten wirklich
+sind (Landkacheln, Seed 4711, 1024):
+
+| Klima | Boden |
+| --- | --- |
+| temperiert | Gras 270.779 - Fels 196.111 - Wald 173.903 - Acker 40.887 - Schnee 36.814 - Sumpf 4.673 |
+| arktisch | **Schnee 723.786 - Kueste 7.317 - sonst nichts** |
+| tropisch | Wald 325.482 - Sumpf 309.139 - Fels 46.580 - Gras 42.331 - kein Acker |
+| Wueste | Acker 566.913 - Gras 90.443 - Fels 46.664 - Wueste 19.079 |
+
+Eine Arktiskarte ist Schnee von der Kueste bis zum Gipfel, und von den neun
+Industrien des arktischen Satzes stehen genau die zwei GRUBEN auf einer Regel,
+die Schnee nennt (`HILLS` = Fels, Gras, Schnee). Tropisch verliert sein Endwerk
+an derselben Ursache in schwaecherer Form: `NEAR_TOWN` erreicht 5,8 % einer
+Regenwaldkarte.
+
+**Warum der D-118-Test gruen blieb.** `climateEconomies.spec.ts` fragt die
+TABELLE - jede Fracht, die ein Satz erzeugt, hat im selben Satz einen Abnehmer -
+und das stimmt fuer alle vier Saetze. Ein Satz kann perfekt sein und die Karte
+leer. Der Test lief nie ueber eine erzeugte Welt.
+
+**Die Korrektur ist eine Klimazeile, keine umgeschriebene Regel.**
+`CLIMATE_GROUND_SUBSTITUTES` sagt je Klima, wofuer der eigene Boden EINSTEHT:
+arktisch Schnee fuer Gras, Acker und Sumpf (die Tundra ist die Weide, das
+gepfluegte Land und das gefrorene Moor); tropisch Sumpf fuer Acker und Gras (die
+Schwemmebene ist, wo die Werke einer Regenwaldstadt stehen). **Die temperierte
+Zeile ist LEER**, also laesst eine temperierte Karte kachelgenau zu, was sie
+immer zugelassen hat - genau das D-246-Argument eine Tabelle weiter, und der
+Grund, warum der kanonische Cross-OS-Hash, das Soak-Fixture und fuenf
+ausgelieferte Szenarien sich nicht bewegt haben. **Die Wuestenzeile ist
+ebenfalls leer, und das ist eine Messung**: vier Fuenftel einer Wuestenkarte
+sind `Field` und ein weiteres Achtel `Grass`, die temperierten Regeln lassen sie
+also schon zu, und alle acht Industrien des Wuestensatzes stehen auf der
+erzeugten Welt. Eine Zeile dort haette Ueberlebens gepinnte Industriezahl und
+die Zahl, die sein Briefing in beiden Sprachen nennt, bewegt - fuer nichts, was
+abgelehnt wurde.
+
+Erweitert wird nur die FUSSABDRUCK-Frage, nie `nearTerrain`: der Forst braucht
+echten Wald in acht Kacheln Reichweite, und ein Klima ohne Wald soll sich keinen
+durch Aequivalenz wachsen lassen.
+
+**Nach der Korrektur** (dieselbe Karte, derselbe Seed): arktisch 175 Werke, alle
+NEUN Typen (Kohle 36, Eisen 25, Bohrtuerme 16, Kraftwerke 17, Stahlwerke 13,
+Maschinenwerke 25, Elektronik 12, Raffinerien 16, Kunststoff 15); tropisch 171
+Werke mit **16 Moebelwerken**; **temperiert Ziehung fuer Ziehung und Ablehnung
+fuer Ablehnung identisch**, Wueste ebenso identisch.
+
+**Der Waechter, der es gefunden haette, laeuft jetzt ueber eine ERZEUGTE Welt**
+(`climateEconomies.spec.ts`, drei neue Tests, ~5,6 s): je Klima eine
+1024er-Welt mit acht Erosionsdurchgaengen, und darauf (1) jede vom Satz
+angebotene Industrie ist wirklich GESETZT, (2) jede erzeugte Fracht hat einen
+Abnehmer AUF DER KARTE, (3) groessenunabhaengig, ueber drei Seeds auf 256: fuer
+jeden angebotenen Typ gibt es ueberhaupt einen legalen Platz - denn auf einer
+kleinen Karte ist ein fehlendes Werk der Wuerfel, ein unmoeglicher Platz aber
+der Boden. Alle drei wurden ROT verifiziert, indem die beiden neuen Klimazeilen
+leer gesetzt wurden: "arctic offers works the ground refuses: expected [
+'industry.oilWell', ...(6) ]", "arctic: nothing on the map takes cargo 2 from
+industry 0", "arctic/4711: no ground anywhere for industry.oilWell".
+
+**Was sich an gepinnten Weltaussagen bewegt hat, ehrlich nachgemessen statt
+angepasst** (D-197/D-198/D-199): genau zwei Zahlen, beide in
+`SCENARIO_WORLD_CLAIMS`, beide auf 256er Karten. Gebirgslogistik (Seed 148,
+arktisch) **5 -> 11 Industrien**, und mit ihr `industriesOfType` (Kohlegrube
+3 -> 1, Eisenerz 2 -> 5, dazu Kraftwerk 1, Stahlwerk 1, Bohrtuerme 2,
+Maschinenwerk 1); **`cargoWithoutAcceptor: Cargo.Coal` ist GELOESCHT**, weil es
+nicht mehr stimmt - diese Karte hat jetzt ein Kraftwerk und ein Stahlwerk, die
+Kohle nehmen. Das war die Zeile, in der der Defekt als Weltbeschreibung dastand
+("nichts, was beides annimmt, also zaehlt das Tonnage-Ziel Passagiere"); der
+Kommentar im Katalog ist umgeschrieben und sagt jetzt, was frueher dort stand
+und warum es ein Defekt war. Inselhuepfen (Seed 67, tropisch) **9 -> 12
+Industrien**, darunter das Moebelwerk, das dem Klima seinen Arm gibt. **Keine
+BRIEFING-Zahl bewegt sich**: keines der beiden Briefings nennt eine
+Industriezahl, was `SCENARIO_BRIEFING_FIGURES` unveraendert bestaetigt. Staedte,
+Landmassen, Korridore und Bevoelkerungen aller acht Szenarien stehen auf der
+Kachel, auf der sie standen - das Klima entscheidet, was irgendwo STEHEN darf,
+nie wo eine Stadt hinkommt.
+
+**Ledger.** `SAVE_VERSION` unveraendert **34**, kein Snapshot-Feld, keine
+i18n-Zeile, keine Atlas-Zelle, kein `CommandKind`. Eine neue exportierte Tabelle
+und eine neue Funktion in `industry/climateSets.ts`; `findSpot` und
+`industrySiteRefusal` bekommen einen `climate`-Parameter, damit die
+hand-platzierte Industrie des Editors und die erzeugte auf denselben Regeln
+stehen (das D-119-Argument, das ueber der Funktion schon steht).
+
+### D-250 Sechs Fahrzeuge sind eine Hublast, keine Zahl - und was die KI 1850 wirklich aufhaelt
+
+**Gemessen, Seed 987.654, 256er Karte, drei Konkurrenten, sechs Spieljahre: bei
+Startjahr 1850 null ausgefuehrte Befehle, null Fahrzeuge, null Stationen,
+dreimal die unangetasteten 500.000 EUR. Dieselbe Welt ab 1950: 36 Befehle, zwei
+Stationen, eine Linie gebaut und wieder geschlossen.** Ueber sechzehn Seeds bei
+1850: **0 Befehle in 48 Firmenlaeufen.**
+
+**Der Ausgangspunkt des Befunds ist, dass die Ausgangs-Senke von D-220 LEER
+ist.** Nicht ein Befehl erreicht die Befehlsschicht - es gibt kein
+Ablehnungsprofil zu lesen, weil nichts abgelehnt wird. Der Defekt sitzt oberhalb
+davon, in der Kandidatenliste. Die drei Fragen, die die Pruefung gestellt hat,
+gemessen an der Filterkaskade von `collectFor` (je Entscheidungszyklus, 1850):
+
+| Persoenlichkeit | roh | kein Fahrzeug | Stau-Tor | Rendite-Tor | bleibt | beste Marge |
+| --- | --- | --- | --- | --- | --- | --- |
+| Strasse (p1) | 51 | 6 | 32 | 13 | **0** | 0,834 |
+| Konservativ (p3) | 6 | **6** | 0 | 0 | **0** | - |
+| Stadtnetz (p4) | 45 | 0 | 32 | 13 | **0** | 0,834 |
+| Strasse (p1) **1950** | 51 | 0 | 30 | 20 | **1** | 2,029 |
+
+Also: **der Katalog ist nicht leer** (der Omnibus 300 steht 1850 zum Verkauf und
+wird gewaehlt), **kein Aeren-Tor schliesst ihn aus**, und die
+industrie-orientierte Persoenlichkeit findet fuer JEDES ihrer sechs Paare kein
+Fahrzeug, weil der Aeren-Strassenkatalog vor dem Pferdefuhrwerk von 1862
+ueberhaupt keine Fracht faehrt. Der Rest wird vom **Stau-Tor und vom Rendite-Tor**
+abgewiesen.
+
+**Der Defekt darin ist eine Konstante ohne Herkunft.**
+`AI_MAX_VEHICLES_PER_LINE = 6` stand kommentarlos in `constants.ts` - gegen die
+stehende Regel, dass jede Konstante Einheit UND Herkunft traegt - und sie ist
+eine ANZAHL. Sechs Fahrzeuge sind nur so lange eine Hublast, wie das Fahrzeug
+das ist, an dem gemessen wurde: der 1950er Omnibus fasst 150, der 1850er 45.
+Sechs davon sind 270 statt 900 Einheiten je Runde, und genau dagegen zitieren
+`AI_DRAIN_MARGIN` und `AI_MIN_PROFIT_MARGIN` ihre Zahlen. Auf dem gemessenen
+Paar (24 Kacheln, 520 Einheiten im Monat) heisst das: die 1950er Flotte leert die
+Stadt, die 1850er nicht - **jedes grosse Staedtepaar fiel am Stau-Tor, bevor
+seine Marge ueberhaupt gerechnet wurde**.
+
+`roadFleetCap` (in `evaluate.ts`, neben `fleetFor`, weil ein Filter und der
+Bauer, fuer den er filtert, nicht auseinanderlaufen duerfen - D-219) gibt einem
+AEREN-Fahrzeug so viele Einheiten, wie sechs des 1950er Fahrzeugs derselben
+Fracht heben: fuer den Omnibus 20, gedeckelt bei
+`AI_MAX_VEHICLES_PER_LINE_ERA = 24`. **Eine 1950er Welt ist davon per
+Konstruktion nicht beruehrt**, nicht per Messung: der Aerenkatalog schliesst
+1949 (D-245), also kann kein ab START_YEAR kaufbares Spec in den Zweig geraten.
+`tests/unit/aiEraFleet.spec.ts` behauptet das ueber jede Fracht und jedes Jahr
+von 1950 bis 2050.
+
+**Was die Korrektur messbar bewirkt - und was nicht, ohne Beschoenigung.** Die
+beste 1850er Kandidatin steigt von "am Stau-Tor abgewiesen, ehe sie bepreist
+wurde" auf eine bepreiste Marge von **1,702**. Das Rendite-Tor steht seit D-231
+bei **2,00**, hergeleitet aus einem Sweep ueber 51 Vierteljahrhunderte, und
+**1,702 bleibt darunter. Die KI baut also auch nach der Korrektur bei 1850
+nichts, und das Tor wird nicht gesenkt, um eine Zahl gruen zu bekommen.** Zwei
+unabhaengige Messungen sagen, dass das Tor recht hat:
+
+1. **Die Projektion ist bei 1850 zu OPTIMISTISCH, nicht zu streng.**
+   `projectLine` rechnet die Runde mit `AI_NOMINAL_SPEED_MS = 14 m/s`, waehrend
+   der 1850er Omnibus 6,7 m/s faehrt - die 1,702 sind um gut den Faktor 2,1
+   allein im Durchsatz zu freundlich. Ein ehrliches Tempo macht die Aeren-Linie
+   schlechter, nicht besser.
+2. **Die Balance-Suite hat dieselbe Duenne schon gemessen.** Der Aeren-Zwilling
+   von D-245 haelt in seinem eigenen Quelltext fest, dass die Geometrie von
+   Szenario 1 (25 Kacheln) ueber dem 1870er Katalog **bei jeder Flottengroesse
+   Geld verliert**, und musste auf zwoelf Kacheln gehen - unter
+   `AI_MIN_DISTANCE = 15`, das aus SPEC 15 und dem Einzugsradius von 12 kommt.
+   Der Kohle-Zwilling misst fuer eine Aeren-Bahn eine Amortisation von 10-14
+   Jahren gegen 4-7 der 1950er Linie.
+
+Die Bahn ist kein Ausweg und das ist gemessen: die beste 1850er
+Schienen-Kandidatin derselben Welt projiziert **1,035**. Der symmetrische
+Modus-Rueckfall (eine Strassen-Persoenlichkeit sieht sich die Schiene an, wenn
+ihre eigene Liste leer ist - D-222 rueckwaerts gelesen) wurde gebaut und ueber
+alle sechzehn Seeds gemessen: **weiterhin 0 Befehle**, also wieder entfernt.
+
+**Der Satz, der stehen bleibt: bei Startjahr 1850 gibt es auf einer erzeugten
+Karte kein Geschaeft, das den Massstab dieses Spiels besteht.** Das ist
+Aeren-OEKONOMIE, keine KI-Logik, und es zu schliessen heisst, den
+Aeren-Strassenkatalog oder ein aus einem Aeren-Sweep hergeleitetes eigenes Tor
+zu messen - eine Bundle-grosse Messung mit eigenen Baendern, benannt statt
+angedeutet. Was dieses Bundle beitraegt, ist die eine echte Fehlmessung darin
+und die Zahl, von der die naechste Messung ausgeht.
+
+**Die Sechzehn-Seed-Tabelle, beide Aeren** (256er Karte, drei Konkurrenten,
+sechs Spieljahre; Befehle / handelnde Firmen von 3 / Fahrzeuge / Stationen /
+Linien):
+
+```
+seed      1850                          1950
+987654      0   0/3   0v   0s 0l          36   1/3   0v   2s 0l
+4711        0   0/3   0v   0s 0l          35   1/3   0v   2s 0l
+4712        0   0/3   0v   0s 0l           0   0/3   0v   0s 0l
+4713        0   0/3   0v   0s 0l          51   1/3   6v   3s 1l
+4714        0   0/3   0v   0s 0l          45   1/3   6v   2s 1l
+2718        0   0/3   0v   0s 0l          41   1/3   0v   2s 0l
+31415       0   0/3   0v   0s 0l          40   1/3   0v   2s 0l
+60613       0   0/3   0v   0s 0l          40   1/3   6v   2s 1l
+12345       0   0/3   0v   0s 0l           0   0/3   0v   0s 0l
+1           0   0/3   0v   0s 0l           0   0/3   0v   0s 0l
+2           0   0/3   0v   0s 0l         117   1/3   0v   4s 0l
+3           0   0/3   0v   0s 0l           0   0/3   0v   0s 0l
+99          0   0/3   0v   0s 0l           0   0/3   0v   0s 0l
+5150        0   0/3   0v   0s 0l           0   0/3   0v   0s 0l
+777         0   0/3   0v   0s 0l          41   1/3   0v   2s 0l
+20260       0   0/3   0v   0s 0l          84   1/3   0v   3s 0l
+Summe       0  0/48   0v   0s 0l         530 10/48  18v  24s 3l
+```
+
+**Die 1950er Spalte ist die Spalte VOR und NACH der Korrektur** - sie kann es
+per Konstruktion sein, und sie ist es auch gemessen: Szenario 5, der
+Vier-Seed-Sweep von `aiGame`, jede Balance-Bank und das Soak-Fixture stehen
+unveraendert. Zehn von 48 Konkurrenten handeln ueberhaupt, drei von 48 fahren
+nach sechs Jahren eine Linie mit Flotte; das ist die Einordnung, die D-220 und
+D-221 fuer die lange Partie schon geschrieben haben, hier auf einem
+Sechs-Jahres-Fenster wiederholt und nicht schoener gemacht.
+
+**Ledger.** `SAVE_VERSION` unveraendert **34**. Zwei Konstanten in
+`constants.ts` und nur dort, beide mit Einheit und Herkunft
+(`AI_MAX_VEHICLES_PER_LINE_ERA` neu, `AI_MAX_VEHICLES_PER_LINE` bekommt die
+Herkunft, die ihr immer gefehlt hat). Kein Snapshot-Feld, keine i18n-Zeile, kein
+`CommandKind`, kein RNG-Zug.
+
+### D-251 Das Soak-Fixture wird dort geprueft, wo es sich nicht verstecken kann
+
+**Zwei M23-Commits sind an ihrem eigenen Tor vorbeigekommen**: bei `ac42a57` und
+`a2436e6` steht im Soak-Fixture `saveVersion: 33`, waehrend `SAVE_VERSION` 34
+ist. `tests/soak/longRun.spec.ts` haette genau das abgelehnt - der Vergleich
+steht dort seit M16 und wirft eine Fehlermeldung mit dem Wiederaufnahme-Rezept
+darin. Er steht aber im `soak`-Job, und der `soak`-Job ist nicht der, mit dem
+ein Bundle abgezeichnet wird. Jedes gelaufene Tor war gruen, weil das eine Tor,
+das die Datei liest, zwei Minuten dauert und nicht gelaufen ist.
+
+Am HEAD sagt das Fixture bereits 34 - **an der Datei ist nichts zu reparieren,
+zu reparieren ist der Waechter**. `tests/unit/soakFixture.spec.ts` liest die
+JSON-Datei und vergleicht ihre `saveVersion` mit `SAVE_VERSION`, dazu die Form:
+Seed, Kartengroesse, Jahre, Konkurrenten und dass jeder Digest sechzehn
+Hexziffern hat. Kein Simulationsschritt, neun Millisekunden, in der
+Standard-Suite - dieselbe Gestalt wie die anderen Kopplungsaudits des Projekts
+(D-133, D-183): zwei Artefakte, die uebereinstimmen muessen, zusammengehalten
+von etwas, das beide liest.
+
+**Es ersetzt den Soak-Lauf nicht und kann es nicht.** Ein Fixture mit der
+richtigen Versionsnummer und den falschen Hashes ist genauso schal, und das sagt
+nur das nachgespielte Vierteljahrhundert. Was der Test kauft, ist die BILLIGE
+Haelfte von "das Fixture ist aktuell" bei jedem Push - ein Save-Bump kann nicht
+mehr mit einem nie neu aufgenommenen Fixture ausgeliefert werden.

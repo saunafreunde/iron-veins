@@ -8,7 +8,6 @@ import {
   AI_DECISION_INTERVAL_TICKS,
   AI_LINE_REVIEW_TICKS,
   AI_MAX_LINES,
-  AI_MAX_VEHICLES_PER_LINE,
   AI_RAIL_MAX_TRAINS,
   AI_REINFORCE_WAITING,
   AI_RETRY_TICKS,
@@ -37,7 +36,13 @@ import {
   pickTrain,
   stopTileNear,
 } from './build';
-import { fleetFor, loadUnitsOf, opportunities, stationMonthlyOutput } from './evaluate';
+import {
+  fleetFor,
+  loadUnitsOf,
+  opportunities,
+  roadFleetCap,
+  stationMonthlyOutput,
+} from './evaluate';
 import { Personality, type AiState } from './types';
 import type { World } from '../World';
 
@@ -165,7 +170,7 @@ function startProject(world: World, queue: CommandQueue, state: AiState): void {
       2 * opportunity.distance * AI_TICKS_PER_TILE,
       loadUnitsOf(specIds, opportunity.cargo),
       opportunity.monthlyOutput,
-      opportunity.rail ? AI_RAIL_MAX_TRAINS : AI_MAX_VEHICLES_PER_LINE,
+      opportunity.rail ? AI_RAIL_MAX_TRAINS : roadFleetCap(opportunity.cargo, specIds),
     );
 
     // WILL IT PAY? - the question this cycle never asked - is settled BEFORE
@@ -342,7 +347,7 @@ function advanceProject(world: World, queue: CommandQueue, state: AiState): void
       2 * distance * AI_TICKS_PER_TILE,
       loadUnitsOf(project.specIds, project.cargo),
       output,
-      project.rail ? project.railTrains : AI_MAX_VEHICLES_PER_LINE,
+      project.rail ? project.railTrains : roadFleetCap(project.cargo, project.specIds),
     );
     buyVehicles(
       world,
@@ -563,7 +568,18 @@ function optimise(world: World, queue: CommandQueue, state: AiState): boolean {
     // and deadlocks (D-059) - so the cap that is provably safe for every
     // railway this AI builds is the built fleet itself.
     if (world.vehicles.kind[crewIds[0]!] === VehicleKind.Train) continue;
-    if (crewIds.length >= AI_MAX_VEHICLES_PER_LINE) continue;
+    // The same cap the line was SIZED with, read off the fleet that runs it -
+    // the composition and the cargo it was refitted to, both from the store
+    // (the M6 rule). A reinforcement that stopped at six would leave an era
+    // line permanently under-crewed against the projection it was built on
+    // (D-250).
+    const leadVehicle = crewIds[0]!;
+    const leadConsist = world.vehicles.consist[leadVehicle]!;
+    const crewSpecIds =
+      leadConsist.length > 0 ? leadConsist : [world.vehicles.specId[leadVehicle]!];
+    if (crewIds.length >= roadFleetCap(world.vehicles.refitCargo[leadVehicle]!, crewSpecIds)) {
+      continue;
+    }
 
     const loadingStop = loadingStationOf(world, lineId);
     if (loadingStop === null) continue;

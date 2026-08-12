@@ -97,6 +97,7 @@ export function openNewIndustries(world: World): void {
 
     const spot = findSpot(
       world.map,
+      world.climate,
       world.rng,
       spec,
       world.towns,

@@ -1,4 +1,4 @@
-import { Cargo, isPassengerClass } from '../cargo/types';
+import { Cargo, CARGO_COUNT, isPassengerClass } from '../cargo/types';
 import { deliveryRevenueCt, timeFactor } from '../cargo/payment';
 import { economyOutputFactor, economyRateFactor } from '../economy/curve';
 import {
@@ -6,6 +6,7 @@ import {
   AI_LIFT_REAL_SHARE,
   AI_MAX_DISTANCE,
   AI_MAX_VEHICLES_PER_LINE,
+  AI_MAX_VEHICLES_PER_LINE_ERA,
   AI_MIN_ARRIVAL_FACTOR,
   AI_MIN_DISTANCE,
   AI_MIN_PROFIT_MARGIN,
@@ -36,11 +37,13 @@ import {
   ROAD_UPKEEP_PER_TILE_CT,
   CARGO_MAX_WAIT_DAYS,
   STATION_CATCHMENT_SCAN_RADIUS,
+  START_YEAR,
+  MapClimate,
   TICKS_PER_DAY,
 } from '../constants';
 import { adviseFleet } from '../lines/metrics';
 import { pickRoadVehicle, pickTrain } from './build';
-import { capacityFor, vehicleSpec } from '../vehicles/catalog';
+import { availableVehicles, capacityFor, VehicleKind, vehicleSpec } from '../vehicles/catalog';
 import { industryBaseOutput, industrySpec, type Industry } from '../industry/types';
 import type { Town } from '../town/types';
 import { RAIL_TYPE_COST_CT, RAIL_TYPE_UPKEEP_CT, RailType } from '../map/track';
@@ -335,7 +338,9 @@ function collectFor(
     // terrain (measured, ten railways of ten - the constant carries the
     // count). Both the drain gate and the profitability floor below are quoted
     // for it, because they are two halves of one question about one line.
-    const cap = opportunity.rail ? AI_RAIL_PROJECTED_TRAINS : AI_MAX_VEHICLES_PER_LINE;
+    const cap = opportunity.rail
+      ? AI_RAIL_PROJECTED_TRAINS
+      : roadFleetCap(opportunity.cargo, specIds);
     const maxLift = cap * liftUnits * roundsPerMonth * AI_LIFT_REAL_SHARE;
     // The fleet must OUT-lift a decaying source, not merely match it: a pile
     // it can never eat pins at a month of age and pays the floor for ever
@@ -719,6 +724,76 @@ export function loadUnitsOf(specIds: readonly number[], cargo: number): number {
   let units = 0;
   for (const specId of specIds) units += capacityFor(vehicleSpec(specId), cargo as Cargo);
   return units;
+}
+
+/**
+ * The lift the 1950 catalogue's own road vehicle gives for a cargo, by cargo.
+ *
+ * Built on first use from the catalogue with `pickRoadVehicle`'s own rule -
+ * the biggest capacity on the market that carries the load - asked in
+ * START_YEAR. Derived rather than written down, so a catalogue edit moves it
+ * on the same commit; built once, because it is a pure function of a `const`
+ * table.
+ */
+let referenceLift: Int32Array | null = null;
+
+function referenceLiftOf(cargo: number): number {
+  if (referenceLift === null) {
+    const table = new Int32Array(CARGO_COUNT);
+    for (const spec of availableVehicles(VehicleKind.Road, START_YEAR, MapClimate.Temperate)) {
+      for (let one = 0; one < CARGO_COUNT; one++) {
+        const capacity = capacityFor(spec, one as Cargo);
+        if (capacity > table[one]!) table[one] = capacity;
+      }
+    }
+    referenceLift = table;
+  }
+  return referenceLift[cargo] ?? 0;
+}
+
+/**
+ * Most road vehicles this competitor will put on ONE line - the cap read as a
+ * LIFT rather than as a count (D-250).
+ *
+ * {@link AI_MAX_VEHICLES_PER_LINE} is six, and six is what every AI band in
+ * the project was measured with. It is a lift only while the vehicle is the
+ * one it was measured on: six 1950 omnibuses are 900 seats a round, six 1850
+ * omnibuses are 270, and the drain gate and the profitability floor are both
+ * quoted against that number. Measured on seed 987,654 at 1850 - the identical
+ * world, the identical towns, the identical pairs - every large town pair
+ * failed the drain gate and every pair that survived it projected at most
+ * 0.834 against the 1.25 floor, so THREE competitors issued zero commands in
+ * six game years.
+ *
+ * So an ERA vehicle - one the pre-1950 catalogue holds, `introYear <
+ * START_YEAR`, the same named rule D-245 gates that catalogue with - gets as
+ * many vehicles as give the lift six of the 1950 vehicle for the same cargo
+ * would, up to {@link AI_MAX_VEHICLES_PER_LINE_ERA}.
+ *
+ * **A 1950 world is untouched by construction, not by measurement**: the era
+ * catalogue closes in 1949, so no spec available from START_YEAR on can enter
+ * the branch below, and the function returns the bare constant for every year
+ * the game has ever been balanced in. `tests/unit/aiEraFleet.spec.ts` asserts
+ * that over every cargo and every year from 1950 to 2050.
+ *
+ * Rail is deliberately NOT scaled. {@link AI_RAIL_MAX_TRAINS} is a SIGNALLING
+ * limit - two trains are what the one-way oval was proved deadlock-free with
+ * (D-153) - and a third steam engine on that ring buys waiting, not lift.
+ */
+export function roadFleetCap(cargo: number, specIds: readonly number[]): number {
+  let era = false;
+  for (let i = 0; i < specIds.length; i++) {
+    if (vehicleSpec(specIds[i]!).introYear < START_YEAR) era = true;
+  }
+  if (!era) return AI_MAX_VEHICLES_PER_LINE;
+
+  const lift = loadUnitsOf(specIds, cargo);
+  const reference = referenceLiftOf(cargo);
+  if (lift <= 0 || reference <= lift) return AI_MAX_VEHICLES_PER_LINE;
+
+  const scaled = Math.round((AI_MAX_VEHICLES_PER_LINE * reference) / lift);
+  if (scaled > AI_MAX_VEHICLES_PER_LINE_ERA) return AI_MAX_VEHICLES_PER_LINE_ERA;
+  return scaled < AI_MAX_VEHICLES_PER_LINE ? AI_MAX_VEHICLES_PER_LINE : scaled;
 }
 
 /**

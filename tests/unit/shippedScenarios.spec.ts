@@ -313,11 +313,19 @@ const SCENARIO_WORLD_CLAIMS: Readonly<Record<string, WorldClaim>> = {
   // set. The ground is untouched - every corridor figure below is the one the
   // pre-M23 world measured, to the decimal, because the climate reaches the
   // NAMES and the industry table and nothing that places a town.
+  //
+  // **The industry figures moved with D-249 and the reason is the defect it
+  // fixed**: an arctic map is snow, and until that entry only the two MINES
+  // stood on a rule that named snow - so this world grew three coal mines, two
+  // iron ore mines and nothing at all that takes either. It grows eleven works
+  // now, a power station and a steel mill among them. The towns, the corridor
+  // and every figure the briefing quotes are untouched: the climate table
+  // reaches what may STAND somewhere, never where a town goes.
   gebirgslogistik: {
     townsTotal: 40,
     citiesAt8000: 3,
     townsAt2500: 16,
-    industries: 5,
+    industries: 11,
     inhabitedLandmasses: 2,
     towns: [
       [3, 'Wrenmoor', 8_000],
@@ -337,14 +345,18 @@ const SCENARIO_WORLD_CLAIMS: Readonly<Record<string, WorldClaim>> = {
       },
     ],
     industriesOfType: [
-      [IndustryType.CoalMine, 3],
-      [IndustryType.IronOreMine, 2],
+      [IndustryType.CoalMine, 1],
+      [IndustryType.IronOreMine, 5],
+      [IndustryType.PowerPlant, 1],
+      [IndustryType.SteelMill, 1],
+      [IndustryType.OilWell, 2],
+      [IndustryType.MachineFactory, 1],
     ],
-    // Still true, and for a sharper reason than before: the arctic set HAS a
-    // power station and a steel mill in it - they are core, every climate has
-    // them - and this small map grew neither, so three coal mines and two iron
-    // ore mines stand on a map with nobody to sell to.
-    cargoWithoutAcceptor: Cargo.Coal,
+    // `cargoWithoutAcceptor: Cargo.Coal` stood here and is GONE, because it is
+    // no longer true and was never a property worth having: this map grows a
+    // power station and a steel mill now, so the one coal mine has two takers.
+    // The tonnage goal still counts passengers, and now because a mountain
+    // scenario is about the corridor rather than because the world was broken.
   },
   // "Heathermoor ... liegt auf einer Insel. Lower-Falconhaven ... liegt 52
   // Tiles entfernt auf dem Festland. Dazwischen ist offenes Meer."
@@ -352,11 +364,16 @@ const SCENARIO_WORLD_CLAIMS: Readonly<Record<string, WorldClaim>> = {
   // English names and the tropical industry set since SPEC2 M23 (D-246); the
   // three land masses, their sizes, the corridor and both populations are the
   // world this scenario always described.
+  //
+  // Twelve works since D-249, nine before it: a `NEAR_TOWN` rule reached 5.8 %
+  // of a rainforest map, so this world grew no furniture factory and no
+  // machine works - the timber arm's terminal works missing from the climate
+  // that owns it. The islands and the sea between them are untouched.
   inselhuepfen: {
     townsTotal: 40,
     citiesAt8000: 2,
     townsAt2500: 12,
-    industries: 9,
+    industries: 12,
     inhabitedLandmasses: 3,
     towns: [
       [23, 'Lower-Falconhaven', 8_000],
