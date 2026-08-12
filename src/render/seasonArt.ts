@@ -4,12 +4,14 @@ import {
   MAX_HEIGHT,
   SEA_LEVEL,
   SEASON_FRICTION_GAIN,
+  START_YEAR,
   type MapClimate,
 } from '../sim/constants';
 import { Terrain, TERRAIN_COUNT } from '../sim/map/terrain';
 import { winterFrictionFactor } from '../sim/weather/seasons';
 import { shade } from './shapes';
 import { architectureFor } from './townArchitecture';
+import { eraSpecFor, TOWN_ERA_COUNT, townEraFor, type TownEra } from './townEra';
 
 /**
  * The pure half of the seasonal optics (SPEC2 M18: "Saison-Optik: Atlas-Seiten
@@ -138,13 +140,28 @@ export interface SeasonLook {
    * "the artwork these pages hold is out of date".
    */
   readonly climate: MapClimate;
+  /**
+   * The era the published YEAR builds in (SPEC2 M23, era optics).
+   *
+   * It rides here for exactly the reason the climate does, one bundle on: the
+   * six town cells are repainted against the LOOK, and the era is the third
+   * thing that changes what they hold. A world crosses two era boundaries in
+   * a century and every month asks the same question, so folding it into the
+   * one key is what keeps the answer free in the months where nothing moved.
+   */
+  readonly era: TownEra;
 }
 
-export function seasonLookFor(month: number, climate: MapClimate): SeasonLook {
+export function seasonLookFor(
+  month: number,
+  climate: MapClimate,
+  year: number = START_YEAR,
+): SeasonLook {
   return {
     stage: seasonStageFor(month, climate),
     snowLine: snowLineFor(month, climate),
     climate,
+    era: townEraFor(year),
   };
 }
 
@@ -158,7 +175,8 @@ export function seasonLookFor(month: number, climate: MapClimate): SeasonLook {
  * NOT part of it - two months that look the same are the same key.
  */
 export function seasonKeyOf(look: SeasonLook): number {
-  return (look.stage * (MAX_HEIGHT + 2) + look.snowLine) * MAP_CLIMATE_COUNT + look.climate;
+  const seasonal = (look.stage * (MAX_HEIGHT + 2) + look.snowLine) * MAP_CLIMATE_COUNT;
+  return (seasonal + look.climate) * TOWN_ERA_COUNT + look.era;
 }
 
 /**
@@ -318,15 +336,17 @@ export function planSeasonRepaint(from: SeasonLook, to: SeasonLook, out: number[
     if (current.colour === target.colour && current.speckle === target.speckle) continue;
     out[count++] = terrain;
   }
-  // Two things move the town cells and they go through the SAME job: the
-  // roofs taking snow (M18) and the climate's own architecture (SPEC2 M23,
-  // D-246). A world's climate changes exactly once - when the simulation
-  // announces it - and that one change has to repaint the six cells even
-  // though no season moved, which is why the comparison is on the LOOK and
-  // not on the stage alone.
+  // THREE things move the town cells and they go through the SAME job: the
+  // roofs taking snow (M18), the climate's own architecture (SPEC2 M23,
+  // D-246) and the era the calendar has reached (SPEC2 M23, era optics). A
+  // world's climate changes exactly once - when the simulation announces it -
+  // and its era twice in a century, and each of those has to repaint the six
+  // cells even though no season moved, which is why the comparison is on the
+  // LOOK and not on the stage alone.
   if (
     roofSnowFor(from.stage) !== roofSnowFor(to.stage) ||
-    architectureFor(from.climate) !== architectureFor(to.climate)
+    architectureFor(from.climate) !== architectureFor(to.climate) ||
+    eraSpecFor(from.era) !== eraSpecFor(to.era)
   ) {
     out[count++] = SEASON_JOB_BUILDINGS;
   }

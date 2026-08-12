@@ -4,6 +4,7 @@ import {
   SEA_LEVEL,
   SEASON_AMPLITUDE_MAX,
   SEASON_CLIMATE_AMPLITUDE,
+  SEASON_CLIMATE_HEAT,
   SEASON_CLIMATE_WINTER,
   SEASON_FARM_OUTPUT_PERCENT,
   SEASON_FORESTRY_OUTPUT_PERCENT,
@@ -12,6 +13,7 @@ import {
   SEASON_WINTER_SEVERITY_PERCENT,
   TICKS_PER_DAY,
   WEATHER_FROST_FULL_SEVERITY,
+  WEATHER_HEAT_SEASON,
   type MapClimate,
 } from '../constants';
 import { IndustryType } from '../industry/types';
@@ -151,6 +153,41 @@ export function winterFrictionFactor(month: number, height: number, climate: Map
  */
 export function frostSeasonFactor(month: number, climate: MapClimate): number {
   return winterSeverity(month, SEA_LEVEL, climate) / WEATHER_FROST_FULL_SEVERITY;
+}
+
+/**
+ * Seasonal gate on the HEAT weight of the weather field, for this month and
+ * climate (SPEC2 M23). [multiplier on `WEATHER_BASE_WEIGHT[rule][Heat]`]
+ *
+ * The other half of D-204, and the residual that entry named: the frost gate
+ * became climate-aware and the heat gate stayed a bare month table, so an
+ * arctic July and a desert July were the same July. D-204 refused to fix it
+ * there for a stated reason - there is no summer term in the season tables to
+ * REUSE, so a climate-aware heat gate means inventing a column - and booked it
+ * to M23's climate sets, where inventing content is what the milestone is for
+ * (E-17).
+ *
+ * So this is deliberately NOT `frostSeasonFactor`'s shape: that one reads the
+ * ground's own winter curve because a winter curve exists, and this one
+ * multiplies the sky's month table by {@link SEASON_CLIMATE_HEAT} because
+ * nothing else in the game knows how hot a climate is. The properties that
+ * follow are the ones a matrix can check:
+ *
+ *  - **a temperate world is bit-identical** to the one M18 shipped, because
+ *    the temperate column is an exact 1 - so the reference coal line's winter
+ *    band is not silently recalibrated by a fix aimed at the other three;
+ *  - **the desert is the hottest sky and the arctic the coolest**, by a factor
+ *    of eleven, in every month that has any heat at all;
+ *  - **there is still no heat in January anywhere**, because the month table
+ *    is a hard zero there and zero times anything is zero - which also means a
+ *    standing heat wave cannot survive into October, since a zero weight beats
+ *    the persistence bonus.
+ *
+ * Height is not a parameter here for the same reason it is not one for the
+ * frost gate: a weather cell covers a whole region and every height in it.
+ */
+export function heatSeasonFactor(month: number, climate: MapClimate): number {
+  return (WEATHER_HEAT_SEASON[month] ?? 0) * (SEASON_CLIMATE_HEAT[climate] ?? 1);
 }
 
 /**

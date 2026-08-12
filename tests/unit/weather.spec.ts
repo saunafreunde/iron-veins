@@ -18,12 +18,15 @@ import {
   TICKS_PER_YEAR,
   WEATHER_CELL_COUNT,
   WEATHER_GRID_SIZE,
+  SEASON_CLIMATE_HEAT,
+  WEATHER_HEAT_SEASON,
   WEATHER_REGION_COUNT,
   WeatherCell,
   WeatherRule,
 } from '../../src/sim/constants';
 import { decodeSave, encodeSave } from '../../src/sim/save/serialize';
 import { weatherRegionOf } from '../../src/sim/weather/field';
+import { heatSeasonFactor } from '../../src/sim/weather/seasons';
 import { writeWeatherBlock } from '../../src/sim/weather/snapshot';
 import { updateWeather } from '../../src/sim/weather/update';
 import { NewsCategory } from '../../src/sim/news/log';
@@ -319,6 +322,67 @@ describe('the field evolves', () => {
     expect(arctic).toBeGreaterThan(temperate);
     expect(temperate).toBeGreaterThan(desert);
     expect(desert).toBeGreaterThan(0);
+  });
+
+  it('bakes the desert harder than the tropics and the arctic least (SPEC2 M23)', () => {
+    // The mirror of the frost test above, and the residual D-204 named: until
+    // M23 the heat gate was a bare month table, so an arctic July and a desert
+    // July were the same July. Same seed, same map, same rule; only the
+    // climate differs, and `SEASON_CLIMATE_HEAT` is what they read back.
+    const heatShare = (climate: MapClimate): number => {
+      const world = World.create({
+        seed: SEED,
+        difficulty: Difficulty.Normal,
+        climate,
+        mapSize: MAP_SIZE,
+        companyName: 'Wetterdienst',
+        companyColorIndex: 1,
+        weather: WeatherRule.Harsh,
+      });
+      const queue = new CommandQueue();
+      let heat = 0;
+      let sampled = 0;
+      for (let i = 0; i < TICKS_PER_YEAR; i++) {
+        world.step(queue, null);
+        if (world.tick % TICKS_PER_DAY !== 0) continue;
+        heat += census(world)[WeatherCell.Heat]!;
+        sampled += WEATHER_REGION_COUNT;
+      }
+      return heat / sampled;
+    };
+
+    const desert = heatShare(MapClimate.Desert);
+    const tropical = heatShare(MapClimate.Tropical);
+    const temperate = heatShare(MapClimate.Temperate);
+    const arctic = heatShare(MapClimate.Arctic);
+    console.log(
+      `heat share of region-days over one harsh year: desert ${(desert * 100).toFixed(1)} %, ` +
+        `tropical ${(tropical * 100).toFixed(1)} %, temperate ${(temperate * 100).toFixed(1)} %, ` +
+        `arctic ${(arctic * 100).toFixed(1)} %`,
+    );
+    expect(desert).toBeGreaterThan(tropical);
+    expect(tropical).toBeGreaterThan(temperate);
+    expect(temperate).toBeGreaterThan(arctic);
+    // A heat wave in the arctic is rare, not impossible - the column is 0.2
+    // and not a zero, so this is a real weather state there.
+    expect(arctic).toBeGreaterThan(0);
+  });
+
+  it('leaves the temperate sky bit-identical to the one M18 shipped', () => {
+    // The construction that lets M23 add a climate column without re-banding
+    // M18's winter (Fehlerkatalog 34): the temperate entry is an exact 1, so
+    // the gate is the month table itself and every temperate weather-on
+    // measurement in this project still measures the same sky.
+    expect(SEASON_CLIMATE_HEAT[MapClimate.Temperate]).toBe(1);
+    for (let month = 0; month < 12; month++) {
+      expect(heatSeasonFactor(month, MapClimate.Temperate), `month ${month}`).toBe(
+        WEATHER_HEAT_SEASON[month],
+      );
+      // And no climate can conjure heat into a month that has none.
+      for (const climate of [MapClimate.Arctic, MapClimate.Tropical, MapClimate.Desert]) {
+        if (WEATHER_HEAT_SEASON[month] === 0) expect(heatSeasonFactor(month, climate)).toBe(0);
+      }
+    }
   });
 
   it('has no frost in July and no heat in January, whatever was standing', () => {

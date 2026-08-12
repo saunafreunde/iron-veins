@@ -22,7 +22,7 @@ import {
   snowedRoof,
   terrainLook,
 } from './seasonArt';
-import { architectureFor } from './townArchitecture';
+import { TownEra, townCellShape, townPalette } from './townEra';
 import {
   box,
   catenaryMast,
@@ -245,7 +245,7 @@ export interface TerrainAtlas {
    * texture source, which is what lets a regeneration run over several frames
    * and still swap seasons in one frame (MapView).
    */
-  repaintSeasonJob(job: number, stage: SeasonStage, climate: MapClimate): number;
+  repaintSeasonJob(job: number, stage: SeasonStage, climate: MapClimate, era: TownEra): number;
 }
 
 /** Corner offsets of the base diamond inside a cell, in draw order N-E-S-W. */
@@ -898,9 +898,9 @@ function drawTownBuilding(
   emissiveOnly = false,
   stage: SeasonStage = SeasonStage.Summer,
   climate: MapClimate = MapClimate.Temperate,
+  era: TownEra = TownEra.Gable,
 ): void {
   const snow = roofSnowFor(stage);
-  const build = architectureFor(climate);
   const view: IsoView = {
     cx: originX + TILE_W / 2,
     cy: originY + CELL_TOP + TILE_H / 2,
@@ -908,71 +908,78 @@ function drawTownBuilding(
     halfH: TILE_H / 2,
   };
   const px = ATLAS_SCALE;
-  const grow = level;
+  // Geometry and palette both come from `townEra.ts`, and neither is written
+  // out here: the shape function is what the D-206 proportion rule MEASURES
+  // (SPEC2 M23), so a cell that is drawn taller than the rule allows is not
+  // expressible - the drawing and the rule read one table. The climate
+  // (D-246) picks the material and the era mixes it towards its century.
+  const shape = townCellShape(kind, level, era, climate);
+  const u = shape.u;
+  const v = shape.v;
 
   if (kind === 0) {
     // Residential: a house, taller and with more windows as the town grows.
-    const height = (9 + grow * 7) * px;
-    const w = 0.5 + grow * 0.06;
-    if (!emissiveOnly) contactShadow(ctx, view, { u: w, v: w * 0.78 });
-    if (!emissiveOnly) box(ctx, view, { u: w, v: w * 0.78, height, colour: build.houseWall });
+    const paint = townPalette(kind, climate, era, '#5d7f92');
+    const height = shape.wall * px;
+    if (!emissiveOnly) contactShadow(ctx, view, { u, v });
+    if (!emissiveOnly) box(ctx, view, { u, v, height, colour: paint.wall });
     windows(ctx, view, {
-      u: w,
-      v: w * 0.78,
+      u,
+      v,
       height,
-      rows: 1 + grow,
-      columns: 2,
-      colour: emissiveOnly ? EMISSIVE_WINDOW_HEX : '#5d7f92',
+      rows: shape.windowRows,
+      columns: shape.windowColumns,
+      colour: emissiveOnly ? EMISSIVE_WINDOW_HEX : paint.glazing,
     });
     if (emissiveOnly) return;
     gableRoof(ctx, view, {
-      u: w,
-      v: w * 0.78,
+      u,
+      v,
       base: height,
-      rise: (6 + grow) * px * build.roofPitch,
-      colour: snowedRoof(build.houseRoof, snow),
+      rise: shape.roof * px,
+      colour: snowedRoof(paint.roof, snow),
     });
     return;
   }
 
   if (kind === 1) {
     // Commercial: a flat block, all glass, and the tallest thing in a town.
-    const height = (15 + grow * 12) * px;
-    const w = 0.54 + grow * 0.05;
-    if (!emissiveOnly) contactShadow(ctx, view, { u: w, v: w * 0.86 });
-    if (!emissiveOnly) box(ctx, view, { u: w, v: w * 0.86, height, colour: build.blockWall });
+    const paint = townPalette(kind, climate, era, '#3f6f88');
+    const height = shape.wall * px;
+    if (!emissiveOnly) contactShadow(ctx, view, { u, v });
+    if (!emissiveOnly) box(ctx, view, { u, v, height, colour: paint.wall });
     windows(ctx, view, {
-      u: w,
-      v: w * 0.86,
+      u,
+      v,
       height,
-      rows: 3 + grow,
-      columns: 3,
-      colour: emissiveOnly ? EMISSIVE_WINDOW_HEX : '#3f6f88',
+      rows: shape.windowRows,
+      columns: shape.windowColumns,
+      colour: emissiveOnly ? EMISSIVE_WINDOW_HEX : paint.glazing,
     });
     if (emissiveOnly) return;
     box(ctx, view, {
-      u: w * 0.4,
-      v: w * 0.34,
-      height: 3 * px,
-      colour: snowedRoof(build.blockRoof, snow),
+      u: u * 0.4,
+      v: u * 0.34,
+      height: shape.roof * px,
+      colour: snowedRoof(paint.roof, snow),
       base: height,
     });
     return;
   }
 
   // Industrial: a low shed with a north-light roof.
-  const height = (8 + grow * 4) * px;
-  const w = 0.62 + grow * 0.06;
-  if (!emissiveOnly) contactShadow(ctx, view, { u: w, v: w * 0.7 });
-  if (!emissiveOnly) box(ctx, view, { u: w, v: w * 0.7, height, colour: build.shedWall });
+  const paint = townPalette(kind, climate, era, '#82aebf');
+  const height = shape.wall * px;
+  if (!emissiveOnly) contactShadow(ctx, view, { u, v });
+  if (!emissiveOnly) box(ctx, view, { u, v, height, colour: paint.wall });
   sawtoothRoof(ctx, view, {
-    u: w,
-    v: w * 0.7,
+    u,
+    v,
     base: height,
-    rise: 3 * px,
+    rise: shape.roof * px,
     teeth: 2,
-    colour: snowedRoof(build.shedRoof, snow),
-    glass: emissiveOnly ? EMISSIVE_WINDOW_HEX : '#82aebf',
+    colour: snowedRoof(paint.roof, snow),
+    glass: emissiveOnly ? EMISSIVE_WINDOW_HEX : paint.glazing,
     glassOnly: emissiveOnly,
   });
 }
@@ -1591,7 +1598,12 @@ export function buildTerrainAtlas(): TerrainAtlas {
    * repaint that only painted over would leave the previous season showing
    * wherever the new artwork happens not to reach.
    */
-  const repaintSeasonJob = (job: number, stage: SeasonStage, climate: MapClimate): number => {
+  const repaintSeasonJob = (
+    job: number,
+    stage: SeasonStage,
+    climate: MapClimate,
+    era: TownEra,
+  ): number => {
     if (job === SEASON_JOB_BUILDINGS) {
       for (let variant = 0; variant < BUILDING_VARIANTS; variant++) {
         const kind = variant % 3;
@@ -1610,6 +1622,7 @@ export function buildTerrainAtlas(): TerrainAtlas {
           false,
           stage,
           climate,
+          era,
         );
         // The twin, from the same call site in the same pass.
         ctx.clearRect(variant * CELL_W, EMISSIVE_ROW * CELL_H, CELL_W, CELL_H);
@@ -1622,6 +1635,7 @@ export function buildTerrainAtlas(): TerrainAtlas {
           true,
           stage,
           climate,
+          era,
         );
       }
       return BUILDING_VARIANTS * 2;
@@ -1731,6 +1745,7 @@ interface DetailCellSpec {
 function detailCellSpecs(
   stage: SeasonStage = SeasonStage.Summer,
   climate: MapClimate = MapClimate.Temperate,
+  era: TownEra = TownEra.Gable,
 ): readonly DetailCellSpec[] {
   const specs: DetailCellSpec[] = [];
 
@@ -1823,7 +1838,7 @@ function detailCellSpecs(
       key: `b${variant}`,
       tall: true,
       seasonJob: SEASON_JOB_BUILDINGS,
-      draw: (ctx) => drawTownBuilding(ctx, 0, 0, kind, level, false, stage, climate),
+      draw: (ctx) => drawTownBuilding(ctx, 0, 0, kind, level, false, stage, climate, era),
     });
   }
 
@@ -1940,9 +1955,14 @@ export function buildDetailAtlas(): TerrainAtlas {
    * page has no emissive row (D-172: it stands full at 4096x4096 and every
    * zoom composites its glow from the base page).
    */
-  const repaintSeasonJob = (job: number, stage: SeasonStage, climate: MapClimate): number => {
+  const repaintSeasonJob = (
+    job: number,
+    stage: SeasonStage,
+    climate: MapClimate,
+    era: TownEra,
+  ): number => {
     let painted = 0;
-    for (const spec of detailCellSpecs(stage, climate)) {
+    for (const spec of detailCellSpecs(stage, climate, era)) {
       if (spec.seasonJob !== job) continue;
       paint(spec);
       painted++;

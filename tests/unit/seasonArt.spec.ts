@@ -16,6 +16,7 @@ import {
   terrainLook,
   terrainTakesSnow,
 } from '../../src/render/seasonArt';
+import { TownEra } from '../../src/render/townEra';
 import { TERRAIN_COLORS } from '../../src/shared/palette';
 import {
   MapClimate,
@@ -205,10 +206,15 @@ describe('what a season change repaints', () => {
    * is the season question asked exactly as it was before that bundle; the
    * climate half has its own test at the end of this block.
    */
-  const at = (stage: SeasonStage, climate: MapClimate = MapClimate.Temperate): SeasonLook => ({
+  const at = (
+    stage: SeasonStage,
+    climate: MapClimate = MapClimate.Temperate,
+    era: TownEra = TownEra.Gable,
+  ): SeasonLook => ({
     stage,
     snowLine: SNOW_LINE_NONE,
     climate,
+    era,
   });
 
   it('lists exactly the terrains whose look moved, and no others', () => {

@@ -399,6 +399,7 @@ import {
   terrainTakesSnow,
   type SeasonLook,
 } from './seasonArt';
+import { bakedBuildingsAllowedIn, TownEra } from './townEra';
 import {
   precipitationFor,
   WEATHER_SPAWN_ATTEMPTS,
@@ -895,16 +896,19 @@ export class MapView {
     stage: SeasonStage.Summer,
     snowLine: SNOW_LINE_NONE,
     climate: MapClimate.Temperate,
+    era: TownEra.Gable,
   };
   private pendingSeason: SeasonLook = {
     stage: SeasonStage.Summer,
     snowLine: SNOW_LINE_NONE,
     climate: MapClimate.Temperate,
+    era: TownEra.Gable,
   };
   private appliedSeasonKey = seasonKeyOf({
     stage: SeasonStage.Summer,
     snowLine: SNOW_LINE_NONE,
     climate: MapClimate.Temperate,
+    era: TownEra.Gable,
   });
   private pendingSeasonKey = this.appliedSeasonKey;
   /**
@@ -1468,9 +1472,16 @@ export class MapView {
    *
    * Called once a game month by the interface, not per frame: the regeneration
    * it may ask for is debounced and runs over the following frames.
+   *
+   * **The YEAR is the third input since SPEC2 M23**, and it arrives the same
+   * way both others do - out of the published snapshot, never out of a saved
+   * render state. That is the whole of the era acceptance sentence: a world
+   * started in 1950 and loaded at a 2049 tick announces 2049 here on its first
+   * calendar message, so the regeneration that follows paints the 2049 town.
+   * There is nothing to migrate because there is nothing stored.
    */
-  setSeason(month: number, climate: MapClimate): void {
-    const look = seasonLookFor(month, climate);
+  setSeason(month: number, climate: MapClimate, year: number): void {
+    const look = seasonLookFor(month, climate, year);
     this.pendingSeason = look;
     this.pendingSeasonKey = seasonKeyOf(look);
     // The climate also chooses the tree family (M13). It is a world constant,
@@ -2253,6 +2264,7 @@ export class MapView {
   private runSeasonSteps(): void {
     const stage = this.seasonTarget.stage;
     const climate = this.seasonTarget.climate;
+    const era = this.seasonTarget.era;
     for (let step = 0; step < SEASON_REPAINT_STEPS_PER_FRAME; step++) {
       if (this.seasonJobAt >= this.seasonJobCount) break;
       const page = this.seasonJobPage === 0 ? this.basePage! : this.detailPage!;
@@ -2261,6 +2273,7 @@ export class MapView {
         this.seasonJobs[this.seasonJobAt]!,
         stage,
         climate,
+        era,
       );
       this.seasonRegenMs += performance.now() - started;
       if (this.seasonJobPage === 0) {
@@ -2864,6 +2877,16 @@ export class MapView {
     x: number,
     y: number,
   ): BakedCellHandle | null {
+    // Past the gable era the bake has no cell to offer and the procedural one
+    // does (SPEC2 M23, era optics): the Kenney city kits are one century's
+    // architecture, D-206 removed its towers for being the wrong one, and the
+    // era axis in the BAKE is the booking this bundle deliberately does not
+    // spend. Refused HERE rather than in `staticArt.ts`, beside the tile's own
+    // draw, which is the D-205 device for the three industries that are
+    // procedural by name - and E-14's own rule: procedural is what fills the
+    // eras the kits do not reach. The applied look is read, never the pending
+    // one, so the sprites and the artwork on the page are the same era.
+    if (!bakedBuildingsAllowedIn(this.appliedSeason.era)) return null;
     const variant = staticVariantFor(
       index,
       buildingTargetFor(kind, level),

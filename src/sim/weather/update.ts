@@ -5,7 +5,6 @@ import {
   WEATHER_BASE_WEIGHT,
   WEATHER_CELL_COUNT,
   WEATHER_GRID_SIZE,
-  WEATHER_HEAT_SEASON,
   WEATHER_NEIGHBOUR_PULL,
   WEATHER_PERSISTENCE,
   WEATHER_STREAM_NAME,
@@ -14,7 +13,7 @@ import {
 } from '../constants';
 import { streamSalt } from '../rng';
 import type { World } from '../World';
-import { frostSeasonFactor } from './seasons';
+import { frostSeasonFactor, heatSeasonFactor } from './seasons';
 
 /**
  * Advance the weather field by one game day (SPEC2 M18, E-01).
@@ -70,10 +69,11 @@ export function updateWeather(world: World): void {
   // depend on the calendar and the world's climate and on nothing a region
   // holds. The frost gate is the season's own winter curve (D-204), so a
   // tropical January cannot freeze and an arctic one freezes harder and for
-  // longer; the heat gate is still a bare month table and `WEATHER_HEAT_SEASON`
-  // says why.
+  // longer; the heat gate is the same question answered for summer since SPEC2
+  // M23 (`heatSeasonFactor`), which is what stops an arctic July and a desert
+  // July from being the same July.
   const frostGate = frostSeasonFactor(month, world.climate);
-  const heatGate = WEATHER_HEAT_SEASON[month]!;
+  const heatGate = heatSeasonFactor(month, world.climate);
   const stream = world.streamFor((streamSalt(WEATHER_STREAM_NAME) + day) | 0);
 
   for (let row = 0; row < WEATHER_GRID_SIZE; row++) {

@@ -152,6 +152,18 @@ export function flatScenario(
    * playable on the same controlled worlds (D-245).
    */
   startYear: number = START_YEAR,
+  /**
+   * The world's climate (SPEC2 M23, D-246). `Temperate` by default and in
+   * every band measured before the climate matrix: the temperate set IS the
+   * whole catalogue, so a temperate world is the world every number in
+   * section 19.4 was measured on and goes on being measured on.
+   *
+   * It is a parameter because SPEC2 M23 asks for scenarios 1-4 banded PER
+   * CLIMATE, and a matrix that built its own worlds would be measuring four
+   * different economies rather than one economy under four climates (the
+   * D-187 rule this file already lives by).
+   */
+  climate: MapClimate = MapClimate.Temperate,
 ): Scenario {
   const map = new TileMap(size);
   map.cornerHeight.fill(GROUND_HEIGHT);
@@ -171,7 +183,7 @@ export function flatScenario(
     {
       seed,
       difficulty: Difficulty.Normal,
-      climate: MapClimate.Temperate,
+      climate,
       mapSize: size,
       companyName: 'Balancing AG',
       companyColorIndex: 1,
@@ -232,6 +244,8 @@ export function twoTownScenario(
   population: number,
   distance: number,
   startYear: number = START_YEAR,
+  climate: MapClimate = MapClimate.Temperate,
+  weather: WeatherRule = WeatherRule.Off,
 ): TwoTownScenario {
   const y = SCENARIO_SIZE >> 1;
   const startX = (SCENARIO_SIZE - distance) >> 1;
@@ -245,10 +259,11 @@ export function twoTownScenario(
     1,
     0,
     true,
-    WeatherRule.Off,
+    weather,
     false,
     false,
     startYear,
+    climate,
   );
   return { ...scenario, townA, townB };
 }

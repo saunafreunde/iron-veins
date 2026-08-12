@@ -211,6 +211,7 @@ export function MapCanvas({ client }: { readonly client: SimClient }): ReactElem
   const dayNight = useSimStore((s) => s.settings.dayNight);
   const editorOverlay = useSimStore((s) => s.editorOverlay);
   const month = useSimStore((s) => s.month);
+  const year = useSimStore((s) => s.year);
   const climate = useSimStore((s) => s.climate);
 
   useEffect(() => {
@@ -641,8 +642,12 @@ export function MapCanvas({ client }: { readonly client: SimClient }): ReactElem
     // world's climate, pushed once a game month rather than read per frame.
     // What the view does with it - repaint the atlas, move the snow line - is
     // debounced and asynchronous (D-202).
-    viewRef.current?.setSeason(month, climate);
-  }, [month, climate]);
+    // The YEAR joins them in SPEC2 M23: it chooses the town-building era, and
+    // it comes out of the same published calendar - so a save started in 1950
+    // and loaded at a 2049 tick shows 2049 architecture on the first message,
+    // with no saved render state anywhere in the path.
+    viewRef.current?.setSeason(month, climate, year);
+  }, [month, year, climate]);
 
   useEffect(() => {
     // The deadlock markers of section 9.3. The clock lives per vehicle in the

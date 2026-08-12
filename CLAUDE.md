@@ -194,6 +194,15 @@ the rest is its own session with its own diff.
   | 1 (1878) omnibus, 12 tiles, 4 buses | payback 3-7 yr | year 5 | the era passenger tariffs |
   | 2 (1878) coal railway, scenario 2's own track | payback 10-14 yr | year 12 | what an era engine is worth on the same line |
 
+  Since SPEC2 M23 bundle 4 the first FOUR rows also run per CLIMATE
+  (`tests/balance/climateMatrix.spec.ts`, D-248): the same bands in every
+  climate, plus each climate's own D-118 chain played end to end. It sweeps two
+  climates by default and all four in the `soak` job, and it carries the
+  finding that the four climates do NOT earn the same money even with every
+  rule off - the yearly industry opening draws its type from the climate's own
+  weight table on the shared stream, so two climates part company at the first
+  year boundary. Read D-248 before reading a per-climate difference as a tariff.
+
   M6's acceptance criterion is exactly this table being in band, and it is.
   (The wood chain's row said 166 k until SPEC2 M19 bundle 1 re-read it: the
   scenario measures 159,516 EUR/yr and did so BEFORE that bundle too, verified
@@ -813,7 +822,10 @@ perf and environment notes above.
   `scale`, and the wrong BUILDING with a remap: the four skyscrapers and
   `building-m` leave the mapping - stage 1 means "grown", not "1999" -
   and **the era axis they belong to is M23's, named, with nothing here
-  making it harder**. Found on the way: `building:industrial:1` drew
+  making it harder** - M23 bundle 4 delivered that axis PROCEDURALLY and left
+  the bake's alone (D-248): past the gable era the `building:` cells are
+  refused and the tile draws the D-117 cell, so this handoff is still open and
+  still the art bundle's. Found on the way: `building:industrial:1` drew
   SHORTER than the stage it outgrows. Trees: 0.11 tile widths against the
   procedural conifer's 0.22 reads as a spike whatever the species, and
   three trees at three fixed slot centres is a wallpaper - crowns widened,
@@ -1723,13 +1735,14 @@ running.
 - **Two of M18's four seams are structurally inert on the reference line** -
   a coal mine is neither farm nor forestry, and coal does not perish - which
   is a property of the scenario and is now written down.
-- **Heat is still climate-blind, and that is the named residual.** Frost could
-  be fixed by REUSING a table; heat cannot - there is no summer term to reuse
-  (`SEASON_CLIMATE_AMPLITUDE` is the harvest swing and is zero in the
+- **Heat was still climate-blind, and that was the named residual.** Frost
+  could be fixed by REUSING a table; heat could not - there is no summer term
+  to reuse (`SEASON_CLIMATE_AMPLITUDE` is the harvest swing and is zero in the
   tropics, which would forbid a tropical heat wave), so giving heat a climate
-  means inventing one. **M23's climate sets are where that booking belongs**,
-  and the frost-weight sweep in D-203 is still the map for whoever raises the
-  band there.
+  meant inventing one. **M23's climate sets were where that booking belonged,
+  and M23 bundle 4 spent it** (D-248): `SEASON_CLIMATE_HEAT` plus
+  `heatSeasonFactor`, temperate an exact 1, so this band did not move by a
+  euro. The frost-weight sweep in D-203 is still the map for raising it.
 - Verified by running: canonical pin `5a2a6cf73f4107bb`, corpus
   `c0a021f5d1ee8619`, soak `e6c5e33d8e7607ec` at 698 commands, all eight
   scenarios hash-identical with their audits, scenario 2 at 249,980 EUR and
@@ -2853,10 +2866,13 @@ three pins unchanged, every balance band re-run and identical to the digit.
 - **Half the sky has a climate now; the other half does not** (D-204).
   Frost is fixed - `frostSeasonFactor` is the season's own climate-aware
   curve, the tropics are an exact zero and the arctic is harder and longer.
-  **HEAT is still indexed by month alone**, so an arctic July can be a heat
+  **HEAT was indexed by month alone**, so an arctic July could be a heat
   wave, and it could not be fixed the same way because the season has no
-  summer term to reuse. **M23's climate sets are where that booking
-  belongs.** Fixing frost did NOT close M18's band gap (4.95 % -> 4.36 %,
+  summer term to reuse. **M23's climate sets were where that booking belonged,
+  and M23 bundle 4 spent it** (D-248): a `SEASON_CLIMATE_HEAT` column,
+  invented rather than reused, temperate an exact 1 - measured heat share
+  desert 7.5 % / tropical 5.0 % / temperate 2.7 % / arctic 0.4 %, with this
+  band unmoved at -4.36 %. Fixing frost did NOT close M18's band gap (4.95 % -> 4.36 %,
   the wrong way): what bounds the effect is the share of the year the
   expensive sky owns, and the frost-weight sweep in D-203 is still the map
   for raising it - honestly, in M23, not by tuning a constant here.
@@ -3771,3 +3787,107 @@ measurement from 1,040,000 to **1,048,000 B** (D-192's rule): under the old
 number the build was still green and would have left the next bundle 587 bytes.
 Split by deletion: +1,682 B the twelve i18n keys in two languages, +1,687 B the
 screen, +1,063 B the rule itself.
+
+## M23 bundle 4 - era optics, the balance matrix and the close (D-248)
+
+The milestone's last bundle: town buildings keyed by the snapshot YEAR through
+M18's own regeneration seam, scenarios 1-4 banded per climate with the D-118
+chain run beside them, and the close in SPEC2 6.1.1 and here. **No save bump,
+no migration, no snapshot byte, no protocol field, no atlas cell, no i18n
+line** - v34 is bundle 1's and this bundle neither spends nor extends it. All
+three pins unmoved (`b7e632a7124e67ce` / `a00868b9911f12d6` /
+`64fec78d6bf0cd5e`) and every 19.4 band to the cent, verified by running.
+
+- **The era is a pure function of the published year, so there is nothing to
+  save** (D-248). Three stages - gable, slab, glass - with
+  `TOWN_ERA_START_YEARS = [1850, 1975, 2005]`, so each decade SPEC2 names
+  (1950s, 1980s, 2020s) falls inside its own stage. The year has ridden the
+  snapshot since M0 (`SnapshotI32.Year`), so "a 1950 save loaded at a 2049 tick
+  shows 2049 architecture" is a construction rather than a promise: the start
+  year does not appear in the derivation at all. The era rides in `SeasonLook`,
+  folds into `seasonKeyOf` and takes exactly the buildings job in
+  `planSeasonRepaint` - D-202's seam, not a second one, and an era change that
+  coincides with a season change plans that job ONCE.
+- **The gable row is the identity**, the way `TOWN_ARCHITECTURE`'s temperate
+  row is: every factor 1, every mix 0, so a 1950 town is the town this project
+  measured D-205's chunk headroom and D-206's lift table against. An era MIXES
+  the climate's colour towards its own material rather than replacing it, or
+  D-246 would have vanished from two thirds of the century - the four climates
+  stay distinguishable in every era, and the climate's roof pitch survives the
+  era flattening it.
+- **D-206's proportion rule holds on the axis D-206 handed to M23** (D-248).
+  `townCellShape` is the table the DRAWING consumes - `drawTownBuilding` writes
+  out no geometry of its own any more - and `townCellLiftPx` measures that same
+  table: gable 1.27, slab 1.34, glass 1.43 tile heights against the 2.00 a cell
+  reserves. It is an upper BOUND (full diamond half-width even for the narrow
+  roof plant), so it errs the safe way, and it is the same number
+  `tools/bake-lib.ts` refuses a baked cell over. A needle tower is not merely
+  absent, it is not expressible.
+- **Past the gable era the bake's `building:` cells are refused and the tile
+  draws procedurally** (D-248) - E-14's own rule, which names the procedural
+  path as the filler for the eras the Kenney kits do not reach, and D-205's
+  refusal-by-name pattern. The price is stated rather than discovered: on a
+  machine with a filled asset cache a town loses the Kenney silhouettes from
+  1975 on, and gets them back when the art bundle that owns M23's ~150 booked
+  cells bakes `building:<zone>:<stage>:<era>`.
+- **The climate-blind heat gate is closed** - the residual D-204 named and
+  booked to M23. `SEASON_CLIMATE_HEAT` (temperate an exact 1, arctic 0.2,
+  tropical 1.6, desert 2.2) and `heatSeasonFactor` mirror the frost gate at the
+  same seam. Measured over one harsh game year, one seed, one map: heat share
+  of region-days desert 7.5 % / tropical 5.0 % / temperate 2.7 % / arctic
+  0.4 %. The temperate column is an exact 1 by construction, so **the hard
+  winter band did not move by a euro** (3,510,797 -> 3,357,840 EUR, -4.36 %),
+  and no climate can conjure heat into a month whose table entry is a hard
+  zero. Draw count per region-day unchanged (Z3). The month SHAPE stays
+  northern-hemisphere - a tropical January still has no heat wave - because
+  every seasonal table in the game shares that shape.
+- **The climate matrix, and the claim it falsified** (D-248).
+  `tests/balance/climateMatrix.spec.ts` holds every 19.4 band in every climate
+  (payback year 3 and year 6, wood chain 158,990-162,735 EUR, ruin in year 9).
+  It was written to assert something sharper - that with every rule off the
+  four climates measure the same money to the cent - and **that is measured
+  false**: scenario 1 earns 21,260 temperate against 14,937 desert, a 29.7 %
+  spread. The mechanism is `openNewIndustries`, and it is deliberate: one works
+  opens a game year, its type comes from the CLIMATE's weight table (D-246),
+  and that draw plus its placement search run on the shared gameplay stream, so
+  the draw COUNT depends on the type drawn. The property is bisected instead of
+  dropped - all four agree to the cent through game year ONE, they part in year
+  2/3/8 depending on the scenario, the spread is banded, and the control is
+  scenario 4: a company that moves no vehicle measures the same loss and the
+  same year of ruin in all four.
+- **The sky arm carries only what one run per cell can carry.** Measured cost
+  of a harsh sky (temperate / arctic / tropical / desert): bus line 42.3 /
+  18.6 / 18.6 / 31.2 %, coal train 19.4 / 24.8 / 28.4 / 24.2 %, wood chain
+  5.4 / 14.9 / 3.6 / 2.4 %, idle company 0.00 % in all four. The obvious
+  claim - the arctic pays more for its sky than the tropics - is TRUE on the
+  wood chain and FALSE on the coal train, because the tropics have heat now and
+  heat spoils cargo where frost slows wheels, and because one run of one line is
+  chaotic (D-203). So the arm asserts that the sky always costs something and
+  never earns, that it costs no multiple of today, and that an idle company pays
+  exactly nothing - and prints the ordering without claiming it.
+- **The D-118 chain run per climate is PLAYED**, not tabulated: food in the
+  temperate world, oil in the arctic, wood in the tropics, stone in the desert,
+  five years each, every works open and every cargo delivered. Two findings a
+  table cannot see: **cement has no road hauler before 1971** (the stone arm is
+  a railway business for the first twenty years of a 1950 game), and three of
+  the four chains end in a WORKS rather than a town, because only goods, food
+  and electronics are town cargo.
+- **The CI split of 6.3, measured.** The matrix file alone costs 65.7 s over
+  two climates in its two default arms and 121.4 s over four with the sky arm,
+  against 132.9 s for the whole balance suite before it. So it sweeps CLIMATES
+  the way `aiGame` sweeps seeds (D-220): two by default (temperate first as the
+  reference, arctic as the counterexample), all four plus the sky arm in the
+  `soak` job, through the same `IRON_VEINS_BALANCE_HASH=all` switch - a third
+  consumer of ONE switch, because the soak job is one job and runs on every
+  push. Full balance suite measured 132.9 s -> 162.3 s (14 files, 131 tests).
+- **Two fixtures became modules** (`tests/balance/chains.ts`,
+  `tests/balance/idleCompany.ts`) on D-187's rule, because the matrix drives
+  both in four climates. Pure motion, verified by running: the wood chain still
+  measures 159,516 EUR a year and the idle company still fails in year 9.
+
+Tick re-measured although the bundle lays no tick path: p50 1.638 / p99
+3.557 ms on the 1,500-vehicle reference fleet against the M10 baseline
+1.45 / 3.26 - 0.30 ms over it, inside the documented +-0.7 ms run noise, on a
+machine that had just run the whole balance suite. Main chunk 1,039,413 ->
+**1,041,208 B** against an unchanged 1,048,000 B budget, 6,792 B of headroom -
+no raise needed and none requested.

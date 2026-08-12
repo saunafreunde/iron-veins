@@ -1,6 +1,6 @@
 import { Cargo } from '../../src/sim/cargo/types';
 import { CommandKind } from '../../src/sim/commands/types';
-import { START_YEAR, WeatherRule } from '../../src/sim/constants';
+import { MapClimate, START_YEAR, WeatherRule } from '../../src/sim/constants';
 import { IndustryType, newIndustry } from '../../src/sim/industry/types';
 import { RailType } from '../../src/sim/map/track';
 import { ModuleKind } from '../../src/sim/station/types';
@@ -110,6 +110,13 @@ export function buildCoalLine(
   startYear: number = START_YEAR,
   loco: number = COAL_LINE_LOCO,
   wagon: number = COAL_LINE_WAGON,
+  /**
+   * The world's climate (SPEC2 M23, D-246), for the per-climate matrix.
+   * Temperate by default: the temperate set is the whole catalogue, so
+   * scenario 2's band and the winter band go on being measured on the world
+   * they were calibrated on (Fehlerkatalog 34).
+   */
+  climate: MapClimate = MapClimate.Temperate,
 ): Scenario {
   const scenario = flatScenario(
     COAL_LINE_SIZE,
@@ -125,6 +132,7 @@ export function buildCoalLine(
     false,
     false,
     startYear,
+    climate,
   );
 
   // The line, a platform at each end and a shed just past the mine.

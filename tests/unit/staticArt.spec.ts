@@ -36,6 +36,7 @@ import {
 } from '../../src/render/staticArt';
 import { CHUNK_ART_HEADROOM_PX, chunkAabb } from '../../src/render/chunks';
 import { CELL_HEADROOM_STEPS, emissiveBuildingFrame } from '../../src/render/TerrainAtlas';
+import { tallestTownCellLiftPx, TownEra } from '../../src/render/townEra';
 import { HEIGHT_PX, TILE_H, TILE_W } from '../../src/render/projection';
 import { HEIGHT_STEP_M } from '../../src/sim/constants';
 
@@ -82,6 +83,22 @@ const sourceManifest = JSON.parse(readFileSync(MANIFEST_PATH, 'utf8')) as {
  * [tile heights]
  */
 const PROCEDURAL_TOWN_MAX_LIFT_TILE_HEIGHTS = 35.78 / 32;
+
+/**
+ * The same reference, COMPUTED from the drawing rather than copied off it -
+ * and only for the GABLE era (SPEC2 M23).
+ *
+ * The number above was read off `drawTownBuilding` by hand when the drawing
+ * had one era in it. It has three since M23, so the comparison against the
+ * BAKE has to name which one it means: the bake's town cells are the Kenney
+ * city kits' one century, the era axis in the bake is not booked yet
+ * (`townEra.ts`), and comparing the mid-century models against a 2049 curtain
+ * wall would be comparing two different towns. `townCellLiftPx` is an upper
+ * BOUND (it uses the full diamond half-width for the roof plant too), which is
+ * why it comes out a few per cent over the hand measurement - the safe
+ * direction for a guard.
+ */
+const GABLE_TOWN_MAX_LIFT_TILE_HEIGHTS = tallestTownCellLiftPx([TownEra.Gable]) / TILE_H;
 
 /** The bake on disk, or null - it is a gitignored build artifact (E-14). */
 function readBakedManifest(): BakedAtlasManifest | null {
@@ -822,6 +839,14 @@ describe('the static-art proportion rule (D-206)', () => {
     // cannot exceed the rule. Measured from `drawTownBuilding`: the tallest,
     // a stage-1 commercial block, lifts 1.12 tile heights.
     expect(PROCEDURAL_TOWN_MAX_LIFT_TILE_HEIGHTS).toBeLessThan(BAKED_STATIC_MAX_LIFT_PX / TILE_H);
+    // And the hand measurement and the computed bound agree about the same
+    // era, which is what stops the literal above from rotting (SPEC2 M23).
+    expect(GABLE_TOWN_MAX_LIFT_TILE_HEIGHTS).toBeGreaterThanOrEqual(
+      PROCEDURAL_TOWN_MAX_LIFT_TILE_HEIGHTS,
+    );
+    expect(GABLE_TOWN_MAX_LIFT_TILE_HEIGHTS).toBeLessThan(
+      PROCEDURAL_TOWN_MAX_LIFT_TILE_HEIGHTS * 1.15,
+    );
   });
 
   it('holds every baked static cell to it, and holds the stage ladder, when a bake is on disk', () => {
@@ -872,7 +897,7 @@ describe('the static-art proportion rule (D-206)', () => {
     for (const [target, lift] of liftsByTarget) {
       if (target.startsWith('building:')) tallestTown = Math.max(tallestTown, lift);
     }
-    expect(tallestTown / TILE_H).toBeLessThanOrEqual(PROCEDURAL_TOWN_MAX_LIFT_TILE_HEIGHTS * 1.5);
+    expect(tallestTown / TILE_H).toBeLessThanOrEqual(GABLE_TOWN_MAX_LIFT_TILE_HEIGHTS * 1.5);
 
     // The trees are the one family the RENDERER resizes (D-209), so the rule
     // has to survive the largest multiplier the size jitter can produce - the

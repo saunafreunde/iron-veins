@@ -1,4 +1,5 @@
 import { expect, it } from 'vitest';
+import { MapClimate } from '../../src/sim/constants';
 import { hashWorld, type World } from '../../src/sim/World';
 
 /**
@@ -75,6 +76,12 @@ export const BALANCE_SCENARIOS = [
   // about 1 s and 2.6 s for the twin run.
   'eraBusLine',
   'eraCoalTrain',
+  // The per-climate matrix (SPEC2 M23). Its twin is deliberately ONE world -
+  // the arctic coal railway - rather than the whole sixteen-run anchor arm:
+  // sixteen twins would cost the anchor arm twice for a desync surface every
+  // one of those runs shares, and the file's own equality assertion already
+  // compares four climates run for run.
+  'climateMatrix',
 ] as const;
 
 export type BalanceScenario = (typeof BALANCE_SCENARIOS)[number];
@@ -149,6 +156,48 @@ export const AI_SWEEP_DEFAULT_SIZE = 2;
 /** The seeds this run sweeps: the first two, or all of them in the full job. */
 export function aiSweepSeeds(): readonly number[] {
   return fullBalanceMode() ? AI_SWEEP_SEEDS : AI_SWEEP_SEEDS.slice(0, AI_SWEEP_DEFAULT_SIZE);
+}
+
+/**
+ * The climates the per-climate balance matrix sweeps, in order (SPEC2 M23).
+ *
+ * The third thing the full-balance switch carries, and it is the same trade as
+ * the two above it. `climateMatrix.spec.ts` plays scenarios 1-4 and each
+ * climate's own D-118 chain in EVERY climate, which SPEC2 M23 asks for in as
+ * many words ("Szenarien 1-4 je Klima gebandet (Suite x4 - CI-Split aus 6.3
+ * traegt das)"); measured on the reference machine, the whole matrix costs
+ * 114 s in the default arms alone and about 175 s with the harsh-sky arm.
+ *
+ * **Temperate is first because it is the reference climate** - the set that IS
+ * the whole catalogue (D-246), the one every band of section 19.4 was measured
+ * on, and the one the canonical pin and five of the eight shipped scenarios
+ * use. **Arctic is second because it is the counterexample**: it is the
+ * climate whose industry set is furthest from the temperate one, and the
+ * scenario-1 spread this matrix measures (30 %) is at its widest between those
+ * two ends of the sweep.
+ */
+export const CLIMATE_SWEEP: readonly number[] = [
+  MapClimate.Temperate,
+  MapClimate.Arctic,
+  MapClimate.Tropical,
+  MapClimate.Desert,
+];
+
+/**
+ * How many of them every run plays.
+ *
+ * Measured: the four-climate matrix costs 114 s of the balance suite's 133 s
+ * again in its two default arms; the two-climate sweep costs 57 s. So the
+ * small sweep is what a developer and the ordinary `npm test` job pay, and
+ * the `soak` job - which runs on EVERY push - plays all four. Coverage of
+ * every climate is therefore per-push, not "eventually" (D-190's own
+ * sentence, one milestone on).
+ */
+export const CLIMATE_SWEEP_DEFAULT_SIZE = 2;
+
+/** The climates this run sweeps: the first two, or all four in the full job. */
+export function climateSweep(): readonly number[] {
+  return fullBalanceMode() ? CLIMATE_SWEEP : CLIMATE_SWEEP.slice(0, CLIMATE_SWEEP_DEFAULT_SIZE);
 }
 
 /**

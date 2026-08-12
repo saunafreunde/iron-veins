@@ -1,11 +1,15 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { MapClimate, MAP_CLIMATE_COUNT } from '../../src/sim/constants';
 import {
   AI_SWEEP_DEFAULT_SIZE,
   AI_SWEEP_SEEDS,
   aiSweepSeeds,
   BALANCE_SCENARIOS,
+  CLIMATE_SWEEP,
+  CLIMATE_SWEEP_DEFAULT_SIZE,
+  climateSweep,
   COSTLY_SCENARIOS,
   FULL_BALANCE_ENV,
   twinRuns,
@@ -171,6 +175,50 @@ describe('the balance suite as a desync guard', () => {
       // stops covering the world the rest of the project's AI evidence is
       // about, and the twin would replay a world no assertion had looked at.
       expect(AI_SWEEP_SEEDS[0]).toBe(4_711);
+    });
+  });
+
+  /**
+   * And the third thing that switch carries since SPEC2 M23: the per-climate
+   * balance matrix's climate sweep.
+   *
+   * Same lesson, same two ways of rotting. A matrix that quietly shrinks to
+   * one climate stops being a matrix, and one that quietly plays all four on
+   * every developer's machine costs two minutes a run - so both ends are held
+   * here rather than inside a file that takes a minute to reach.
+   */
+  describe("and as the climate matrix's climate sweep", () => {
+    it('sweeps every climate the game has', () => {
+      expect(CLIMATE_SWEEP).toHaveLength(MAP_CLIMATE_COUNT);
+      expect(new Set(CLIMATE_SWEEP).size).toBe(CLIMATE_SWEEP.length);
+    });
+
+    it('keeps the small sweep a real, proper prefix of the full one', () => {
+      expect(CLIMATE_SWEEP_DEFAULT_SIZE).toBeGreaterThanOrEqual(2);
+      expect(CLIMATE_SWEEP_DEFAULT_SIZE).toBeLessThan(CLIMATE_SWEEP.length);
+    });
+
+    it('plays the small sweep by default and every climate in the full job', () => {
+      const previous = process.env[FULL_BALANCE_ENV];
+      try {
+        delete process.env[FULL_BALANCE_ENV];
+        expect(climateSweep()).toEqual(CLIMATE_SWEEP.slice(0, CLIMATE_SWEEP_DEFAULT_SIZE));
+
+        process.env[FULL_BALANCE_ENV] = 'all';
+        expect(climateSweep()).toEqual(CLIMATE_SWEEP);
+      } finally {
+        if (previous === undefined) delete process.env[FULL_BALANCE_ENV];
+        else process.env[FULL_BALANCE_ENV] = previous;
+      }
+    });
+
+    it('has the reference climate first, so every comparison is against it', () => {
+      // Temperate is the set that IS the whole catalogue (D-246), the climate
+      // every band of section 19.4 was measured on and the one the canonical
+      // pin uses. The matrix compares the others against the first entry, so
+      // if it ever stops being first, every spread that file reports is a
+      // spread against something else.
+      expect(CLIMATE_SWEEP[0]).toBe(MapClimate.Temperate);
     });
   });
 });

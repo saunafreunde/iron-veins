@@ -42,7 +42,7 @@ no entry below. A number may appear under several topics.
   D-078, D-118, D-142, D-151, D-176, D-178, D-187, D-207, D-211, D-213,
   D-215, D-233, D-237
 - **Industry & production:** D-022, D-062, D-063, D-064, D-069, D-071, D-079,
-  D-085, D-086, D-174, D-201, D-202, D-205, D-225, D-232, D-239, D-246
+  D-085, D-086, D-174, D-201, D-202, D-205, D-225, D-232, D-239, D-246, D-248
 - **Towns, council & ownership:** D-101, D-102, D-103, D-104, D-205, D-207,
   D-206, D-213, D-216, D-217, D-231, D-232, D-233, D-234, D-235
 - **Economy, finance & emissions:** D-008, D-090, D-091, D-092, D-105, D-154,
@@ -52,7 +52,7 @@ no entry below. A number may appear under several topics.
   D-196, D-197, D-198, D-199, D-200, D-203, D-204, D-207, D-211, D-213,
   D-215, D-216, D-220, D-221, D-222, D-224, D-225, D-226, D-228, D-229,
   D-232, D-233, D-234, D-235, D-236, D-237, D-238, D-239, D-245, D-246,
-  D-247
+  D-247, D-248
 - **Vehicles & fleet:** D-043, D-044, D-045, D-068, D-076, D-089, D-093,
   D-096, D-142, D-143, D-145, D-146, D-155, D-157, D-171, D-174, D-181, D-185,
   D-201, D-207, D-245, D-246
@@ -64,7 +64,7 @@ no entry below. A number may appear under several topics.
 - **Rendering & art:** D-013, D-014, D-033, D-035, D-112, D-117, D-125, D-127,
   D-136, D-140, D-160, D-161, D-162, D-163, D-164, D-165, D-166, D-169, D-170,
   D-171, D-172, D-173, D-174, D-175, D-177, D-179, D-186, D-202, D-205, D-206,
-  D-208, D-209, D-212, D-214, D-217, D-241, D-246
+  D-208, D-209, D-212, D-214, D-217, D-241, D-246, D-248
 - **UI & input:** D-011, D-013, D-015, D-035, D-110, D-113, D-114, D-119,
   D-126, D-148, D-165, D-166, D-177, D-179, D-180, D-181, D-182, D-183, D-184,
   D-186, D-187, D-189, D-191, D-192, D-193, D-194, D-195, D-196, D-200, D-202,
@@ -72,7 +72,7 @@ no entry below. A number may appear under several topics.
 - **Performance & measurement:** D-002, D-120, D-135, D-136, D-161, D-162,
   D-163, D-164, D-167, D-170, D-171, D-172, D-173, D-174, D-176, D-177, D-184,
   D-185, D-186, D-187, D-191, D-192, D-193, D-196, D-200, D-201, D-202, D-205,
-  D-206, D-209, D-214, D-231, D-234, D-235, D-241, D-242, D-247
+  D-206, D-209, D-214, D-231, D-234, D-235, D-241, D-242, D-247, D-248
 - **Platform, tooling & build:** D-012, D-014, D-015, D-016, D-017, D-029,
   D-030, D-031, D-160, D-168, D-169, D-170, D-172, D-175, D-192, D-206, D-208,
   D-227, D-242
@@ -82,7 +82,7 @@ no entry below. A number may appear under several topics.
   D-195, D-196, D-197, D-198, D-199, D-200, D-201, D-202, D-203, D-204,
   D-205, D-207, D-206, D-208, D-209, D-210, D-212, D-213, D-215, D-216,
   D-217, D-219, D-220, D-221, D-222, D-228, D-229, D-230, D-231, D-233,
-  D-234, D-235, D-236, D-241, D-242
+  D-234, D-235, D-236, D-241, D-242, D-248
 - **Process & specification:** D-070, D-123, D-129, D-133, D-138, D-140,
   D-185, D-191, D-197, D-198, D-199, D-203, D-204, D-205, D-206, D-215,
   D-222, D-225, D-226, D-227, D-228, D-229, D-235
@@ -15361,3 +15361,227 @@ Migration, `hashWorld` und `replayGenesis`. `SimWorker` 406.983 -> 408.714 B,
 `replay` 226.494 -> 227.191 B, Szenario-Katalog 13.539 -> 13.542 B, CSS 13.470 B
 unveraendert. Keine Atlas-Zelle, kein Snapshot-Byte, kein Protokollfeld auf dem
 20-Hz-Pfad, keine Allowlist-Zeile.
+
+### D-248 Aeren-Optik, die Klima-Matrix - und die Messung, die "das Klima ist kein Geld" widerlegt hat
+
+**SPEC2 M23, Bundle 4 - der Abschluss des Meilensteins.** Drei Lieferungen:
+die Stadtgebaeude nach Snapshot-JAHR ueber die M18-Regenerationsnaht, die
+Balance-Matrix (Szenarien 1-4 je Klima plus der D-118-Kettenlauf je Klima-Set)
+mit ihrem CI-Split, und der Abschluss in 6.1.1 und `CLAUDE.md`.
+**Kein Save-Bump, keine Migration, kein Snapshot-Byte, kein Protokollfeld,
+keine Atlas-Zelle, keine i18n-Zeile, keine Allowlist-Zeile** - der EINE
+Z5-Bump des Meilensteins gehoert Bundle 1 und liegt auf v34; dieses Bundle
+verbraucht ihn nicht und erweitert ihn auch nicht. Kanonischer Pin
+`b7e632a7124e67ce`, Korpus `a00868b9911f12d6` und Soak-Fixture
+`64fec78d6bf0cd5e` unbewegt - **nachgeprueft durch Ausfuehren**
+(Determinismus-Suite 9 Dateien / 44 Tests gruen, volle Balance-Suite 14
+Dateien / 131 Tests gruen).
+
+**1. Die Aera ist eine reine Funktion des veroeffentlichten JAHRES, und genau
+deshalb gibt es nichts zu speichern.** `render/townEra.ts` ist
+`townArchitecture.ts` fuer die zweite Achse: das Klima sagt, WORAUS eine Stadt
+gebaut ist (D-246), die Aera sagt, WIE. Drei Stufen - Giebel, Platte, Glas -
+mit Grenzjahren `TOWN_ERA_START_YEARS = [1850, 1975, 2005]`, sodass jede der
+drei Dekaden, die SPEC2 beim Namen nennt (1950er, 1980er, 2020er), INNERHALB
+ihrer Stufe liegt. Das Jahr faehrt seit jeher im Snapshot (`SnapshotI32.Year`),
+also ist die Abnahmebedingung eine Konstruktion und keine Zusicherung: **ein
+1950 gestartetes, bei Tick 2049 geladenes Save zeigt die 2049-Optik auf der
+ersten Kalendermeldung**, weil das Startjahr in der Ableitung ueberhaupt nicht
+vorkommt. Es gibt keinen gespeicherten Render-Zustand, der veralten koennte.
+
+Die Naht ist die von D-202 und keine zweite: die Aera liegt im `SeasonLook`,
+faltet sich in `seasonKeyOf`, und `planSeasonRepaint` nimmt bei einem
+Aerenwechsel genau den Gebaeude-Job und keine einzige Terrain-Zeile. Ein
+Aerenwechsel, der mit einem Jahreszeitenwechsel zusammenfaellt, plant den
+Gebaeude-Job EINMAL - die Job-Liste ist eine Menge von Arbeiten, keine Liste
+von Gruenden. Drei Stufen statt einer je Dekade, aus demselben Grund, aus dem
+`SeasonStage` vier statt zwoelf hat: ein Repaint wird bezahlt, und zwoelf
+Stufen waeren zwoelf Repaints fuer Unterschiede, die niemand benennen kann.
+
+**Die Giebel-Zeile ist die Identitaet**, wie die temperierte Zeile in
+`TOWN_ARCHITECTURE` es ist: jeder Faktor 1, jede Mischung 0. Eine 1950er Stadt
+wird gezeichnet wie vor diesem Bundle, weshalb D-205s Chunk-Headroom, D-206s
+Hoehentabelle und die Emissive-Zwillinge ihre Bedeutung behalten. Die Aera
+MISCHT die Klimafarbe zu ihrem Material hin, sie ersetzt sie nicht - sonst
+haette die Aera gewonnen und D-246 waere aus zwei Dritteln des Jahrhunderts
+still verschwunden; der Test haelt alle vier Klimata in JEDER Aera
+unterscheidbar, und die Dachneigung des Klimas (arktisch steil, Wueste flach)
+ueberlebt jede Aera, die sie flacher macht.
+
+**2. Die Proportionsregel von D-206, auf der Achse, die D-206 diesem
+Meilenstein uebergeben hat.** D-206 hat die vier Wolkenkratzer und
+`building-m` aus dem Mapping geworfen, weil "Stufe 1 heisst gewachsen, nicht
+1999", und M23 als den Ort benannt, an dem eine Aera-Achse hingehoert. Eine
+Aera-Tabelle ist damit genau die Stelle, an der eine Nadel zurueckkommen
+koennte. Sie kann es nicht:
+
+* `townCellShape` ist die Tabelle, die die ZEICHNUNG konsumiert -
+  `drawTownBuilding` schreibt keine Geometrie mehr selbst aus -, und
+  `townCellLiftPx` misst dieselbe Tabelle. Gemessene Silhouetten je Aera
+  (temperiert, alle sechs Zellen): Giebel bis **1,27**, Platte bis **1,34**,
+  Glas bis **1,43** Kachelhoehen gegen die **2,00**, die eine Zelle
+  reserviert. Der Wert ist eine obere SCHRANKE (er nimmt die volle
+  Diamant-Halbbreite auch fuer den schmalen Dachaufbau), irrt also in die
+  sichere Richtung, und `staticArt.spec.ts` haelt ihn gegen die alte
+  Handmessung 1,118, damit das Literal dort nicht verrottet.
+* Die Zahl ist **dieselbe**, ueber die `tools/bake-lib.ts` eine gebackene
+  Zelle ABLEHNT (`BAKE_STATIC_MAX_LIFT_PX`, D-160-Kopplung): eine Regel, ein
+  Datum, beide Haelften der Welt. Der Backofen erzwingt die gebackene Haelfte,
+  `townEra.spec.ts` die prozedurale - denn diese Aeren backen nichts.
+
+**3. Was die gebackenen `building:`-Zellen jetzt duerfen, ehrlich gesagt.**
+Die Kenney-City-Kits sind die Architektur EINES Jahrhunderts. Ab der
+Platten-Aera lehnt `MapView.bakedBuildingHandle` sie ab, und die Kachel
+zeichnet die prozedurale Zelle, die eine Aera hat - E-14s eigene Regel, die
+den prozeduralen Pfad ausdruecklich als Lueckenfueller fuer die Aeren nennt,
+die die Kits nicht hergeben, und das D-205-Muster (drei Industrien, beim Namen
+abgelehnt). **Der Preis, benannt statt entdeckt:** auf einer Maschine mit
+gefuelltem Asset-Cache verliert eine Stadt ab 1975 die Kenney-Silhouetten. Sie
+bekommt sie zurueck, wenn das Kunstbundle, dem M23s ~150 gebuchte Zellen
+gehoeren, `building:<zone>:<stage>:<era>` backt; die Zielgrammatik ist
+unangetastet, eine Aera ist dann eine weitere Variantendimension. Die
+Alternative waere gewesen, auf einer Bake-Maschine 1950er Giebel bis 2049
+stehen zu lassen - also die Abnahmebedingung genau dort zu verfehlen, wo die
+meisten Spieler stehen.
+
+**4. Der klimablinde Hitze-Regler ist geschlossen - der Rest, den D-204 beim
+Namen genannt und M23 gebucht hat.** Bis zu diesem Bundle war ein arktischer
+Juli genauso hitzewahrscheinlich wie ein Wuesten-Juli: `frostSeasonFactor` las
+seit D-204 die Winterkurve des Bodens, `WEATHER_HEAT_SEASON` war eine blanke
+Monatstabelle. D-204 hat den Fix dort abgelehnt, weil es keinen Sommer-Term
+zum WIEDERVERWENDEN gibt (eine Klima-Spalte haette erfunden werden muessen) -
+und genau dafuer ist dieser Meilenstein nach E-17 da. Neu:
+`SEASON_CLIMATE_HEAT` (temperiert **exakt 1**, arktisch 0,2, tropisch 1,6,
+Wueste 2,2) und `heatSeasonFactor(month, climate)` in `weather/seasons.ts`, das
+Gegenstueck zum Frost-Tor an derselben Naht in `weather/update.ts`.
+
+Gemessen ueber ein raues Spieljahr, ein Seed, eine Karte, nur das Klima
+verschieden: Hitzeanteil der Regionentage **Wueste 7,5 % / tropisch 5,0 % /
+temperiert 2,7 % / arktisch 0,4 %**. Zwei Eigenschaften halten den Preis in
+Grenzen: **die temperierte Welt ist bit-identisch** zu der, die M18
+ausgeliefert hat (die Spalte ist eine exakte 1 - dieselbe Konstruktion wie
+`WEATHER_FROST_FULL_SEVERITY`), nachgeprueft durch Ausfuehren -
+`hardWinter.spec.ts` misst weiterhin 3.510.797 -> 3.357.840 EUR, **-4,36 %**
+auf den Euro -, und **kein Klima kann Hitze in einen Monat zaubern, der keine
+hat**, weil die Monatstabelle dort eine harte Null traegt. Die Ziehungszahl je
+Region und Tag bleibt eins (Z3). Was das NICHT tut: die Monatsform bleibt
+nordhalbkugelig, ein tropischer Januar hat also weiterhin keine Hitzewelle -
+diese Form teilen alle Saisontabellen des Spiels, und sie einem Klima flach zu
+machen hiesse, sie allen flach zu machen.
+
+**5. Die Balance-Matrix, und der Befund, der ihre erste Behauptung widerlegt
+hat.** `tests/balance/climateMatrix.spec.ts` faehrt Szenarien 1-4 je Klima mit
+allen Regeln aus (Anker-Arm), dieselben vier unter rauem Himmel (Himmel-Arm)
+und den D-118-Kettenlauf je Klima (Ketten-Arm). Der Anker-Arm haelt **jedes
+19.4-Band in jedem Klima**: Rueckfluss Jahr 3 (Bus) und Jahr 6 (Kohle) in
+allen vier, Holzkette 158.990-162.735 EUR im Band 80.000-200.000, Insolvenz
+Jahr 9 in allen vier.
+
+Geschrieben war der Arm mit einer schaerferen Behauptung: **mit ausgeschaltetem
+Himmel muessten vier Klimata dasselbe Geld auf den Cent messen** - das Klima
+erreicht den Generator, die Namen, die Stadtarchitektur und die
+Fahrzeugmaske, und keines davon ist Geld auf einer handgebauten Welt.
+**Gemessen ist das falsch:** Szenario 1 verdient temperiert 21.260, arktisch
+19.302, tropisch 17.128, in der Wueste 14.937 EUR - 29,7 % Spanne. Der
+Mechanismus ist `industry/lifecycle.ts#openNewIndustries` und er ist
+ABSICHTLICH so: jedes Spieljahr oeffnet ein Werk, sein Typ wird aus der
+Gewichtstabelle DES KLIMAS gezogen (D-246: ein Werk, das waehrend des Spiels
+oeffnet, muss aus derselben Menge kommen, aus der die Karte erzeugt wurde),
+und diese Ziehung plus die Platzierungssuche dahinter laufen auf dem GETEILTEN
+Gameplay-Stream. Die Ziehungs-ANZAHL ist damit eine Funktion des gezogenen
+Typs, und zwei Klimata trennen sich an der ersten Jahresgrenze - die Gestalt
+von Fehlerkatalog 25 ohne einen einzigen Fremd-Draw.
+
+Statt die Behauptung zu streichen, ist sie bisiziert und begrenzt:
+
+* **bis einschliesslich Spieljahr 1 stimmen alle vier auf den Cent ueberein**,
+  und das ist die Zeile, die rot wird, wenn eine kuenftige Regel das Klima in
+  einen Tarif legt;
+* gemessen trennen sie sich in Jahr 2 (Bus), 3-8 (Kohle), 3 (Holzkette);
+* die Spanne ist gebandet (`CLIMATE_SPREAD_MAX` 0,45 gegen gemessene 29,7 /
+  13,9 / 2,3 / 0,0 %);
+* und die **Kontrolle** ist Szenario 4: eine Firma, die kein Fahrzeug bewegt,
+  misst in allen vier Klimata denselben Verlust auf den Cent und dasselbe
+  Ruinjahr. Laege das Klima in einer Kostenstelle oder einem Tarif, bewegte
+  sich diese Zeile mit.
+
+**6. Der Himmel-Arm: was ein Lauf je Zelle tragen kann und was nicht.**
+Gemessen (Anteil des Anker-Ertrags, temperiert / arktisch / tropisch /
+Wueste): Bus **42,3 / 18,6 / 18,6 / 31,2 %**, Kohlezug **19,4 / 24,8 / 28,4 /
+24,2 %**, Holzkette **5,4 / 14,9 / 3,6 / 2,4 %**, Leerlauf-Firma **0,00 % in
+allen vier**. Die naheliegende Behauptung - eine arktische Linie zahlt mehr
+fuer ihren Himmel als eine tropische - ist auf der Holzkette wahr (14,9 gegen
+3,6 %) und auf dem Kohlezug **falsch** (24,8 gegen 28,4 %). Zwei Gruende, beide
+echt: die Tropen HABEN seit Punkt 4 Hitze, und Hitze verdirbt Fracht, wo Frost
+Raeder bremst - eine langsame Bahn mit alternder Ladung kann an einem heissen
+Himmel mehr verlieren als an einem kalten; und ein Lauf einer Linie ist
+chaotisch (D-203 hat 1,48-6,31 % ueber sechs Seeds EINES Kohlezugs gemessen
+und deshalb ein Ensemble gebaut). Sechzehn Ensembles waeren keine Datei
+sondern eine zweite Suite, also traegt der Arm nur, was ein Lauf tragen kann:
+**der Himmel kostet immer etwas, er verdient nie**, er kostet kein Vielfaches
+des Heutigen (Band 0,5-60 %), und die Leerlauf-Firma zahlt exakt null. Die
+Reihenfolge zwischen den Klimata wird gedruckt und ausdruecklich NICHT
+behauptet.
+
+**7. Der D-118-Kettenlauf je Klima, gespielt statt tabelliert.**
+`climateEconomies.spec.ts` (D-246) fragt die TABELLEN, ob jede Kette in beide
+Richtungen schliesst; dieser Arm baut jedem Klima seine Signaturkette und
+faehrt sie fuenf Jahre: temperiert Farm -> Lebensmittelwerk -> Stadt, arktisch
+Bohrturm -> Raffinerie -> Kunststoff -> Elektronik, tropisch Forst -> Saegewerk
+-> Moebel -> Stadt, Wueste Kiesgrube -> Zementwerk -> Baustoffhandel. Alle
+Werke bleiben offen, jede Fracht jeder Kette wird ausgeliefert (Korn 8.139,
+Vieh 6.282, Nahrung 7.595; Oel 9.523, Chemie 7.716, Kunststoff 6.158; Holz
+8.176, Bretter 5.314, Waren 3.496; Kies 8.176, Zement 5.357). Zwei Befunde,
+die eine Tabelle nicht sehen kann: **Zement hat vor 1971 keinen
+Strassen-Traeger** (der Steinarm ist die ersten zwanzig Jahre einer 1950er
+Partie ein Bahngeschaeft), und drei der vier Ketten enden in einem WERK statt
+in einer Stadt, weil nur Waren, Nahrung und Elektronik Stadtfracht sind - ein
+Abnehmer ist ein Abnehmer.
+
+**8. Der CI-Split von 6.3, gemessen statt geschaetzt.** Die Datei kostet
+allein **65,7 s** in ihren zwei Standard-Armen ueber zwei Klimata und
+**121,4 s** ueber alle vier mit dem Himmel-Arm - gegen **132,9 s** fuer die
+ganze Balance-Suite davor. Eine Datei, die die Suite bei jedem Push
+verdoppelt, ist kein Split sondern eine Steuer, also sweept die Matrix
+KLIMATA, wie `aiGame` Seeds sweept (D-220): `CLIMATE_SWEEP` mit temperiert
+zuerst (die Referenz, auf der jedes 19.4-Band gemessen ist) und arktisch als
+Gegenbeispiel, `CLIMATE_SWEEP_DEFAULT_SIZE = 2`, alle vier plus der Himmel-Arm
+im `soak`-Job - ueber DENSELBEN `IRON_VEINS_BALANCE_HASH=all`-Schalter, der
+schon die teuren Zwillinge und den Seed-Sweep traegt. Der `soak`-Job laeuft je
+Push, also ist die Abdeckung jedes Klimas per Push und nicht "irgendwann"
+(D-190s eigener Satz). Die Sweep-Grenzen haelt derselbe Kopplungstest von
+aussen, der die anderen beiden haelt (`tests/unit/balanceDeterminism.spec.ts`).
+Gemessen im Verbund: die volle Balance-Suite **132,9 s -> 162,3 s** (14
+Dateien, 131 Tests), weil die Matrix parallel zu `gameScore` und `aiCompany`
+laeuft und nicht hinter ihnen.
+
+**9. Zwei Fixtures sind Module geworden, nach der D-187-Disziplin.** Die
+Holzkette und die Leerlauf-Firma lagen in ihren Spec-Dateien; die Matrix
+faehrt beide in vier Klimata, und zwei Dateien, die je ihre eigene Welt bauen,
+messen binnen eines Spieljahres nach der ersten Aenderung zwei verschiedene
+Welten. Also `tests/balance/chains.ts` (der verallgemeinerte Kettenbauer, aus
+dem `WOOD_CHAIN` eine Zeile ist) und `tests/balance/idleCompany.ts` - genau
+das, wofuer `coalLine.ts` existiert. Reine Verschiebung, nachgeprueft durch
+Ausfuehren: die Holzkette misst weiterhin **159.516 EUR/Jahr**, die
+Leerlauf-Firma weiterhin Insolvenz **Jahr 9** bei 8,1 % Unterhalt, Szenario 2
+weiterhin 249.980 EUR Investition und Rueckfluss Jahr 6, Punktzahl 5.889,
+Netzdesign 3,75, Szenario 5 1.022.084 / 1.802.165 / 2.153.604 EUR.
+
+**Tick nachgemessen, obwohl das Bundle keinen Tick-Pfad anlegt:** p50
+**1,638** / p99 **3,557** ms auf der 1500-Fahrzeug-Referenzflotte (max
+21,140 ms ueber 6.500 Ticks) gegen die M10-Grundlinie 1,45 / 3,26 - 0,30 ms
+darueber und damit im dokumentierten ±0,7-ms-Laufrauschen, gemessen auf einer
+Maschine unmittelbar nach der vollen Balance-Suite. Die Referenzflotte faehrt
+mit Wetter "aus", wo `heatSeasonFactor` nie erreicht wird; die AN-Kosten sind
+EIN Funktionsaufruf je Spieltag, aus der Regionenschleife herausgezogen, und
+sind auf diesem Fixture nicht gemessen - dieselbe ehrliche Klausel, die D-204
+fuer das Frost-Tor geschrieben hat.
+
+**Ledger.** `SAVE_VERSION` unveraendert **34**, `SNAPSHOT_LAYOUT_VERSION`
+unveraendert, Atlas **null Zellen** (Regeneration ist der Mechanismus, SPEC2
+6.2), kein Protokollfeld, keine i18n-Zeile. Neue Konstanten in `constants.ts`
+und nur dort: `TOWN_ERA_START_YEARS` und `SEASON_CLIMATE_HEAT`, beide mit
+Einheit und Herkunft annotiert. Hauptchunk **1.039.413 -> 1.041.208 B** gegen
+unveraenderte 1.048.000 B, **Restluft 6.792 B** - keine Anhebung noetig und
+keine beantragt. `SimWorker` 408.714 -> 408.787 B, `replay` 227.191 ->
+227.201 B, Szenario-Katalog 13.542 -> 13.611 B, CSS 13.470 B unveraendert.

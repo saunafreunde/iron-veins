@@ -552,6 +552,23 @@ export const START_YEAR_PRESETS = [1850, 1880, 1920, 1950] as const;
 export const EARLIEST_START_YEAR = 1850;
 
 /**
+ * The first calendar year of each town-building era (SPEC2 M23). [calendar years]
+ *
+ * SPEC2 names the three by their decades - "1950er-Giebel -> 1980er-Platte ->
+ * 2020er-Glas" - so the boundaries are placed where each named decade falls
+ * INSIDE its own era: the fifties build gables, the eighties build slabs, the
+ * twenties build glass. The first entry is {@link EARLIEST_START_YEAR} rather
+ * than 1950, because a world may begin in 1850 since D-245 and a gable is what
+ * that century built.
+ *
+ * A calendar year is a world-facing fact, which is why it lives here beside
+ * {@link START_YEAR_PRESETS} rather than in the render table it feeds. What it
+ * feeds is `render/townEra.ts`, and NOTHING in `src/sim` reads it: the era is
+ * pixels, and Z1 keeps pixels out of the simulation.
+ */
+export const TOWN_ERA_START_YEARS = [EARLIEST_START_YEAR, 1975, 2005] as const;
+
+/**
  * Highest tick a non-endless calendar reaches, and the tick at which the
  * scheduler stops the clock unless the world is `endless` (SPEC2 E-15).
  *
@@ -3111,10 +3128,44 @@ export const WEATHER_NEIGHBOUR_PULL = 0.35;
  * about winter and `SEASON_CLIMATE_AMPLITUDE` is the harvest swing, which is
  * exactly zero in the tropics and would forbid a tropical heat wave - so
  * giving heat a climate would mean INVENTING a table rather than reusing one.
- * That booking belongs to M23's climate sets, and D-204 names it as the
- * residual it is.
+ * **That booking is spent in SPEC2 M23** ({@link SEASON_CLIMATE_HEAT}), and it
+ * is spent the way D-204 said it would have to be: by INVENTING one climate
+ * column rather than by reusing a winter table that means something else. This
+ * row keeps the month SHAPE for every climate, and the column below scales it.
  */
 export const WEATHER_HEAT_SEASON: readonly number[] = [0, 0, 0, 0, 0.5, 1, 1, 1, 0.5, 0, 0, 0];
+
+/**
+ * How much summer a climate has, indexed by {@link MapClimate}.
+ * [multiplier on the monthly heat gate]
+ *
+ * The climate half of the sky's heat, and the residual D-204 named: until
+ * SPEC2 M23 an arctic July was exactly as likely to bring a heat wave as a
+ * desert one, which made two of the four climates the same summer. It is the
+ * mirror of {@link SEASON_CLIMATE_WINTER} and it is deliberately NOT derived
+ * from it - a world's winter says nothing about its summer, and the two
+ * climates with no winter at all (tropical 0, desert 0.35) are precisely the
+ * two with the most heat.
+ *
+ * **Temperate is an exact 1**, which is the same construction
+ * {@link WEATHER_FROST_FULL_SEVERITY} uses and the same one D-246 used for the
+ * temperate industry set: the reference climate is left bit-identical, so
+ * every number M18 measured on the reference coal line under a harsh sky is
+ * the same number after this table exists (Fehlerkatalog 34).
+ *
+ * What it does NOT do, stated rather than discovered: the month table above
+ * keeps its northern-hemisphere shape in every climate, so a tropical January
+ * still has no heat wave. That shape is shared by every seasonal table in the
+ * game - the winter severity, the harvest swing, the stage table - and giving
+ * one climate a flat year would mean giving all of them one, which is a
+ * bigger decision than a gate.
+ */
+export const SEASON_CLIMATE_HEAT: readonly number[] = [
+  1, // Temperate - the reference, exactly as the sky shipped in M18
+  0.2, // Arctic - a heat wave exists and is rare
+  1.6, // Tropical - the climate whose extreme weather is the heat
+  2.2, // Desert - the hottest sky the game has
+];
 
 // --------------------------------------- what the weather costs (SPEC2 M18)
 
