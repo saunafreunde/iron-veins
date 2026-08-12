@@ -272,6 +272,33 @@ export async function exportSave(name: string, bytes: Uint8Array): Promise<boole
   return true;
 }
 
+/**
+ * Hand a scenario the workshop just wrote to the author as a file (M22).
+ *
+ * Deliberately EXPORT only, with no shelf and no index behind it. A save is a
+ * game somebody wants to continue and a recording is evidence, so both live in
+ * application data where the game can list them; a scenario is something an
+ * author gives away, and the place for that is wherever they keep the things
+ * they share. The scenario BROWSER lists the shipped catalogue, which is code
+ * (D-191), so there is no list here for this file to join.
+ */
+export async function exportScenario(name: string, bytes: Uint8Array): Promise<boolean> {
+  if (hasTauriRuntime()) {
+    const { save } = await import('@tauri-apps/plugin-dialog');
+    const path = await save({
+      defaultPath: name,
+      filters: [{ name: 'Iron Veins Scenario', extensions: ['ironscenario'] }],
+    });
+    if (path === null) return false;
+    const { writeFile } = await import('@tauri-apps/plugin-fs');
+    await writeFile(path, bytes);
+    return true;
+  }
+
+  downloadBytes(name, bytes);
+  return true;
+}
+
 /** The browser's only way out: hand the bytes over as a download. */
 function downloadBytes(name: string, bytes: Uint8Array): void {
   const url = URL.createObjectURL(new Blob([bytes as BlobPart]));

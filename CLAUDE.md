@@ -3223,3 +3223,66 @@ after it.
 - **The five kinds are on the documented `NO_UI_ISSUER` allowlist with a
   deadline: bundle 2 deletes those five lines.** The audit fails both ways, so
   the entry cannot outlive its reason.
+
+## M22 bundle 2 - the palette that only builds commands (D-241)
+
+The interface half of the scenario workshop: `src/ui/editor/` - tool palette,
+brush sizes, the four debug overlays SPEC2 names, and the `.ironscenario`
+export. **No save bump**: v33 is bundle 1's, this bundle extends it and touches
+no saved field.
+
+- **The palette builds commands and nothing else, and it is ONE file.**
+  `ui/editor/tools.ts` holds the only mapping from armed tool plus clicked tile
+  to a `Command` - six tools over five kinds (the terrain brush is two buttons
+  on one kind). It is a pure function, so the test drives the whole palette
+  headless and then again through the REAL queue. The radius is NOT clamped: a
+  palette that shrank an oversized brush would hide the refusal the author is
+  owed, and the cap belongs to the command (D-240). The size ladder is
+  GENERATED from `EDITOR_BRUSH_MAX_RADIUS`, so the palette can never offer a
+  brush the queue refuses.
+- **`NO_UI_ISSUER` is empty, and it got there the way the mechanism intends.**
+  Bundle 1 listed the five kinds with a reason and a deadline; the audit fails
+  in BOTH directions, so the entries could not outlive it.
+- **The four overlays are pure recomputes, and both halves of "pure" are
+  measured**: same world twice gives the same field; a fingerprint over
+  revisions, heights, terrain, landmass and ocean mask is unchanged afterwards;
+  and - the test a cache would fail - a CHANGED world gives a changed field.
+  Each is bound to the sim function it claims to read: temperature is
+  `assignBiomes`'s own expression (moved to `mapgen/climateField.ts`, one
+  definition) at the tile's CURRENT height; **moisture is honestly labelled** -
+  the genesis noise field is gone and would be wrong after the first painted
+  wood, so the overlay reads the MAP and every band is fed back through
+  `classifyBiome` and comes out as that terrain; landmass READS the derived
+  layer rather than re-labelling it, because `computeLandmasses` WRITES and an
+  overlay that writes is a second author of state; catchment paints exactly
+  `withinCatchment`, the simulation's own circle, compared cell by cell.
+  `MapView` is handed a packed colour field and learns what none of the four
+  MEAN.
+- **The export is M17's serializer with no second writer.** The worker calls
+  `encodeScenario`, the main thread decides where the bytes go (D-111); the
+  test reads an edited world back through `decodeSave`, because **there is no
+  scenario reader**. The worker's case is inline on purpose - a named parameter
+  would put the metadata block's type into a `src/sim` file that is not
+  `src/sim/save`, which `scenarioCoupling.spec.ts` forbids. The form's checks
+  are the CONTAINER's read forwards: an empty author encodes cleanly and would
+  not load, and that was the find.
+- **The workshop opens from the new-game screen and starts paused.**
+  `editorMode` is an optional `NewGameOptions` field; `SimClient.newGame` sets
+  speed 0, there rather than on the screen, because every door into a workshop
+  world goes through that method. Whether the RUNNING world is a workshop comes
+  from the worker's `ready` message, not from the button: the rule is saved,
+  hashed state, so a saved and reloaded workshop is still one.
+- **The bundle budget caught something, which is what it is for**: the first
+  build was 996,464 B and **5,346 B of that were `map/terraform.ts` plus
+  `mapgen/hydrology.ts`**, dragged into the entry chunk by a palette importing
+  `TerraformDirection` - two integers - from the module that moves ground. The
+  vocabulary moved to `constants.ts`. Booked with the measurement:
+  **976,409 -> 991,118 B (+14,709)**, of which **+8,098 B are the forty i18n
+  lines in two languages** (measured by deleting exactly those and rebuilding)
+  and **+6,611 B are the interface**; `EditorPanel` is lazy in a 5,211 B chunk
+  of its own. Budget 978,000 -> 998,000.
+- **Every band identical to D-240 to the euro**, `npm run test:balance:full`
+  green at 101 (scenario 5 1,022,084 / 1,802,165 / 2,153,604 EUR, score 5,889,
+  Netzdesign 3.75, hard winter -4.36 %), determinism 33 green, unit 1,689 green
+  - run rather than assumed, because two functions moved files and "identical
+  arithmetic" is a claim until the digest agrees.

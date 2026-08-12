@@ -16,7 +16,7 @@ no entry below. A number may appear under several topics.
   D-196, D-200, D-201, D-202, D-204, D-232, D-233, D-236, D-240
 - **Commands, snapshot & worker boundary:** D-004, D-005, D-006, D-011, D-032,
   D-100, D-111, D-145, D-146, D-148, D-162, D-174, D-176, D-179, D-187, D-189,
-  D-192, D-193, D-196, D-200, D-202, D-218, D-240
+  D-192, D-193, D-196, D-200, D-202, D-218, D-240, D-241
 - **Lines & timetables:** D-145, D-146, D-147, D-148, D-149, D-150, D-151,
   D-152, D-155, D-159
 - **Map generation & terrain:** D-018, D-019, D-020, D-021, D-022, D-023,
@@ -27,7 +27,7 @@ no entry below. A number may appear under several topics.
   D-111, D-130, D-131, D-134, D-142, D-144, D-145, D-146, D-147, D-153, D-178,
   D-181, D-184, D-185, D-188, D-189, D-190, D-191, D-192, D-193, D-194,
   D-197, D-198, D-200, D-207, D-213, D-231, D-232, D-233, D-236, D-238,
-  D-239, D-240
+  D-239, D-240, D-241
 - **Rail & track:** D-042, D-043, D-044, D-045, D-046, D-047, D-053, D-141,
   D-153, D-157, D-184, D-230
 - **Signals & reservations:** D-054, D-055, D-056, D-057, D-058, D-059, D-060,
@@ -60,15 +60,15 @@ no entry below. A number may appear under several topics.
 - **Rendering & art:** D-013, D-014, D-033, D-035, D-112, D-117, D-125, D-127,
   D-136, D-140, D-160, D-161, D-162, D-163, D-164, D-165, D-166, D-169, D-170,
   D-171, D-172, D-173, D-174, D-175, D-177, D-179, D-186, D-202, D-205, D-206,
-  D-208, D-209, D-212, D-214, D-217
+  D-208, D-209, D-212, D-214, D-217, D-241
 - **UI & input:** D-011, D-013, D-015, D-035, D-110, D-113, D-114, D-119,
   D-126, D-148, D-165, D-166, D-177, D-179, D-180, D-181, D-182, D-183, D-184,
   D-186, D-187, D-189, D-191, D-192, D-193, D-194, D-195, D-196, D-200, D-202,
-  D-210
+  D-210, D-241
 - **Performance & measurement:** D-002, D-120, D-135, D-136, D-161, D-162,
   D-163, D-164, D-167, D-170, D-171, D-172, D-173, D-174, D-176, D-177, D-184,
   D-185, D-186, D-187, D-191, D-192, D-193, D-196, D-200, D-201, D-202, D-205,
-  D-206, D-209, D-214, D-231, D-234, D-235
+  D-206, D-209, D-214, D-231, D-234, D-235, D-241
 - **Platform, tooling & build:** D-012, D-014, D-015, D-016, D-017, D-029,
   D-030, D-031, D-160, D-168, D-169, D-170, D-172, D-175, D-192, D-206, D-208,
   D-227
@@ -78,7 +78,7 @@ no entry below. A number may appear under several topics.
   D-195, D-196, D-197, D-198, D-199, D-200, D-201, D-202, D-203, D-204,
   D-205, D-207, D-206, D-208, D-209, D-210, D-212, D-213, D-215, D-216,
   D-217, D-219, D-220, D-221, D-222, D-228, D-229, D-230, D-231, D-233,
-  D-234, D-235, D-236
+  D-234, D-235, D-236, D-241
 - **Process & specification:** D-070, D-123, D-129, D-133, D-138, D-140,
   D-185, D-191, D-197, D-198, D-199, D-203, D-204, D-205, D-206, D-215,
   D-222, D-225, D-226, D-227, D-228, D-229, D-235
@@ -14251,3 +14251,166 @@ Platzierungsbefehle; null RNG-Zug und Reproduzierbarkeit; Preis gleich
 Rechnung und die byteweise Unversehrtheit der Vorschau) - plus die fuenf
 Stichproben in `tests/unit/commandCoupling.spec.ts` und `editorMode` in beiden
 Kopplungstabellen von `tests/unit/scenarioCoupling.spec.ts`.
+
+### D-241 Die Palette, die nur Commands baut - vier reine Overlays, der Szenario-Export, und die geloeschte Erlaubnisliste
+
+SPEC2 M22, Bundle 2: die Oberflaechenhaelfte der Szenario-Werkstatt.
+`src/ui/editor/` - Werkzeugpalette, Pinselgroessen, Debug-Overlays,
+`.ironscenario`-Export. **Kein Save-Bump**: v33 gehoert Bundle 1, dieser Bundle
+erweitert ihn und beruehrt kein gespeichertes Feld.
+
+**Die Palette baut Commands und sonst nichts, und das ist eine Datei.**
+`src/ui/editor/tools.ts` haelt die EINE Abbildung von "welches Werkzeug ist
+scharf und wohin wurde geklickt" auf einen `Command`; sechs Werkzeuge, fuenf
+Kinds (der Gelaendepinsel ist zwei Knoepfe auf einem Kind, Heben und Senken).
+Weil das eine reine Funktion ihrer Argumente ist, faehrt der Test die ganze
+Palette kopflos ab - erst gegen die erwarteten Command-Literale, dann durch die
+ECHTE Queue, also denselben Umschlag, denselben Executor, dasselbe
+Ablehnungsvokabular.
+
+* **Der Radius wird nicht geklemmt.** Eine Palette, die einen zu grossen Pinsel
+  still verkleinert, versteckt die Ablehnung, auf die der Autor Anspruch hat -
+  und der Deckel gehoert dem Befehl (D-240). Der Test uebergibt
+  `EDITOR_BRUSH_MAX_RADIUS + 1` und erwartet ihn unveraendert im Command.
+* **Die Pinselleiter wird aus dem Deckel ERZEUGT**, nicht getippt:
+  `[0, 1, 2, 4, 8]`, verdoppelnd bis `EDITOR_BRUSH_MAX_RADIUS`. Damit kann die
+  Palette nie eine Groesse anbieten, die die Queue zurueckweisen wuerde, und
+  ein anderer Deckel bewegt die Leiter mit.
+* **Vier von sieben Knoepfen tragen den NAMEN DES BEFEHLS** aus Bundle 1
+  (`editor.tool.placeTownSeed` und die drei anderen). Knopf und Ablehnungs-Toast
+  sagen dasselbe Wort fuer dieselbe Sache.
+
+**Die fuenf Zeilen der Erlaubnisliste sind geloescht, und zwar so, wie der
+Mechanismus es vorsieht.** `NO_UI_ISSUER` in
+`tests/unit/commandCoupling.spec.ts` ist jetzt LEER. Der Audit faellt in beide
+Richtungen - ein Kind ohne Erzeuger ist rot, ein gelistetes Kind MIT Erzeuger
+ebenso -, also konnte der Eintrag seine Frist nicht ueberleben.
+
+**Die vier Debug-Overlays sind reine Recomputes, und der Test misst beide
+Haelften von "rein".** `computeEditorOverlay` ist eine Funktion von der Welt auf
+ein gepacktes Farbfeld (`0xAARRGGBB` je Kachel, 0 = nichts malen):
+
+* **Gleiche Welt, gleiches Feld** - zweimal gerechnet, byteweise gleich.
+* **Nichts geschrieben** - ein Fingerabdruck aus `revision`, `trackRevision`,
+  `cornerHeight`, `terrain`, `landmassId` und `oceanMask` ist danach identisch.
+* **Und die Gegenprobe, die ein Cache nicht besteht**: eine GEAENDERTE Welt
+  liefert ein geaendertes Feld. Die ersten beiden Tests allein wuerden von einem
+  Cache bestanden.
+* Der wiederverwendbare Puffer gehoert dem Aufrufer und wird vor jedem Lauf
+  ganz genullt, also kann kein Rest des vorigen Overlays durchscheinen -
+  gemessen gegen einen frisch gerechneten Lauf.
+
+Jedes der vier ist an die Simulationsfunktion gebunden, die es zu lesen
+behauptet:
+
+* **Temperatur** ist der Ausdruck des Generators, nicht sein Zwilling.
+  `temperatureAtSeaLevel` und `tileTemperatureC` sind nach
+  `mapgen/climateField.ts` gezogen; `assignBiomes` ruft dieselbe Funktion.
+  Gelesen wird die AKTUELLE Hoehe - wer in der Werkstatt einen Berg hebt, sieht
+  die Temperatur fallen.
+* **Feuchte ist ehrlich beschriftet.** Das Rauschfeld der Weltgenese ist NICHT
+  rekonstruierbar (der Strom ist verbraucht, das Feld wurde nie gespeichert,
+  und nach dem ersten gepflanzten Wald waere es ohnehin falsch). Das Overlay
+  liest deshalb die KARTE: jede Geländeart steht fuer das Feuchteband, aus dem
+  `classify` sie gemacht haette. Die Kopplung ist gemessen, nicht behauptet -
+  jeder Bandwert geht durch `classifyBiome` zurueck und liefert dieselbe
+  Geländeart. Schnee, Fels, Wasser und Stadtboden tragen bewusst gar kein
+  Messergebnis. Die Oberflaeche sagt beides in beiden Sprachen.
+* **Landmasse LIEST die abgeleitete Schicht**, statt sie neu zu labeln:
+  `computeLandmasses` SCHREIBT in `map.landmassId`, und ein Overlay, das in die
+  geteilte Karte schreibt, waere ein zweiter Zustandsautor. Acht Farben,
+  zyklisch - zwei weit auseinander liegende Massen koennen sich eine teilen,
+  und die Bildunterschrift sagt das, statt eine Bijektion vorzutaeuschen.
+* **Einzugsgebiet malt genau den Kreis der Simulation.** `inCatchment` wurde auf
+  `withinCatchment(cx, cy, radius, x, y)` zurueckgefuehrt, und das Overlay ruft
+  dieselbe Funktion; der Test faehrt alle 4096 Kacheln ab und vergleicht Zelle
+  fuer Zelle. Eine Ueberlappung ist Bernstein statt Gruen - kein Fehler, aber
+  das, wonach ein Autor in diesem Overlay sucht.
+
+**Der Renderer weiss von keinem der vier, was es bedeutet.** `MapView` bekommt
+das gepackte Feld und malt das sichtbare Fenster; die Bedeutung bleibt in
+`ui/editor/overlays.ts`. Vergleich per IDENTITAET, nicht per Inhalt: die
+Oberflaeche rechnet nur neu, wenn die Welt sich bewegt hat, also heisst ein
+neues Array ein neues Bild. Das ist die Zeile, die alle vier kopflos testbar
+macht und ein Render-Modul davor bewahrt, eine Meinung ueber Klima zu bekommen.
+
+**Der Export ist der M17-Serializer, ohne zweiten Schreiber.** Der Worker ruft
+`encodeScenario` (= `encodeSave` plus Metablock), die Hauptseite entscheidet,
+wohin die Bytes gehen - dieselbe D-111-Teilung wie bei jedem Save. Zwei neue
+Nachrichten (`requestScenario`, `scenarioWritten`/`scenarioFailed`), null
+Save-Felder, null Snapshot-Bytes. Der Test schreibt eine im Editor gebaute Welt
+und liest sie durch `decodeSave` zurueck - **es gibt keinen Szenario-Leser**,
+was genau SPEC2s Satz fuer diesen Meilenstein ist: Weltdigest gleich, Stadt mit
+demselben Namen wieder da, `editorMode` erhalten, Briefing in beiden Sprachen,
+und das Befehlslog der Sitzung liegt in der Datei.
+
+* **Der Fall im Worker ist absichtlich inline geschrieben.** Ein benannter
+  Parameter haette den Typ des Metablocks in eine Datei unter `src/sim` gebracht,
+  die nicht `src/sim/save` ist - genau das, was `scenarioCoupling.spec.ts`
+  verbietet. Der Worker reicht das Briefing durch, ohne ein Feld davon zu lesen.
+* **Die Formularpruefung ist die Pruefung des CONTAINERS, vorwaerts gelesen.**
+  `parseSaveFile` weist leeren Titel, leeren Autor, jede leere Briefing-Haelfte
+  und alles ueber `SCENARIO_TEXT_MAX_CHARS` zurueck. Ein Szenario ist ein Save
+  (D-194), das laden muss - also findet das Formular den Fehler, waehrend der
+  Autor noch tippt, statt in fremden Haenden. Der leere Autor war der Fund: er
+  waere sauber kodiert und unladbar gewesen.
+* Keine Regel wird gepinnt und kein Ziel gesetzt: `lockedRules` und `goals` sind
+  leer, weil dieser Bundle keinen Bildschirm dafuer anbietet und ein erfundener
+  Vorgabesatz Regeln pinnen wuerde, die niemand gewaehlt hat. Der Parser prueft
+  die Zielanzahl gegen die Welt, also ist die leere Liste die WAHRE Beschreibung
+  einer Welt ohne Ziele.
+
+**Die Werkstatt wird auf dem Neues-Spiel-Bildschirm geoeffnet, und sie startet
+pausiert.** `editorMode` ist ein `NewGameOptions`-Feld (optional, abwesend =
+aus, wie jede Regel seit D-185); `SimClient.newGame` setzt Speed 0, wenn es
+gesetzt ist - dort und nicht auf dem Bildschirm, weil JEDE Tuer in eine
+Werkstattwelt durch diese Methode geht und eine laufende Uhr Industrien altern
+und Gegner starten liesse, waehrend der Autor noch eine Kueste zieht. Ob die
+laufende Welt eine Werkstatt IST, sagt der Worker in `ready` - nicht der Knopf,
+der sie geoeffnet hat: die Regel ist gespeicherter, gehashter Zustand, also ist
+eine gespeicherte und wieder geladene Werkstatt weiter eine.
+
+**Das Bundle-Budget hat einen Fund gemacht, und dafuer gibt es das Budget.**
+Der erste Build lag bei 996.464 B, und **5.346 B davon waren `map/terraform.ts`
+mit `mapgen/hydrology.ts` darunter**, in den Entry-Chunk gezogen von einer
+Palette, die `TerraformDirection` - zwei ganze Zahlen - aus dem Modul importierte,
+das Boden bewegt. Das Vokabular ist nach `constants.ts` gewandert, wo Konstanten
+ohnehin wohnen, und der Chunk gab die Bytes zurueck. Gebucht wird der Rest, mit
+der Messung daneben: **976.409 B -> 991.118 B (+14.709 B)**, davon **+8.098 B
+die vierzig i18n-Zeilen in zwei Sprachen** (gemessen, indem genau diese Zeilen
+geloescht und neu gebaut wurde: 983.020 B) und **+6.611 B die Oberflaeche**.
+`EditorPanel` ist LAZY (D-192-Muster) und liegt in einem eigenen 5.211-B-Chunk -
+wer nie eine Werkstatt oeffnet, laedt keine. Am gebauten Entry-Chunk geprueft:
+kein `decodeSave`, kein `hashWorld`, keine Save-Magic, kein `streamFor`. Neue
+Grenze 998.000 B = Messung plus ~0,7 %.
+
+**Kein Band bewegt, alles auf den Euro identisch mit D-240**:
+`npm run test:balance:full` gruen bei 101 - Szenario 5 1.022.084 / 1.802.165 /
+2.153.604 EUR, Punktzahl 5.889, Netzdesign 3,75 (Trasse 2,01x, Kapazitaet
+1,87x), Harter Winter -4,36 %. Determinismus 33 gruen, Unit 1.689 gruen. Das ist
+erwartbar - keine Zeile dieses Bundles laeuft in einer Welt ohne Werkstatt -,
+und trotzdem nachgefahren, weil `TerraformDirection` und `temperatureAtSeaLevel`
+in andere Dateien gezogen sind und "identische Arithmetik" eine Behauptung ist,
+bis der Digest sie bestaetigt.
+
+**Nicht gemessen und deshalb nicht beansprucht:** keine
+`npm run test:perf`-Zahl. Die Overlay-Schicht liegt neben der Heat-Map und wird
+nur neu gemalt, wenn Feld, Zoom oder Kamerafenster sich bewegen; in einem Spiel
+ohne Werkstatt ist das Feld immer `null` und die Schleife laeuft nie. Die
+Ledger-Zeile 6.1.1 fuer M22 gehoert an das Ende des Meilensteins, wenn
+Heightmap-Import und Benchmark-Karten stehen - dort wird auch der Editor-Chunk
+gegen die 0,00-ms-Zusage der M22-Zeile gehalten.
+
+**Tests:** `tests/unit/editorPalette.spec.ts` (18 Faelle: die fuenf Kinds aus
+der Palette und keine anderen, die Palettenwerte im Command, der ungeklemmte
+Ueberpinsel, der Zeiger baut nichts, alle sechs Werkzeuge durch die echte Queue
+angenommen, die Leiter unter dem Deckel, Label plus Wirkungs-Tooltip in beiden
+Sprachen fuer jede Zeile der Registry, jeder Bildschirmtext in beiden
+Katalogen; die vier Overlays zweimal gleich, nichts geschrieben, Puffer ohne
+Leck, geaenderte Welt geaendertes Feld, Temperatur gegen den Generatorausdruck
+mit Wasser ausgenommen, Feuchtebaender durch `classifyBiome` zurueck, eine
+Farbe je Landmasse mit klarem Wasser, das Einzugsgebiet Zelle fuer Zelle gegen
+`withinCatchment`; die Formularablehnungen, der Dateiname, und die editierte
+Welt exportiert und wieder eingelesen) - plus die geleerte `NO_UI_ISSUER` in
+`tests/unit/commandCoupling.spec.ts`, deren Meta-Tests unveraendert beweisen,
+dass der Audit noch feuert.

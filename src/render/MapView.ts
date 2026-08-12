@@ -1032,6 +1032,26 @@ export class MapView {
   private heatDrawnZoom = -1;
   private heatDrawnRevision = -1;
   private heatDrawnBounds = { minX: 0, minY: 0, maxX: -1, maxY: -1 };
+
+  /**
+   * The scenario workshop's debug overlays (SPEC2 M22): temperature, moisture,
+   * landmass and catchment.
+   *
+   * **This layer knows what none of the four MEAN.** It is handed a packed
+   * colour per tile - `0xAARRGGBB`, zero for "paint nothing" - and paints the
+   * visible window of it; deciding what the colour says is the interface's own
+   * pure function (`ui/editor/overlays.ts`), which is what makes all four
+   * testable headless and keeps a render module from acquiring an opinion
+   * about climate. Structurally the heat map's twin: a wash on the world art,
+   * under every instrument, outside the chunk bakes, rebuilt only when the
+   * FIELD, the zoom or the camera window moved.
+   */
+  private readonly editorLayer = new Graphics();
+  private editorField: Int32Array | null = null;
+  /** The field the layer currently shows, by identity - never a copy. */
+  private editorDrawnField: Int32Array | null = null;
+  private editorDrawnZoom = -1;
+  private editorDrawnBounds = { minX: 0, minY: 0, maxX: -1, maxY: -1 };
   private flowSource: (() => { data: Int32Array; count: number; tick: number }) | null = null;
   /** Row indices of the drawn legs, filled by `selectTopFlows`. */
   private readonly flowScratch = new Int32Array(FLOW_TOP_N);
@@ -1350,6 +1370,10 @@ export class MapView {
     // F3 blocks have to stay readable on top of it.
     this.heatLayer.eventMode = 'none';
     this.world.addChild(this.heatLayer);
+    // The workshop's overlays (M22) beside the heat map and for the same
+    // reason: a wash the instruments above it stay readable on.
+    this.editorLayer.eventMode = 'none';
+    this.world.addChild(this.editorLayer);
     // The flow atlas (M14) above the world art and outside its tint, below
     // the selection overlay: an arrow must not cover the marker of the tile
     // the player is pointing at.
@@ -1516,6 +1540,20 @@ export class MapView {
   /** Turn the utilisation heat map on or off (M15; the U key of D-114's table). */
   setHeatOverlay(on: boolean): void {
     this.heatOverlay = on;
+  }
+
+  /**
+   * Show a workshop overlay field, or null for none (M22).
+   *
+   * Compared by IDENTITY, not by content: the interface recomputes the field
+   * only when the world moved, so a new array means a new picture and the same
+   * array means the picture on screen is still right. Nothing is copied here -
+   * the caller owns the buffer and is free to reuse it, which is why a fresh
+   * computation always hands over a different reference than the one it
+   * replaced would have.
+   */
+  setEditorOverlay(field: Int32Array | null): void {
+    this.editorField = field;
   }
 
   /** Where the flow atlas reads the published FlowMarker block from (D-176). */
@@ -2032,6 +2070,7 @@ export class MapView {
     this.updateParticles(map, abstract);
     this.maintainFlow(map, generationMoved);
     this.maintainHeat(map, bounds, phase);
+    this.maintainEditorOverlay(map, bounds);
     this.drawOverlay(map);
 
     // Map text (SPEC2 M12): re-laid-out only when zoom, lists or revision
@@ -5035,6 +5074,56 @@ export class MapView {
     this.heatDrawnZoom = this.zoom;
     this.heatDrawnRevision = map.revision;
     this.heatDrawnBounds = bounds;
+  }
+
+  /**
+   * Paint the workshop's overlay field over the visible window (M22).
+   *
+   * No timer and no revision check, unlike the heat map: the field IS the
+   * revision here - the interface rebuilds it when the world moved and hands
+   * over a new array, so identity is a complete answer to "is what is on
+   * screen still true". The walk is bounded by the camera window like every
+   * other overlay since M4.
+   */
+  private maintainEditorOverlay(
+    map: TileMap,
+    bounds: { minX: number; minY: number; maxX: number; maxY: number },
+  ): void {
+    const field = this.editorField;
+    if (field === null || field.length !== map.size * map.size) {
+      if (this.editorDrawnField !== null) {
+        this.editorLayer.clear();
+        this.editorDrawnField = null;
+      }
+      return;
+    }
+    if (
+      this.editorDrawnField === field &&
+      this.zoom === this.editorDrawnZoom &&
+      bounds.minX === this.editorDrawnBounds.minX &&
+      bounds.minY === this.editorDrawnBounds.minY &&
+      bounds.maxX === this.editorDrawnBounds.maxX &&
+      bounds.maxY === this.editorDrawnBounds.maxY
+    ) {
+      return;
+    }
+
+    const layer = this.editorLayer;
+    layer.clear();
+    for (let y = bounds.minY; y <= bounds.maxY; y++) {
+      for (let x = bounds.minX; x <= bounds.maxX; x++) {
+        if (x < 0 || y < 0 || x >= map.size || y >= map.size) continue;
+        const packed = field[y * map.size + x]!;
+        if (packed === 0) continue;
+        const centre = tileToWorld(x, y, map.baseHeight(x, y));
+        this.diamondOn(layer, centre.x, centre.y);
+        layer.fill({ color: packed & 0xff_ffff, alpha: ((packed >>> 24) & 0xff) / 255 });
+      }
+    }
+
+    this.editorDrawnField = field;
+    this.editorDrawnZoom = this.zoom;
+    this.editorDrawnBounds = bounds;
   }
 
   /** Push the drawn/omitted counts to the interface, only on a change. */

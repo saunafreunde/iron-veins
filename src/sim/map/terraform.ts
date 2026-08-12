@@ -5,6 +5,7 @@ import {
   TERRAFORM_COST_PER_STEP_CT,
   TERRAFORM_ROCK_SURCHARGE,
   TERRAFORM_WATER_SURCHARGE,
+  TerraformDirection,
   TILE_PUBLIC,
 } from '../constants';
 import { computeLandmasses, markOcean } from '../mapgen/hydrology';
@@ -21,12 +22,6 @@ import { Terrain } from './terrain';
  * player pays for every corner that actually moved, which is what makes
  * flattening a mountain expensive without needing a separate rule for it.
  */
-
-export const TerraformDirection = {
-  Lower: -1,
-  Raise: 1,
-} as const;
-export type TerraformDirection = (typeof TerraformDirection)[keyof typeof TerraformDirection];
 
 export const TerraformReason = {
   OutOfRange: 'terraform.reject.outOfRange',

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { Cargo } from '../../src/sim/cargo/types';
 import { CommandKind, type OrderSpec } from '../../src/sim/commands/types';
-import { MAX_ORDER_WAIT_TICKS, TILE_PUBLIC } from '../../src/sim/constants';
-import { estimateTerraform, TerraformDirection } from '../../src/sim/map/terraform';
+import { MAX_ORDER_WAIT_TICKS, TerraformDirection, TILE_PUBLIC } from '../../src/sim/constants';
+import { estimateTerraform } from '../../src/sim/map/terraform';
 import { Terrain } from '../../src/sim/map/terrain';
 import { RailType } from '../../src/sim/map/track';
 import { WaypointKind } from '../../src/sim/map/waypoints';

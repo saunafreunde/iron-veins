@@ -3497,3 +3497,22 @@ export const FIXED_POINT_ONE = 1 << FIXED_POINT_BITS; // 65_536
 
 /** Entries of the sine lookup table (one full turn). Must stay a power of two. */
 export const TRIG_TABLE_SIZE = 4096;
+
+// ----------------------------------------------------------- terraform vocabulary
+
+/**
+ * Which way a terraform command moves ground.
+ *
+ * A vocabulary constant rather than a member of `map/terraform.ts`, and the
+ * move was made for a measured reason (SPEC2 M22 bundle 2): the scenario
+ * workshop's palette has to name the direction its brush issues, and reading
+ * it out of `terraform.ts` dragged that module - and `mapgen/hydrology.ts`
+ * under it - into the interface's entry chunk for the sake of two integers.
+ * Constants have one home and this is it, so the palette imports what it needs
+ * and nothing it does not.
+ */
+export const TerraformDirection = {
+  Lower: -1,
+  Raise: 1,
+} as const;
+export type TerraformDirection = (typeof TerraformDirection)[keyof typeof TerraformDirection];

@@ -4,6 +4,7 @@ import type { GoalSpec } from '../sim/goals/types';
 import type { MapGenPhase } from '../sim/mapgen';
 import type { ReplayVerification } from '../sim/save/replay';
 import type { ReplayMeta } from '../sim/save/replaySession';
+import type { ScenarioMeta } from '../sim/save/scenarioMeta';
 
 /**
  * Message contract between the main thread and the simulation worker.
@@ -533,6 +534,21 @@ export type MainToWorkerMessage =
    * only side that may touch a disk (architecture law #1).
    */
   | { readonly type: 'requestSave'; readonly slot: SaveSlotKind; readonly label: string }
+  /**
+   * Write the running world as a `.ironscenario` (SPEC2 M22, bundle 2).
+   *
+   * The same split as every save (D-111): the worker encodes, the main thread
+   * decides where the bytes land. And the same SERIALIZER - `encodeScenario`
+   * is `encodeSave` plus the metadata block, so "Szenario-Kompatibilitaet IST
+   * Save-Kompatibilitaet" stays a statement about the code rather than about
+   * two file layouts kept in step by hand.
+   *
+   * The briefing travels FROM the interface because that is where an author
+   * types it; nothing in the simulation reads it on the way through
+   * (`tests/unit/scenarioCoupling.spec.ts` holds that, and the worker never
+   * names the block's own vocabulary).
+   */
+  | { readonly type: 'requestScenario'; readonly meta: ScenarioMeta }
   /** Load a save from bytes the main thread read. */
   | { readonly type: 'loadSave'; readonly bytes: Uint8Array }
   /** Throw the world away and generate a new one with these parameters. */
@@ -597,6 +613,16 @@ export interface NewGameOptions {
   readonly economy: boolean;
   readonly aiCompanies: number;
   /**
+   * Open this world as a scenario WORKSHOP rather than as a game (SPEC2 M22).
+   *
+   * A world rule like every other field here - saved, hashed, migrated - and
+   * the only one that is a rule of the workshop rather than of the world,
+   * which is exactly why a scenario may not pin it (D-240's `NOT_LOCKABLE`
+   * entry). Absent means off, decided in `World`'s own constructor like the
+   * two 8.4 rules, so nothing that starts a game has to mention it.
+   */
+  readonly editorMode?: boolean;
+  /**
    * The goals the world is created with (SPEC2 M17), or absent for none.
    *
    * A world rule like every other field here - saved, hashed and fixed at
@@ -654,6 +680,16 @@ export type WorkerToMainMessage =
        * M21 at no layout change at all.
        */
       readonly economyCurve: readonly number[];
+      /**
+       * True when this world is a WORKSHOP rather than a game (SPEC2 M22).
+       *
+       * Published rather than remembered by whoever opened it: the rule is
+       * saved and hashed world state, so a workshop that was saved and loaded
+       * again is still a workshop, and an interface that guessed from "I
+       * pressed the workshop button" would offer the palette on the wrong
+       * world after a load.
+       */
+      readonly editorMode: boolean;
     }
   | { readonly type: 'companyChanged'; readonly name: string; readonly colorIndex: number }
   | { readonly type: 'commandRejected'; readonly reasonKey: string }
@@ -704,6 +740,14 @@ export type WorkerToMainMessage =
       readonly month: number;
       readonly companyValueCt: number;
     }
+  /**
+   * A scenario the worker encoded. Bytes only: the interface asked for it and
+   * already holds the briefing, so sending the metadata back would be the
+   * worker handing over something it was told (D-111's split, kept narrow).
+   */
+  | { readonly type: 'scenarioWritten'; readonly bytes: Uint8Array }
+  /** A scenario that could not be written, named by a translation key. */
+  | { readonly type: 'scenarioFailed'; readonly reasonKey: string; readonly detail: string }
   /**
    * A load that did not work out, named by a translation key.
    *

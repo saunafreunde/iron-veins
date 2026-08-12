@@ -6,6 +6,7 @@ import {
   MAX_ORDER_WAIT_TICKS,
   TAKT_MAX_TICKS,
   TAKT_MIN_TICKS,
+  TerraformDirection,
 } from '../constants';
 import { repayLoan, takeLoan } from '../economy/company';
 import { affordable, buildBudgetCt, chargeBuild } from './editorRule';
@@ -56,7 +57,7 @@ import {
 } from './build';
 import { releaseAll } from '../vehicles/reservations';
 import { divertToDepot, startVehicle } from '../vehicles/update';
-import { applyTerraform, estimateTerraform, levelTile, TerraformDirection } from '../map/terraform';
+import { applyTerraform, estimateTerraform, levelTile } from '../map/terraform';
 import { acceptContract, isOpen } from '../economy/contracts';
 import { acceptSupply, isSupplyOpen } from '../economy/supply';
 import { applyTownMeasure, buyExclusiveRights } from '../town/measures';

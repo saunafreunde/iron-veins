@@ -52,6 +52,16 @@ const GameEndScreen = lazy(async () => ({
 }));
 
 /**
+ * The scenario workshop's palette (SPEC2 M22), loaded when a workshop world
+ * arrives and never in a game - the same budget argument as the end screen
+ * above (D-192). The fallback is `null`: a palette that appears one frame
+ * after the map is a palette that appears with the map.
+ */
+const EditorPanel = lazy(async () => ({
+  default: (await import('./editor/EditorPanel')).EditorPanel,
+}));
+
+/**
  * Map generation takes seconds on a large map, and it runs inside the worker,
  * so the phases arrive as messages rather than as a progress bar the UI drives.
  */
@@ -103,6 +113,7 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
   const replaying = useSimStore((s) => s.replay !== null);
   // The end of the game (SPEC2 M17). The decision itself is a pure function so
   // a headless test drives exactly what the screen does.
+  const editorMode = useSimStore((s) => s.editorMode);
   const gameEnd = useSimStore((s) => s.gameEnd);
   const dismissedEnd = useSimStore((s) => s.dismissedEnd);
   const dismissEnd = useSimStore((s) => s.dismissEnd);
@@ -372,6 +383,14 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
             {!replaying && openList === 'industries' && <IndustryList />}
             {/* What the scenario asks for, above the books: a goal is the
                 reason the books are being read (SPEC2 M17). */}
+            {/* A workshop world puts the palette at the top of the sidebar,
+                above the panels of the company whose money it does not spend
+                (SPEC2 M22, D-240). */}
+            {!replaying && editorMode && (
+              <Suspense fallback={null}>
+                <EditorPanel client={client} />
+              </Suspense>
+            )}
             {!replaying && <GoalPanel />}
             {!replaying && <TilePanel client={client} />}
             {!replaying && <FleetPanel client={client} />}

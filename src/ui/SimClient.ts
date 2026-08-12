@@ -15,6 +15,7 @@ import {
   type VehicleFrame,
 } from '../shared/snapshot';
 import type { Command } from '../sim/commands/types';
+import type { ScenarioMeta } from '../sim/save/scenarioMeta';
 import type { Difficulty, MapClimate } from '../sim/constants';
 import { handleWorkerCrash, recordCommand, recordWorldReplaced } from './crashReporter';
 import { useSimStore } from './store';
@@ -274,6 +275,12 @@ export class SimClient {
     store.resetWorld();
     recordWorldReplaced('newGame');
     this.post({ type: 'newGame', options });
+    // "Der Editor laeuft gegen eine pausierte Vor-Start-Welt" (SPEC2 M22).
+    // Set HERE rather than on the screen that offered the checkbox, because
+    // every door into a workshop world goes through this method and a clock
+    // that ran while an author shaped a coastline would age industries,
+    // settle towns and start competitors on a map that is not finished.
+    if (options.editorMode === true) this.setSpeed(0);
   }
 
   /**
@@ -287,6 +294,22 @@ export class SimClient {
   /** Called when the worker hands back an encoded save. */
   onSaveWritten: ((message: Extract<WorkerToMainMessage, { type: 'saveWritten' }>) => void) | null =
     null;
+
+  /**
+   * Ask the worker to write the running world as a `.ironscenario` (M22).
+   *
+   * The briefing goes out with the request and the bytes come back, exactly
+   * like a save: the workshop is where the words are typed, the serializer is
+   * where they are written, and the file dialog is on this side of the
+   * boundary because the simulation may not touch a disk.
+   */
+  exportScenario(meta: ScenarioMeta): void {
+    this.post({ type: 'requestScenario', meta });
+  }
+
+  /** Called when the worker hands back an encoded scenario. */
+  onScenarioWritten:
+    ((message: Extract<WorkerToMainMessage, { type: 'scenarioWritten' }>) => void) | null = null;
 
   /** Stop the worker and the read loop. */
   dispose(): void {
@@ -321,6 +344,7 @@ export class SimClient {
           economyCurve: message.economyCurve,
           towns: message.towns,
           industries: message.industries,
+          editorMode: message.editorMode,
         });
         store.setReady(seed);
         return;
@@ -362,6 +386,15 @@ export class SimClient {
         return;
       case 'saveWritten':
         this.onSaveWritten?.(message);
+        return;
+      case 'scenarioWritten':
+        this.onScenarioWritten?.(message);
+        return;
+      case 'scenarioFailed':
+        // The same channel every refused request uses: a toast naming the
+        // reason. A scenario that could not be written is an authoring
+        // mistake, not a broken game.
+        store.setRejection(message.reasonKey);
         return;
       case 'loadFailed':
         store.setLoadError({

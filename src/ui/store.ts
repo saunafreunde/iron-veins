@@ -25,7 +25,11 @@ import type { MapGenPhase } from '../sim/mapgen';
 import type { ReplayVerification } from '../sim/save/replay';
 import type { ReplayMeta } from '../sim/save/replaySession';
 import type { ConnectPlan } from './connect';
+import { IndustryType } from '../sim/industry/types';
+import { TownSize } from '../sim/town/types';
 import type { CrashBundleSummary } from './crashBundle';
+import { EDITOR_DEFAULT_BRUSH_RADIUS, type EditorTool } from './editor/tools';
+import type { EditorOverlay } from './editor/overlays';
 
 /**
  * The full-screen panels of M9. One at a time, because each of them wants the
@@ -293,6 +297,25 @@ export interface SimUiState extends SnapshotValues {
    */
   showHeat: boolean;
   /**
+   * True when the running world is a scenario WORKSHOP (SPEC2 M22).
+   *
+   * Published by the worker on `ready` rather than remembered from the button
+   * that opened it: `editorMode` is saved, hashed world state, so a workshop
+   * that was saved and loaded again is still one - and the palette has to
+   * follow the WORLD, not the click.
+   */
+  editorMode: boolean;
+  /** Which workshop tool is armed. Its own union: the palette is not the toolbar. */
+  editorTool: EditorTool;
+  /** Brush radius the sized workshop tools use. [tiles] */
+  editorRadius: number;
+  /** `TownSize` value the town-seed tool places. */
+  editorTownSize: number;
+  /** `IndustryType` value the industry tool sites. */
+  editorIndustryType: number;
+  /** Which debug overlay the workshop draws, or null for none. */
+  editorOverlay: EditorOverlay | null;
+  /**
    * What the atlas currently shows against what the world measured: `drawn`
    * arrows on screen, `omitted` active legs cut by the top-N cap - the
    * honest "x weitere" indicator of the M14 order. Pushed change-detected
@@ -341,6 +364,7 @@ export interface SimUiState extends SnapshotValues {
     economyCurve: readonly number[];
     towns: readonly TownMarker[];
     industries: readonly IndustryMarker[];
+    editorMode: boolean;
   }) => void;
   setHoveredTile: (tile: TileInfo | null) => void;
   setSelectedTile: (tile: TileInfo | null) => void;
@@ -425,6 +449,11 @@ export interface SimUiState extends SnapshotValues {
   toggleDebug: () => void;
   toggleFlow: () => void;
   toggleHeat: () => void;
+  setEditorTool: (tool: EditorTool) => void;
+  setEditorRadius: (radius: number) => void;
+  setEditorTownSize: (sizeClass: number) => void;
+  setEditorIndustryType: (industryType: number) => void;
+  setEditorOverlay: (overlay: EditorOverlay | null) => void;
   setFlowStats: (drawn: number, omitted: number) => void;
   setFlowSource: (source: (() => { data: Int32Array; count: number; tick: number }) | null) => void;
 }
@@ -521,6 +550,12 @@ export const useSimStore = create<SimUiState>((set) => ({
   showDebug: false,
   showFlow: false,
   showHeat: false,
+  editorMode: false,
+  editorTool: 'none',
+  editorRadius: EDITOR_DEFAULT_BRUSH_RADIUS,
+  editorTownSize: TownSize.Town,
+  editorIndustryType: IndustryType.CoalMine,
+  editorOverlay: null,
   flowStats: { drawn: 0, omitted: 0 },
   flowSource: null,
   rejectionKey: null,
@@ -546,6 +581,12 @@ export const useSimStore = create<SimUiState>((set) => ({
       industries: world.industries,
       townCount: world.towns.length,
       industryCount: world.industries.length,
+      editorMode: world.editorMode,
+      // Whatever the previous world had armed is disarmed with it: a workshop
+      // tool surviving into a game would put the palette's click handler over
+      // somebody's map, and an overlay would paint a world it never measured.
+      editorTool: 'none',
+      editorOverlay: null,
     }),
   setHoveredTile: (tile) => set({ hoveredTile: tile }),
   setSelectedTile: (tile) => set({ selectedTile: tile }),
@@ -652,6 +693,12 @@ export const useSimStore = create<SimUiState>((set) => ({
       // do: a curve left standing would price the next game's build preview.
       economyCurve: new EconomyCurve(),
       flowStats: { drawn: 0, omitted: 0 },
+      // The workshop belongs to the world that is going. `ready` sets the flag
+      // again for the world that arrives, so the palette can never outlive the
+      // map it was editing.
+      editorMode: false,
+      editorTool: 'none',
+      editorOverlay: null,
     }),
   setCompany: (name, colorIndex) => set({ companyName: name, companyColorIndex: colorIndex }),
   setPlatform: (appVersion, isDesktop) => set({ appVersion, isDesktop }),
@@ -665,6 +712,11 @@ export const useSimStore = create<SimUiState>((set) => ({
   toggleDebug: () => set((state) => ({ showDebug: !state.showDebug })),
   toggleFlow: () => set((state) => ({ showFlow: !state.showFlow })),
   toggleHeat: () => set((state) => ({ showHeat: !state.showHeat })),
+  setEditorTool: (editorTool) => set({ editorTool }),
+  setEditorRadius: (editorRadius) => set({ editorRadius }),
+  setEditorTownSize: (editorTownSize) => set({ editorTownSize }),
+  setEditorIndustryType: (editorIndustryType) => set({ editorIndustryType }),
+  setEditorOverlay: (editorOverlay) => set({ editorOverlay }),
   setFlowStats: (drawn, omitted) => set({ flowStats: { drawn, omitted } }),
   setFlowSource: (flowSource) => set({ flowSource }),
 }));

@@ -345,12 +345,30 @@ export function stationRadius(station: Station): number {
   return radiusForModuleCount(station.modules.length);
 }
 
+/**
+ * True when `(x, y)` lies inside a catchment of `radius` around `(cx, cy)`.
+ *
+ * The ONE circle test of section 10, so nothing outside this file may write
+ * the comparison down a second time - the workshop's catchment overlay (SPEC2
+ * M22) draws exactly the tiles this returns true for, and a preview that drew
+ * a slightly different disc would be teaching an author a station the
+ * simulation does not have.
+ */
+export function withinCatchment(
+  cx: number,
+  cy: number,
+  radius: number,
+  x: number,
+  y: number,
+): boolean {
+  const dx = x - cx;
+  const dy = y - cy;
+  return dx * dx + dy * dy <= radius * radius;
+}
+
 /** True when a tile lies inside the station's catchment area. */
 export function inCatchment(station: Station, x: number, y: number): boolean {
-  const radius = stationRadius(station);
-  const dx = x - station.x;
-  const dy = y - station.y;
-  return dx * dx + dy * dy <= radius * radius;
+  return withinCatchment(station.x, station.y, stationRadius(station), x, y);
 }
 
 /**

@@ -3,6 +3,7 @@ import {
   EDITOR_FOREST_COST_PER_TILE_CT,
   EDITOR_INDUSTRY_COST_CT,
   EDITOR_TOWN_SEED_COST_CT,
+  TerraformDirection,
   TILE_PUBLIC,
   TOWN_COUNT_MAX,
   TOWN_MIN_DISTANCE,
@@ -19,7 +20,6 @@ import {
   digTileToSeaLevel,
   refreshShorelineEverywhere,
   terraformBrush,
-  TerraformDirection,
 } from '../map/terraform';
 import { industrySiteRefusal, occupy } from '../mapgen/industries';
 import { isValidCentre, newTown, settleTown } from '../mapgen/towns';

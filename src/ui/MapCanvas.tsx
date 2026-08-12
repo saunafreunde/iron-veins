@@ -15,6 +15,8 @@ import { audioEngine } from './audioBridge';
 import { planConnection } from './connect';
 import { nextSignalStep } from './signalCycle';
 import { stationAtTile } from './TilePanel';
+import { computeEditorOverlay } from './editor/overlays';
+import { commandForEditorTool } from './editor/tools';
 import { useSimStore, type Tool } from './store';
 
 /**
@@ -207,6 +209,7 @@ export function MapCanvas({ client }: { readonly client: SimClient }): ReactElem
   const connectPlan = useSimStore((s) => s.connectPlan);
   const roadStopPreview = useSimStore((s) => s.roadStopPreview);
   const dayNight = useSimStore((s) => s.settings.dayNight);
+  const editorOverlay = useSimStore((s) => s.editorOverlay);
   const month = useSimStore((s) => s.month);
   const climate = useSimStore((s) => s.climate);
 
@@ -322,6 +325,23 @@ export function MapCanvas({ client }: { readonly client: SimClient }): ReactElem
       const state = useSimStore.getState();
       state.setSelectedTile(tile);
       if (tile === null) return;
+
+      /*
+       * The scenario workshop (SPEC2 M22). Checked FIRST and answered whole:
+       * while a workshop tool is armed the map belongs to the palette, and a
+       * click that fell through to the build tools would lay a road across the
+       * ridge the author is shaping. `commandForEditorTool` is the ONE place
+       * any of the five workshop kinds is built.
+       */
+      if (state.editorMode && state.editorTool !== 'none') {
+        const command = commandForEditorTool(state.editorTool, tile.x, tile.y, {
+          radius: state.editorRadius,
+          townSize: state.editorTownSize,
+          industryType: state.editorIndustryType,
+        });
+        if (command !== null) client.send(command);
+        return;
+      }
 
       /*
        * Connect: two clicks on two STATIONS, then a priced confirmation.
@@ -584,6 +604,37 @@ export function MapCanvas({ client }: { readonly client: SimClient }): ReactElem
   useEffect(() => {
     viewRef.current?.setDayNight(dayNight);
   }, [dayNight]);
+
+  useEffect(() => {
+    /*
+     * The workshop's debug overlays (SPEC2 M22), recomputed - never stored.
+     *
+     * The dependency list IS the statement that the field is a pure function
+     * of the world: which overlay, the map (through its revision), the climate
+     * and the stations. Nothing here is remembered between runs, no buffer is
+     * reused across a change of overlay, and the view is handed a fresh array
+     * so its identity check is exact.
+     */
+    const view = viewRef.current;
+    const map = mapRef.current;
+    if (view === null) return;
+    if (editorOverlay === null || map === null) {
+      view.setEditorOverlay(null);
+      return;
+    }
+    view.setEditorOverlay(
+      computeEditorOverlay(
+        editorOverlay,
+        map,
+        climate,
+        stations.map((station) => ({
+          x: station.x,
+          y: station.y,
+          moduleCount: station.modules.length,
+        })),
+      ),
+    );
+  }, [editorOverlay, mapRevision, mapBuffer, climate, stations]);
 
   useEffect(() => {
     // The seasonal optics of SPEC2 M18: the published month crossed with the

@@ -35,6 +35,7 @@ export function worldParamsFor(options: NewGameOptions): NewGameParams {
     elections: options.elections,
     economy: options.economy,
     aiCompanies: options.aiCompanies,
+    editorMode: options.editorMode,
     goals: options.goals,
   };
 }

@@ -81,6 +81,12 @@ export function NewGameDialog({
   // game was measured by a world without weather.
   const [weather, setWeather] = useState<WeatherRule>(WeatherRule.Off);
   const [aiCompanies, setAiCompanies] = useState(2);
+  // The scenario workshop of SPEC2 M22. It rides on THIS screen rather than on
+  // one of its own because a workshop world is chosen exactly like a game
+  // world - seed, size, climate, every rule - and the map an author shapes has
+  // to be a map the game can play. What the flag adds is who is allowed to ask
+  // for what (D-240): funds and ownership stop refusing, and nothing else does.
+  const [editorMode, setEditorMode] = useState(false);
 
   return (
     <section className="panel panel--wide">
@@ -239,6 +245,16 @@ export function NewGameDialog({
         {t('ui.newGame.economy')}
       </label>
 
+      <label className="panel__hint">
+        <input
+          type="checkbox"
+          checked={editorMode}
+          onChange={(event) => setEditorMode(event.target.checked)}
+        />{' '}
+        {t('ui.newGame.editorMode')}
+      </label>
+      {editorMode && <p className="panel__hint">{t('ui.newGame.editorModeHint')}</p>}
+
       <label className="field">
         <span className="field__label">{t('ui.newGame.seed')}</span>
         <div className="button-row">
@@ -279,6 +295,7 @@ export function NewGameDialog({
               elections,
               economy,
               aiCompanies,
+              editorMode,
             })
           }
         >

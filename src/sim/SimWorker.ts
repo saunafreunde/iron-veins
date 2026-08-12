@@ -74,6 +74,7 @@ import {
   REPLAY_NOT_A_RECORDING,
 } from './save/replaySession';
 import { decodeSave, encodeSave } from './save/serialize';
+import { encodeScenario } from './save/scenario';
 import { councilRating, exclusiveRightsCostCt, TOWN_MEASURE_COUNT } from './town/council';
 import { ticksToNextElection } from './town/elections';
 import { calendarFromTick, hashWorldLive, World } from './World';
@@ -1017,6 +1018,7 @@ function adoptWorld(current: World, sink: SnapshotWriter): void {
     towns: townMarkers(current),
     industries: industryMarkers(current.industries),
     economyCurve: current.economyCurve.toData(),
+    editorMode: current.editorMode,
   });
 }
 
@@ -1059,6 +1061,32 @@ function handleMessage(message: MainToWorkerMessage): void {
       }
       writeSave(message.slot, message.label);
       return;
+
+    case 'requestScenario': {
+      // The workshop's export (SPEC2 M22). Written inline rather than through
+      // a helper on purpose: a named parameter would put the metadata block's
+      // own type into a file under `src/sim` that is not `src/sim/save`, which
+      // is precisely what `scenarioCoupling.spec.ts` forbids. The worker
+      // therefore hands the briefing straight to the serializer without ever
+      // reading a field of it.
+      const current = world;
+      if (current === null) return;
+      if (replay !== null) {
+        scope.postMessage({ type: 'commandRejected', reasonKey: REPLAY_COMMAND_REFUSAL });
+        return;
+      }
+      try {
+        const bytes = encodeScenario(current, queue, __APP_VERSION__, message.meta, checkpoints);
+        scope.postMessage({ type: 'scenarioWritten', bytes });
+      } catch (error) {
+        scope.postMessage({
+          type: 'scenarioFailed',
+          reasonKey: 'ui.editor.export.failed',
+          detail: error instanceof Error ? error.message : String(error),
+        });
+      }
+      return;
+    }
 
     case 'loadSave':
       abandonReplay();

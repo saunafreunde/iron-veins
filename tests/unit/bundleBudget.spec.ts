@@ -118,8 +118,34 @@ const DIST = join(REPO_ROOT, 'dist');
  * `economy/subsidies.ts` are reached only from `World.ts` and `SimWorker.ts`,
  * both of which are already the worker's chunk. 978,000 is the new measurement
  * plus ~0.5 %.
+ *
+ * **Raised again for SPEC2 M22 bundle 2** (the scenario workshop's palette,
+ * brush sizes, debug overlays and scenario export), with the measurement and
+ * the same rule. The A/B is two builds of the same tree, `NODE_ENV=production`
+ * on both: **976,409 B -> 991,118 B, +14,709 B**, against 1,591 B of headroom
+ * under the old number, so this bundle had to book whatever it weighed. Split
+ * by deleting exactly the forty new catalogue lines from both languages and
+ * rebuilding (983,020 B): **+8,098 B are the i18n keys in two languages** -
+ * seven effect-explaining tool tooltips, the brush and river hints, the four
+ * overlay captions with their two honesty notes, the export form and its four
+ * refusals, and the new-game rule's own paragraph - and the remaining
+ * **+6,611 B are the interface**: the tool registry, the four pure overlay
+ * fields, the map view's overlay layer, the store's five fields and the
+ * new-game checkbox. **The palette itself is NOT in this number**: `EditorPanel`
+ * is loaded lazily (the D-192 pattern) into a 5,211 B chunk of its own, because
+ * a player who never opens a workshop should not download one.
+ *
+ * **A finding this budget caught, which is what it is for**: the first build of
+ * the bundle came in at 996,464 B, and 5,346 B of that were `map/terraform.ts`
+ * and `mapgen/hydrology.ts` under it, dragged into the entry chunk by a palette
+ * that imported `TerraformDirection` - two integers - from the module that
+ * moves ground. The vocabulary moved to `constants.ts`, where constants live
+ * anyway, and the chunk gave the bytes straight back. **No static `src/sim`
+ * import chain that decodes, serialises or steps a world**: probed on the built
+ * entry chunk, which contains no `decodeSave`, no `hashWorld`, no save magic
+ * and no `streamFor`. 998,000 is the new measurement plus ~0.7 %.
  */
-const MAIN_CHUNK_BUDGET_BYTES = 978_000;
+const MAIN_CHUNK_BUDGET_BYTES = 998_000;
 
 /** The verdict, separated from the measuring so a planted size can be judged. */
 interface BudgetVerdict {

@@ -10,6 +10,7 @@ import {
   MapClimate,
   SEA_LEVEL,
   TERRAFORM_COST_PER_STEP_CT,
+  TerraformDirection,
   TILE_PUBLIC,
 } from '../../src/sim/constants';
 import { IndustryType } from '../../src/sim/industry/types';
@@ -19,7 +20,6 @@ import {
   applyTerraform,
   refreshShorelineEverywhere,
   standingWaterAboveSeaLevel,
-  TerraformDirection,
 } from '../../src/sim/map/terraform';
 import { RailType, TrackDir, trackBit } from '../../src/sim/map/track';
 import { parseCommand } from '../../src/sim/save/format';

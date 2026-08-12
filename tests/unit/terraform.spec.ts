@@ -5,17 +5,13 @@ import {
   MAX_TERRAFORM_CORNERS,
   SEA_LEVEL,
   TERRAFORM_COST_PER_STEP_CT,
+  TerraformDirection,
 } from '../../src/sim/constants';
 import { SignalKind, packSignal } from '../../src/sim/map/signals';
 import { Structure } from '../../src/sim/map/structures';
 import { TileMap } from '../../src/sim/map/TileMap';
 import { Terrain } from '../../src/sim/map/terrain';
-import {
-  applyTerraform,
-  estimateTerraform,
-  levelTile,
-  TerraformDirection,
-} from '../../src/sim/map/terraform';
+import { applyTerraform, estimateTerraform, levelTile } from '../../src/sim/map/terraform';
 import { RailType, TrackDir, trackBit } from '../../src/sim/map/track';
 import { ModuleKind } from '../../src/sim/station/types';
 import { RoadBit } from '../../src/sim/town/types';

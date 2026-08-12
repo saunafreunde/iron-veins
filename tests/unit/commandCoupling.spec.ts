@@ -26,23 +26,16 @@ const UI_DIR = fileURLToPath(new URL('../../src/ui/', import.meta.url));
  * reason, instead of silently having no button - and the audit fails a stale
  * entry, so the list cannot outlive its reasons.
  *
- * The five entries below are the scenario workshop's own commands (SPEC2 M22).
- * They are here for exactly ONE bundle: M22 bundle 1 ships the simulation half
- * - the kinds, the parser, the `editorMode` rule, the save bump - and bundle 2
- * ships `src/ui/editor/` with the palette that issues them. Splitting it that
- * way is what keeps the save bump and its pin re-record in one reviewable
- * change; the allowlist is the honest way to say "not yet" rather than to
- * weaken the audit, and **bundle 2 deletes these five lines**. An entry that is
- * still here when the palette exists is a red build, because the audit fails a
- * kind that IS issued and is listed.
+ * **The list is EMPTY, and it got there the way the mechanism intends.** M22
+ * bundle 1 put the scenario workshop's five kinds here with a reason and a
+ * deadline - the simulation half shipped first so that the save bump and its
+ * pin re-record stayed one reviewable change - and bundle 2 deleted all five
+ * lines when `src/ui/editor/tools.ts` began issuing them. The audit fails in
+ * both directions, so the entries could not have outlived their reason: a kind
+ * that IS issued and is still listed is as red as one that is issued by
+ * nobody.
  */
-const NO_UI_ISSUER: readonly string[] = [
-  'TerraformBrushRegion',
-  'PlaceTownSeed',
-  'PlaceIndustryAt',
-  'PaintForest',
-  'PaintRiver',
-];
+const NO_UI_ISSUER: readonly string[] = [];
 
 /**
  * Command construction sites: `kind: CommandKind.X` is how a command literal
