@@ -137,6 +137,44 @@ export class TileMap {
    */
   revision = 0;
 
+  /**
+   * Bumped whenever the TRACK layers change - `trackBits` or `signal`.
+   *
+   * The rail pathfinder's dense index and the block index are the only two
+   * things in the simulation that cache a whole-map derivation, and both of
+   * them depend on those two layers and on nothing else. They used to key on
+   * {@link revision}, which moves for every house, every kerbstone and every
+   * tree - so ONE map edit cost a full 1024^2 scan twice on the very next tick,
+   * whatever it had edited. Measured on the 1,500-vehicle fixture with one town
+   * building a day: tick p99 **6.0 -> 8.3 ms** with the bump, back to **5.0**
+   * with the bump alone removed and everything else left in (SPEC2 M20 bundle
+   * 2, D-232). It has been the price of every road tile a player lays since M4;
+   * nothing exercised it, because the acceptance fixture never edited the map
+   * while it was being timed.
+   *
+   * {@link noteChange} moves both counters and is what every COMMAND calls. The
+   * three passes the town runs for itself - the growth of D-231, and the trees
+   * and streets of the 13.3 measures - move {@link revision} alone, and they
+   * are allowed to because each of them refuses a tile carrying track before it
+   * writes anything. `tests/unit/trackRevision.spec.ts` holds both halves: that
+   * the town moves one counter and not the other, and that nothing outside
+   * `commands/build.ts` writes either track layer.
+   */
+  trackRevision = 0;
+
+  /**
+   * Record a map change that MAY have touched the track layers.
+   *
+   * The safe direction by construction: over-invalidating the two indexes is
+   * always correct and costs one rebuild, while under-invalidating them is a
+   * stale route (law #3). Every command therefore calls this and nothing has to
+   * work out what it touched.
+   */
+  noteChange(): void {
+    this.revision++;
+    this.trackRevision++;
+  }
+
   constructor(size: number, buffer?: SharedArrayBuffer) {
     this.size = size;
     const tiles = size * size;

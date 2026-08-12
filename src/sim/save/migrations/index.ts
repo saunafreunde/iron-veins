@@ -1422,20 +1422,48 @@ const v29_to_v30: SaveMigration = (payload) => {
 };
 
 /**
- * M20 gave a town a body: the monthly growth rate finally puts up houses and
- * lays street, and SPEC.md 13.2's cap of three tiles a month needs a counter
- * to be a cap at all (SPEC2 M20's one Z5 bump - v31).
+ * Keep a number a payload already carries; write the default only where the
+ * field is missing.
  *
- * A version 30 town never built anything, so it had spent nothing of any
- * month's road budget. Zero is not a default chosen for convenience - it is
- * exactly what that world knew about itself, the same sentence every migration
- * in this chain since v25 has been able to write.
+ * `withFields` overwrites, which is right for a field that cannot exist yet and
+ * wrong the moment the corpus trick wraps a CURRENT state in an old version
+ * header - the same rule `growCargoRow` and `fillReturnLedger` follow, and the
+ * reason "migrates a v22 save to v23 without moving the world hash" is a test
+ * that can be trusted.
+ */
+function keptNumbers(entry: unknown, defaults: Record<string, number>): unknown {
+  if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) return entry;
+  const raw = entry as Record<string, unknown>;
+  const filled: Record<string, unknown> = { ...raw };
+  for (const key of Object.keys(defaults)) {
+    const value = raw[key];
+    filled[key] = typeof value === 'number' && Number.isFinite(value) ? value : defaults[key]!;
+  }
+  return filled;
+}
+
+/**
+ * M20 gave a town a body and then the whole of SPEC.md 13.2's growth formula
+ * (SPEC2 M20's one Z5 bump - v31, spent by bundle 1 and extended in place here).
+ *
+ * Bundle 1's field is the road budget: the cap of three tiles a month needs a
+ * counter to be a cap at all. Bundle 2 adds the building-material term of 13.2
+ * and its twelve-month passenger window - historical inputs to the monthly
+ * growth decision, and therefore save state rather than figures rebuilt on load
+ * (Z4, Fehlerkatalog 23).
+ *
+ * A version 30 town never built anything, had never been offered a tonne of
+ * cement and had no window: zero and an EMPTY window are not defaults chosen
+ * for convenience, they are exactly what that world knew about itself. An empty
+ * window is also self-repairing rather than wrong - `supplyMonths` 0 makes the
+ * first month a true mean of one month, so a loaded town is judged on the
+ * months it has actually played instead of on twelve months of invented zeros.
  *
  * The growth CURSOR is deliberately not migrated in, because it is not stored:
  * the town whose turn it is comes from the game day and the town count
  * (`town/growth.ts`), both of which a version 30 save already carries. Later
- * bundles of this milestone - the twelve-month supply window, the council
- * elections - extend THIS migration in place rather than adding a v32 (Z5).
+ * bundles of this milestone - the council elections - extend THIS migration in
+ * place rather than adding a v32 (Z5).
  */
 const v30_to_v31: SaveMigration = (payload) => {
   const inner = state(payload);
@@ -1443,7 +1471,15 @@ const v30_to_v31: SaveMigration = (payload) => {
     ...payload,
     state: {
       ...inner,
-      ...mapSection(inner, 'towns', (town) => withFields(town, { roadTilesThisMonth: 0 })),
+      ...mapSection(inner, 'towns', (town) =>
+        keptNumbers(town, {
+          roadTilesThisMonth: 0,
+          buildingMaterialThisMonth: 0,
+          supplyProducedMean: 0,
+          supplyTransportedMean: 0,
+          supplyMonths: 0,
+        }),
+      ),
     },
   };
 };

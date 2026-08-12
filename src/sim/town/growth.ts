@@ -1,4 +1,10 @@
-import { TICKS_PER_DAY, TILE_PUBLIC, TOWN_GROWTH_ROAD_TILES_PER_MONTH } from '../constants';
+import {
+  MAX_STATIONS,
+  STATION_CATCHMENT_SCAN_RADIUS,
+  TICKS_PER_DAY,
+  TILE_PUBLIC,
+  TOWN_GROWTH_ROAD_TILES_PER_MONTH,
+} from '../constants';
 import { refreshCommercialShare } from '../industry/catchment';
 import type { TileMap } from '../map/TileMap';
 import { Structure } from '../map/structures';
@@ -10,13 +16,15 @@ import {
   joinStreetTile,
   placeBuildings,
   plotBuildable,
+  pruneUnservedStreets,
   STREET_STEP_BIT,
   STREET_STEP_DX,
   STREET_STEP_DY,
 } from '../mapgen/towns';
 import { roadBuildableAt } from '../net/roadBuilder';
+import { inCatchment } from '../station/types';
 import type { World } from '../World';
-import type { Town } from './types';
+import { BuildingKind, type Town } from './types';
 
 /**
  * Physical town growth (SPEC.md 13.2, SPEC2 M20 bundle 1).
@@ -46,6 +54,18 @@ import type { Town } from './types';
  *    extension candidate and its tie-breaks are all total orders over tile
  *    indices, so no later breakdown roll moves and no existing seed forks
  *    because a town put a house up.
+ *
+ * SPEC2 M20 bundle 2 gave the pass its second direction: SPEC.md 13.2's
+ * "Ohne jede Versorgung schrumpfen Staedte langsam" is a population that falls,
+ * and a falling population has to take houses down again or a town would keep
+ * a skyline it no longer has anybody for. The same three shapes hold in both
+ * directions - the deficit is `buildingsWantedFor` minus what stands, whichever
+ * sign it has; the winner is an explicit total order; and D-216's pruning
+ * invariant is restored after a removal exactly as it is respected before an
+ * extension. Two things are refused on the way down and neither is decoration:
+ * a station is never left with an empty catchment (see {@link mayRemoveBuilding}
+ * - the 10.1 death spiral has to stay visible in the M14 instruments), and a
+ * street a company built or a bay it parked beside one is never touched.
  *
  * What the growth may NOT do, and each of these is a refusal rather than an
  * oversight: it never terraforms (it builds where the ground already allows,
@@ -82,7 +102,15 @@ export function growTownFabric(world: World): void {
 
   const wanted = buildingsWantedFor(town.population);
   const standing = countTownBuildings(map, town, radius);
-  if (standing >= wanted) return;
+  // SPEC.md 13.2's other direction (SPEC2 M20 bundle 2): a town whose
+  // population has fallen below its housing stock takes a house down again.
+  if (standing > wanted) {
+    if (!removeBuilding(world, town, radius)) return;
+    refreshTownStationShares(world, town);
+    map.revision++;
+    return;
+  }
+  if (standing === wanted) return;
 
   let built = placeBuildings(map, town, radius, wanted - standing);
   let laidStreet = false;
@@ -110,6 +138,134 @@ export function growTownFabric(world: World): void {
   // the game that was saved (law #3).
   if (built > 0) refreshTownStationShares(world, town);
   map.revision++;
+}
+
+/**
+ * Live count of the buildings each station covers, for the removal guard.
+ *
+ * Preallocated at `MAX_STATIONS` and indexed by the station's POSITION in
+ * `world.stations`, which is the order every loop below walks (law #7 - the
+ * daily hook may not allocate, and a shrinking town runs in exactly that hook).
+ * It is a scratch buffer and never state: it is filled at the top of every
+ * removal and read only until that removal ends.
+ */
+const coveredBuildings = new Int32Array(MAX_STATIONS);
+
+/**
+ * Count, for every station of this town, how many of its buildings it covers.
+ *
+ * `station.buildingsCovered` is a BUILD-TIME reading that nothing refreshes
+ * (the residual D-231 names), so it cannot answer this: it would say a station
+ * still covers eight houses on the day the last one came down. The guard has to
+ * read the map.
+ */
+function countCoveredBuildings(world: World, town: Town): void {
+  const map = world.map;
+  const stations = world.stations;
+  const scan = STATION_CATCHMENT_SCAN_RADIUS;
+
+  for (let s = 0; s < stations.length && s < MAX_STATIONS; s++) {
+    const station = stations[s]!;
+    coveredBuildings[s] = 0;
+    if (station.townId !== town.id) continue;
+
+    let count = 0;
+    for (let dy = -scan; dy <= scan; dy++) {
+      const y = station.y + dy;
+      if (y < 0 || y >= map.size) continue;
+      for (let dx = -scan; dx <= scan; dx++) {
+        const x = station.x + dx;
+        if (x < 0 || x >= map.size) continue;
+        if (!inCatchment(station, x, y)) continue;
+        const index = map.tileIndex(x, y);
+        if (map.townId[index] !== town.id) continue;
+        if (map.buildingKind[index] !== BuildingKind.None) count++;
+      }
+    }
+    coveredBuildings[s] = count;
+  }
+}
+
+/**
+ * May this house come down without leaving a station with nothing to serve?
+ *
+ * The refusal SPEC2 M20 asks for by name: "Schrumpfung/Rueckbau gegen
+ * Stationseinzugsgebiete getestet - die Todesspirale (10.1) darf dadurch nicht
+ * unsichtbar eskalieren". A station whose catchment holds ONE building of its
+ * town keeps it. The stop then goes on selling the tickets its town still
+ * produces, its rating goes on being readable, and the decline stays something
+ * the M14 history ring and the x-ray can show the player month by month -
+ * rather than a stop that silently stops existing economically because the
+ * houses around it were taken away by a pass nobody is watching.
+ *
+ * It is deliberately the LAST one and not the last few: a town that may never
+ * shrink inside a catchment would keep its full housing stock for ever wherever
+ * a stop was ever built, and the shrinkage 13.2 asks for would be unobservable
+ * in exactly the towns a player has touched.
+ */
+function mayRemoveBuilding(world: World, town: Town, x: number, y: number): boolean {
+  const stations = world.stations;
+  for (let s = 0; s < stations.length && s < MAX_STATIONS; s++) {
+    const station = stations[s]!;
+    if (station.townId !== town.id) continue;
+    if (coveredBuildings[s]! > 1) continue;
+    if (inCatchment(station, x, y)) return false;
+  }
+  return true;
+}
+
+/**
+ * Take ONE house down, from the edge inwards, and answer whether one went.
+ *
+ * The mirror image of `placeBuildings`, which fills ring by ring from the
+ * centre out: a town shrinks where it grew last, so the candidate FARTHEST from
+ * the centre goes first and ties break on the HIGHEST tile index - a total
+ * order no two candidates tie on, decided before the walk and never by it
+ * (law #3).
+ *
+ * One a day rather than the whole surplus at once. The surplus of a shrinking
+ * town is one house every three or four game years, so the pass converges long
+ * before the next one appears; and a pass that could clear a whole quarter in a
+ * day would let one edited population number level a town.
+ *
+ * The pruning invariant of D-216 is restored afterwards and not promised: the
+ * street that served the house may now serve nothing, and `pruneUnservedStreets`
+ * is the same sweep, to the same fixed point, that the map generator runs -
+ * with the owner check that makes it safe over a played map, so a company's
+ * road and a bay beside the street are never touched.
+ */
+function removeBuilding(world: World, town: Town, radius: number): boolean {
+  const map = world.map;
+  countCoveredBuildings(world, town);
+
+  let bestTile = -1;
+  let bestDistanceSq = -1;
+
+  for (let dy = -radius; dy <= radius; dy++) {
+    const y = town.y + dy;
+    for (let dx = -radius; dx <= radius; dx++) {
+      const x = town.x + dx;
+      if (!map.contains(x, y)) continue;
+      const index = map.tileIndex(x, y);
+      if (map.townId[index] !== town.id) continue;
+      if (map.buildingKind[index] === BuildingKind.None) continue;
+
+      const distanceSq = dx * dx + dy * dy;
+      if (bestTile !== -1) {
+        if (distanceSq < bestDistanceSq) continue;
+        if (distanceSq === bestDistanceSq && index < bestTile) continue;
+      }
+      if (!mayRemoveBuilding(world, town, x, y)) continue;
+      bestTile = index;
+      bestDistanceSq = distanceSq;
+    }
+  }
+
+  if (bestTile === -1) return false;
+  map.buildingKind[bestTile] = BuildingKind.None;
+  map.buildingLevel[bestTile] = 0;
+  pruneUnservedStreets(map, town, radius);
+  return true;
 }
 
 /** Refresh the derived zone mix of every station this town's growth reached. */

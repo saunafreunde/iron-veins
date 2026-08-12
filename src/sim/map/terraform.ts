@@ -311,7 +311,7 @@ export function applyTerraform(
   for (const corner of affected.corners) {
     map.cornerHeight[corner] = map.cornerHeight[corner]! + direction;
   }
-  map.revision++;
+  map.noteChange();
 
   const changedShoreline = refreshShoreline(map, affected.corners);
   return {

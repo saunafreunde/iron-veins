@@ -976,6 +976,13 @@ function hashDynamicState(h: Fnv1a64, world: World): void {
     h.u32(town.x).u32(town.y).u32(town.sizeClass).int(town.population).u32(town.radius);
     h.f64(town.producedThisMonth).f64(town.transportedThisMonth);
     h.f64(town.goodsDeliveredThisMonth).f64(town.foodDeliveredThisMonth);
+    // SPEC.md 13.2's building-material term and its twelve-month passenger
+    // window (SPEC2 M20 bundle 2). All four are historical inputs to the
+    // monthly growth decision, so all four are hashed: a window that travelled
+    // unhashed would let two worlds with different growth ahead of them
+    // fingerprint the same (Z4, Fehlerkatalog 23).
+    h.f64(town.buildingMaterialThisMonth);
+    h.f64(town.supplyProducedMean).f64(town.supplyTransportedMean).u32(town.supplyMonths);
     // The month's own road budget (SPEC2 M20): saved history, so hashed like
     // every other saved figure (D-134). Two worlds that differ only in how
     // much street a town has already laid this month will lay it differently

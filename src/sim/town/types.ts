@@ -50,6 +50,39 @@ export interface Town {
   goodsDeliveredThisMonth: number;
   foodDeliveredThisMonth: number;
   /**
+   * Building material delivered into a builders' merchant of this town this
+   * month. [units]
+   *
+   * SPEC.md 13.2's `versorgungBau`, and with it the first thing SPEC.md 7.2's
+   * "Baustoffhandel (Senke, treibt Stadtwachstum)" actually drives. Booked when
+   * the cement goes INTO the yard rather than when the yard consumes it,
+   * because the formula says "geliefert"; which town a yard belongs to is
+   * decided by `TOWN_BUILDING_MATERIAL_RADIUS`.
+   *
+   * Cleared by `growTowns` with the other monthly counters.
+   */
+  buildingMaterialThisMonth: number;
+  /**
+   * The twelve-month passenger window of SPEC.md 13.2, kept D-079's way.
+   *
+   * `versorgungPass` is the ONE term of 13.2 the specification annotates with
+   * "letzte 12 Monate", and a window is historical input to a simulation
+   * decision, so it is saved state rather than a figure rebuilt on load (Z4,
+   * Fehlerkatalog 23): a town reloaded with an empty window would grow at the
+   * unserved rate for a game year and then at the served one, which is the same
+   * world priced differently after a load.
+   *
+   * Two running means rather than a ring of twenty-four numbers, exactly as the
+   * industry service window (D-079) and the return-journey ledger (D-213) keep
+   * theirs, and `supplyMonths` is what makes them TRUE means while the window
+   * is still filling: rolled from zero instead, a town served perfectly from
+   * its first day would read two thirds of its own service for a game year.
+   */
+  supplyProducedMean: number;
+  supplyTransportedMean: number;
+  /** Completed months in the window above, capped at TOWN_SUPPLY_WINDOW_MONTHS. */
+  supplyMonths: number;
+  /**
    * Tiles of street the town has laid for itself this game month. [tiles]
    *
    * SPEC.md 13.2 caps a town's own road building at three tiles a month, and

@@ -13,7 +13,7 @@ no entry below. A number may appear under several topics.
 - **Determinism, RNG & hashing:** D-001, D-002, D-003, D-004, D-009, D-010,
   D-024, D-093, D-106, D-128, D-137, D-142, D-145, D-146, D-149, D-153, D-178,
   D-181, D-184, D-185, D-188, D-189, D-190, D-191, D-193, D-194, D-195,
-  D-196, D-200, D-201, D-202, D-204
+  D-196, D-200, D-201, D-202, D-204, D-232
 - **Commands, snapshot & worker boundary:** D-004, D-005, D-006, D-011, D-032,
   D-100, D-111, D-145, D-146, D-148, D-162, D-174, D-176, D-179, D-187, D-189,
   D-192, D-193, D-196, D-200, D-202, D-218
@@ -26,26 +26,28 @@ no entry below. A number may appear under several topics.
 - **Save format, migrations & replays:** D-007, D-025, D-026, D-027, D-048,
   D-111, D-130, D-131, D-134, D-142, D-144, D-145, D-146, D-147, D-153, D-178,
   D-181, D-184, D-185, D-188, D-189, D-190, D-191, D-192, D-193, D-194,
-  D-197, D-198, D-200, D-207, D-213, D-231
+  D-197, D-198, D-200, D-207, D-213, D-231, D-232
 - **Rail & track:** D-042, D-043, D-044, D-045, D-046, D-047, D-053, D-141,
   D-153, D-157, D-184, D-230
 - **Signals & reservations:** D-054, D-055, D-056, D-057, D-058, D-059, D-060,
-  D-061, D-073, D-080, D-081, D-082, D-083, D-157, D-173, D-184, D-185, D-186
+  D-061, D-073, D-080, D-081, D-082, D-083, D-157, D-173, D-184, D-185, D-186,
+  D-232
 - **Stations & catchment:** D-049, D-080, D-095, D-150, D-159, D-178, D-179,
   D-208, D-210, D-230, D-231
 - **Cargo, payment & routing:** D-036, D-037, D-065, D-067, D-075, D-077,
   D-078, D-118, D-142, D-151, D-176, D-178, D-187, D-207, D-211, D-213,
   D-215
 - **Industry & production:** D-022, D-062, D-063, D-064, D-069, D-071, D-079,
-  D-085, D-086, D-174, D-201, D-202, D-205, D-225
+  D-085, D-086, D-174, D-201, D-202, D-205, D-225, D-232
 - **Towns, council & ownership:** D-101, D-102, D-103, D-104, D-205, D-207,
-  D-206, D-213, D-216, D-217, D-231
+  D-206, D-213, D-216, D-217, D-231, D-232
 - **Economy, finance & emissions:** D-008, D-090, D-091, D-092, D-105, D-154,
   D-180, D-193, D-196, D-228, D-229
 - **Balancing & scenarios:** D-038, D-039, D-040, D-041, D-066, D-087, D-088,
   D-116, D-151, D-152, D-156, D-158, D-159, D-187, D-190, D-194, D-195,
   D-196, D-197, D-198, D-199, D-200, D-203, D-204, D-207, D-211, D-213,
-  D-215, D-216, D-220, D-221, D-222, D-224, D-225, D-226, D-228, D-229
+  D-215, D-216, D-220, D-221, D-222, D-224, D-225, D-226, D-228, D-229,
+  D-232
 - **Vehicles & fleet:** D-043, D-044, D-045, D-068, D-076, D-089, D-093,
   D-096, D-142, D-143, D-145, D-146, D-155, D-157, D-171, D-174, D-181, D-185,
   D-201, D-207
@@ -12695,3 +12697,197 @@ radius, there is room for a century.
 re-record; `npm run test:balance:full` **12 files / 101 tests** green;
 `npm run test:soak` **4** green at the re-recorded hash; `npm run test:perf`
 green with the three tick samples above.
+
+### D-232 SPEC.md 13.2 complete - the building-material term, the company rating, the twelve-month window, and the shrinkage that takes houses down again
+
+**`growTowns` has computed a growth rate since M2 and it was never the rate 13.2
+asks for.** Three of the formula's terms were missing or wrong and the sentence
+underneath it had never been implemented at all: `versorgungBau` did not exist,
+so SPEC.md 7.2's "Baustoffhandel (Senke, treibt Stadtwachstum)" drove nothing
+and a builders' merchant was a yard that ate cement; the goods and food weights
+stood at 0.35 against the specification's 0.45; the company-rating factor
+`(0.5 + 0.5 x firmenRating/100)` was absent; the passenger share was read off ONE
+month where 13.2 annotates it "letzte 12 Monate"; and "Ohne jede Versorgung
+schrumpfen Staedte langsam (-0,03 %/Monat)" was not in the code in any form - an
+unserved town GREW at 0.15 % a month for the whole century. This is SPEC2 M20
+bundle 2. The v31 migration is EXTENDED in place (Z5); no bump.
+
+- **The formula is one pure function of six numbers, and that is what makes the
+  Fertig-wenn answerable.** `townGrowthRate(pass, waren, food, bau, terrain,
+  rating)` takes no world, so `tests/unit/townFormula.spec.ts` can compute the
+  specification BY HAND from its own numerals - `0.0015 * 2.1275 * 0.6 * 0.9 =
+  0.001723275` - and then drop one term at a time and check what the rate loses
+  against `weight x share x outer`. A test that composed the constants the
+  implementation reads would only prove a file agrees with itself, so the hand
+  reckoning uses literals and a separate case asserts the constants ARE those
+  literals.
+- **"Ohne jede Versorgung ..." is a BRANCH and not a term, and it has to be.**
+  Every factor in the product is strictly positive, so the formula evaluated at
+  zero supply grows a town nobody has ever reached; the two halves of 13.2 are
+  only both true if a town with no supply at all takes the flat rate instead of
+  the product. The flat rate carries neither the terrain factor nor the council
+  with it - which is why the desert and the temperate passive curves, which used
+  to part at 9,248 and 10,574 by the end of 1975, are now **the same 7,376**.
+- **Rounding is the floor nobody has to write.** At -0.03 % a month a town under
+  1,667 inhabitants rounds back to where it was and does not shrink at all,
+  exactly as a town under 334 does not grow at the base rate. A hamlet therefore
+  outlives its bus line, and that is arithmetic rather than a rule.
+- **`versorgungBau` is booked on what the yard ACCEPTED, from the cargo the yard
+  itself accepts.** The delivery path calls `noteBuildingMaterial` with what
+  `deliverToIndustry` really took, so the term widens the day a merchant's recipe
+  does (the D-174/D-183 shape: the table IS the enumeration) and a full yard
+  credits nothing - the term reads the LINE rather than the stock. Which town a
+  yard belongs to is `TOWN_BUILDING_MATERIAL_RADIUS`, nearest centre first, ties
+  on the lower id: **the town's own claimed radius could not be used and this is
+  not a shortcut** - `mapgen/industries.ts` refuses to place any industry on a
+  claimed tile, so a term measured against the claim would be zero on every
+  generated world by construction. The radius is `INDUSTRY_NEAR_TOWN_DISTANCE`,
+  the placement rule's own figure, moved out of `industry/types.ts` into
+  `constants.ts` so the two ends cannot drift.
+  `TOWN_INHABITANTS_PER_BUILDING_MATERIAL` = 1,200 is the one demand ratio 13.2
+  leaves open; the constant's comment carries the arithmetic that chose it
+  (6.67 t a month for a city of 8,000 against one merchant's 200 t of intake).
+  Measured end to end: three cement lorries into a merchant ten tiles from a town
+  of 3,000 leave it at **3,104 after three game years against 2,964 for the
+  identical world with no lorries** - the whole gap is the term.
+- **`firmenRating` is the 13.3 council rating, weighted by what each company
+  CARRIED.** It is the only company rating the game has, `reviewCouncils` runs
+  immediately before `growTowns`, and it already carries what 13.2 wants growth
+  to depend on. A town served by a well regarded operator and touched once by a
+  resented one does not grow at the average of the two. Where nothing was carried
+  the best regarded company with a station in the town speaks for it; where no
+  company serves at all the rating is 0 and the factor sits on its 0.5 floor -
+  which a town in that state never reaches anyway, because it is shrinking.
+- **The twelve-month window is D-079's device for the third time** (after the
+  industry service window and the M19 return-journey mean): two running numbers
+  and a month count rather than a ring of twenty-four, a TRUE mean while the
+  window fills. It is SAVE STATE, because a window is historical input to a
+  simulation decision (Z4, Fehlerkatalog 23) - a town reloaded with an empty
+  window would grow at the unserved rate for a game year and then at the served
+  one, the same world priced differently after a load. The ratio is of the two
+  MEANS and not the mean of the ratios, so a month in which a town produced
+  nothing carries no weight instead of counting as perfect or hopeless service.
+- **Shrinkage takes houses down, and the two refusals on the way down are the
+  point.** `growTownFabric` gained its second direction: `standing > wanted`
+  removes ONE house a day, farthest from the centre first (the mirror of
+  `placeBuildings`, which fills from the centre out), ties on the highest tile
+  index. **A station is never left with an empty catchment** - a house that is
+  the last one a station of this town covers is refused, counted live off the map
+  because `station.buildingsCovered` is the build-time reading D-231 named as a
+  residual - so the 10.1 death spiral stays legible in the M14 instruments
+  instead of ending as a stop with nothing around it. Measured on a stop nobody
+  drives to: population 2,776 -> 2,296 over forty years, and the station's own
+  history ring reads **947 -> 785 commuters lost at the platform a month**. The
+  refusal is the LAST building and deliberately not the last few: a town that
+  could never shrink inside a catchment would keep its full stock for ever
+  wherever a stop was ever built.
+- **D-216's pruning invariant holds in both directions, through the same sweep.**
+  `pruneUnservedStreets` is exported and runs after a removal, so a street that
+  served the house it lost is shortened to the same fixed point the map generator
+  uses - one invariant, not two. What the played map adds is an OWNER, and
+  `streetServesSomething` reads it now: a tile a company took is a stop, a bay, a
+  depot or its own road, and every one of those is something the street beside it
+  exists for. **Provably a no-op at generation time** - `owner` is `TILE_PUBLIC`
+  everywhere until a command writes it - and every `SCENARIO_WORLD_CLAIMS`
+  generation figure and every `mapgen.spec.ts` assertion is unmoved, which is
+  what proves it.
+- **The shipped scenarios' passive curves were re-measured and both ends moved
+  together** (D-197/D-198/D-199's rule). Wiederaufbau's Erlenbach 9,925 / 10,033
+  / 10,465 / 10,574 -> **7,520 / 7,496 / 7,400 / 7,376**, Ueberleben's
+  Sandenwerder 9,200 / 9,248 -> **7,400 / 7,376**; the claims table, the German
+  and English briefings (10.574 -> 7.376, and "waechst von allein nur langsam" ->
+  "waechst nicht, sie schrumpft"), the catalogue header and three doc comments
+  all changed in the same edit, and `SCENARIO_BRIEFING_FIGURES` reads the numeral
+  straight back out of the claims table. The 11,000 population goal is still
+  above the passive line - by a much wider margin than before - and still
+  reachable: with passengers and food fully carried the rate is
+  `0.0015 x 2.0 x 0.6 x ~0.92`, i.e. **8,000 -> about 13,100 over the scenario's
+  own span**.
+- **One AI band was re-banded with an A/B trace from two worktrees at one commit,
+  and the trace is the entry.** `aiGame`'s seed-4711 block asserted "the road
+  company still runs its line"; once a town nobody serves shrinks instead of
+  growing for free, the town-pair bus business on that seed stops clearing
+  `AI_MIN_PROFIT_MARGIN` and D-221's floor refuses it. What the old assertion was
+  protecting: Seeblick Spedition ran that line to a company value of **342,738
+  EUR from a 500,000 start** and Rautenberg Fracht laid 151 tiles of road for
+  **233,189** - seed 4711's three competitors together held **1,047,515 EUR of
+  the 1,500,000 they began with**. On this build they hold **1,462,984** and two
+  of them never leave the yard. The line the guard protected was destroying its
+  owner's capital, so **the guard is on the CAPITAL now**, banded at 1,200,000
+  EUR - under the measurement and over the previous build's run, so it would have
+  been RED on that build. Four-seed sweep 6,877,612 -> **7,293,303 EUR**, 0 wound
+  up on both sides, and the whole difference is seed 4711: 4713 moves 1,842,235
+  -> 1,842,457, and 4712 and 4714 are identical to the euro.
+- **Every other band is untouched and scenario 5 is identical to the euro.**
+  Scenario 1 payback in game year 3, scenario 2 249,980 EUR / year 6, scenario 3
+  159,516 EUR/yr, mine closure month 25, Netzdesign 3.75 against a band of 3
+  (3.73 in the M15 note - the scenario prints the figure and bands the
+  threshold; its alignment half is unmoved at 2.01x and its capacity half reads
+  1.87x against 1.86x, both on a world whose towns now decline), takt -8.3 % / 0.57,
+  Harter Winter -4.36 %, Punktzahl 5,889, scenario 5 road **1,022,084** / rail
+  **1,802,165** / expansive **2,153,604** - the D-221 and D-229 figures to the
+  cent. The AI worlds that DID move are the three-competitor ones, where towns
+  are the business.
+- **A stated claim in `src/sim/ai/evaluate.ts` was falsified by this bundle and
+  is corrected rather than left**: "a town is the one source in the game that
+  cannot shut down or run dry". It can run dry now, slowly, and the comment says
+  so with the measurement beside it.
+- **Pins, all moved once and each by running:** canonical cross-OS
+  `6e46c92e5d94c66b` -> **`817c99ef5dfe2061`** (D-137 protocol); corpus manifest
+  re-recorded with a fresh `v31-played.ironsave` - **the nine frozen fixtures
+  still decode to ONE world** (`ac21b577424ab399`, played by builds whose towns
+  did not shrink) and the v31 one is the same thirty days played by THIS build
+  (`8356a543736c7eb1`), which is D-231's pattern one bundle on; soak
+  `ad5247561331af6e` -> **`75ef4332dae55b89`** at **143 -> 35** recorded
+  commands, the drop being seed 4711's two companies that no longer build.
+  `SAVE_VERSION` stays **31**.
+- **A latent cost the whole game has paid since M4, found by this bundle and
+  fixed.** With one town changing the map every day, the 1,500-vehicle
+  acceptance fixture measured tick p99 **6.06 -> 8.29 ms** (five interleaved A/B
+  pairs against a worktree at HEAD; p50 2.433 -> 2.522). Two probes located ALL
+  of it and none of it was the town's own work: with the removal disabled the
+  run reads **6.03 ms**, and with the removal kept but the single `map.revision++`
+  taken out it reads **4.95 ms**. `RailPathfinder.reindex` and
+  `BlockIndex.refresh` keyed on `TileMap.revision`, which moves for every house,
+  kerbstone and tree, so ONE map edit cost a full 1024^2 scan TWICE on the very
+  next tick whatever it had edited - which is what a player's every road tile
+  has cost since M4, hidden because the acceptance fixture never edited the map
+  while it was being timed. **`TileMap.trackRevision` is the second counter**,
+  moved by `TileMap.noteChange()` - which every command calls, in the safe
+  direction by construction, because over-invalidating costs a rebuild and
+  under-invalidating is a stale route. The three passes the town runs for itself
+  (D-231's growth, and the trees and streets of the 13.3 measures) move
+  `revision` alone, and each of them refuses a tile carrying track before it
+  writes anything. `tests/unit/trackRevision.spec.ts` holds both halves: the
+  counters move apart exactly where they should, and a source walk over
+  `src/sim` proves `commands/build.ts` is the ONLY writer of `trackBits` or
+  `signal`, so "every writer went through `noteChange`" is a property of the
+  source rather than a promise (the D-176/D-186 device). After it: **p99 6.07 ms
+  with the daily map change in place.** Zero behavioural difference - both
+  indexes are pure functions of the same two layers and a rebuild is
+  deterministic, which the determinism suite, the corpus and the soak confirm by
+  not moving.
+- **The tick numbers are named rather than claimed** (D-167, D-215's posture).
+  This box is not clean: both sides of every pair sit at **p50 2.3-2.8 ms
+  against the reference machine's 1.43-1.45**, and `max` reads 30-47 ms. What is
+  measured cleanly is the growth pass itself, on the same 512 world in both
+  trees: **1.19 us per game day against 0.99** (+0.20 us, i.e. about 1 ns a
+  tick), allocating **0.798 B per game day** against an allocating control at
+  1,665 B (law #7). The 6.1.1 row stays open until the milestone closes.
+- **Named residual, and it is the same one D-231 left**: `station.buildingsCovered`
+  is still a build-time reading. The growth and the shrinkage both refresh
+  `commercialShare` and neither refreshes that counter, so a town that has
+  doubled or halved its houses still offers its stop the coverage it had on the
+  day the stop was built. The removal guard therefore counts the buildings LIVE
+  rather than trusting it, and the field itself belongs to the zone-economy
+  bundle.
+
+**Verified by running**, on the final tree: `npm run typecheck` clean;
+`npm run lint` over the whole repo clean; `npx vitest run tests/unit`
+**118 files / 1,525 tests** green (115 -> 118 files, +29 cases);
+`npx vitest run tests/determinism tests/corpus` green after the two re-records;
+`npm run test:balance:full` **12 files / 101 tests** green;
+`npm run test:soak` **4** green at the re-recorded hash; `npm run test:perf`
+green at p99 6.07 ms with the daily map change in place. `npm run format:check`
+is red on the same 31 files it was red on before (D-227); the three new test
+files were formatted before they were committed and are not among them.

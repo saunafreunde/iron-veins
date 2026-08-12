@@ -41,19 +41,23 @@ import type { ShippedScenario } from './types';
  *    **1,400-2,000 units of coal a year** (the M6 coal world; 16,360
  *    cumulative over ten years, the yearly steps falling as the mine's
  *    platform queue settles).
- *  - a town of 8,000 that nobody serves reaches **9,925 after twenty game
- *    years, 10,465 after twenty-five, and 10,574 by the END of 1975** in a
- *    temperate climate; in the desert **9,200 after twenty-five years and
- *    9,248 by the end of 1975**. All six figures are played out and pinned in
- *    `tests/unit/shippedScenarios.spec.ts` (the desert pair on the Ueberleben
+ *  - a town of 8,000 that nobody serves FALLS to **7,520 after twenty game
+ *    years, 7,400 after twenty-five, and 7,376 by the END of 1975** - in the
+ *    desert as well as in a temperate climate, because SPEC.md 13.2's
+ *    "-0,03 %/Monat ohne jede Versorgung" is a flat rate that carries neither
+ *    the terrain factor nor the council's opinion with it (SPEC2 M20 bundle 2;
+ *    until then an unserved town GREW, to 10,574 temperate and 9,248 desert).
+ *    Both curves are played out and pinned in
+ *    `tests/unit/shippedScenarios.spec.ts` (the desert one on the Ueberleben
  *    seed with its four competitors taken out - "unserved" is not a thing that
- *    can be measured in a world where somebody else is building). The pairs are
- *    one game year apart and which one a threshold has to clear is decided by
- *    its band tick: `endOfYear(Y)` is the year Y running OUT, so it is the
+ *    can be measured in a world where somebody else is building). The samples
+ *    are one game year apart and which one a threshold has to clear is decided
+ *    by its band tick: `endOfYear(Y)` is the year Y running OUT, so it is the
  *    second figure of each pair.
  *    Full passenger service multiplies the growth rate by 1.55, goods and food
- *    by a further 0.35 each (`TOWN_GROWTH_*` in constants.ts), so a population
- *    goal above the passive line is a goal about SERVICE.
+ *    by a further 0.45 each and building material by 0.35 (`TOWN_GROWTH_*` in
+ *    constants.ts), so a population goal is now a goal about SERVICE twice
+ *    over: what a town gains AND what it stops losing.
  *  - a competent network gains at most ~840,000 EUR of company value over a
  *    quarter century, and the strongest measured AI company reached 1.12
  *    million from a 500,000 start (D-158). Nothing here asks for more than
@@ -487,13 +491,14 @@ const INSELHUEPFEN: ShippedScenario = {
 /**
  * Seed 12, temperate, 256 tiles, HARD (250,000 to start with). Measured: seven
  * towns of 8,000, three farms and three food factories - the full food chain
- * standing idle. Erlenbach (32) is one of the big towns; unserved it reaches
- * 10,033 by the end of 1970 and 10,574 by the end of 1975, so the 11,000 asked
- * for below cannot be waited out. This world has no competitors at all, which
- * is what makes it the one the passive temperate growth curve is played out on
- * (`shippedScenarios.spec.ts`): both figures above are pinned there, and so are
- * the 9,925 and 10,465 the catalogue header quotes at twenty and twenty-five
- * game years.
+ * standing idle. Erlenbach (32) is one of the big towns; unserved it FALLS to
+ * 7,496 by the end of 1970 and 7,376 by the end of 1975, so the 11,000 asked
+ * for below cannot be waited out - and since SPEC2 M20 bundle 2 it cannot be
+ * approached by waiting either, because a town nobody serves shrinks. This
+ * world has no competitors at all, which is what makes it the one the passive
+ * growth curve is played out on (`shippedScenarios.spec.ts`): both figures
+ * above are pinned there, and so are the 7,520 and 7,400 the catalogue header
+ * quotes at twenty and twenty-five game years.
  */
 const WIEDERAUFBAU: ShippedScenario = {
   id: 'wiederaufbau',
@@ -502,16 +507,16 @@ const WIEDERAUFBAU: ShippedScenario = {
   briefing: {
     de:
       'Sieben Grossstaedte, drei Bauernhoefe, drei Lebensmittelwerke - und 250.000 ' +
-      'EUR Startkapital. Die Kette steht still, und eine Stadt waechst von allein ' +
-      'nur langsam: Erlenbach kaeme unbedient bis Ende 1975 auf 10.574 Einwohner. ' +
-      'Die 11.000 muessen Sie herbeifahren. Wer nur zusieht, ist vorher ' +
-      'zahlungsunfaehig.',
+      'EUR Startkapital. Die Kette steht still, und eine Stadt ohne Anschluss ' +
+      'waechst nicht, sie schrumpft: Erlenbach faellt unbedient bis Ende 1975 auf ' +
+      '7.376 Einwohner. Die 11.000 muessen Sie herbeifahren. Wer nur zusieht, ist ' +
+      'vorher zahlungsunfaehig.',
     en:
       'Seven cities, three farms, three food factories - and 250,000 EUR to start ' +
-      'with. The chain is idle, and a town grows slowly on its own: by the end of ' +
-      '1975 an unserved Erlenbach would have reached 10,574 inhabitants. The 11,000 ' +
-      'asked for has to be carried in. Anybody who only watches is insolvent ' +
-      'before then.',
+      'with. The chain is idle, and a town nobody serves does not grow, it shrinks: ' +
+      'by the end of 1975 an unserved Erlenbach would be down to 7,376 inhabitants. ' +
+      'The 11,000 asked for has to be carried in. Anybody who only watches is ' +
+      'insolvent before then.',
   },
   goals: [
     {
@@ -583,8 +588,9 @@ const WIEDERAUFBAU: ShippedScenario = {
  * industries - the map where the councils of 13.3 matter more than any chain.
  * Falkenheim (16) is one of the nine, and it starts at the same 8,000 in the
  * same climate as Wiederaufbau's Erlenbach, whose passive curve IS played out
- * and pinned: 10,033 by the end of 1970, 10,574 by the end of 1975. That is
- * where the 11,000 asked for below comes from. Falkenheim itself is not played
+ * and pinned: 7,496 by the end of 1970, 7,376 by the end of 1975 - it falls,
+ * since SPEC2 M20 bundle 2. That is where the 11,000 asked for below comes
+ * from, and it was already above the line when the line still rose. Falkenheim itself is not played
  * out, and could not be honestly: this world has three competitors in it, and
  * one of them serving the town is exactly what the goal is asking the player
  * to do first (D-198 - the earlier comment quoted the figures as if they had
@@ -754,11 +760,14 @@ const SPEEDRUN: ShippedScenario = {
  * Seed 69, desert, 256 tiles, HARD, four competitors, every world rule the
  * game has switched ON. Measured: ten industries and only two towns of 8,000,
  * the rest at 2,500 or below - a thin offer for five companies, and one that
- * grows slowly, because a desert town of 8,000 that nobody serves reaches
- * 9,248 by the end of 1975 where a temperate one reaches 10,574. That desert
- * figure is played out and pinned on THIS seed with the four competitors taken
- * out (`shippedScenarios.spec.ts`, D-198): "unserved" is not a property a
- * world with four builders in it can be asked about. Surviving a quarter
+ * does not grow at all: a desert town of 8,000 that nobody serves is down to
+ * 7,376 by the end of 1975, which is exactly what a temperate one reaches,
+ * because SPEC.md 13.2's shrinkage is a flat rate with no climate and no
+ * terrain in it (SPEC2 M20 bundle 2; before it the two curves parted at 9,248
+ * and 10,574). That desert figure is played out and pinned on THIS seed with
+ * the four competitors taken out (`shippedScenarios.spec.ts`, D-198):
+ * "unserved" is not a property a world with four builders in it can be asked
+ * about. Surviving a quarter
  * century here is the goal, and it is not a formality: the measured
  * quarter-century AI games wind up two companies in three (D-109).
  */

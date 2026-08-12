@@ -357,7 +357,7 @@ const SCENARIO_WORLD_CLAIMS: Readonly<Record<string, WorldClaim>> = {
     ],
   },
   // "Sieben Grossstaedte, drei Bauernhoefe, drei Lebensmittelwerke ...
-  // Erlenbach kaeme unbedient bis Ende 1975 auf 10.574 Einwohner."
+  // Erlenbach faellt unbedient bis Ende 1975 auf 7.376 Einwohner."
   wiederaufbau: {
     townsTotal: 40,
     citiesAt8000: 7,
@@ -374,13 +374,18 @@ const SCENARIO_WORLD_CLAIMS: Readonly<Record<string, WorldClaim>> = {
     // quotes it with: twenty years, the end of 1970, twenty-five years, the end
     // of 1975. The pairs are one game year apart, which is the trap D-197 found
     // - `endOfYear(Y)` is the year Y running OUT.
+    //
+    // **The curve FALLS since SPEC2 M20 bundle 2** (9,925 / 10,033 / 10,465 /
+    // 10,574 before it): SPEC.md 13.2's closing sentence gives a town that
+    // nothing at all reaches -0.03 % a month, and this world has no
+    // competitors, so nothing ever reaches Erlenbach.
     passiveGrowth: {
       townId: 32,
       samples: [
-        [20, 9_925],
-        [21, 10_033],
-        [25, 10_465],
-        [26, 10_574],
+        [20, 7_520],
+        [21, 7_496],
+        [25, 7_400],
+        [26, 7_376],
       ],
       withoutCompetitors: false,
     },
@@ -412,11 +417,17 @@ const SCENARIO_WORLD_CLAIMS: Readonly<Record<string, WorldClaim>> = {
     // Neither is named anywhere in the scenario's text; both are pinned
     // because the doc comment counts them.
     briefingTowns: [],
+    // The desert curve, and it is the same curve as the temperate one now
+    // (9,200 / 9,248 before SPEC2 M20 bundle 2): the shrinkage of 13.2 is a
+    // flat rate that carries neither the terrain factor nor the climate, so
+    // two unserved towns of 8,000 decline identically wherever they stand.
+    // Kept as its OWN claim rather than folded into Wiederaufbau's, because
+    // what it pins is a property of THIS seed's world played out on THIS seed.
     passiveGrowth: {
       townId: 8,
       samples: [
-        [25, 9_200],
-        [26, 9_248],
+        [25, 7_400],
+        [26, 7_376],
       ],
       withoutCompetitors: true,
     },
@@ -1083,12 +1094,12 @@ describe('every load-bearing claim a briefing makes is true of its world', () =>
   for (const scenario of SHIPPED_SCENARIOS) {
     const growth = SCENARIO_WORLD_CLAIMS[scenario.id]!.passiveGrowth;
     if (growth === undefined) continue;
-    it(`${scenario.id} grows its unserved town exactly as far as it claims`, () => {
+    it(`${scenario.id} moves its unserved town exactly as far as it claims`, () => {
       // The claims about the world's FUTURE rather than about the world as
       // generated, and three thresholds rest on them: "unserved, Erlenbach
-      // would reach 10,574 by the end of 1975 - the 11,000 has to be carried
-      // in", plus the four temperate and two desert figures the catalogue
-      // header quotes. Played to each sample with no player at all, because a
+      // FALLS to 7,376 by the end of 1975 - the 11,000 has to be carried in",
+      // plus the four temperate and two desert figures the catalogue header
+      // quotes. Played to each sample with no player at all, because a
       // threshold under the passive line is a medal the scenario gives away.
       //
       // The desert world is this seed and these rules with `aiCompanies` at

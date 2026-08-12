@@ -509,18 +509,42 @@ describe('M8 acceptance: a quarter century against three competitors, swept over
     ).toBeGreaterThanOrEqual(1);
   });
 
+  /**
+   * What the three competitors of seed 4711 must be left holding. [cent]
+   *
+   * Measured 1,462,984 EUR on this build against 1,047,515 on the build before
+   * SPEC2 M20 bundle 2, both played in a worktree an hour apart. The band sits
+   * under the measurement and OVER the previous run, which is what makes it
+   * evidence rather than an accommodation.
+   */
+  const SEED_4711_VALUE_FLOOR_CT = 1_200_000_00;
+
   it('seed 4711 stays the run the soak fixture recorded', () => {
     // The one deliberately seed-SPECIFIC block left, and it is labelled: this
     // seed is what `tests/soak` replays and what the desync twin below hashes,
     // so a change that quietly makes it worse should be a red test here and not
     // only a re-recorded fixture. Nothing in it is claimed of the simulation -
     // it is red on 4713 by construction.
+    //
+    // **Its second half used to read "the road company still runs its line",
+    // and SPEC2 M20 bundle 2 re-banded it with the trace.** Once an unserved
+    // town shrinks instead of growing for free (SPEC.md 13.2's closing
+    // sentence), the town-pair bus business on this seed no longer clears
+    // `AI_MIN_PROFIT_MARGIN` and the D-221 floor refuses to build it. What the
+    // old assertion was guarding is worth reading before anybody restores it:
+    // on the previous build Seeblick Spedition ran that line to a company value
+    // of **342,738 EUR from a 500,000 start** and Rautenberg Fracht laid 151
+    // tiles of road for **233,189** - the seed's three competitors together
+    // held 1,047,515 EUR of the 1,500,000 they started with. On this build they
+    // hold **1,462,984** and two of them never leave the yard. The line the
+    // guard protected was destroying its owner's capital, so the guard is now
+    // on the CAPITAL and not on the line.
     const { rows } = quarterCentury();
     expect(rows.filter((row) => row.bankrupt).length, 'seed 4711: nobody wound up').toBe(0);
-    expect(
-      rows.some((row) => row.lines >= 1 && row.vehicles >= 2),
-      'seed 4711: the road company still runs its line',
-    ).toBe(true);
+    const totalCt = rows.reduce((sum, row) => sum + row.valueCt, 0);
+    expect(totalCt, 'seed 4711: the competitors between them').toBeGreaterThanOrEqual(
+      SEED_4711_VALUE_FLOOR_CT,
+    );
   });
 
   it('is reproducible: the same seed plays the same game', () => {

@@ -43,10 +43,15 @@ export class BlockIndex {
     return this.blocks;
   }
 
-  /** Rebuild if the map has changed since the last time. Cheap when it has not. */
+  /**
+   * Rebuild if the TRACK has changed since the last time. Cheap when it has
+   * not - and since D-232 a house, a kerbstone or a tree is not a change to
+   * the track, which is what stops one town's building day costing a full-map
+   * flood fill on the next tick.
+   */
   refresh(map: TileMap): void {
-    if (this.builtRevision === map.revision) return;
-    this.builtRevision = map.revision;
+    if (this.builtRevision === map.trackRevision) return;
+    this.builtRevision = map.trackRevision;
     this.rebuild(map);
   }
 

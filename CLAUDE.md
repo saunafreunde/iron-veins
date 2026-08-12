@@ -2557,6 +2557,59 @@ council elections are those later bundles.
   streets it HAS and never starts a new one (13.2's literal sentence), and it
   never grows past the ground it claimed at genesis.
 
+## M20 bundle 2 - the 13.2 formula, complete (D-232)
+
+**Three of SPEC.md 13.2's terms were missing or wrong and the sentence
+underneath it had never been written at all.** `versorgungBau` did not exist, so
+7.2's "Baustoffhandel (Senke, treibt Stadtwachstum)" drove nothing; goods and
+food stood at 0.35 against the specification's 0.45; the company-rating factor
+was absent; the passenger share was one month where 13.2 says twelve; and an
+unserved town GREW at 0.15 % a month for the whole century. The v31 migration is
+EXTENDED in place (Z5), no bump.
+
+- **The formula is one pure function of six numbers** - `townGrowthRate` takes
+  no world - which is what lets the Fertig-wenn's "Formel-Test gegen
+  Handrechnung" be answered term by term instead of by playing a world.
+- **"Ohne jede Versorgung schrumpfen Staedte" is a BRANCH, not a term.** Every
+  factor in the product is positive, so the formula at zero supply grows a town
+  nobody ever reached. The flat -0.03 %/month carries neither the terrain factor
+  nor the council, which is why the desert and temperate passive curves - 9,248
+  and 10,574 by the end of 1975 - are now **the same 7,376**. Integer rounding
+  is a floor nobody wrote: under 1,667 inhabitants a town does not shrink at
+  all, as under 334 it does not grow.
+- **`versorgungBau` is booked on what the yard ACCEPTED**, from whatever the
+  yard accepts, and the town is the nearest centre within
+  `TOWN_BUILDING_MATERIAL_RADIUS` = `INDUSTRY_NEAR_TOWN_DISTANCE`. The town's own
+  claimed radius could NOT be used: mapgen refuses to place any industry on a
+  claimed tile, so that term would be zero on every generated world by
+  construction. Measured: three cement lorries leave a town of 3,000 at **3,104
+  after three game years against 2,964** with no lorries.
+- **Shrinkage takes houses down, and the two refusals are the point.** One house
+  a day, farthest from the centre first; **a station is never left with an empty
+  catchment** (counted LIVE, because `buildingsCovered` is the build-time
+  reading D-231 named), so the 10.1 spiral stays legible - measured 947 -> 785
+  commuters lost a month in the M14 ring as the town falls 2,776 -> 2,296.
+  D-216's pruner is exported and runs after a removal, with an OWNER check that
+  makes it safe over a played map and is a no-op at generation time.
+- **A latent cost the whole game has paid since M4, found here and fixed.**
+  `RailPathfinder.reindex` and `BlockIndex.refresh` keyed on `TileMap.revision`,
+  which moves for every house - so ONE map edit cost a full 1024^2 scan twice on
+  the next tick. Measured p99 6.06 -> 8.29 ms with a town building daily, and
+  **4.95 ms with the removal kept but the revision bump alone removed**: all of
+  it was the invalidation. `TileMap.trackRevision` + `noteChange()` is the split;
+  every COMMAND moves both counters, the three passes a town runs for itself
+  move `revision` alone, and a source walk proves `commands/build.ts` is the only
+  writer of `trackBits`/`signal`. After: **p99 6.07 ms**.
+- **Pins moved once each:** canonical `6e46c92e5d94c66b` ->
+  **`817c99ef5dfe2061`**, soak `ad5247561331af6e` -> **`75ef4332dae55b89`** at
+  143 -> 35 commands, corpus re-recorded (the nine frozen fixtures still decode
+  to ONE world). `SAVE_VERSION` stays **31**.
+- **One AI band re-banded with the trace**: `aiGame`'s seed-4711 guard was "the
+  road company still runs its line"; that line was losing its owner money
+  (three competitors held 1,047,515 EUR of 1,500,000), the D-221 floor now
+  refuses it, and the guard is on the CAPITAL instead - 1,462,984 measured
+  against a 1,200,000 band. Every other band and scenario 5 are untouched.
+
 ## Still outstanding
 
 - **A player still practically never meets a railway competitor, and D-228 says

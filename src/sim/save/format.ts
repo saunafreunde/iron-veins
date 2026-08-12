@@ -581,6 +581,16 @@ function parseTowns(value: unknown, path: string): Town[] {
         raw['foodDeliveredThisMonth'],
         `${path}[${i}].foodDeliveredThisMonth`,
       ),
+      buildingMaterialThisMonth: asFinite(
+        raw['buildingMaterialThisMonth'],
+        `${path}[${i}].buildingMaterialThisMonth`,
+      ),
+      supplyProducedMean: asFinite(raw['supplyProducedMean'], `${path}[${i}].supplyProducedMean`),
+      supplyTransportedMean: asFinite(
+        raw['supplyTransportedMean'],
+        `${path}[${i}].supplyTransportedMean`,
+      ),
+      supplyMonths: asInt(raw['supplyMonths'], `${path}[${i}].supplyMonths`),
       roadTilesThisMonth: asInt(raw['roadTilesThisMonth'], `${path}[${i}].roadTilesThisMonth`),
       transportedByCompany: parseNumbers(
         raw['transportedByCompany'],

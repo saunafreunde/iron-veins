@@ -4,6 +4,7 @@ import {
   INDUSTRY_FLUCTUATION_AMPLITUDE,
   INDUSTRY_FLUCTUATION_PERIOD_YEARS,
   INDUSTRY_LEVEL_START,
+  INDUSTRY_NEAR_TOWN_DISTANCE,
   INDUSTRY_STOCK_MONTHS,
   TICKS_PER_YEAR,
   TRIG_TABLE_SIZE,
@@ -84,7 +85,7 @@ const NEAR_TOWN: PlacementRule = {
   terrains: [Terrain.Grass, Terrain.Field, Terrain.Coast],
   minHeight: 4,
   maxHeight: 10,
-  nearTownDistance: 12,
+  nearTownDistance: INDUSTRY_NEAR_TOWN_DISTANCE,
 };
 
 export const INDUSTRY_SPECS: readonly IndustrySpec[] = [

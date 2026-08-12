@@ -144,8 +144,12 @@ describe('signal aspects from the claimed-block set', () => {
     // A new signal at 15 splits the section; the claim at 17 now lies in a
     // block that no longer touches the signal at 10. MapView re-collects
     // the set on every revision for exactly this renumbering.
+    //
+    // `noteChange` and not `revision++`: since D-232 the block index keys on
+    // `trackRevision`, which is what stops a house or a kerbstone costing a
+    // whole-map flood fill - and a signal IS a change to the track.
     map.signal[tileAt(map, 15)] = packSignal(SignalKind.Block, TrackDir.East);
-    map.revision++;
+    map.noteChange();
     claimed = claimSet(map, blocks, claimedTiles);
     expect(signalAspect(map, blocks, claimed, tileAt(map, 10))).toBe(SignalAspect.Green);
     expect(signalAspect(map, blocks, claimed, tileAt(map, 15))).toBe(SignalAspect.Red);

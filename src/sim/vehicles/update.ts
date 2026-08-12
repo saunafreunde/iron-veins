@@ -57,6 +57,8 @@ import { serviceVehicle } from './lifecycle';
 import { recordStationCargo, StationHistoryField } from '../station/history';
 import { creditPassengerArrival } from '../station/returns';
 import { deliverToIndustry } from '../industry/production';
+import { IndustryType } from '../industry/types';
+import { noteBuildingMaterial } from '../town/update';
 import { isOneWay, signalDirection, signalKind, SignalKind } from '../map/signals';
 import { flightPath } from '../net/airPath';
 import { roadSpeedFactor } from '../net/congestion';
@@ -978,7 +980,16 @@ function deliverCargo(world: World, station: Station, cargo: Cargo, amount: numb
     if (left <= 0) break;
     const industry = world.industries[industryId];
     if (industry === undefined) continue;
-    left -= deliverToIndustry(industry, cargo, left);
+    const taken = deliverToIndustry(industry, cargo, left);
+    left -= taken;
+    // SPEC.md 13.2's `versorgungBau`, which is what finally makes 7.2's
+    // "Baustoffhandel (Senke, treibt Stadtwachstum)" drive something: what a
+    // builders' merchant took is building material for the town it stands
+    // beside. Booked on what the yard ACCEPTED, so a full yard credits nothing
+    // and the term reads the line rather than the stock (SPEC2 M20 bundle 2).
+    if (taken > 0 && industry.type === IndustryType.BuildersMerchant) {
+      noteBuildingMaterial(world, industry.x, industry.y, taken);
+    }
   }
 
   if (left <= 0 || station.townId < 0) return;

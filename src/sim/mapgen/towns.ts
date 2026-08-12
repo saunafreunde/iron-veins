@@ -1,4 +1,5 @@
 import {
+  TILE_PUBLIC,
   TILES_PER_TOWN,
   TOWN_BUILT_RADIUS_MARGIN,
   TOWN_COUNT_MAX,
@@ -456,8 +457,19 @@ export const STREET_STEP_DX: readonly number[] = STEP_DX;
 export const STREET_STEP_DY: readonly number[] = STEP_DY;
 export const STREET_STEP_BIT: readonly number[] = STEP_BIT;
 
-/** A tile with something on it a street could exist for. */
+/**
+ * A tile with something on it a street could exist for.
+ *
+ * The owner is part of the answer since SPEC2 M20 bundle 2, and it is what
+ * makes the pruner safe to run over a PLAYED map: a tile a company took is a
+ * road stop, a lorry bay, a depot or a piece of its own road (D-101,
+ * `attachModule`), and every one of those is something the street beside it
+ * exists for. **It is provably a no-op at generation time** - `TileMap` fills
+ * `owner` with `TILE_PUBLIC` and nothing but a command ever writes it, so the
+ * whole map is public while the towns are being laid out.
+ */
 function occupiedTile(map: TileMap, index: number): boolean {
+  if (map.owner[index] !== TILE_PUBLIC) return true;
   return map.buildingKind[index] !== BuildingKind.None || map.industryId[index] !== -1;
 }
 
@@ -467,6 +479,7 @@ function streetServesSomething(map: TileMap, x: number, y: number): boolean {
   if (map.trackBits[index] !== 0) return true;
   if (map.structure[index] !== Structure.None) return true;
   if (map.industryId[index] !== -1) return true;
+  if (map.owner[index] !== TILE_PUBLIC) return true;
   if (x > 0 && occupiedTile(map, index - 1)) return true;
   if (x < map.size - 1 && occupiedTile(map, index + 1)) return true;
   if (y > 0 && occupiedTile(map, index - map.size)) return true;
@@ -570,8 +583,16 @@ function keepStreetsReachedFromCentre(map: TileMap, town: Town, radius: number):
  * generated - stations are the player's and industries are placed afterwards -
  * but the test asks about track, bridges and industry too, because M20 grows
  * towns with the same rule over a played map.
+ *
+ * **Exported since SPEC2 M20 bundle 2**, where the same sweep runs after a
+ * SHRINKING town has taken a house down: the invariant D-216 established at
+ * generation time - no street tile serving nothing - has to survive growth and
+ * shrinkage alike, and a second copy of the sweep would be a second invariant
+ * within a game year of the first edit. What the played map adds is an owner,
+ * and `streetServesSomething` reads it: a town may shorten its own street, it
+ * may never tear up what a company built or strand a bay beside it.
  */
-function pruneUnservedStreets(map: TileMap, town: Town, radius: number): void {
+export function pruneUnservedStreets(map: TileMap, town: Town, radius: number): void {
   let removed = true;
   while (removed) {
     removed = false;
@@ -710,6 +731,10 @@ export function generateTowns(map: TileMap, rng: Rng): Town[] {
       measureReadyTick: [],
       goodsDeliveredThisMonth: 0,
       foodDeliveredThisMonth: 0,
+      buildingMaterialThisMonth: 0,
+      supplyProducedMean: 0,
+      supplyTransportedMean: 0,
+      supplyMonths: 0,
       roadTilesThisMonth: 0,
     };
     towns.push(town);

@@ -273,7 +273,7 @@ export function buildRoad(
   bookExpense(world.company, chargeCt);
   world.company.infrastructureUpkeepPerYearCt += newTiles * ROAD_UPKEEP_PER_TILE_CT;
   world.company.fixedAssetsCt += cost;
-  world.map.revision++;
+  world.map.noteChange();
   return ACCEPTED;
 }
 
@@ -308,7 +308,7 @@ export function demolishRoad(world: World, x: number, y: number): CommandOutcome
 
   world.company.cashCt += Math.round(ROAD_COST_PER_TILE_CT * DEMOLITION_REFUND);
   world.company.infrastructureUpkeepPerYearCt -= ROAD_UPKEEP_PER_TILE_CT;
-  world.map.revision++;
+  world.map.noteChange();
   return ACCEPTED;
 }
 
@@ -404,7 +404,7 @@ export function buildTrack(
   bookExpense(world.company, chargeCt);
   world.company.infrastructureUpkeepPerYearCt += upkeepDelta;
   world.company.fixedAssetsCt += route.costCt;
-  map.revision++;
+  map.noteChange();
 
   if (signalSpacing > 0) autoSignal(world, route.tiles, signalSpacing);
   return ACCEPTED;
@@ -492,7 +492,7 @@ export function demolishTrack(world: World, x: number, y: number): CommandOutcom
 
   world.company.cashCt += Math.round(RAIL_TYPE_COST_CT[railType]! * DEMOLITION_REFUND);
   world.company.infrastructureUpkeepPerYearCt -= RAIL_TYPE_UPKEEP_CT[railType]!;
-  map.revision++;
+  map.noteChange();
   return ACCEPTED;
 }
 
@@ -540,7 +540,7 @@ export function buildSignal(
   bookExpense(world.company, chargeCt);
   world.company.infrastructureUpkeepPerYearCt += SIGNAL_UPKEEP_CT_PER_YEAR;
   world.company.fixedAssetsCt += SIGNAL_COST_CT;
-  map.revision++;
+  map.noteChange();
   return ACCEPTED;
 }
 
@@ -552,7 +552,7 @@ export function demolishSignal(world: World, x: number, y: number): CommandOutco
   }
 
   clearSignal(world, tile);
-  world.map.revision++;
+  world.map.noteChange();
   return ACCEPTED;
 }
 
@@ -611,7 +611,7 @@ export function buildWaypoint(world: World, x: number, y: number): CommandOutcom
   bookExpense(world.company, chargeCt);
   world.company.infrastructureUpkeepPerYearCt += WAYPOINT_UPKEEP_CT_PER_YEAR;
   world.company.fixedAssetsCt += WAYPOINT_COST_CT;
-  map.revision++;
+  map.noteChange();
   return ACCEPTED;
 }
 
@@ -625,7 +625,7 @@ export function demolishWaypoint(world: World, x: number, y: number): CommandOut
   if (permission !== null) return reject(permission);
 
   clearWaypoint(world, tile);
-  world.map.revision++;
+  world.map.noteChange();
   return ACCEPTED;
 }
 
@@ -771,7 +771,7 @@ export function buildRoadStop(
   bookExpense(world.company, chargeCt);
   world.company.infrastructureUpkeepPerYearCt += plan.upkeepCtPerYear;
   world.company.fixedAssetsCt += plan.costCt;
-  world.map.revision++;
+  world.map.noteChange();
   return ACCEPTED;
 }
 
@@ -810,7 +810,7 @@ export function buildRailStop(
   bookExpense(world.company, chargeCt);
   world.company.infrastructureUpkeepPerYearCt += upkeep;
   world.company.fixedAssetsCt += cost;
-  world.map.revision++;
+  world.map.noteChange();
   return ACCEPTED;
 }
 
@@ -853,7 +853,7 @@ export function buildWaterStop(
   bookExpense(world.company, chargeCt);
   world.company.infrastructureUpkeepPerYearCt += upkeep;
   world.company.fixedAssetsCt += chargeCt;
-  map.revision++;
+  map.noteChange();
   return ACCEPTED;
 }
 
@@ -914,7 +914,7 @@ export function buildAirport(world: World, x: number, y: number, kind: ModuleKin
   bookExpense(world.company, chargeCt);
   world.company.infrastructureUpkeepPerYearCt += AIRPORT_UPKEEP_CT[size]!;
   world.company.fixedAssetsCt += chargeCt;
-  map.revision++;
+  map.noteChange();
   return ACCEPTED;
 }
 
@@ -1030,7 +1030,7 @@ export function buildStationModule(
   bookExpense(world.company, chargeCt);
   world.company.infrastructureUpkeepPerYearCt += SUPPORT_MODULE_UPKEEP_CT[kind]!;
   world.company.fixedAssetsCt += cost;
-  map.revision++;
+  map.noteChange();
   return ACCEPTED;
 }
 
@@ -1220,7 +1220,7 @@ export function demolishBuilding(world: World, x: number, y: number): CommandOut
   }
   bookExpense(world.company, chargeCt);
   bookDemolition(world, tile);
-  map.revision++;
+  map.noteChange();
   return ACCEPTED;
 }
 

@@ -1209,6 +1209,19 @@ export const RETURN_TRIP_SHARE = 0.8;
 // ---------------------------------------------------------------- industry
 
 /**
+ * How near a town a `NEAR_TOWN` industry has to stand to be placed. [tiles]
+ *
+ * The map generator's own rule (`nearTownSatisfied` in `mapgen/industries.ts`),
+ * measured from the industry's north-west footprint tile to a town centre. It
+ * lives here rather than as a literal in the catalogue because SPEC2 M20 asks
+ * for the building material delivered to the merchant "im Stadtradius" and this
+ * is the game's ONE answer to how far from a town such a yard can be
+ * ({@link TOWN_BUILDING_MATERIAL_RADIUS}) - two copies of the figure would be
+ * two different definitions of which town a merchant belongs to.
+ */
+export const INDUSTRY_NEAR_TOWN_DISTANCE = 12;
+
+/**
  * Industry output at level 100, before any service gate. [units per month]
  *
  * Indexed by IndustryType. A pure sink - the power plant, the merchant - uses
@@ -1446,6 +1459,42 @@ export const TOWN_INHABITANTS_PER_GOODS = 900;
 export const TOWN_INHABITANTS_PER_FOOD = 700;
 
 /**
+ * Inhabitants per tonne of building material demanded per month.
+ * [inhabitants/tonne/month]
+ *
+ * SPEC.md 13.2 writes `versorgungBau = clamp(geliefert.zement+baustoffe /
+ * bedarf, 0, 1)` and then scales only the OTHER two demands
+ * (`bedarf.waren = einwohner / 900`, `bedarf.lebensmittel = einwohner / 700`).
+ * The building demand is the one the specification leaves open, so the figure
+ * is chosen here and this is what pins it.
+ *
+ * A town does not eat cement, it builds with it, so a head wants less of it per
+ * month than of food or of manufactured goods - one step out on the same scale.
+ * At 1,200 a city of 8,000 wants 6.67 t a month against one BuildersMerchant's
+ * 200 t of monthly intake (`INDUSTRY_BASE_OUTPUT_PER_MONTH`), so a single yard
+ * can supply a large town and its neighbours - which is what makes SPEC.md
+ * 7.2's "Senke, treibt Stadtwachstum" a sink that drives something rather than
+ * one that would need a merchant per suburb to matter.
+ */
+export const TOWN_INHABITANTS_PER_BUILDING_MATERIAL = 1_200;
+
+/**
+ * How far from its centre a town counts a builders' merchant as its own.
+ * [tiles]
+ *
+ * SPEC2 M20 says the building-material term comes from deliveries "an den
+ * BuildersMerchant im Stadtradius", and the town's own claimed radius cannot be
+ * that radius: the map generator refuses to place ANY industry on a tile a town
+ * has claimed (`mapgen/industries.ts`, `map.townId[index] !== -1`), so a term
+ * measured against the claim would be zero on every generated world by
+ * construction. The merchant's own placement rule is the figure the game
+ * already uses for "near a town" - {@link INDUSTRY_NEAR_TOWN_DISTANCE}, which
+ * is where a `NEAR_TOWN` industry is allowed to stand - so the yard that
+ * belongs to a town is exactly the yard that was allowed to be built beside it.
+ */
+export const TOWN_BUILDING_MATERIAL_RADIUS = INDUSTRY_NEAR_TOWN_DISTANCE;
+
+/**
  * Passengers produced per inhabitant and month.
  *
  * Calibrated against balancing scenario 1. Note that what reaches the station
@@ -1463,11 +1512,54 @@ export const TOWN_PRODUCTION_SLICES_PER_MONTH = 30;
 /**
  * Monthly town growth: a base rate lifted by how well each need is served.
  *
- * All three supply terms are shares in 0..1, so a town whose passengers, goods
- * and food are all fully carried grows at the base rate times one plus the sum
- * of the weights.
+ * All four supply terms are shares in 0..1, so a town whose passengers, goods,
+ * food and building material are all fully carried grows at the base rate times
+ * one plus the sum of the weights - then times the terrain factor and the
+ * council's opinion of whoever serves it (SPEC.md 13.2).
  */
 export const TOWN_GROWTH_BASE_RATE = 0.0015;
+
+/**
+ * What a town loses in a month in which NOTHING at all reaches it.
+ * [share per month]
+ *
+ * SPEC.md 13.2's closing sentence, verbatim: "Ohne jede Versorgung schrumpfen
+ * Staedte langsam (-0,03 %/Monat)." It is deliberately not the growth formula
+ * evaluated at zero supply - that product is strictly positive, because every
+ * factor in it is - but a separate branch, which is the only reading under
+ * which both halves of 13.2 can be true at once.
+ *
+ * Not a balancing knob: it is the specification's own figure. It is also small
+ * by construction - a town of 8,000 abandoned for a whole century keeps 69 % of
+ * its people - because a decline that emptied the map would take the player's
+ * own network down with it.
+ */
+export const TOWN_SHRINK_RATE_PER_MONTH = 0.0003;
+
+/**
+ * The window the passenger supply share is measured over. [months]
+ *
+ * SPEC.md 13.2 annotates `versorgungPass` with "letzte 12 Monate" and nothing
+ * else in the formula, so the passenger term is the one that is smoothed and
+ * the delivery terms are the month that just ended. Kept the way D-079 keeps
+ * the industry's twelve-month service window and the way SPEC2 M19 keeps the
+ * return-journey mean: ONE running number per figure rather than a ring of
+ * twelve, a TRUE mean while the window is still filling and a rolling one
+ * afterwards.
+ */
+export const TOWN_SUPPLY_WINDOW_MONTHS = 12;
+
+/**
+ * The company-rating factor of SPEC.md 13.2: `0.5 + 0.5 * firmenRating/100`.
+ *
+ * Two halves of one sentence, split into two constants so neither can move
+ * without the other being looked at: a town nobody the council thinks anything
+ * of grows at HALF speed, and a town whose servers the council rates 100 grows
+ * at full speed. The rating is the 13.3 council's, which is the only company
+ * rating the game has.
+ */
+export const TOWN_GROWTH_RATING_FLOOR = 0.5;
+export const TOWN_GROWTH_RATING_SPAN = 0.5;
 
 /**
  * Tiles of street a town may lay for itself in one game month. [tiles/month]
@@ -1568,9 +1660,19 @@ export const TOWN_MEASURE_ROAD_REACH = 2;
 
 /** What it costs to clear a town building out of the way. [cent] */
 export const BUILDING_DEMOLITION_COST_CT = 12_000_00;
+/**
+ * The four weights of SPEC.md 13.2, at the specification's own values.
+ *
+ * `0.0015 * (1 + 0.55*pass + 0.45*waren + 0.45*food + 0.35*bau)`. Goods and
+ * food stood at 0.35 until SPEC2 M20 bundle 2 read the formula back: they were
+ * first draft figures written when nothing delivered either, and the building
+ * term did not exist at all. A fully supplied town therefore grows at 2.8 times
+ * the base rate instead of 2.25.
+ */
 export const TOWN_GROWTH_PASSENGER_WEIGHT = 0.55;
-export const TOWN_GROWTH_GOODS_WEIGHT = 0.35;
-export const TOWN_GROWTH_FOOD_WEIGHT = 0.35;
+export const TOWN_GROWTH_GOODS_WEIGHT = 0.45;
+export const TOWN_GROWTH_FOOD_WEIGHT = 0.45;
+export const TOWN_GROWTH_BUILDING_WEIGHT = 0.35;
 
 /**
  * Half width of the square scanned when a station works out what it serves.

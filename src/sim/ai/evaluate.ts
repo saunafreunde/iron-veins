@@ -125,8 +125,17 @@ function expectedOutput(world: World, industry: Industry): number {
  * Passengers a town offers in a month.
  *
  * Deliberately generous: a town is the one source in the game that cannot shut
- * down or run dry, and what actually limits a passenger line is the station
- * rating rather than the town.
+ * down, and what actually limits a passenger line is the station rating rather
+ * than the town.
+ *
+ * It CAN run dry slowly, and that sentence used to say it could not: since
+ * SPEC2 M20 bundle 2 a town nobody serves loses 0.03 % of its people a month
+ * (SPEC.md 13.2), so the figure this reads falls while the candidate sits
+ * unbuilt. That is a real economic signal and not a defect - a business that
+ * has been worth building for twenty years and never was is worth less by then
+ * - and it is measured: on seed 4711 the town-pair business stops clearing
+ * `AI_MIN_PROFIT_MARGIN`, and the line the AI used to build there was losing
+ * its owner 157,262 EUR (the trace is in `tests/balance/aiGame.spec.ts`).
  */
 function townOutput(town: Town): number {
   return town.population * AI_TOWN_OUTPUT_SHARE;

@@ -82,12 +82,13 @@ export class RailPathfinder {
   }
 
   /**
-   * Rebuild the dense track index. Runs when the map revision moved on, which
-   * is a player action - never inside a tick that only moves vehicles.
+   * Rebuild the dense track index. Runs when the TRACK revision moved on,
+   * which is a player action - never inside a tick that only moves vehicles,
+   * and never because a town put a house up (`TileMap.trackRevision`, D-232).
    */
   private reindex(map: TileMap): void {
-    if (this.indexedRevision === map.revision) return;
-    this.indexedRevision = map.revision;
+    if (this.indexedRevision === map.trackRevision) return;
+    this.indexedRevision = map.trackRevision;
     this.nodeOf.fill(-1);
 
     let count = 0;
