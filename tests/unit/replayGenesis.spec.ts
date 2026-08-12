@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { Difficulty, MapClimate, WeatherRule } from '../../src/sim/constants';
+import { Difficulty, MapClimate, MapPreset, WeatherRule } from '../../src/sim/constants';
 import { GoalKind } from '../../src/sim/goals/types';
+import { knobsForPreset } from '../../src/sim/mapgen/presets';
 import { replayGenesis } from '../../src/sim/save/replay';
 import type { NewGameParams } from '../../src/sim/types';
 import { hashWorld, World } from '../../src/sim/World';
@@ -71,6 +72,13 @@ const GENESIS_RULES: Record<keyof Required<NewGameParams>, RuleProbe> = {
   climate: { value: { climate: MapClimate.Tropical }, read: (world) => world.climate },
   startYear: { value: { startYear: 1880 }, read: (world) => world.startYear },
   endless: { value: { endless: true }, read: (world) => world.endless },
+  // The generator rule of M23 bundle 3. The probe is a preset AND an off-centre
+  // control, because the two travel as one record and a reconstruction that
+  // carried only half of it would rebuild a different map from the recording's.
+  mapgen: {
+    value: { mapgen: { ...knobsForPreset(MapPreset.Archipelago), hilliness: 4 } },
+    read: (world) => `${world.mapgen.preset}/${world.mapgen.hilliness}`,
+  },
   mapSize: { value: { mapSize: 128 }, read: (world) => world.map.size },
   companyName: {
     value: { companyName: 'Werkstatt AG' },

@@ -1,5 +1,5 @@
 import type { Command } from '../sim/commands/types';
-import type { Difficulty, MapClimate, WeatherRule } from '../sim/constants';
+import type { Difficulty, MapClimate, MapGenKnobs, WeatherRule } from '../sim/constants';
 import type { GoalSpec } from '../sim/goals/types';
 import type { MapGenPhase } from '../sim/mapgen';
 import type { ReliefImport } from '../sim/mapgen/heightmap';
@@ -635,6 +635,14 @@ export interface NewGameOptions {
    */
   readonly startYear?: number;
   readonly endless?: boolean;
+  /**
+   * The generator preset and its five controls (SPEC2 M23 bundle 3).
+   *
+   * Optional on the same terms as the two rules above it: absence is the
+   * continent preset at every neutral step, decided in `World`'s own
+   * constructor, so nothing that starts an ordinary game has to mention it.
+   */
+  readonly mapgen?: MapGenKnobs;
   readonly inflation: boolean;
   readonly emissions: boolean;
   /** The route-cost rules of SPEC.md 8.4 (M15): saved, hashed, off by default. */

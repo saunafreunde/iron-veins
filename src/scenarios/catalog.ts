@@ -195,7 +195,7 @@ const FRACHTRAUSCH: ShippedScenario = {
     elections: false,
     economy: false,
   },
-  lockedRules: ['climate', 'difficulty', 'goals', 'mapSize', 'seed'],
+  lockedRules: ['climate', 'difficulty', 'goals', 'mapSize', 'mapgen', 'seed'],
   fromTick: 0,
   toTick: endOfYear(1975),
 };
@@ -319,7 +319,7 @@ const PASSAGIERNETZ: ShippedScenario = {
     elections: false,
     economy: false,
   },
-  lockedRules: ['climate', 'difficulty', 'goals', 'mapSize', 'seed'],
+  lockedRules: ['climate', 'difficulty', 'goals', 'mapSize', 'mapgen', 'seed'],
   fromTick: 0,
   toTick: endOfYear(1975),
 };
@@ -415,6 +415,7 @@ const GEBIRGSLOGISTIK: ShippedScenario = {
     'difficulty',
     'goals',
     'mapSize',
+    'mapgen',
     'occupancyPenalty',
     'seed',
     'signalPenalty',
@@ -503,7 +504,7 @@ const INSELHUEPFEN: ShippedScenario = {
     elections: false,
     economy: false,
   },
-  lockedRules: ['climate', 'difficulty', 'goals', 'mapSize', 'seed'],
+  lockedRules: ['climate', 'difficulty', 'goals', 'mapSize', 'mapgen', 'seed'],
   fromTick: 0,
   toTick: endOfYear(1975),
 };
@@ -600,7 +601,7 @@ const WIEDERAUFBAU: ShippedScenario = {
     elections: false,
     economy: false,
   },
-  lockedRules: ['climate', 'difficulty', 'goals', 'inflation', 'mapSize', 'seed'],
+  lockedRules: ['climate', 'difficulty', 'goals', 'inflation', 'mapSize', 'mapgen', 'seed'],
   fromTick: 0,
   toTick: endOfYear(1975),
 };
@@ -700,7 +701,7 @@ const RATSDIPLOMATIE: ShippedScenario = {
     elections: false,
     economy: false,
   },
-  lockedRules: ['climate', 'difficulty', 'goals', 'mapSize', 'roadCongestion', 'seed'],
+  lockedRules: ['climate', 'difficulty', 'goals', 'mapSize', 'mapgen', 'roadCongestion', 'seed'],
   fromTick: 0,
   toTick: endOfYear(1975),
 };
@@ -777,7 +778,7 @@ const SPEEDRUN: ShippedScenario = {
     elections: false,
     economy: false,
   },
-  lockedRules: ['climate', 'difficulty', 'goals', 'inflation', 'mapSize', 'seed'],
+  lockedRules: ['climate', 'difficulty', 'goals', 'inflation', 'mapSize', 'mapgen', 'seed'],
   fromTick: 0,
   toTick: endOfYear(1957),
 };
@@ -869,6 +870,7 @@ const UEBERLEBEN: ShippedScenario = {
     'goals',
     'inflation',
     'mapSize',
+    'mapgen',
     'occupancyPenalty',
     'roadCongestion',
     'seed',

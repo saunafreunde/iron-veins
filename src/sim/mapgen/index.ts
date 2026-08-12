@@ -1,9 +1,11 @@
 import {
+  DEFAULT_MAP_GEN_KNOBS,
   EROSION_PASSES,
   MAPGEN_MAX_SEED_RETRIES,
   START_PAIR_MAX_DISTANCE,
   START_PAIR_MIN_DISTANCE,
   type MapClimate,
+  type MapGenKnobs,
 } from '../constants';
 import type { Industry } from '../industry/types';
 import { TileMap } from '../map/TileMap';
@@ -20,6 +22,7 @@ import {
   markOcean,
 } from './hydrology';
 import { generateIndustries } from './industries';
+import { resourceRichnessOf, riverScaleOf, townDensityOf } from './presets';
 import { generateTowns } from './towns';
 
 /**
@@ -61,6 +64,16 @@ export interface MapGenParams {
    * this milestone.
    */
   readonly relief?: ReliefImport;
+  /**
+   * The generator preset and its five controls (SPEC2 M23).
+   *
+   * Absent means {@link DEFAULT_MAP_GEN_KNOBS} - the continent shape and the
+   * neutral step of every control - which is what every world before this
+   * milestone was drawn with, bit for bit. The record is a saved, hashed world
+   * rule and travels as one; it is passed in here rather than read from a
+   * `World` because mapgen runs BEFORE there is a world to ask.
+   */
+  readonly knobs?: MapGenKnobs;
 }
 
 export interface GeneratedWorld {
@@ -121,6 +134,7 @@ function generateOnce(
   const rng = Rng.fromSeed(seed);
   const map = new TileMap(params.size);
   const attempt = seed - params.seed;
+  const knobs = params.knobs ?? DEFAULT_MAP_GEN_KNOBS;
 
   report?.(MapGenPhase.Relief, attempt);
   if (importedRelief !== null) {
@@ -130,14 +144,14 @@ function generateOnce(
     // price, on the one path that has an eight-second promise over it.
     map.cornerHeight.set(importedRelief);
   } else {
-    generateRelief(map, rng, params.erosionPasses ?? EROSION_PASSES);
+    generateRelief(map, rng, params.erosionPasses ?? EROSION_PASSES, knobs);
   }
 
   report?.(MapGenPhase.Water, attempt);
   floodSeaLevel(map);
 
   report?.(MapGenPhase.Rivers, attempt);
-  generateRivers(map, rng);
+  generateRivers(map, rng, riverScaleOf(knobs));
   markOcean(map);
   computeLandmasses(map);
 
@@ -146,10 +160,16 @@ function generateOnce(
   markCoast(map);
 
   report?.(MapGenPhase.Towns, attempt);
-  const towns = generateTowns(map, rng, params.climate);
+  const towns = generateTowns(map, rng, params.climate, townDensityOf(knobs));
 
   report?.(MapGenPhase.Industries, attempt);
-  const industries = generateIndustries(map, rng, towns, params.climate);
+  const industries = generateIndustries(
+    map,
+    rng,
+    towns,
+    params.climate,
+    resourceRichnessOf(knobs),
+  );
 
   report?.(MapGenPhase.Validate, attempt);
   const playable = findStartingPair(map, towns) !== null;

@@ -23,14 +23,14 @@ no entry below. A number may appear under several topics.
   D-152, D-155, D-159
 - **Map generation & terrain:** D-018, D-019, D-020, D-021, D-022, D-023,
   D-025, D-027, D-197, D-198, D-199, D-216, D-231, D-234, D-240, D-242,
-  D-246
+  D-246, D-247
 - **Terraforming & structures:** D-028, D-034, D-050, D-051, D-052, D-124,
   D-141, D-240, D-244
 - **Save format, migrations & replays:** D-007, D-025, D-026, D-027, D-048,
   D-111, D-130, D-131, D-134, D-142, D-144, D-145, D-146, D-147, D-153, D-178,
   D-181, D-184, D-185, D-188, D-189, D-190, D-191, D-192, D-193, D-194,
   D-197, D-198, D-200, D-207, D-213, D-231, D-232, D-233, D-236, D-238,
-  D-239, D-240, D-241, D-243, D-244, D-245
+  D-239, D-240, D-241, D-243, D-244, D-245, D-247
 - **Rail & track:** D-042, D-043, D-044, D-045, D-046, D-047, D-053, D-141,
   D-153, D-157, D-184, D-230
 - **Signals & reservations:** D-054, D-055, D-056, D-057, D-058, D-059, D-060,
@@ -51,7 +51,8 @@ no entry below. A number may appear under several topics.
   D-116, D-151, D-152, D-156, D-158, D-159, D-187, D-190, D-194, D-195,
   D-196, D-197, D-198, D-199, D-200, D-203, D-204, D-207, D-211, D-213,
   D-215, D-216, D-220, D-221, D-222, D-224, D-225, D-226, D-228, D-229,
-  D-232, D-233, D-234, D-235, D-236, D-237, D-238, D-239, D-245, D-246
+  D-232, D-233, D-234, D-235, D-236, D-237, D-238, D-239, D-245, D-246,
+  D-247
 - **Vehicles & fleet:** D-043, D-044, D-045, D-068, D-076, D-089, D-093,
   D-096, D-142, D-143, D-145, D-146, D-155, D-157, D-171, D-174, D-181, D-185,
   D-201, D-207, D-245, D-246
@@ -67,11 +68,11 @@ no entry below. A number may appear under several topics.
 - **UI & input:** D-011, D-013, D-015, D-035, D-110, D-113, D-114, D-119,
   D-126, D-148, D-165, D-166, D-177, D-179, D-180, D-181, D-182, D-183, D-184,
   D-186, D-187, D-189, D-191, D-192, D-193, D-194, D-195, D-196, D-200, D-202,
-  D-210, D-241, D-242
+  D-210, D-241, D-242, D-247
 - **Performance & measurement:** D-002, D-120, D-135, D-136, D-161, D-162,
   D-163, D-164, D-167, D-170, D-171, D-172, D-173, D-174, D-176, D-177, D-184,
   D-185, D-186, D-187, D-191, D-192, D-193, D-196, D-200, D-201, D-202, D-205,
-  D-206, D-209, D-214, D-231, D-234, D-235, D-241, D-242
+  D-206, D-209, D-214, D-231, D-234, D-235, D-241, D-242, D-247
 - **Platform, tooling & build:** D-012, D-014, D-015, D-016, D-017, D-029,
   D-030, D-031, D-160, D-168, D-169, D-170, D-172, D-175, D-192, D-206, D-208,
   D-227, D-242
@@ -15188,3 +15189,175 @@ keine beantragt. Szenario-Katalog-Chunk 13.319 -> 13.539 B (die drei
 umgeschriebenen Briefings), `SimWorker` 406.983 B, `replay` 226.494 B, CSS
 13.470 B. Keine i18n-Zeile, keine Allowlist-Zeile und keine neue Konstante in
 `constants.ts` ausser `MAP_CLIMATE_COUNT` (Einheit und Herkunft annotiert).
+
+### D-247 Generator-Presets und Regler: fuenf Boeden, fuenf Regler - und die Klemme, die einer 2048er-Karte vier Fuenftel ihrer Staedte gekostet hat
+
+**SPEC2 M23, Bundle 3.** Fuenf Presets, fuenf Regler, eine Klemmen-Reparatur -
+**kein Save-Bump**: der EINE Z5-Bump des Meilensteins gehoert Bundle 1 und liegt
+auf v34; dieses Bundle ERWEITERT ihn (die Migration v33 auf v34 traegt jetzt
+drei Felder statt zwei, das D-181-Muster: ein Bump ist nicht ein
+Migrations-EDIT). Kanonischer Pin `1fa54bf95cc82b40` -> **`b7e632a7124e67ce`**,
+Korpus-Welthash `3b797322b43b717c` -> **`a00868b9911f12d6`**, Soak-Fixture
+`1f1ac33ffed6afe9` -> **`64fec78d6bf0cd5e`** bei unveraenderten 35
+aufgezeichneten Kommandos - alle drei nach D-137/D-130 neu aufgenommen, weil
+sechs neue Woerter unbedingt in den Digest gehen.
+
+**1. Die Regel ist EIN Record aus sechs Feldern, gespeichert und unbedingt
+gehasht.** `mapgen = { preset, seaLevel, hilliness, rivers, townDensity,
+resources }` ist ein `NewGameParams`-Feld auf den Bedingungen von `startYear`
+und `editorMode`: die Karte IST die Welt, also sind zwei Welten mit demselben
+Startwert und verschiedenen Reglern zwei verschiedene Welten, und ein bedingter
+Hash liesse sie gleich fingerprinten (Z2, Fehlerkatalog 24). Der Parser
+verlangt jedes Feld und prueft jeden Schritt gegen seine Tabellenlaenge - ein
+Schritt ausserhalb des Bandes waere ein Griff hinter das Ende einer
+Faktortabelle, und ein `NaN`-Multiplikator wirft nicht, er erzeugt still eine
+Karte aus nichts. `replayGenesis` traegt den Record mit; das ist die vierte
+Weltregel, die diese Funktion sich hat nachtragen lassen, und die einzige,
+deren Verlust nicht die Physik sondern den BODEN aendern wuerde: ein Rebuild
+ohne Preset regeneriert einen Kontinent unter dem Kommandolog eines Archipels,
+und jeder Baubefehl darin landet im Meer.
+
+**2. `Continent` ist die arithmetische IDENTITAET, und sie ist verzweigt statt
+multipliziert.** `pivot + (v - pivot) * 1` ist in binaerem Fliesskomma NICHT
+`v`; ein neutraler Regler, der durch die Arithmetik liefe, machte aus jeder je
+gemessenen Welt eine andere. Alle Naehte pruefen darum auf ihren
+Identitaetswert (`heightfield.ts`, `hydrology.ts`, `towns.ts`,
+`industries.ts`). Drei unabhaengige Belege statt einer Behauptung:
+(a) `mapgenPresets.spec.ts` erzeugt ueber fuenf Seeds dieselbe Karte durch drei
+Tueren - ohne Knobs (jede Welt vor diesem Bundle), mit dem Record der Migration
+und mit dem Record des Kontinent-Knopfes - und vergleicht Ecken, Terrain,
+Stadt- und Industrielayer byteweise; (b) die drei 1024er-Benchmarkkarten aus
+M22 wurden neu aufgezeichnet und kamen **byte-identisch** heraus (nur die
+2048er bewegte sich, siehe 7.); (c) jedes Band aus 19.4 misst auf den Cent
+weiter, was D-246 gemessen hat - Szenario 5 auf 1.022.084 / 1.802.165 /
+2.153.604 EUR, Punktzahl 5.889, Netzdesign 3,75, Winter -4,36 %, Kohlebahn
+Rueckfluss Jahr 6, Holzkette 159.516 EUR/Jahr.
+
+**3. Jeder Preset besitzt eine Ecke der Messung, und die Disjunktheit wird
+GEPRUEFT statt gehofft.** Die drei Koordinaten sind die, die SPEC2 nennt -
+Landmassenzahl, mittlere Hoehe, Flusszahl -, und jeder Preset liegt in einer
+Box darin; der Test prueft fuer jedes Paar (Preset, Box), dass NUR die eigene
+Box haelt, ueber fuenf Seeds. Gemessen (256 Tiles, 8 Erosionspaesse):
+
+| Preset | Landanteil | Landmassen | mittlere Hoehe | Flusstiles |
+| --- | --- | --- | --- | --- |
+| Kontinent | 64,0-68,2 % | 2-7 | 5,52-5,83 | 120-245 |
+| Archipel | 49,5-51,6 % | 6-12 | 3,73-3,82 | 35-109 |
+| Hochland | 80,2-82,6 % | 1 | 9,72-9,93 | 281-390 |
+| Flussebene | 68,6-74,6 % | 1-3 | 5,47-5,85 | 652-1.034 |
+| Tal | 74,9-79,6 % | 1-2 | 7,77-8,00 | 198-368 |
+
+Die Boxen sind Landanteil < 60 % (Archipel), Hoehe >= 9 (Hochland), >= 500
+Flusstiles (Flussebene), Hoehe 7 bis 9 (Tal) und alles drei mittig
+(Kontinent); zusaetzlich wird per Seed geprueft, dass der Archipel MEHR
+Landmassen traegt als jeder andere Preset. Ein Fluss ist hier **Wasser
+OBERHALB des Meeresspiegels** - `applyRivers` macht Talkacheln zu Wasser ohne
+sie zu senken, waehrend die Binnenmeere eines Archipels als Binnenwasser
+zaehlen wuerden und die Messung ruinierten. Ausserdem wird jeder Preset auf
+Spielbarkeit geprueft (Staedte und mindestens ein Betrieb) - eine Regel, die
+zwei Zwischenstaende gefangen hat: eine Flussebene ganz OHNE Fluesse
+(`RIVER_SOURCE_MIN_HEIGHT` ist Stufe 10, und ein flach gepresstes Feld erreicht
+sie nie) und ein Tal mit null Industrien (die Platzierungsschleife verliert auf
+gefaltetem Relief mehr Standorte an die Neigung als auf jedem anderen Boden).
+
+**4. Die Regler bewegen, was sie heissen - und der Flussregler bewegt das
+ERGEBNIS der Ziehung, nicht die Ziehung.** `RIVER_SOURCES_MIN..MAX` wird
+weiterhin genau einmal an derselben Stromposition gewuerfelt und der Faktor auf
+das Ergebnis gelegt; ein Regler, der die Zahl der gezogenen Woerter aenderte,
+forkte jede spaetere Ziehung der Karte (Z3, Fehlerkatalog 25). Der
+Huegeligkeitsregler spreizt um `HEIGHTMAP_CONTRAST_PIVOT` - denselben Drehpunkt
+und dieselbe Operation wie der Importkontrast aus M22 (D-242) -, weil eine
+Spreizung um Mittelgrau ein verkleideter Meeresspiegelregler waere und das
+Spiel den echten eine Zeile weiter oben hat; der Test misst genau das (der
+Landanteil bleibt zwischen tiefstem und hoechstem Huegeligkeitsschritt unter 25
+Punkten auseinander, waehrend der Meeresspiegelregler ihn monoton bewegt).
+Stadtdichte und Ressourcenreichtum skalieren die Flaechenregel; `Math.round`
+einer bereits ganzen Zahl mal 1 ist dieselbe Zahl, weshalb der neutrale Schritt
+ueberall die Identitaet ist.
+
+**5. Die Presets erreichen eine importierte Hoehenkarte NICHT, und das ist
+strukturell.** Preset, Meeresspiegel und Huegeligkeit leben ausschliesslich in
+`generateRelief`, und der M22-Importpfad ersetzt genau diese Funktion. Ein Bild
+behaelt also seine Kueste und seine Berge, und der Kontrastregler bleibt der
+eine Regler darueber. Die drei uebrigen Regler - Fluesse, Staedte, Rohstoffe -
+sind kein Relief und gelten auch auf importiertem Boden.
+
+**6. Die `TOWN_COUNT_MAX`-Klemme: gemessen, und die Leere ist genau die, die
+SPEC2 nennt.** Vorher flach 140 fuer jede Kartengroesse. Bei 1024 fragt die
+Flaechenregel `round(1024^2 / 7.500)` = **140** - die Klemme und die
+Flaechenregel sind dort zufaellig gleich, also hat sie nie gebissen; bei 2048
+fragt die Flaechenregel **559** und die Klemme schnitt auf 140, also ein
+Viertel der Staedte pro Quadratkachel (133,5 gegen 33,4 je Million Kacheln,
+Faktor **4,0** - die Zahl aus SPEC2, nachgerechnet statt uebernommen). Die
+Reparatur ist eine Decke, die mit der FLAECHE waechst und den alten flachen
+Wert als BODEN behaelt: `townCountMaxFor(size) = max(140, round(252 * size^2 /
+1024^2))`, mit `TOWN_COUNT_MAX_PER_DEFAULT_AREA = 252 = round(139,8 * 1,8)`,
+der Flaechenregel am dichtesten Reglerschritt - eine Decke darunter kappte
+still einen Regler, den der Spieler sich bewegen sieht. **Damit bewegt sich
+keine Karte von 1024 Kacheln oder weniger**: alle acht mitgelieferten
+Szenarien, jede Balance-Fixture, beide Pins und die drei 1024er-Benchmarks
+liegen in diesem Band, und der Test behauptet das als eigene Zeile. Bewegt hat
+sich genau die 2048er: **140 -> 559 Staedte, 534 -> 653 Industrien**. Dieselbe
+Decke gilt jetzt fuer `PlaceTownSeed` in der Werkstatt, sonst haelt der Editor
+einen Autor auf einer 2048er-Karte an einer Grenze fest, die der Generator
+selbst nicht mehr kennt.
+
+**7. Was neu aufgezeichnet werden musste, und was NICHT.** Neu: der kanonische
+Cross-OS-Pin, das Korpus-Manifest, die Soak-Fixture und die
+2048er-Benchmarkkarte `archipelago.json` - vier Strassenbefehle ihres Logs
+landeten auf Boden, den jetzt eine Stadt haelt, und `bench/build.ts` hat sie
+namentlich abgelehnt statt sie still zu verschlucken. NICHT bewegt:
+`mega-junction.json`, `megalopolis.json` und `hundred-k-edges.json` kamen aus
+derselben Neuaufzeichnung **byte-identisch** heraus, was der unabhaengigste
+verfuegbare Beleg fuer 2. ist. **Ehrlich gesagt gehoert hierher auch**: eine
+v34-Datei, die ein Zwischenstand dieses Meilensteins (Bundle 1 oder 2)
+geschrieben hat, laesst sich vom fertigen v34 nicht mehr laden - ihr fehlt
+`mapgen`, und fuer die eigene Version laeuft keine Migration. Das ist der Preis
+dafuer, eine Version innerhalb ihres Meilensteins zu erweitern statt zu bumpen
+(Z5); er trifft ausschliesslich Dateien unveroeffentlichter Zwischenstaende,
+und die Korpus-Fixture `v34-played.ironsave` wurde genau darum neu
+geschrieben - alle dreizehn Fixtures ab v22 dekodieren danach wieder in EINE
+Welt. Die Soak-Fixture war seit Bundle 1 rot (D-246 Abschnitt 9 hat es gemeldet
+und die Neuaufnahme dem Bump zugeschrieben, der sie ungueltig machte); dieses
+Bundle ist der letzte, der v34 bewegt, also ist jetzt der richtige Moment, und
+sie ist wieder gruen.
+
+**8. Das Mapgen-Perf-Band je Groessenstufe, gemessen statt geschaetzt.** Vorher
+gab es genau eine Zusage (1024^2 unter 8 s) und fuer 2048^2 keine. Gemessen auf
+der Referenzmaschine: **256^2 223 ms, 512^2 695 ms, 1024^2 3.010 ms, 2048^2
+12.003 ms** - letzteres mit den 559 Staedten, also auf der neuen Welt und nicht
+auf der alten. Die Kosten sind praktisch die Erosion, die linear in der
+Eckenzahl und damit quadratisch in der Kantenlaenge ist (Phasenmessung 2048^2:
+Relief 9.366 ms von 11.664 ms, Staedte 9 ms). Band: 900 / 2.000 / 8.000 /
+30.000 ms - etwa das 2,5-fache der Messung, das Vielfache, das eine belastete
+Maschine kostet (D-167s Argument eine Suite weiter), ausser fuer die
+1024er-Zeile, die SPEC.mds eigene acht Sekunden bleibt. **Und jeder Preset
+erzeugt eine 1024er-Karte in unter 8 s, einzeln gemessen: 2.734 / 2.826 /
+2.795 / 2.782 / 2.804 ms** (Kontinent, Archipel, Hochland, Flussebene, Tal),
+jeweils mit Staedten und Betrieben darauf - das ist SPEC2 M23s eigenes
+Fertig-wenn. Tick unveraendert: p50 **1,516** / p99 **3,126** ms auf der
+1500-Fahrzeug-Referenzflotte gegen die M10-Grundlinie 1,45 / 3,26 - das Bundle
+legt keinen Tick-Pfad an, die Regler laufen einmal bei der Genese.
+
+**9. `mapgen` ist szenariofaehig, und die acht mitgelieferten Szenarien pinnen
+es.** Ein Szenario, das den Startwert pinnt und den Preset nicht, pinnt nichts:
+derselbe Startwert unter dem Archipel-Preset ist eine andere Welt unter
+demselben Briefing. `SCENARIO_LOCKABLE_RULES` traegt den Namen (der
+Kopplungstest erzwingt die Entscheidung als Compile-Fehler), und alle acht
+`lockedRules`-Listen tragen ihn ebenfalls. Der Metadatenblock ist ungehasht,
+also bewegt das keinen Hash - geprueft, nicht angenommen.
+
+**Bundle-Budget:** Hauptchunk **1.034.981 -> 1.039.413 B (+4.432)**, und **das
+Budget ist mit dieser Messung von 1.040.000 auf 1.048.000 B angehoben** (D-192s
+Regel: Messung plus rund 0,8 %) - unter der alten Zahl war der Build noch gruen
+und haette dem naechsten Bundle 587 Byte gelassen, was eine Falle ist und kein
+Budget. Dreigeteilt nach der Methode der Datei, jeder Teil durch Loeschen genau
+dieses Teils und Neubauen: **+1.682 B** die zwoelf i18n-Schluessel in zwei
+Sprachen (ohne sie 1.037.731 B), **+1.687 B** der Bildschirm - die
+Preset-Reihe, fuenf Regler und ihre zwei Tabellen (ohne ihn 1.037.726 B),
+**+1.063 B** die Regel selbst: die Tabellen in `constants.ts`, das Blatt
+`mapgen/presets.ts` und der Sechs-Felder-Record durch Protokoll, Parser,
+Migration, `hashWorld` und `replayGenesis`. `SimWorker` 406.983 -> 408.714 B,
+`replay` 226.494 -> 227.191 B, Szenario-Katalog 13.539 -> 13.542 B, CSS 13.470 B
+unveraendert. Keine Atlas-Zelle, kein Snapshot-Byte, kein Protokollfeld auf dem
+20-Hz-Pfad, keine Allowlist-Zeile.

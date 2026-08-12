@@ -1,76 +1,76 @@
 {
-  "saveVersion": 33,
+  "saveVersion": 34,
   "seed": 4711,
   "mapSize": 256,
   "years": 25,
   "aiCompanies": 3,
   "finalTick": 1800000,
-  "finalHash": "1f1ac33ffed6afe9",
+  "finalHash": "64fec78d6bf0cd5e",
   "commandCount": 35,
   "checkpoints": [
     {
       "tick": 0,
-      "hash": "989e4dde9c633505"
+      "hash": "6f2478be8098f420"
     },
     {
       "tick": 792000,
-      "hash": "0d177332639d2b34"
+      "hash": "88f52e19ed3cb225"
     },
     {
       "tick": 864000,
-      "hash": "f2b2b63e7bf33946"
+      "hash": "16c88792406c7bf9"
     },
     {
       "tick": 936000,
-      "hash": "45841e9fda474d97"
+      "hash": "1bf307eda204b97e"
     },
     {
       "tick": 1008000,
-      "hash": "94b61fe87ebf6579"
+      "hash": "8f64a3007a9b6a2e"
     },
     {
       "tick": 1080000,
-      "hash": "d4126fdf323f7b1c"
+      "hash": "4392ebf9afd6cf51"
     },
     {
       "tick": 1152000,
-      "hash": "b7405b074c44ea59"
+      "hash": "2a662e4d615552d8"
     },
     {
       "tick": 1224000,
-      "hash": "d878d99dfa247ef1"
+      "hash": "c95c6b6e24bdac48"
     },
     {
       "tick": 1296000,
-      "hash": "87ba736fd775171f"
+      "hash": "8823022e0a775a76"
     },
     {
       "tick": 1368000,
-      "hash": "52ac699685f7f99e"
+      "hash": "6f17952a158ee8a5"
     },
     {
       "tick": 1440000,
-      "hash": "e0b63e22546521e4"
+      "hash": "f1f66bc181734245"
     },
     {
       "tick": 1512000,
-      "hash": "af7f39906c514497"
+      "hash": "2f0a6ffde74c623e"
     },
     {
       "tick": 1584000,
-      "hash": "83daf750b52648df"
+      "hash": "a48b56824722d5de"
     },
     {
       "tick": 1656000,
-      "hash": "a2ef5b3a48275792"
+      "hash": "0f8da57da29acb9f"
     },
     {
       "tick": 1728000,
-      "hash": "31fe1aa6acf3321b"
+      "hash": "265fac07ea174b64"
     },
     {
       "tick": 1800000,
-      "hash": "1f1ac33ffed6afe9"
+      "hash": "64fec78d6bf0cd5e"
     }
   ],
   "recordedOn": {

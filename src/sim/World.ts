@@ -4,6 +4,7 @@ import type { CommandQueue } from './commands/queue';
 import type { CommandEnvelope, CommandOutcome } from './commands/types';
 import {
   CO2_LEVY_FROM_YEAR,
+  DEFAULT_MAP_GEN_KNOBS,
   ECONOMY_STREAM_NAME,
   MAX_COMPANIES,
   MAX_TICK,
@@ -15,6 +16,7 @@ import {
   WeatherRule,
   type Difficulty,
   type MapClimate,
+  type MapGenKnobs,
 } from './constants';
 import {
   bookMonthlyInterest,
@@ -114,6 +116,8 @@ export interface WorldStateData {
   startYear: number;
   /** Whether the MAX_TICK stop applies at all - E-15's second rule. */
   endless: boolean;
+  /** The preset and the five controls the map was drawn with (SPEC2 M23). */
+  mapgen: MapGenKnobs;
   inflation: boolean;
   emissions: boolean;
   /** The two 8.4 route-cost rules of M15. Saved and hashed like inflation. */
@@ -253,6 +257,18 @@ export class World {
    * ABSENT MEANS OFF: every world recorded before M23 stopped at MAX_TICK.
    */
   readonly endless: boolean;
+  /**
+   * The generator preset and the five controls this world's map was drawn with
+   * (SPEC2 M23).
+   *
+   * Saved and hashed like every rule around it, and kept on the world although
+   * nothing in the simulation reads it after genesis: what it buys is that a
+   * loaded world can still say which ground it is, which is what the scenario
+   * lock, the save digest and any future re-generation need. A rule that was
+   * consumed and thrown away would be a rule the digest could not see, which
+   * is the Z2 hole `saveFieldCoupling.spec.ts` exists to find.
+   */
+  readonly mapgen: MapGenKnobs;
   /** Whether costs and fares drift upward over the century (section 14.2). */
   readonly inflation: boolean;
   /** Whether the carbon levy and its grants of section 14.3 apply. */
@@ -583,6 +599,10 @@ export class World {
     // when its hundred and first year ran out.
     this.startYear = params.startYear ?? START_YEAR;
     this.endless = params.endless ?? false;
+    // And absent means the continent preset at every neutral step (M23 bundle
+    // 3): the arithmetic identity of all six seams, which is what every world
+    // before that bundle was drawn by.
+    this.mapgen = params.mapgen ?? DEFAULT_MAP_GEN_KNOBS;
     // The century is anchored on the world's own first year, here and nowhere
     // else - the curve is the object every cost, tariff, output and energy
     // seam already holds (D-245).
@@ -723,6 +743,11 @@ export class World {
         size: params.mapSize,
         seed: params.seed,
         climate: params.climate,
+        // The generator rule of M23 bundle 3. Unlike the relief above it this
+        // IS a `NewGameParams` field - a preset and five steps are saved,
+        // hashed and migrated, where a picture is none of those things - so it
+        // is passed through rather than taken as an argument.
+        knobs: params.mapgen ?? DEFAULT_MAP_GEN_KNOBS,
         ...(relief === null ? {} : { relief }),
       },
       report,
@@ -999,6 +1024,7 @@ export class World {
       climate: this.climate,
       startYear: this.startYear,
       endless: this.endless,
+      mapgen: { ...this.mapgen },
       inflation: this.inflation,
       emissions: this.emissions,
       occupancyPenalty: this.occupancyPenalty,
@@ -1092,6 +1118,7 @@ export class World {
         climate: data.climate,
         startYear: data.startYear,
         endless: data.endless,
+        mapgen: data.mapgen,
         inflation: data.inflation,
         emissions: data.emissions,
         occupancyPenalty: data.occupancyPenalty,
@@ -1224,6 +1251,18 @@ function hashDynamicState(h: Fnv1a64, world: World): void {
   // (D-137/D-130).
   h.u32(world.startYear);
   h.u32(world.endless ? 1 : 0);
+  // The generator rule of M23 bundle 3, hashed UNCONDITIONALLY and on exactly
+  // the terms above: a preset and five control steps have no absent state -
+  // every world was drawn from some ground - so hashing them only when they
+  // are off-neutral would let two worlds whose maps cannot be the same
+  // fingerprint alike. Six words, and adding them moved every world hash once,
+  // which is the designed-for event with a written protocol (D-137/D-130).
+  h.u32(world.mapgen.preset);
+  h.u32(world.mapgen.seaLevel);
+  h.u32(world.mapgen.hilliness);
+  h.u32(world.mapgen.rivers);
+  h.u32(world.mapgen.townDensity);
+  h.u32(world.mapgen.resources);
   h.u32(world.inflation ? 1 : 0);
   h.u32(world.emissions ? 1 : 0);
   // The two 8.4 route-cost rules of M15. Hashed UNCONDITIONALLY, false

@@ -390,9 +390,13 @@ const ARCHIPELAGO: BenchmarkPlan = {
   warmupTicks: 600,
   sampleTicks: 1_500,
   build(recorder) {
-    // A wider span than the megalopolis's on purpose: 140 towns spread over
-    // 4.2 million tiles are further apart than 140 towns over a quarter of
-    // that, and a pairing rule tuned for 1024 finds almost nothing here.
+    // A wider span than the megalopolis's, and it is kept although the reason
+    // it was written down has gone: until SPEC2 M23 bundle 3 the town ceiling
+    // truncated this map to 140 towns over 4.2 million tiles, so a pairing
+    // rule tuned for 1024 found almost nothing here. The ceiling scales with
+    // area now (D-247) and the map carries 559, i.e. the same town density as
+    // the megalopolis - the wide span survives because a big map is what this
+    // benchmark exists to measure, and long hauls are what a big map has.
     roadNetwork(recorder, 300, 20, 160);
   },
 };

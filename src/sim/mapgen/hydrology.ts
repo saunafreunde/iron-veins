@@ -312,10 +312,23 @@ export function markCoast(map: TileMap): void {
   }
 }
 
-/** Cut rivers into the map. Returns how many tiles became river. */
-export function generateRivers(map: TileMap, rng: Rng): number {
+/**
+ * Cut rivers into the map. Returns how many tiles became river.
+ *
+ * `scale` is the river-count control of SPEC2 M23, and where it is applied is
+ * the whole of its Z3 discipline: the source count is DRAWN exactly as it
+ * always was - one roll of `RIVER_SOURCES_MIN..MAX` from the same stream at
+ * the same position - and the factor multiplies the RESULT. A control that
+ * changed how many words came out of the generator would fork every later
+ * draw on the map, which is the stray-draw failure of Fehlerkatalog 25 wearing
+ * a slider.
+ */
+export function generateRivers(map: TileMap, rng: Rng, scale = 1): number {
   const filled = fillSinks(map);
-  const wanted = rng.nextRange(RIVER_SOURCES_MIN, RIVER_SOURCES_MAX);
+  const drawn = rng.nextRange(RIVER_SOURCES_MIN, RIVER_SOURCES_MAX);
+  // `scale` is 1 at the neutral step, and `Math.round` of an integer is that
+  // integer, so a neutral world asks for exactly the number it drew.
+  const wanted = Math.max(1, Math.round(drawn * scale));
   const sources = chooseSources(map, rng, wanted);
   const catchment = traceRivers(map, filled, sources);
   return applyRivers(map, catchment);

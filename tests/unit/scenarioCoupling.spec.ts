@@ -368,6 +368,7 @@ const NEW_GAME_FIELDS: Record<keyof Required<NewGameParams>, true> = {
   climate: true,
   startYear: true,
   endless: true,
+  mapgen: true,
   mapSize: true,
   companyName: true,
   companyColorIndex: true,

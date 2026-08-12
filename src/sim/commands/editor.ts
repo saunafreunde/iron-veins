@@ -5,7 +5,6 @@ import {
   EDITOR_TOWN_SEED_COST_CT,
   TerraformDirection,
   TILE_PUBLIC,
-  TOWN_COUNT_MAX,
   TOWN_MIN_DISTANCE,
 } from '../constants';
 import {
@@ -24,7 +23,7 @@ import {
   terraformBrush,
 } from '../map/terraform';
 import { industrySiteRefusal, occupy } from '../mapgen/industries';
-import { isValidCentre, newTown, settleTown } from '../mapgen/towns';
+import { isValidCentre, newTown, settleTown, townCountMaxFor } from '../mapgen/towns';
 import { PlaceNameGenerator } from '../mapgen/names';
 import { streamSalt } from '../rng';
 import { assignStationIndustries } from '../industry/catchment';
@@ -182,7 +181,12 @@ export function planTownSeed(world: World, x: number, y: number, sizeClass: numb
   if (sizeClass !== TownSize.City && sizeClass !== TownSize.Town && sizeClass !== TownSize.Village) {
     return refused(RejectReason.UnknownType);
   }
-  if (world.towns.length >= TOWN_COUNT_MAX) return refused(RejectReason.TooManyTowns);
+  // The generator's own ceiling for THIS map's size (SPEC2 M23 bundle 3): an
+  // author on a 2048 map who could place only 140 towns would be held to a
+  // limit the generator itself no longer keeps. Unchanged at 1024 and below.
+  if (world.towns.length >= townCountMaxFor(world.map.size)) {
+    return refused(RejectReason.TooManyTowns);
+  }
   if (!tileWritable(world, world.map.tileIndex(x, y))) return refused(RejectReason.NotYours);
   if (!isValidCentre(world.map, x, y)) return refused(RejectReason.BadTownSite);
 

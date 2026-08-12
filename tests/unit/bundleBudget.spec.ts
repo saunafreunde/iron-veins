@@ -189,8 +189,30 @@ const DIST = join(REPO_ROOT, 'dist');
  * world**, re-probed on the built entry chunk exactly as before: it contains no
  * `decodeSave`, no `encodeSave`, no `hashWorld`, no save magic and no
  * `streamFor`. 1,040,000 is the new measurement plus ~0.8 %.
+ *
+ * **Raised again for SPEC2 M23 bundle 3** (generator presets and controls).
+ * **1,034,981 B -> 1,039,413 B, +4,432 B**, against 5,019 B of headroom under
+ * the old number - so the build was still green and would have left the NEXT
+ * bundle 587 bytes, which is a trap rather than a budget. Measured in three
+ * parts by the file's own method, each by deleting exactly that part and
+ * rebuilding:
+ *
+ *  - **+1,682 B are the i18n keys in two languages** (deleting the twelve
+ *    `ui.newGame.mapgen*` and `ui.newGame.preset.*` lines from both catalogues
+ *    rebuilds at 1,037,731 B) - five preset names, five control labels, the
+ *    step template and the paragraph that says the knobs are a world rule.
+ *  - **+1,687 B are the screen** (deleting the preset row, the five sliders
+ *    and their two tables rebuilds at 1,037,726 B).
+ *  - **+1,063 B are the rule itself**: the preset and knob tables in
+ *    `constants.ts`, the `mapgen/presets.ts` leaf, and the six-field record
+ *    threaded through the protocol, the parser, the migration, `hashWorld` and
+ *    `replayGenesis`. The tables are in the entry chunk for the reason the
+ *    paragraph above gives - `App.tsx` takes `MAPGEN_PHASE_COUNT` out of the
+ *    mapgen barrel, so the whole of mapgen is already in this graph.
+ *
+ * 1,048,000 is the new measurement plus ~0.8 %.
  */
-const MAIN_CHUNK_BUDGET_BYTES = 1_040_000;
+const MAIN_CHUNK_BUDGET_BYTES = 1_048_000;
 
 /** The verdict, separated from the measuring so a planted size can be judged. */
 interface BudgetVerdict {

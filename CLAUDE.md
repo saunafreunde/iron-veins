@@ -3680,4 +3680,94 @@ Main chunk 1,031,963 -> **1,034,981 B** against an unchanged 1,040,000 budget
 (5,019 B of air, no raise asked for). **`npm run test:soak` is red and was red
 before this bundle**: the fixture says save version 33 against the current 34,
 i.e. bundle 1's bump left it unrecorded (`ac42a57`), and the check fires before
-a tick runs.
+a tick runs. **Closed in bundle 3** (D-247), which is the last bundle to move
+v34 and therefore the first moment a re-recording would have survived:
+`1f1ac33ffed6afe9` -> `64fec78d6bf0cd5e` at an unchanged 35 commands.
+
+## M23 bundle 3 - generator presets and controls (D-247)
+
+Five presets (continent, archipelago, highland, river plain, valley), five
+controls (sea level, hilliness, river count, town density, resource richness)
+and the town clamp that had cost a 2048 map four fifths of its towns.
+**No save bump** - v34 is bundle 1's and this one EXTENDS it, so the v33 -> v34
+migration carries three fields now instead of two (Z5 is one bump per
+milestone, not one migration edit; the D-181 precedent). Six new hash words
+move every world digest once, so all three pins were re-recorded under the
+D-137/D-130 protocols: canonical `1fa54bf95cc82b40` -> **`b7e632a7124e67ce`**,
+corpus `3b797322b43b717c` -> **`a00868b9911f12d6`**, soak
+`1f1ac33ffed6afe9` -> **`64fec78d6bf0cd5e`** at an unchanged 35 commands.
+
+- **The rule is ONE record of six fields, saved and hashed UNCONDITIONALLY**
+  (D-247). `mapgen = { preset, seaLevel, hilliness, rivers, townDensity,
+  resources }` on `startYear`'s own terms: the map IS the world, so two worlds
+  with one seed and different knobs share nothing but the seed, and a
+  conditional hash would let them fingerprint alike. The parser requires every
+  field and range-checks every step against its table length - a step past the
+  end of a factor table is a `NaN` multiplier, and `NaN` does not throw, it
+  quietly generates a map of nothing. `replayGenesis` carries it: the fourth
+  world rule that function has had to be taught, and the only one whose loss
+  would change the GROUND rather than the physics.
+- **`Continent` is the arithmetic IDENTITY, and every seam is BRANCHED on it**
+  (D-247). `pivot + (v - pivot) * 1` is not `v` in binary floating point, so a
+  neutral control that went through the arithmetic would make every world this
+  project ever measured a different one. Three independent proofs rather than
+  the claim: byte-identical maps through three doors (no knobs, the migration's
+  record, the continent button) over five seeds; the three 1024 benchmark logs
+  of M22 re-recorded **byte-identical**; and every 19.4 band to the cent
+  (scenario 5 at 1,022,084 / 1,802,165 / 2,153,604 EUR, score 5,889,
+  Netzdesign 3.75, winter 4.36 %, coal payback year 6, wood chain 159,516).
+- **Every preset owns a corner of the measurement, and the disjointness is
+  PROVEN** (D-247). Landmass count, mean height and river tiles are SPEC2's own
+  three coordinates; each preset sits in a box and the test asserts that no
+  other preset's map meets that box, over five seeds. A river here is water
+  ABOVE sea level - `applyRivers` wets valley tiles without lowering them,
+  where "inland water" would count an archipelago's enclosed seas as rivers.
+  Playability is asserted too, and it caught two intermediate states: a river
+  plain with NO rivers (`RIVER_SOURCE_MIN_HEIGHT` is level 10 and a field
+  pressed flat about the pivot never reaches it) and a valley with no industry
+  at all.
+- **The river control moves the RESULT of the draw, never the draw** (Z3).
+  `RIVER_SOURCES_MIN..MAX` is still rolled once at the same stream position and
+  the factor multiplies what came out; a control that changed how many words
+  left the generator would fork every later draw on the map. Hilliness spreads
+  about `HEIGHTMAP_CONTRAST_PIVOT` - M22's import contrast, same operation,
+  same pivot (D-242) - because a spread about mid-grey is a sea-level control
+  in disguise and the game has the real one on the next line.
+- **The presets do not reach an imported heightmap, structurally.** Preset, sea
+  level and hilliness live only inside `generateRelief`, which the M22 import
+  path replaces whole. The other three controls are not relief and do apply.
+- **The `TOWN_COUNT_MAX` clamp scales with area now, floored at the old flat
+  value** (D-247). At 1024 the area rule asks for 140 and the clamp WAS 140, so
+  it never bit; at 2048 the area rule asks for 559 and it cut to 140 - a
+  quarter of the towns per square tile, which is SPEC2's "four times emptier",
+  recomputed rather than taken on trust. `townCountMaxFor(size) = max(140,
+  round(252 * size^2 / 1024^2))`, where 252 is the area rule at the densest
+  control step - a ceiling below that would silently truncate a control the
+  player can see moving. **No map of 1024 tiles or less moves**, which is its
+  own asserted line; the 2048 map goes 140 -> 559 towns and 534 -> 653
+  industries, and the workshop's `PlaceTownSeed` refuses against the same
+  ceiling.
+- **What had to be re-recorded, and what did not.** The three pins above plus
+  the 2048 benchmark map: four road commands of `archipelago.json` now land on
+  ground a town holds, and `bench/build.ts` refused them by name instead of
+  swallowing them. `mega-junction`, `megalopolis` and `hundred-k-edges` came
+  out of the same re-recording byte-identical. Said plainly: **a v34 file
+  written by an intermediate build of this milestone no longer loads** - it has
+  no `mapgen` and no migration runs for its own version. That is the price of
+  extending a version inside its milestone, it reaches only unreleased
+  intermediate saves, and it is why `v34-played.ironsave` was rewritten.
+- **A mapgen perf band per size step, measured** (D-247). 256 223 ms, 512
+  695 ms, 1024 3,010 ms, 2048 12,003 ms (on the NEW 559-town world) against
+  budgets of 900 / 2,000 / 8,000 / 30,000 ms - roughly 2.5x the measurement,
+  except the 1024 row which stays SPEC.md's own eight seconds. Every preset
+  builds a 1024 map in 2,734-2,826 ms, measured one by one, which is M23's own
+  Fertig-wenn. Tick unmoved: p50 1.516 / p99 3.126 ms on the 1500-vehicle
+  fixture against the M10 baseline 1.45 / 3.26 - the bundle lays no tick path.
+- **`mapgen` is lockable and all eight shipped scenarios lock it.** A scenario
+  that pins the seed and not the preset pins nothing.
+
+Main chunk 1,034,981 -> **1,039,413 B**, and the budget is raised with that
+measurement from 1,040,000 to **1,048,000 B** (D-192's rule): under the old
+number the build was still green and would have left the next bundle 587 bytes.
+Split by deletion: +1,682 B the twelve i18n keys in two languages, +1,687 B the
+screen, +1,063 B the rule itself.

@@ -1,9 +1,11 @@
 import {
+  DEFAULT_MAP_SIZE,
   type MapClimate,
   TILE_PUBLIC,
   TILES_PER_TOWN,
   TOWN_BUILT_RADIUS_MARGIN,
   TOWN_COUNT_MAX,
+  TOWN_COUNT_MAX_PER_DEFAULT_AREA,
   TOWN_COUNT_MIN,
   TOWN_MAIN_ROAD_SPACING_MAX,
   TOWN_MAIN_ROAD_SPACING_MIN,
@@ -69,10 +71,39 @@ const STEP_BIT = [RoadBit.West, RoadBit.East, RoadBit.North, RoadBit.South] as c
 /** The bit the tile in direction k carries BACK, i.e. the opposite of STEP_BIT. */
 const STEP_BACK_BIT = [RoadBit.East, RoadBit.West, RoadBit.South, RoadBit.North] as const;
 
-/** How many towns a map of this size should have. */
-export function targetTownCount(size: number): number {
-  const byArea = Math.round((size * size) / TILES_PER_TOWN);
-  return Math.min(TOWN_COUNT_MAX, Math.max(TOWN_COUNT_MIN, byArea));
+/**
+ * Most towns a map of this size may hold (SPEC2 M23).
+ *
+ * The ceiling scales with AREA above the default size and is floored at the
+ * flat figure it always was below it. That asymmetry is the fix and its own
+ * proof: at 1024 and under, `TOWN_COUNT_MAX` is at least what the area rule
+ * asks for, so nothing about any map this project has measured moves; at 2048
+ * the old flat cap truncated 559 towns to 140 and made the biggest map four
+ * times emptier per square tile than the default one, which is the emptiness
+ * SPEC2 M23 names (D-247).
+ *
+ * Exported because the workshop's `PlaceTownSeed` refuses against the same
+ * ceiling: an author on a 2048 map who could place only 140 towns would be
+ * held to a limit the generator itself no longer keeps.
+ */
+export function townCountMaxFor(size: number): number {
+  const byArea = Math.round(
+    (TOWN_COUNT_MAX_PER_DEFAULT_AREA * (size * size)) / (DEFAULT_MAP_SIZE * DEFAULT_MAP_SIZE),
+  );
+  return byArea > TOWN_COUNT_MAX ? byArea : TOWN_COUNT_MAX;
+}
+
+/**
+ * How many towns a map of this size should have, at this density.
+ *
+ * `density` is the town-density control of SPEC2 M23; it is 1 at the neutral
+ * step, and `Math.round` of the integer the area rule already produced is that
+ * integer, so a neutral world of every size except 2048 asks for exactly the
+ * count it asked for before the control existed.
+ */
+export function targetTownCount(size: number, density = 1): number {
+  const byArea = Math.round(Math.round((size * size) / TILES_PER_TOWN) * density);
+  return Math.min(townCountMaxFor(size), Math.max(TOWN_COUNT_MIN, byArea));
 }
 
 /** A tile is a usable town centre if it is flat, dry and not on the border. */
@@ -829,9 +860,19 @@ export function settleTown(map: TileMap, town: Town, rng: Rng): void {
  * the towns are named in (SPEC2 M23, D-246). Nothing else about a town's
  * placement or layout knows about it - the biomes were assigned before this
  * step and the ground is the ground.
+ *
+ * `density` is the town-density control of the same milestone and reaches
+ * exactly one thing too: HOW MANY centres are asked for. Where each one lands
+ * and how it is laid out is unchanged, which is why a denser map is the same
+ * map with more towns on it rather than a differently shaped one.
  */
-export function generateTowns(map: TileMap, rng: Rng, climate: MapClimate): Town[] {
-  const centres = placeCentres(map, rng, targetTownCount(map.size));
+export function generateTowns(
+  map: TileMap,
+  rng: Rng,
+  climate: MapClimate,
+  density = 1,
+): Town[] {
+  const centres = placeCentres(map, rng, targetTownCount(map.size, density));
   const names = new PlaceNameGenerator(rng, climate);
   const towns: Town[] = [];
 

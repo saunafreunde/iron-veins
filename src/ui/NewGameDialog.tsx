@@ -5,6 +5,7 @@ import { COMPANY_COLORS } from '../shared/palette';
 import type { NewGameOptions } from '../shared/protocol';
 import {
   COMPANY_COLOR_COUNT,
+  DEFAULT_MAP_GEN_KNOBS,
   DEFAULT_MAP_SIZE,
   Difficulty,
   HEIGHTMAP_CONTRAST_DEFAULT,
@@ -12,13 +13,17 @@ import {
   HEIGHTMAP_CONTRAST_MIN,
   HEIGHTMAP_CONTRAST_STEP,
   MAP_SIZES,
+  MAPGEN_KNOB_STEPS,
   MAX_AI_COMPANIES,
   MapClimate,
+  MapPreset,
   PLAYABLE_YEARS,
   START_YEAR,
   START_YEAR_PRESETS,
   WeatherRule,
+  type MapGenKnobs,
 } from '../sim/constants';
+import { knobsForPreset } from '../sim/mapgen/presets';
 import type { HeightmapImage, ReliefImport } from '../sim/mapgen/heightmap';
 import type { PngRefusal } from '../sim/mapgen/png';
 import { useSimStore } from './store';
@@ -68,6 +73,60 @@ const WEATHERS: readonly { readonly value: WeatherRule; readonly key: string }[]
  */
 const START_YEARS: readonly number[] = START_YEAR_PRESETS;
 
+/**
+ * The five generator presets of SPEC2 M23 bundle 3.
+ *
+ * Buttons rather than a list, and the order is the enum's, because the value
+ * is saved and hashed world state: the screen must be able to show which
+ * ground a world was drawn from, not only offer a choice.
+ */
+const PRESETS: readonly { readonly value: MapPreset; readonly key: string }[] = [
+  { value: MapPreset.Continent, key: 'ui.newGame.preset.continent' },
+  { value: MapPreset.Archipelago, key: 'ui.newGame.preset.archipelago' },
+  { value: MapPreset.Highland, key: 'ui.newGame.preset.highland' },
+  { value: MapPreset.RiverPlain, key: 'ui.newGame.preset.riverPlain' },
+  { value: MapPreset.Valley, key: 'ui.newGame.preset.valley' },
+];
+
+/**
+ * The five controls, in the order SPEC2 M23 names them.
+ *
+ * `read` and `write` rather than five pieces of state: the record is ONE world
+ * rule and travels as one, so a control that forgot to be included would be a
+ * screen that silently generated a different map from the one it showed.
+ */
+const KNOBS: readonly {
+  readonly key: string;
+  readonly read: (knobs: MapGenKnobs) => number;
+  readonly write: (knobs: MapGenKnobs, step: number) => MapGenKnobs;
+}[] = [
+  {
+    key: 'ui.newGame.mapgenSeaLevel',
+    read: (k) => k.seaLevel,
+    write: (k, step) => ({ ...k, seaLevel: step }),
+  },
+  {
+    key: 'ui.newGame.mapgenHilliness',
+    read: (k) => k.hilliness,
+    write: (k, step) => ({ ...k, hilliness: step }),
+  },
+  {
+    key: 'ui.newGame.mapgenRivers',
+    read: (k) => k.rivers,
+    write: (k, step) => ({ ...k, rivers: step }),
+  },
+  {
+    key: 'ui.newGame.mapgenTownDensity',
+    read: (k) => k.townDensity,
+    write: (k, step) => ({ ...k, townDensity: step }),
+  },
+  {
+    key: 'ui.newGame.mapgenResources',
+    read: (k) => k.resources,
+    write: (k, step) => ({ ...k, resources: step }),
+  },
+];
+
 /** A fresh seed. Main-thread randomness is fine: it becomes world state. */
 function rollSeed(): number {
   return Math.floor(Math.random() * 0x1_0000_0000);
@@ -111,6 +170,12 @@ export function NewGameDialog({
   // that is on by default is a rule nobody chose (Fehlerkatalog 34).
   const [startYear, setStartYear] = useState<number>(START_YEAR);
   const [endless, setEndless] = useState(false);
+  // The generator rule of M23 bundle 3, held as ONE record because that is
+  // what it is in the save and in the hash. Picking a preset REPLACES the five
+  // controls with the ones that preset opens on; moving a control afterwards
+  // keeps the preset, because the preset is the ground and the controls are
+  // what the player does to it.
+  const [mapgen, setMapgen] = useState<MapGenKnobs>(DEFAULT_MAP_GEN_KNOBS);
   // And the weather rule of M18, off for the same reason: every band in the
   // game was measured by a world without weather.
   const [weather, setWeather] = useState<WeatherRule>(WeatherRule.Off);
@@ -196,6 +261,41 @@ export function NewGameDialog({
           </button>
         ))}
       </div>
+
+      <span className="field__label field__label--spaced">{t('ui.newGame.mapgen')}</span>
+      <div className="button-row">
+        {PRESETS.map((entry) => (
+          <button
+            key={entry.key}
+            type="button"
+            disabled={heightmap !== null}
+            className={entry.value === mapgen.preset ? 'button button--active' : 'button'}
+            onClick={() => setMapgen(knobsForPreset(entry.value))}
+          >
+            {t(entry.key)}
+          </button>
+        ))}
+      </div>
+      {KNOBS.map((knob) => (
+        <label className="field" key={knob.key}>
+          <span className="field__label">
+            {t('ui.newGame.mapgenStep', {
+              label: t(knob.key),
+              step: knob.read(mapgen) + 1,
+              steps: MAPGEN_KNOB_STEPS,
+            })}
+          </span>
+          <input
+            type="range"
+            min={0}
+            max={MAPGEN_KNOB_STEPS - 1}
+            step={1}
+            value={knob.read(mapgen)}
+            onChange={(event) => setMapgen(knob.write(mapgen, Number(event.target.value)))}
+          />
+        </label>
+      ))}
+      <p className="panel__hint">{t('ui.newGame.mapgenHint')}</p>
 
       <span className="field__label field__label--spaced">{t('ui.newGame.heightmap')}</span>
       <div className="button-row">
@@ -432,6 +532,7 @@ export function NewGameDialog({
                 companyColorIndex,
                 startYear,
                 endless,
+                mapgen,
                 inflation,
                 emissions,
                 occupancyPenalty,

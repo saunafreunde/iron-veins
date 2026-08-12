@@ -1,18 +1,22 @@
 import {
+  DEFAULT_MAP_GEN_KNOBS,
   EROSION_PASSES,
   EROSION_RATE,
   EROSION_TALUS,
   HEIGHT_LEVELS,
+  HEIGHTMAP_CONTRAST_PIVOT,
   MAP_EDGE_FALLOFF,
   MAX_HEIGHT,
   TERRAIN_NOISE_BASE_WAVELENGTH,
   TERRAIN_NOISE_LACUNARITY,
   TERRAIN_NOISE_OCTAVES,
   TERRAIN_NOISE_PERSISTENCE,
+  type MapGenKnobs,
 } from '../constants';
 import type { TileMap } from '../map/TileMap';
 import type { Rng } from '../rng';
 import { SimplexNoise2D } from './noise';
+import { hillinessGainOf, presetShape, seaLevelShiftOf } from './presets';
 
 /**
  * Step 1 and 2 of section 6: the raw height field, eroded and quantised into
@@ -37,25 +41,56 @@ function edgeFalloff(x: number, y: number, size: number): number {
   return smoothstep(distance / margin);
 }
 
-/** Fill `field` with fractal noise shaped into [0, 1]. */
-function sampleNoise(field: Float32Array, size: number, rng: Rng): void {
+/**
+ * Fill `field` with fractal noise shaped into [0, 1].
+ *
+ * Four seams the preset and the two relief controls of SPEC2 M23 reach, and
+ * every one of them is BRANCHED on its identity rather than multiplied by it:
+ * `pivot + (v - pivot) * 1` is not bit-identical to `v` in binary floating
+ * point, so a neutral world that went through the arithmetic would be a
+ * different world from every one this game recorded before M23. The branches
+ * are what `mapgenPresets.spec.ts` asserts the identity of, and they cost one
+ * predictable comparison per corner.
+ */
+function sampleNoise(field: Float32Array, size: number, rng: Rng, knobs: MapGenKnobs): void {
   const noise = new SimplexNoise2D(rng);
   const stride = size + 1;
+  const shape = presetShape(knobs.preset);
   // One wavelength of the first octave spans this fraction of the map.
-  const scale = 1 / (size * TERRAIN_NOISE_BASE_WAVELENGTH);
+  const scale = 1 / (size * (TERRAIN_NOISE_BASE_WAVELENGTH * shape.wavelength));
+  const ridge = shape.ridge;
+  const gain = hillinessGainOf(knobs);
+  // The lift the preset gives the ground, less the height the sea takes.
+  const offset = shape.lift - seaLevelShiftOf(knobs);
 
   for (let y = 0; y <= size; y++) {
     for (let x = 0; x <= size; x++) {
-      const raw = noise.fractal(
+      let raw = noise.fractal(
         x * scale,
         y * scale,
         TERRAIN_NOISE_OCTAVES,
         TERRAIN_NOISE_PERSISTENCE,
         TERRAIN_NOISE_LACUNARITY,
       );
+      // Ridges: the zero crossing - the commonest value in fbm - becomes the
+      // summit, so the ranges are long and the ground between them is floor.
+      if (ridge !== 0) {
+        const folded = 1 - 2 * (raw < 0 ? -raw : raw);
+        raw = raw + (folded - raw) * ridge;
+      }
       // [-1,1] -> [0,1], then push towards the extremes so the map gets clear
       // plains and clear mountains instead of uniform lumpiness.
-      const shaped = smoothstep((raw + 1) * 0.5);
+      let shaped = smoothstep((raw + 1) * 0.5);
+      // Relief about the land pivot, never about mid-grey: the same operation
+      // and the same pivot as the M22 import contrast (D-242), so the control
+      // moves mountains and leaves the coastline where it was.
+      if (gain !== 1) {
+        shaped = HEIGHTMAP_CONTRAST_PIVOT + (shaped - HEIGHTMAP_CONTRAST_PIVOT) * gain;
+      }
+      // And the coastline is the OTHER control's, applied before the falloff
+      // so that the ring of ocean which makes "coast" mean anything survives
+      // every preset and every step.
+      if (offset !== 0) shaped = shaped + offset;
       field[y * stride + x] = shaped * edgeFalloff(x, y, size);
     }
   }
@@ -155,10 +190,22 @@ export function quantise(field: Float32Array, map: TileMap): void {
 /**
  * Generate the terrain relief of `map` in place.
  * `erosionPasses` is a parameter so tests can run a cheap version.
+ *
+ * `knobs` is where the preset and the two RELIEF controls of SPEC2 M23 land,
+ * and it is the only place they land: an imported heightmap (M22) replaces
+ * this function whole, so a picture keeps its own coastline and its own
+ * mountains and the contrast slider stays the one control over them. The
+ * other three controls - rivers, towns, resources - are not relief and do
+ * apply to an imported map.
  */
-export function generateRelief(map: TileMap, rng: Rng, erosionPasses = EROSION_PASSES): void {
+export function generateRelief(
+  map: TileMap,
+  rng: Rng,
+  erosionPasses = EROSION_PASSES,
+  knobs: MapGenKnobs = DEFAULT_MAP_GEN_KNOBS,
+): void {
   const field = new Float32Array((map.size + 1) * (map.size + 1));
-  sampleNoise(field, map.size, rng);
+  sampleNoise(field, map.size, rng, knobs);
   erode(field, map.size, erosionPasses);
   quantise(field, map);
   map.enforceSlopeInvariant();

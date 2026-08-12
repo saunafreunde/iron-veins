@@ -85,6 +85,199 @@ export const EROSION_TALUS = 1 / HEIGHT_LEVELS;
 /** Fraction of the excess height moved downhill per erosion pass. */
 export const EROSION_RATE = 0.5;
 
+// --------------------------------------------- generator presets & controls
+
+/**
+ * The five grounds the generator can draw (SPEC2 M23).
+ *
+ * A preset is a SHAPE, not a difficulty: it decides what the noise field looks
+ * like before anything is quantised, and every one of them is then finished by
+ * the same hydrology, climate, town and industry passes. `Continent` is the
+ * identity - the field every world before M23 was drawn from, to the bit -
+ * which is what keeps every balancing band, every shipped scenario and both
+ * pins on ground that did not move (`tests/unit/mapgenPresets.spec.ts` asserts
+ * that identity rather than assuming it).
+ */
+export const MapPreset = {
+  Continent: 0,
+  Archipelago: 1,
+  Highland: 2,
+  RiverPlain: 3,
+  Valley: 4,
+} as const;
+export type MapPreset = (typeof MapPreset)[keyof typeof MapPreset];
+
+/** How many presets exist. [1] */
+export const MAP_PRESET_COUNT = 5;
+
+/**
+ * Steps every generator control offers, 0 (least) to 4 (most). [1]
+ *
+ * Integer steps rather than a free multiplier because the value is saved and
+ * hashed world state: a step is a number a parser can refuse, a slider can
+ * show and a migration can enter, where a float would make two worlds that
+ * differ in the ninth decimal two different worlds for no reason a player
+ * could see.
+ */
+export const MAPGEN_KNOB_STEPS = 5;
+
+/** The step that changes nothing - the middle one. [1] */
+export const MAPGEN_KNOB_NEUTRAL = 2;
+
+/** The shape a preset gives the raw noise field, before any control is read. */
+export interface MapPresetShape {
+  /**
+   * Factor on {@link TERRAIN_NOISE_BASE_WAVELENGTH}. [1]
+   *
+   * Below 1 the features get smaller, which is what breaks a continent into
+   * islands; above 1 they get broader.
+   */
+  readonly wavelength: number;
+  /**
+   * How much of the fractal noise is folded into RIDGES. [1]
+   *
+   * Zero is plain fbm. One replaces every value `v` by `1 - 2*|v|`, which
+   * turns the zero crossings - the most common value in fbm - into the
+   * highest ground and leaves long troughs between the ranges. Anything in
+   * between is the linear blend of the two.
+   */
+  readonly ridge: number;
+  /**
+   * Added to the shaped field before the edge falloff. [fraction of full height]
+   *
+   * One height level is `1 / HEIGHT_LEVELS` = 0.0625, so 0.125 is two levels
+   * of ground everywhere. Before the falloff on purpose: the ocean ring that
+   * makes "coast" mean something must survive every preset.
+   */
+  readonly lift: number;
+}
+
+/**
+ * One shape per {@link MapPreset}, indexed by it.
+ *
+ * Origin: measured, not guessed - each row was moved until the preset owns one
+ * property of the finished map outright (`tests/unit/mapgenPresets.spec.ts`
+ * holds the whole matrix). `Continent` is exactly `{1, 0, 0}`, which is the
+ * arithmetic identity at every one of the three seams.
+ */
+export const MAP_PRESET_SHAPES: readonly MapPresetShape[] = [
+  // Continent: the pre-M23 field, untouched.
+  { wavelength: 1, ridge: 0, lift: 0 },
+  // Archipelago: small features and a shoulder of ground taken away, so what
+  // is left stands out of the water separately.
+  { wavelength: 0.4, ridge: 0, lift: -0.04 },
+  // Highland: broad features lifted almost six levels clear of the sea, and
+  // then FLATTENED by its own hilliness step - a plateau, not an alp range.
+  { wavelength: 1.3, ridge: 0, lift: 0.36 },
+  // River plain: very broad, barely above the water, so the rivers that find
+  // their way across it are the whole relief.
+  { wavelength: 1.8, ridge: 0, lift: 0.06 },
+  // Valley: ridged noise - ranges with floors between them. The lift is
+  // NEGATIVE because folding the noise into ridges raises the whole field by
+  // itself; without it a valley world would out-climb the highland one.
+  { wavelength: 0.85, ridge: 0.7, lift: -0.06 },
+];
+
+/**
+ * The control steps a preset opens on, per {@link MapPreset}.
+ *
+ * The preset draws the ground and the controls are the player's; these are
+ * only what the screen fills in when a preset is picked, and every one of them
+ * is then saved as a value in its own right. `Continent` opens on neutral
+ * everywhere, which is what makes "pick nothing" the pre-M23 world.
+ */
+export const MAP_PRESET_DEFAULT_KNOBS: readonly (readonly number[])[] = [
+  // seaLevel, hilliness, rivers, townDensity, resources
+  [2, 2, 2, 2, 2],
+  // Archipelago: a high sea is what an archipelago is.
+  [3, 2, 1, 2, 2],
+  // Highland: a low sea and a plateau - lifted, not sharpened.
+  [1, 1, 2, 2, 2],
+  // River plain: gentle ground, more towns on it, and every river the
+  // generator will draw. Hilliness 1 rather than 0 because a river needs
+  // SOURCE ground: `RIVER_SOURCE_MIN_HEIGHT` is level 10, and a field pressed
+  // flat about the land pivot never reaches it - a river plain with no rivers
+  // on it was measured before this step was raised.
+  [2, 1, 4, 3, 2],
+  // Valley: the rivers belong in the floors, and the seams are richer because
+  // the ground is harder to build on - measured, the placement loop loses more
+  // sites to slope here than on any other preset.
+  [2, 2, 3, 2, 3],
+];
+
+/**
+ * Height the sea takes, per step of the sea-level control. [fraction of full height]
+ *
+ * Subtracted from the shaped field, so a higher step drowns more ground. The
+ * span is +-2 height levels (`2 / HEIGHT_LEVELS`), which moves a coastline
+ * visibly without turning any map into open water or into one unbroken plate.
+ */
+export const MAPGEN_SEA_LEVEL_SHIFT: readonly number[] = [-0.125, -0.0625, 0, 0.0625, 0.125];
+
+/**
+ * Relief gain, per step of the hilliness control. [1]
+ *
+ * Applied around {@link HEIGHTMAP_CONTRAST_PIVOT} - the same pivot and the
+ * same operation as M22's import contrast (D-242), deliberately: a gain about
+ * mid-grey is a sea-level control in disguise, and the game already has one of
+ * those on the next line.
+ */
+export const MAPGEN_HILLINESS_GAIN: readonly number[] = [0.4, 0.7, 1, 1.4, 1.9];
+
+/**
+ * Factor on the drawn number of river sources, per step. [1]
+ *
+ * The DRAW is unchanged at every step - `RIVER_SOURCES_MIN..MAX` is rolled
+ * once as it always was and the factor is applied to the result (Z3: a control
+ * may move a threshold, never the number of words taken from a stream).
+ */
+export const MAPGEN_RIVER_SCALE: readonly number[] = [0.25, 0.5, 1, 1.75, 2.5];
+
+/** Factor on the area rule for towns, per step of the town-density control. [1] */
+export const MAPGEN_TOWN_DENSITY: readonly number[] = [0.4, 0.7, 1, 1.4, 1.8];
+
+/** Factor on the area rule for industries, per step of the richness control. [1] */
+export const MAPGEN_RESOURCE_RICHNESS: readonly number[] = [0.4, 0.7, 1, 1.5, 2];
+
+/**
+ * The generator settings of a world: which ground was drawn and how (SPEC2 M23).
+ *
+ * A world rule in the full Z2 sense and not a menu memory: the map is the
+ * world, so two worlds with the same seed and different knobs are two
+ * different worlds, and a save that lost them could not say which one it is.
+ * Saved, hashed unconditionally and migrated - see `hashWorld` and
+ * `save/migrations/index.ts`.
+ */
+export interface MapGenKnobs {
+  readonly preset: MapPreset;
+  /** Step of the sea-level control, 0..4. */
+  readonly seaLevel: number;
+  /** Step of the hilliness control, 0..4. */
+  readonly hilliness: number;
+  /** Step of the river-count control, 0..4. */
+  readonly rivers: number;
+  /** Step of the town-density control, 0..4. */
+  readonly townDensity: number;
+  /** Step of the resource-richness control, 0..4. */
+  readonly resources: number;
+}
+
+/**
+ * What every world recorded before SPEC2 M23 bundle 3 was generated with.
+ *
+ * Every value is the arithmetic identity of its seam, which is the property
+ * the migration leans on: a version 33 world entering this record is not being
+ * given a default, it is being told what it already is.
+ */
+export const DEFAULT_MAP_GEN_KNOBS: MapGenKnobs = {
+  preset: MapPreset.Continent,
+  seaLevel: MAPGEN_KNOB_NEUTRAL,
+  hilliness: MAPGEN_KNOB_NEUTRAL,
+  rivers: MAPGEN_KNOB_NEUTRAL,
+  townDensity: MAPGEN_KNOB_NEUTRAL,
+  resources: MAPGEN_KNOB_NEUTRAL,
+};
+
 // ------------------------------------------------------- heightmap import
 
 /**
@@ -183,7 +376,35 @@ export const RIVER_WIDTH_3_CATCHMENT = 8;
 /** One town per this many tiles, clamped to the bounds below. */
 export const TILES_PER_TOWN = 7_500;
 export const TOWN_COUNT_MIN = 40;
+
+/**
+ * Floor of the town ceiling: what a map of the default size or smaller may
+ * hold, whatever the controls ask for. [towns]
+ *
+ * Unchanged since M1, and it stays the floor rather than the ceiling for one
+ * reason: every map this game has ever measured - all eight shipped scenarios,
+ * every balancing fixture, both determinism pins - is 1024 tiles or less, and
+ * on all of them the area rule asks for fewer towns than this. Lowering the
+ * ceiling of a small map would move ground nobody asked to move.
+ */
 export const TOWN_COUNT_MAX = 140;
+
+/**
+ * Town ceiling per default-size map area, for maps LARGER than the default.
+ * [towns per 1024 x 1024 tiles]
+ *
+ * Origin: the area rule at the densest step the controls offer,
+ * `round(1024^2 / TILES_PER_TOWN * MAPGEN_TOWN_DENSITY[4])` = `round(139.8 *
+ * 1.8)` = 252. A ceiling below that would silently truncate a control the
+ * player can see moving.
+ *
+ * This is the number SPEC2 M23 asks for: the flat 140 was written when 1024
+ * was the largest map the game had, and it happens to equal what the area rule
+ * asks for there - so it never bit until 2048 arrived, where it truncated 559
+ * towns to 140 and made the biggest map four times emptier per square tile
+ * than the default one (measured, D-247).
+ */
+export const TOWN_COUNT_MAX_PER_DEFAULT_AREA = 252;
 
 /** Poisson disc radius between two town centres. [tiles] */
 export const TOWN_MIN_DISTANCE = 24;

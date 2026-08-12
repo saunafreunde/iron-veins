@@ -70,6 +70,12 @@ export const SCENARIO_LOCKABLE_RULES = [
   'goals',
   'inflation',
   'mapSize',
+  // The generator rule of SPEC2 M23 bundle 3, and lockable for the sharpest
+  // version of the reason `seed` and `mapSize` are: a scenario's goals are
+  // calibrated on the ground its seed draws, and a player who could pick the
+  // archipelago preset would be given a different world under the same
+  // briefing. Pinning the seed without pinning the preset would pin nothing.
+  'mapgen',
   'occupancyPenalty',
   'roadCongestion',
   'seed',

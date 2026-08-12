@@ -18,12 +18,16 @@ import {
   Difficulty,
   LEDGER_HISTORY_MONTHS,
   LINK_SAMPLE_COUNT,
+  MAP_PRESET_COUNT,
+  MAPGEN_KNOB_STEPS,
   MapClimate,
   SCENARIO_TEXT_MAX_CHARS,
   START_YEAR,
   WEATHER_CELL_COUNT,
   WEATHER_REGION_COUNT,
   WEATHER_RULE_COUNT,
+  type MapGenKnobs,
+  type MapPreset,
   type WeatherRule,
 } from '../constants';
 import { INDUSTRY_EVENT_KIND_COUNT, type IndustryEvent } from '../industry/events';
@@ -623,6 +627,38 @@ function parseStartYear(value: unknown, path: string): number {
     );
   }
   return year;
+}
+
+/**
+ * The generator rule of SPEC2 M23 bundle 3: a preset and five control steps.
+ *
+ * Every field is REQUIRED and range-checked. Required because a world that
+ * lost its preset is a world that cannot say what its own map is - the same
+ * argument the two era rules above it carry - and range-checked because the
+ * steps are table indices: an out-of-band step would reach past the end of a
+ * factor table, and a `NaN` multiplier does not throw, it silently generates a
+ * map of nothing.
+ */
+function parseMapGenKnobs(value: unknown, path: string): MapGenKnobs {
+  const raw = asRecord(value, path);
+  const step = (name: string, ceiling: number): number => {
+    const at = asInt(raw[name], `${path}.${name}`);
+    if (at < 0 || at >= ceiling) {
+      throw new SaveFormatError(
+        `${path}.${name}: ${at} is outside the 0..${ceiling - 1} band`,
+        `${path}.${name}`,
+      );
+    }
+    return at;
+  };
+  return {
+    preset: step('preset', MAP_PRESET_COUNT) as MapPreset,
+    seaLevel: step('seaLevel', MAPGEN_KNOB_STEPS),
+    hilliness: step('hilliness', MAPGEN_KNOB_STEPS),
+    rivers: step('rivers', MAPGEN_KNOB_STEPS),
+    townDensity: step('townDensity', MAPGEN_KNOB_STEPS),
+    resources: step('resources', MAPGEN_KNOB_STEPS),
+  };
 }
 
 function parseEconomyCurve(value: unknown, path: string, economy: boolean): number[] {
@@ -1493,6 +1529,10 @@ export function parseWorldState(value: unknown, path: string): WorldStateData {
     // a year it should not or refuses to.
     startYear: parseStartYear(stateRaw['startYear'], `${path}.startYear`),
     endless: asBoolean(stateRaw['endless'], `${path}.endless`),
+    // The generator rule of the same milestone, required on the same terms:
+    // the map is the world, so a save that has lost the preset and the five
+    // control steps is a save that cannot say which world it holds.
+    mapgen: parseMapGenKnobs(stateRaw['mapgen'], `${path}.mapgen`),
     inflation: asBoolean(stateRaw['inflation'], `${path}.inflation`),
     emissions: asBoolean(stateRaw['emissions'], `${path}.emissions`),
     // The two 8.4 rules of M15. Required, like every other world rule: a save

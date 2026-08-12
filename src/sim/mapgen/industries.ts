@@ -343,14 +343,22 @@ function repairChains(
   return compacted;
 }
 
-/** Place all industries of the map, from the climate's own set (SPEC2 M23). */
+/**
+ * Place all industries of the map, from the climate's own set (SPEC2 M23).
+ *
+ * `richness` is the resource-richness control of the same milestone. It moves
+ * the COUNT the placement loop asks for and nothing else - `repairChains`
+ * still runs afterwards, so a poor map is a map with fewer works on it and
+ * never a map with a broken chain on it.
+ */
 export function generateIndustries(
   map: TileMap,
   rng: Rng,
   towns: readonly Town[],
   climate: MapClimate,
+  richness = 1,
 ): Industry[] {
-  const wanted = Math.max(1, Math.round(map.tileCount / TILES_PER_INDUSTRY));
+  const wanted = Math.max(1, Math.round((map.tileCount / TILES_PER_INDUSTRY) * richness));
   const table = buildWeightTable(climate);
   const placed: Industry[] = [];
 

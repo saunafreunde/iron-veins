@@ -110,6 +110,12 @@ export function replayGenesis(world: World): World {
     // widest-reaching omission this list could have (D-245).
     startYear: world.startYear,
     endless: world.endless,
+    // And the generator rule of M23 bundle 3, which is the one omission that
+    // would not merely change the world's physics but its GROUND: a rebuild
+    // that dropped the preset would regenerate a continent under an
+    // archipelago's command log, and every build command in it would land in
+    // the sea.
+    mapgen: world.mapgen,
     inflation: world.inflation,
     emissions: world.emissions,
     occupancyPenalty: world.occupancyPenalty,

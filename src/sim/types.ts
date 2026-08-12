@@ -1,4 +1,4 @@
-import type { Difficulty, MapClimate, WeatherRule } from './constants';
+import type { Difficulty, MapClimate, MapGenKnobs, WeatherRule } from './constants';
 import type { GoalSpec } from './goals/types';
 
 /** The four 32 bit words of the xoshiro128** generator, as unsigned integers. */
@@ -146,6 +146,21 @@ export interface NewGameParams {
    * how far the Int32 tick counter honestly carries that.
    */
   readonly endless?: boolean;
+  /**
+   * Which ground the generator drew, and how (SPEC2 M23: the five presets and
+   * the five controls).
+   *
+   * A world rule in the full Z2 sense and the most literal one in this record:
+   * the map IS the world, so two worlds with the same seed and different knobs
+   * share nothing but their seed. Saved, hashed unconditionally, migrated.
+   *
+   * ABSENT MEANS {@link DEFAULT_MAP_GEN_KNOBS} - the continent preset and the
+   * neutral step of every control - and that is not a default but a recorded
+   * fact: every seam the record reaches is branched on its identity value, so
+   * a world with these knobs is drawn by exactly the arithmetic that drew
+   * every world before this milestone.
+   */
+  readonly mapgen?: MapGenKnobs;
   /**
    * Whether prices and costs drift upward over the century (section 14.2).
    *

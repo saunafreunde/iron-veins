@@ -1,5 +1,6 @@
 import { CARGO_COUNT } from '../../cargo/types';
 import {
+  DEFAULT_MAP_GEN_KNOBS,
   LEDGER_HISTORY_MONTHS,
   START_YEAR,
   TILE_PUBLIC,
@@ -1739,8 +1740,11 @@ const v32_to_v33: SaveMigration = (payload) => {
 /**
  * M23 gave the game two centuries (SPEC2 M23's one Z5 bump - v34, E-15).
  *
- * Two fields, and both enter a version 33 world as the only values that world
- * can honestly be given:
+ * Three fields now, and every one of them enters a version 33 world as the
+ * only value that world can honestly be given. The third arrived with bundle
+ * 3, which EXTENDS this migration rather than adding a v35: one bump per
+ * milestone is Z5, and one bump is not one migration EDIT (the D-181
+ * precedent, where M14's statistics centre widened the v25 payload in place).
  *
  *  - `startYear` becomes `START_YEAR`. Every world this game has ever recorded
  *    began on 1 January 1950 - the calendar had no other opinion available -
@@ -1750,7 +1754,17 @@ const v32_to_v33: SaveMigration = (payload) => {
  *    and a goal deadline would name a year the player never played towards.
  *  - `endless` becomes `false`. A version 33 world stopped when its hundred
  *    and first playable year ran out, because there was no way for it not to.
+ *  - `mapgen` becomes `DEFAULT_MAP_GEN_KNOBS` - the continent preset at the
+ *    neutral step of all five controls. This is the strongest of the three:
+ *    every seam the record reaches is BRANCHED on its identity value
+ *    (`mapgen/heightfield.ts`, `hydrology.ts`, `towns.ts`, `industries.ts`),
+ *    so a world drawn with these knobs is drawn by the same arithmetic that
+ *    drew every world before bundle 3. The migration is therefore not
+ *    choosing a default, it is writing down what the file already holds - and
+ *    that is checkable rather than asserted: the corpus decodes every
+ *    fixture from v22 on and hashes it.
  *
+
  * The pre-1950 catalogue that arrives with the same milestone needs nothing
  * here for the reason the five editor command kinds needed nothing at v33: a
  * spec id is a number in a consist, and a save written by an older build
@@ -1774,6 +1788,7 @@ const v33_to_v34: SaveMigration = (payload) => {
       ...inner,
       startYear: inner['startYear'] ?? START_YEAR,
       endless: inner['endless'] ?? false,
+      mapgen: inner['mapgen'] ?? { ...DEFAULT_MAP_GEN_KNOBS },
     },
   };
 };
