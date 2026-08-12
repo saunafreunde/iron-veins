@@ -3356,5 +3356,91 @@ pins unmoved and every band identical to D-241 to the euro.
   under `src/sim` imports, and is a 3,133 B chunk of its own. Booked:
   **991,118 -> 997,787 B**, of which +3,528 B are the 28 i18n lines in two
   languages; budget 998,000 -> **1,006,000**.
-- Still owed by M22: the four benchmark maps and the milestone's own 6.1.1
-  ledger row.
+- The four benchmark maps and the milestone's 6.1.1 ledger row are bundle 4,
+  digested below.
+
+## M22 bundle 4 - the four benchmark maps, and the close (D-243)
+
+The milestone's last bundle: the four canonical benchmark maps SPEC2 names by
+hand, as TEXT command logs, read by the perf suite AND by an in-game benchmark
+mode. **No save bump** - v33 is bundle 1's and there was nothing to extend,
+because a benchmark map is a text file with commands in it and not state. Zero
+hashed bytes, zero RNG draws, zero snapshot bytes, zero atlas cells, zero new
+command kinds; all three pins unmoved and every band identical to D-242 to the
+euro.
+
+- **A benchmark map IS a command log, which is D-240's sentence again.** A
+  `.ironsave` of a 2048 world with a hundred thousand rail arcs would be
+  megabytes of opaque bytes that go stale at the next save bump; a log is
+  readable, diffable, migration-free and replayed by the executor a player's own
+  game uses. The four files live under `src/sim/bench/maps/` because the GAME
+  reads them.
+- **Recorded, not typed - and that was the one real design question.** On a
+  generated 512 map, **518 of 1,845** straight 32-tile track runs are accepted
+  and 1,327 refused, so a hand-written lattice of coordinates would be a list of
+  guesses about where the sea is. `tests/perf/benchmarkPlans.ts` probes the real
+  world and keeps the answers. Recording is deliberate
+  (`IRON_VEINS_RECORD_BENCH=1`), verifying is automatic - the D-137 split.
+- **The guard is two-part and the second part is the one people forget.**
+  `bench/build.ts` throws on the FIRST refused line of a log (D-072); but every
+  command can be accepted and the world still be a different one if the
+  generator moved a town, so each file carries a `claims` block that is READ
+  BACK and compared (the `SCENARIO_WORLD_CLAIMS` bargain of D-197). Both are
+  right to go red on a generation change; the answer is to re-record.
+- **The finding is junction DENSITY, not size.** Measured: mega-junction
+  (512², 48 trains, 47,024 arcs, **932 junctions**) p50 0.088 / **p99 18.586** /
+  max 36.340 ms; megalopolis (1024², **1,500 vehicles**) p50 1.056 / **p99
+  2.274**; archipelago (2048², 300 vehicles, **11 land masses**) p50 0.199 /
+  p99 0.556; 100k-edges (1024², **105,648 directed arcs**, 485 junctions) p50
+  0.051 / **p99 0.126**. The 100k-edge net carries **2.2x the arcs** and is
+  **148x cheaper at p99**. It is the rail pathfinder: A* over (tile, incoming
+  direction) with a straight-line heuristic that discriminates nothing on a
+  uniform lattice. **Controlled, not asserted**: the same map with the fleet
+  parked measures p50 0.002 / p99 0.007 ms, and **no vehicle is ever `NoRoute`**
+  - the tail is the search, not a failure repeating. Section 21's 8 ms budget is
+  about the world the MEGALOPOLIS is, and that holds at 2.274 ms; the
+  mega-junction is a world nobody ever budgeted, it gets no budget here, and
+  **anybody who wants the pathfinder cheaper on lattice maps now has the
+  instrument** (D-167: gates are multiples, the numbers are the ledger's).
+- **Law #8 had no world until today.** "Rail graphs reach 100k edges" has stood
+  in this file since M0 and nothing in the repository had ever built one. An
+  edge is a DIRECTED track arc (`railArcCount` - one direction bit on one tile),
+  because that is what the pathfinder searches over.
+- **The clock is read in exactly one place.** `bench/build.ts` replays and knows
+  no clock; `bench/stats.ts` computes percentiles from numbers and cannot tell
+  they are milliseconds; the two `performance.now()` calls are in `SimWorker.ts`.
+  Both consumers share `quantileOfSorted` - the expression the perf suite has
+  used since M10, extracted rather than restated, because a different rounding
+  rule would move every row of ledger 6.1.1 by a sample.
+- **`src/sim/bench/ids.ts` imports nothing, and that is the D-191 rule made
+  structural.** The catalogue can DECODE a map, so it stands on
+  `save/format.ts` and would drag the whole `World` into any chunk that imports
+  it; the screen needs three strings per map and takes those. An audit over
+  `src/ui`, `src/render` and `src/platform` makes a convenience import a red
+  build. The logs are dynamic imports in their own chunks (213/246/64/345 kB).
+  Main chunk **997,787 -> 1,002,279 B** (+4,492, of which **+3,675 B are the 46
+  i18n lines**, measured by deleting exactly those and rebuilding); budget
+  unchanged at 1,006,000 B.
+- **The acceptance sentence is proved in three halves**
+  (`tests/determinism/editorScenario.spec.ts`): a 512 map authored with all five
+  workshop kinds exports as a scenario and reads back to the same `hashWorld`;
+  replaying the log into a fresh world of the same seed reaches the same hash
+  AND the byte-identical `encodeSave`; and file and replay are compared with
+  EACH OTHER, because a shared fault in the original would pass the first two.
+  **The log carries the refusals too** - 102 entries against 19 accepted
+  commands - which is the stronger claim: the two worlds agree about what was
+  rejected as well.
+- Reference tick after the whole milestone: **p50 1.469 / 1.360 / 1.367**, **p99
+  2.995 / 2.774 / 2.757 ms** - all three under the M10 baseline, budget row
+  +0.00 ms held by construction (nothing in the hot path was touched).
+- **Named and not delivered**: the benchmark runs SYNCHRONOUSLY, so the
+  interface stands still for the seconds a 2048 map takes, and the screen says
+  so rather than hiding it - chunking it over the frame timer would be a second
+  scheduler beside `runFrame` and would distort the measurement it exists to
+  take.
+
+**M22 is complete.** The workshop speaks only commands (D-240), the palette
+builds nothing else and exports `.ironscenario` (D-241), a picture is a mapgen
+input with a contrast control that moves the relief and not the coast (D-242),
+and the four benchmark maps print p99 in the suite and show a result screen in
+the game (D-243).

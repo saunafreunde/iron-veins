@@ -62,6 +62,15 @@ const EditorPanel = lazy(async () => ({
 }));
 
 /**
+ * The benchmark screen of SPEC2 M22, lazy for the same reason: the four
+ * canonical maps are a menu entry a player opens once, and the panel that
+ * shows their percentiles has no business in the chunk that boots a game.
+ */
+const BenchmarkPanel = lazy(async () => ({
+  default: (await import('./BenchmarkPanel')).BenchmarkPanel,
+}));
+
+/**
  * Map generation takes seconds on a large map, and it runs inside the worker,
  * so the phases arrive as messages rather than as a progress bar the UI drives.
  */
@@ -339,6 +348,9 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
           )}
           {overlay === 'replays' && (
             <ReplayBrowser client={client} onClose={() => setOverlay(null)} />
+          )}
+          {overlay === 'benchmark' && (
+            <BenchmarkPanel client={client} onClose={() => setOverlay('menu')} />
           )}
           {overlay === 'handbook' && <HandbookPanel onClose={() => setOverlay(null)} />}
           {overlay === 'tutorial' && (

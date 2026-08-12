@@ -62,7 +62,7 @@ export function recordCommand(command: Command): void {
  * stay - a crash shortly after a load is a crash the load probably caused,
  * and the marker is what lets a reader see the boundary.
  */
-export function recordWorldReplaced(kind: 'load' | 'newGame' | 'replay'): void {
+export function recordWorldReplaced(kind: 'load' | 'newGame' | 'replay' | 'benchmark'): void {
   tail.push(JSON.stringify({ marker: kind, atTick: useSimStore.getState().tick }));
 }
 

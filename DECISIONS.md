@@ -16,7 +16,7 @@ no entry below. A number may appear under several topics.
   D-196, D-200, D-201, D-202, D-204, D-232, D-233, D-236, D-240
 - **Commands, snapshot & worker boundary:** D-004, D-005, D-006, D-011, D-032,
   D-100, D-111, D-145, D-146, D-148, D-162, D-174, D-176, D-179, D-187, D-189,
-  D-192, D-193, D-196, D-200, D-202, D-218, D-240, D-241, D-242
+  D-192, D-193, D-196, D-200, D-202, D-218, D-240, D-241, D-242, D-243
 - **Lines & timetables:** D-145, D-146, D-147, D-148, D-149, D-150, D-151,
   D-152, D-155, D-159
 - **Map generation & terrain:** D-018, D-019, D-020, D-021, D-022, D-023,
@@ -27,7 +27,7 @@ no entry below. A number may appear under several topics.
   D-111, D-130, D-131, D-134, D-142, D-144, D-145, D-146, D-147, D-153, D-178,
   D-181, D-184, D-185, D-188, D-189, D-190, D-191, D-192, D-193, D-194,
   D-197, D-198, D-200, D-207, D-213, D-231, D-232, D-233, D-236, D-238,
-  D-239, D-240, D-241
+  D-239, D-240, D-241, D-243
 - **Rail & track:** D-042, D-043, D-044, D-045, D-046, D-047, D-053, D-141,
   D-153, D-157, D-184, D-230
 - **Signals & reservations:** D-054, D-055, D-056, D-057, D-058, D-059, D-060,
@@ -14578,3 +14578,181 @@ Kontrastkurve am Pivot und an ihren Klemmen; Terrassierung monoton mit Faktor >
 Staedten und Industrien; Reproduzierbarkeit; und dass ein anderer Kontrast eine
 andere Karte ist). Jedes Bild in dieser Datei wird ERZEUGT - ein eingechecktes
 PNG waere genau der Bruch, den der Glob-Test aus E-14 bewacht.
+
+### D-243 Die vier Benchmark-Karten sind Befehlslogs - und die Mega-Kreuzung findet den Schwanz des Pfadfinders
+
+SPEC2 M22, Bundle 4 und Abschluss des Meilensteins. **Kein Save-Bump** - v33
+gehoert Bundle 1, und dieser Bundle hat nichts zu erweitern: eine Benchmark-Karte
+ist eine Textdatei mit Kommandos darin, kein Zustand. Kein gehashtes Byte, kein
+RNG-Zug, kein Snapshot-Byte, keine Atlas-Zelle, kein neuer CommandKind; alle drei
+Pins unveraendert, jedes Balance-Band auf den Euro identisch mit D-242
+(`npm run test:balance:full` gruen bei 101, Szenario 5 1.022.084 / 1.802.165 /
+2.153.604 EUR, Punktzahl 5.889, Netzdesign 3,75, Harter Winter -4,36 %).
+
+**Eine Benchmark-Karte ist ein Befehlslog, und das ist derselbe Satz wie
+D-240s.** SPEC2 verlangt die vier Karten ausdruecklich "als
+Text-Command-Log-Fixtures", und der Grund steht in der Ueberschrift des
+Meilensteins: was der Editor baut, ist ein Log, und ein Log ist etwas, das der
+Beweiskette aus M16 vorgelegt werden kann. Ein `.ironsave` einer 2048er-Welt mit
+hunderttausend Gleiskanten waeren Megabyte undurchsichtiger Bytes im Repository,
+die beim naechsten Save-Bump still veralten; ein Log ist lesbar, diffbar,
+migrationsfrei und wird von demselben Executor abgespielt, der das Spiel eines
+Spielers abspielt. Die vier Dateien liegen unter `src/sim/bench/maps/`, weil das
+SPIEL sie liest - der In-Game-Benchmark-Modus ist die zweite Haelfte der
+Fertig-wenn-Klausel.
+
+**Aufgezeichnet statt getippt, und das war die eine echte Entwurfsfrage.** Eine
+handgeschriebene Kachelliste waere eine Liste von Vermutungen darueber, wo das
+Meer liegt: auf einer erzeugten 512er-Karte werden von 1.845 geraden
+32-Kachel-Gleislaeufen **518 angenommen und 1.327 abgelehnt** (gemessen). Die
+vier Plaene in `tests/perf/benchmarkPlans.ts` fragen deshalb die echte Welt und
+behalten die Antworten - ein `PlanRecorder` fuehrt jedes Kommando aus und
+schreibt es nur ins Log, wenn es angenommen wurde. Das committete Log ist damit
+die Aufzeichnung einer Autorensitzung, was genau die Beschreibung ist, die D-240
+einer gebauten Karte gibt. Aufgezeichnet wird auf Verlangen
+(`IRON_VEINS_RECORD_BENCH=1`), verifiziert bei jedem Perf-Lauf - dieselbe
+Trennung wie beim kanonischen Hash (D-137): Aufzeichnen ist eine Entscheidung,
+Pruefen ist automatisch.
+
+**Der Waechter ist zweiteilig, und der zweite Teil ist der, den man vergisst.**
+`bench/build.ts` wirft bei der ERSTEN abgelehnten Zeile des Logs - die
+D-072-Regel, die das 1500er-Fixture seit M10 hat. Das reicht aber nicht: alle
+Kommandos koennen angenommen werden und die Welt trotzdem eine andere sein, wenn
+der Generator eine Stadt verschoben hat. Jede Datei traegt deshalb einen
+`claims`-Block (Fahrzeuge, Bahnhoefe, Staedte, Industrien, Gleiskanten,
+Abzweige, Landmassen), der nach dem Aufbau ZURUECKGELESEN und verglichen wird -
+`SCENARIO_WORLD_CLAIMS` aus D-197, einen Meilenstein weiter. Beide Waechter sind
+richtig, wenn sie bei einer Mapgen-Aenderung rot werden; die Antwort ist neu
+aufzuzeichnen, nicht die Behauptung zu senken.
+
+**Die vier Karten, gemessen auf der Referenzmaschine** (2.000 bzw. 1.500 Ticks,
+nach 200 Aufwaermticks, Zeit AUS DEM TEST genommen):
+
+| Karte | Welt | Kommandos | Tick p50 | Tick p99 | max |
+|---|---|---|---|---|---|
+| Mega-Kreuzung | 512², 48 Zuege, 47.024 Kanten, **932 Abzweige** | 2.359 | **0,088 ms** | **18,586 ms** | 36,340 ms |
+| Megalopolis | 1024², **1.500 Fahrzeuge**, 88 Bahnhoefe | 4.764 | **1,056 ms** | **2,274 ms** | 3,812 ms |
+| Archipel | 2048², 300 Fahrzeuge, **11 Landmassen**, 563 Industrien | 1.182 | **0,199 ms** | **0,556 ms** | 2,258 ms |
+| 100k-Kanten | 1024², **105.648 gerichtete Kanten**, 485 Abzweige, 24 Zuege | 3.753 | **0,051 ms** | **0,126 ms** | 1,607 ms |
+
+**Der Befund, den diese vier Karten liefern, ist nicht die Groesse - es ist die
+Abzweigdichte.** Das 100k-Kanten-Netz hat **2,2-mal so viele Kanten** wie die
+Mega-Kreuzung und ist im p99 **148-mal billiger**. Der Unterschied ist der
+Schienen-Pfadfinder: A* laeuft ueber (Kachel, Einfahrtrichtung) mit einer
+zulaessigen Luftlinien-Heuristik, und auf einem gleichmaessigen Gitter, in dem
+alle 8 Kacheln drei oder vier Wege gleich lang sind, unterscheidet diese
+Heuristik nichts mehr - die Front laeuft breit. **Kontrolliert und nicht
+behauptet**: dieselbe Mega-Kreuzung mit abgestellter Flotte misst **p50 0,002 /
+p99 0,007 / max 0,258 ms**, also ist der ganze Schwanz die Flotte und keine
+Kartenlast. Und die Flotte arbeitet dabei ordentlich - ueber sechs Stichproben
+ueber 1.000 Ticks ist **kein einziges Fahrzeug `NoRoute`**, alle 48 sind
+Driving/Braking/BrokenDown, es ist also die Suche selbst und kein Scheitern, das
+sich wiederholt. 141 von 2.000 Ticks liegen ueber 5 ms, und diese Ticks liegen
+nicht auf Tagesgrenzen - es sind Neuberechnungen einzelner Zuege.
+
+**Das ist ausdruecklich KEIN Bruch von Abschnitt 21, und der Grund ist eine
+Weltfrage.** Das 8-ms-Budget aus Abschnitt 21 gilt fuer "1500 Fahrzeuge /
+1024² / 120 Staedte / 300 Industrien" - das ist die Megalopolis, und die misst
+**p99 2,274 ms**, gut ein Viertel des Budgets. Die Mega-Kreuzung ist eine andere
+Welt (48 Zuege auf 512²), fuer die nie ein Budget vergeben wurde. Sie bekommt
+hier auch keines: die Benchmark-Karten sind Messinstrumente, und ein Instrument,
+das man auf die Zahl eicht, die es liefern soll, misst nichts mehr. Was
+protokolliert ist, ist die Zahl; was gegated ist, sind Vielfache davon (D-167:
+Median-Gate plus sehr grosszuegiger p99-Backstop, `GATES` in
+`benchmarkMaps.perf.spec.ts`). **Wer den Pfadfinder auf Gitterkarten billiger
+machen will, hat mit dieser Karte jetzt das Instrument dafuer** - das ist der
+Wert des Befundes und kein Defekt dieses Bundles.
+
+**Gesetz 8 hatte bis heute keine Welt.** "Rail graphs reach 100k edges. Always
+iterative with an explicit stack or queue" steht seit M0 in `CLAUDE.md`, und
+kein Weltzustand im Repository hatte je hunderttausend Kanten - das Gesetz war
+ein Versprechen ueber eine Karte, die niemand besass. Sie existiert jetzt, sie
+ist ein Textlog, und ein Zug faehrt in jedem gemessenen Tick darueber. Eine
+Kante ist dabei ein GERICHTETER Gleisbogen (`railArcCount`: ein Richtungsbit auf
+einer Kachel), weil das das Vokabular ist, ueber das der Pfadfinder sucht; eine
+gerade Kachel traegt zwei, ein Abzweig drei oder mehr, eine Sackgasse eine.
+
+**Die Zeit wird an genau einer Stelle gelesen.** SPEC2 sagt es woertlich
+("Zeitmessung nur im Worker-Scheduler, nie in der Sim"), und die Aufteilung macht
+es strukturell: `bench/build.ts` spielt das Log ab und kennt keine Uhr,
+`bench/stats.ts` rechnet Perzentile aus Zahlen und kann nicht erkennen, ob es
+Millisekunden sind, und die beiden `performance.now()`-Aufrufe stehen in
+`SimWorker.ts` - der einen Datei unter `src/sim`, der Gesetz 3 eine Uhr erlaubt.
+Die Perf-Suite misst aus dem TEST heraus, aus demselben Grund, aus dem
+`tick.perf.spec.ts` es seit M10 tut. **Beide benutzen dieselbe
+Perzentil-Funktion**, weil zwei Implementierungen zwei verschiedene p99 fuer
+eine Welt waeren und die Ledger-Zeile 6.1.1 eine Tabelle genau dieser Zahlen ist.
+`quantileOfSorted` ist der Ausdruck, den die Perf-Suite seit M10 benutzt
+(`sorted[floor(n * q)]`), extrahiert statt neu formuliert - eine andere
+Rundungsregel wuerde jede Ledger-Zeile um eine Stichprobe verschieben.
+
+**Der Benchmark-Modus ersetzt die Welt und laesst sie stehen.** Derselbe Tausch,
+den ein Laden macht; danach ist die Welt pausiert und der Ergebnisschirm liegt
+darueber. Der Weg zurueck ist der gewoehnliche - die laufende Partie wird NICHT
+beiseitegelegt, weil ein Benchmark etwas ist, das man aus dem Menue verlangt,
+und nicht etwas, das eine Sitzung unterbricht. Die vier Karten laufen mit
+`editorMode: true`, weil sie AUTORIERTE Welten sind (D-240): ohne die
+Werkstattregel koennte kein Startkapital der Welt 105.648 Gleiskanten bezahlen,
+und die Regel ist gespeicherter, gehashter Zustand, also ist eine Benchmark-Welt
+ueberall als autorierte erkennbar.
+
+**Die Buendelgrenze hat die Struktur diktiert, und sie hat wieder etwas
+gefangen.** `bench/catalog.ts` kann eine Karte DEKODIEREN, steht also auf
+`save/format.ts`, das die Entitaets-Codecs und mit ihnen den ganzen `World` in
+jeden Chunk zieht, der es importiert - der +248-kB-Unfall aus D-191. Der
+Benchmark-Schirm braucht drei Strings je Karte, also gibt es
+**`src/sim/bench/ids.ts`, das nichts importiert** (das `save/version.ts`-Muster),
+und ein Audit in `benchmarkMaps.spec.ts` laeuft ueber `src/ui`, `src/render` und
+`src/platform` und macht einen bequemen Import des Katalogs zum roten Build.
+Die vier Logs selbst sind DYNAMISCHE Importe: Vite legt sie als eigene Chunks ab
+(213 / 246 / 64 / 345 kB), und ein Spiel, das nie einen Benchmark faehrt, laedt
+keinen davon. Gemessen: Hauptchunk **997.787 -> 1.002.279 B (+4.492)**, davon
+**+3.675 B die 46 i18n-Zeilen in zwei Sprachen** (gemessen, indem genau die
+geloescht und neu gebaut wurde: 998.604 B) und **+817 B die Oberflaeche**;
+`BenchmarkPanel` ist ein eigener 2,98-kB-Chunk. **Budget unveraendert bei
+1.006.000 B**, 3.721 B Rest.
+
+**Die Formatierung der Logs ist eine Entscheidung mit einer Zahl dahinter.**
+`JSON.stringify(map, null, 2)` schreibt jedes Feld jedes Kommandos auf eine
+eigene Zeile und machte aus dem 100k-Kanten-Log **1,88 MB** fast nur
+Einrueckung; ein Kommando je Zeile sind **447 kB**. Die vier Dateien stehen
+deshalb in `.prettierignore` - `printWidth` wuerde sie zurueckbrechen, und
+niemand editiert sie von Hand. Zusammen 1,13 MB Text, und das IST das
+Lieferergebnis: vier Karten, die man lesen kann.
+
+**Die Fertig-wenn-Klausel des Meilensteins, Satz fuer Satz nachgewiesen.** Der
+erste Satz - "eine im Editor gebaute 512er-Karte wird als Szenario exportiert,
+neu geladen und durch Replay des Editor-Befehlslogs bit-identisch reproduziert"
+- ist `tests/determinism/editorScenario.spec.ts`, und er ist in DREI Haelften
+zerlegt, weil zwei davon halten koennen, waehrend die dritte faellt: die Datei
+liest zurueck (`hashWorld` gleich), das Log baut eine frische Welt desselben
+Startwerts zur selben Welt (`hashWorld` gleich UND `encodeSave` **Byte fuer
+Byte** gleich - der Encoder ist eine reine Funktion aus Welt, Queue und Version,
+ohne Uhr), und Datei und Replay werden zusaetzlich MITEINANDER verglichen, weil
+ein gemeinsamer Fehler im Original die ersten beiden bestehen wuerde. Alle fuenf
+Werkstatt-Kinds kommen in der Sitzung vor. **Das Log enthaelt die Ablehnungen
+mit** - 102 Eintraege gegen 19 angenommene Kommandos - und das ist die staerkere
+Aussage: die beiden Welten sind sich auch darueber einig, was abgelehnt wurde.
+Der zweite Satz (1024er-PNG in <= 8 s) ist D-242s Messung, der dritte (p99 in
+der Perf-Suite) und der vierte (Ergebnisschirm im Spiel) sind dieser Bundle.
+
+**Tests:** `tests/unit/benchmarkMaps.spec.ts` (13 Faelle: Registry in beiden
+Richtungen gegen die Dateien auf der Platte, jedes Log geparst und gegen seinen
+eigenen Namen geprueft, Katalogreihenfolge, Beschriftungen in de UND en,
+Identitaetsansprueche je Karte, drei gepflanzte Fehler im Parser, das
+Buendelaudit ueber `src/ui`/`src/render`/`src/platform`, und die
+Perzentil-Arithmetik samt dem Nachweis, dass `summarise` das Eingabefeld des
+Aufrufers nicht sortiert); `tests/determinism/editorScenario.spec.ts` (4 Faelle,
+oben); `tests/perf/benchmarkMaps.perf.spec.ts` (5 Faelle: vier Karten mit
+Median-Gate und p99-Backstop, plus die Gesetz-8-Behauptung als eigene
+Zusicherung); `tests/perf/recordBenchmarkMaps.spec.ts` (der Aufzeichner, per
+Umgebungsvariable, damit ein Lauf aus Versehen die gepinnten Logs nicht
+ueberschreibt).
+
+**Benannt und nicht geliefert:** der Benchmark-Modus laeuft SYNCHRON durch - die
+Oberflaeche steht waehrend des Aufbaus der 2048er-Karte einige Sekunden still,
+und der Ergebnisschirm sagt das statt es zu verstecken. Ein Lauf in Haeppchen
+ueber den Frame-Timer waere ein zweiter Scheduler neben dem, der `runFrame`
+schon ist, und der wuerde die Messung selbst verzerren. Und die vier Karten
+messen den TICK, nicht die Bildrate: die zwei Frame-Budgets brauchen eine GPU
+und stehen weiter in README.md als Handmessung.

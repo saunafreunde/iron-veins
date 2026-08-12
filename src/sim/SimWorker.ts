@@ -15,6 +15,10 @@ import {
   SnapshotI32,
   SnapshotWriter,
 } from '../shared/snapshot';
+import { benchmarkEntry } from './bench/catalog';
+import { buildBenchmarkWorld } from './bench/build';
+import { measureBenchmarkWorld } from './bench/measure';
+import { summarise } from './bench/stats';
 import { CommandQueue } from './commands/queue';
 import type { CommandEnvelope, CommandOutcome } from './commands/types';
 import { writeFlowLegs } from './flow';
@@ -1034,6 +1038,92 @@ function adoptWorld(current: World, sink: SnapshotWriter): void {
   });
 }
 
+/**
+ * Run one of the four canonical benchmark maps and report what it measured
+ * (SPEC2 M22).
+ *
+ * **The whole of the milestone's "Zeitmessung nur im Worker-Scheduler" clause
+ * is this function.** `buildBenchmarkWorld` replays the map's TEXT command log
+ * and knows nothing about time; `summarise` turns numbers into percentiles and
+ * knows nothing about time either; the two `performance.now()` calls below are
+ * the only clock in the chain, and they are in the one file below `src/sim`
+ * that architecture law #3 allows one in.
+ *
+ * The run REPLACES the world, the same swap a load does, and leaves it paused:
+ * a result screen over the world the figures came from is worth more than a
+ * table over the game the player was in the middle of. There is no way back to
+ * that game except the ordinary one - it was not put aside, because a benchmark
+ * is something a player asks for from the menu rather than something that
+ * interrupts a session.
+ */
+async function runBenchmark(mapId: string): Promise<void> {
+  const sink = writer;
+  if (sink === null) return;
+
+  const entry = benchmarkEntry(mapId);
+  if (entry === null) {
+    scope.postMessage({
+      type: 'benchmarkFailed',
+      reasonKey: 'ui.benchmark.failed',
+      detail: `no benchmark map called "${mapId}"`,
+    });
+    return;
+  }
+
+  try {
+    const map = await entry.load();
+    abandonReplay();
+
+    const buildStarted = performance.now();
+    const built = buildBenchmarkWorld(map, (phase, seedAttempt) => {
+      scope.postMessage({ type: 'generating', phase, seedAttempt });
+    });
+    const buildMs = performance.now() - buildStarted;
+
+    // Everything from here to the last post is synchronous, so the frame timer
+    // cannot step in between and half-adopt a world.
+    world = built.world;
+    queue = built.queue;
+    checkpoints = new CheckpointRing();
+    checkpoints.record(built.world, built.queue);
+
+    const samples = new Float64Array(map.sampleTicks);
+    for (let i = 0; i < map.sampleTicks; i++) {
+      const started = performance.now();
+      built.world.step(built.queue, null);
+      samples[i] = performance.now() - started;
+    }
+    const stats = summarise(samples);
+    const claims = measureBenchmarkWorld(built.world);
+
+    adoptWorld(built.world, sink);
+    scope.postMessage({
+      type: 'benchmarkResult',
+      mapId: map.id,
+      mapSize: map.mapSize,
+      ticks: stats.samples,
+      p50Ms: stats.p50,
+      p99Ms: stats.p99,
+      maxMs: stats.max,
+      meanMs: stats.mean,
+      buildMs,
+      vehicles: claims.vehicles,
+      stations: claims.stations,
+      towns: claims.towns,
+      industries: claims.industries,
+      railArcs: claims.railArcs,
+      railJunctions: claims.railJunctions,
+      landmasses: claims.landmasses,
+    });
+  } catch (error) {
+    scope.postMessage({
+      type: 'benchmarkFailed',
+      reasonKey: 'ui.benchmark.failed',
+      detail: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
 function handleMessage(message: MainToWorkerMessage): void {
   switch (message.type) {
     case 'init':
@@ -1132,6 +1222,14 @@ function handleMessage(message: MainToWorkerMessage): void {
 
     case 'exitReplay':
       exitReplay();
+      return;
+
+    case 'runBenchmark':
+      // Fire and forget: the log is loaded through a dynamic import, so the
+      // handler cannot wait for it without becoming async itself - and an
+      // async message handler would let a second message overtake the first.
+      // Every failure inside is answered with `benchmarkFailed`.
+      void runBenchmark(message.mapId);
       return;
 
     case 'shutdown':

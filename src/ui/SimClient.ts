@@ -320,6 +320,21 @@ export class SimClient {
   onScenarioWritten:
     ((message: Extract<WorkerToMainMessage, { type: 'scenarioWritten' }>) => void) | null = null;
 
+  /**
+   * Run one of the four canonical benchmark maps (SPEC2 M22).
+   *
+   * The world is replaced by the benchmark's, exactly as a load replaces it,
+   * so the store is reset the same way - a fleet list from the game that was
+   * running would otherwise sit over the map the numbers came from.
+   */
+  runBenchmark(mapId: string): void {
+    const store = useSimStore.getState();
+    store.resetWorld();
+    store.setBenchmarkRunning(mapId);
+    recordWorldReplaced('benchmark');
+    this.post({ type: 'runBenchmark', mapId });
+  }
+
   /** Stop the worker and the read loop. */
   dispose(): void {
     if (this.timerId !== 0) {
@@ -398,6 +413,13 @@ export class SimClient {
         return;
       case 'scenarioWritten':
         this.onScenarioWritten?.(message);
+        return;
+      case 'benchmarkResult':
+        store.setBenchmarkResult(message);
+        return;
+      case 'benchmarkFailed':
+        store.setBenchmarkRunning(null);
+        store.setRejection(message.reasonKey);
         return;
       case 'scenarioFailed':
         // The same channel every refused request uses: a toast naming the

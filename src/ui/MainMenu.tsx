@@ -52,6 +52,12 @@ export function MainMenu({
         <button type="button" className="button" onClick={() => onSelect('handbook')}>
           {t('ui.menu.handbook')}
         </button>
+        {/* The four canonical benchmark maps of SPEC2 M22. A menu entry rather
+            than a developer flag: the milestone's own sentence is that they
+            "show a result screen in the game". */}
+        <button type="button" className="button" onClick={() => onSelect('benchmark')}>
+          {t('ui.menu.benchmark')}
+        </button>
         {/* The same bundle the crash dialog writes, from a HEALTHY game -
             for "something is wrong but nothing crashed" reports (D-132). */}
         <button type="button" className="button" onClick={() => void exportBugReport()}>

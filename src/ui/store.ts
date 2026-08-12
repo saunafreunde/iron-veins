@@ -16,6 +16,7 @@ import type {
   StationMarker,
   TownMarker,
   VehicleMarker,
+  WorkerToMainMessage,
 } from '../shared/protocol';
 import type { ReplayEntry, SaveEntry } from '../platform/Storage';
 import { DEFAULT_SETTINGS, type AppSettings } from '../shared/settings';
@@ -32,6 +33,19 @@ import { EDITOR_DEFAULT_BRUSH_RADIUS, type EditorTool } from './editor/tools';
 import type { EditorOverlay } from './editor/overlays';
 
 /**
+ * What a benchmark run reported (SPEC2 M22) - the worker's own message, minus
+ * its `type` tag.
+ *
+ * Taken off `WorkerToMainMessage` rather than restated, so a figure that is
+ * added to the run is a figure the screen can show without a second type
+ * drifting behind the first (the D-133 shape, one layer out).
+ */
+export type BenchmarkResult = Omit<
+  Extract<WorkerToMainMessage, { type: 'benchmarkResult' }>,
+  'type'
+>;
+
+/**
  * The full-screen panels of M9. One at a time, because each of them wants the
  * whole window and two of them at once would mean deciding which is on top.
  */
@@ -42,6 +56,7 @@ export type OverlayKind =
   | 'options'
   | 'saves'
   | 'replays'
+  | 'benchmark'
   | 'handbook'
   | 'tutorial'
   | null;
@@ -316,6 +331,17 @@ export interface SimUiState extends SnapshotValues {
   /** Which debug overlay the workshop draws, or null for none. */
   editorOverlay: EditorOverlay | null;
   /**
+   * Id of the benchmark map being built and timed, or null (SPEC2 M22).
+   *
+   * The run blocks the worker for as long as it takes to generate a 2048 map
+   * and step a couple of thousand ticks, so the screen has to be able to say
+   * "this is running" - a benchmark that looks like a frozen menu is a
+   * benchmark somebody kills halfway through.
+   */
+  benchmarkRunning: string | null;
+  /** What the last benchmark measured, or null. */
+  benchmarkResult: BenchmarkResult | null;
+  /**
    * What the atlas currently shows against what the world measured: `drawn`
    * arrows on screen, `omitted` active legs cut by the top-N cap - the
    * honest "x weitere" indicator of the M14 order. Pushed change-detected
@@ -454,6 +480,8 @@ export interface SimUiState extends SnapshotValues {
   setEditorTownSize: (sizeClass: number) => void;
   setEditorIndustryType: (industryType: number) => void;
   setEditorOverlay: (overlay: EditorOverlay | null) => void;
+  setBenchmarkRunning: (mapId: string | null) => void;
+  setBenchmarkResult: (result: BenchmarkResult) => void;
   setFlowStats: (drawn: number, omitted: number) => void;
   setFlowSource: (source: (() => { data: Int32Array; count: number; tick: number }) | null) => void;
 }
@@ -556,6 +584,8 @@ export const useSimStore = create<SimUiState>((set) => ({
   editorTownSize: TownSize.Town,
   editorIndustryType: IndustryType.CoalMine,
   editorOverlay: null,
+  benchmarkRunning: null,
+  benchmarkResult: null,
   flowStats: { drawn: 0, omitted: 0 },
   flowSource: null,
   rejectionKey: null,
@@ -717,6 +747,13 @@ export const useSimStore = create<SimUiState>((set) => ({
   setEditorTownSize: (editorTownSize) => set({ editorTownSize }),
   setEditorIndustryType: (editorIndustryType) => set({ editorIndustryType }),
   setEditorOverlay: (editorOverlay) => set({ editorOverlay }),
+  setBenchmarkRunning: (benchmarkRunning) =>
+    set(
+      benchmarkRunning === null
+        ? { benchmarkRunning }
+        : { benchmarkRunning, benchmarkResult: null },
+    ),
+  setBenchmarkResult: (benchmarkResult) => set({ benchmarkResult, benchmarkRunning: null }),
   setFlowStats: (drawn, omitted) => set({ flowStats: { drawn, omitted } }),
   setFlowSource: (flowSource) => set({ flowSource }),
 }));

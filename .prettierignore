@@ -6,3 +6,7 @@ src-tauri/target
 src-tauri/gen
 src/assets
 package-lock.json
+# The four benchmark command logs of SPEC2 M22: machine-recorded, one command
+# per line. Reflowing them at printWidth would put every field of every command
+# on its own line and quadruple four files nobody edits by hand.
+src/sim/bench/maps

@@ -600,6 +600,21 @@ export type MainToWorkerMessage =
   | { readonly type: 'verifyReplay' }
   /** Leave replay mode and restore the game that was put aside. */
   | { readonly type: 'exitReplay' }
+  /**
+   * Build one of the four canonical benchmark maps of SPEC2 M22 and time it.
+   *
+   * The map is a TEXT command log under `src/sim/bench/maps/`; the worker
+   * replays it, steps the world the log's own number of ticks, and answers with
+   * `benchmarkResult`. The CLOCK is read in `SimWorker.ts` and nowhere else -
+   * `performance` is banned under `src/sim` by architecture law #3 and the
+   * milestone's own sentence repeats it ("Zeitmessung nur im Worker-Scheduler,
+   * nie in der Sim").
+   *
+   * It REPLACES the running world, exactly as loading a save does, and leaves
+   * it paused where it stopped, so a player can look at the world the numbers
+   * came from instead of being handed a table over a black screen.
+   */
+  | { readonly type: 'runBenchmark'; readonly mapId: string }
   | { readonly type: 'shutdown' };
 
 /** Everything the player chooses on the new-game screen (section 20, M9). */
@@ -758,6 +773,35 @@ export type WorkerToMainMessage =
    * worker handing over something it was told (D-111's split, kept narrow).
    */
   | { readonly type: 'scenarioWritten'; readonly bytes: Uint8Array }
+  /**
+   * What one benchmark run measured (SPEC2 M22).
+   *
+   * Milliseconds per tick, plus what the world the log built actually
+   * contains - because a percentile printed over an unnamed world is a number
+   * without a subject (D-197), and the result screen is the one place a PLAYER
+   * ever sees these figures.
+   */
+  | {
+      readonly type: 'benchmarkResult';
+      readonly mapId: string;
+      readonly mapSize: number;
+      readonly ticks: number;
+      readonly p50Ms: number;
+      readonly p99Ms: number;
+      readonly maxMs: number;
+      readonly meanMs: number;
+      /** How long replaying the log and generating the map took. [ms] */
+      readonly buildMs: number;
+      readonly vehicles: number;
+      readonly stations: number;
+      readonly towns: number;
+      readonly industries: number;
+      readonly railArcs: number;
+      readonly railJunctions: number;
+      readonly landmasses: number;
+    }
+  /** A benchmark that could not be run, named by a translation key. */
+  | { readonly type: 'benchmarkFailed'; readonly reasonKey: string; readonly detail: string }
   /** A scenario that could not be written, named by a translation key. */
   | { readonly type: 'scenarioFailed'; readonly reasonKey: string; readonly detail: string }
   /**
