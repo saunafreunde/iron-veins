@@ -37,6 +37,11 @@ export function MainMenu({
         <button type="button" className="button" onClick={() => onSelect('scenarios')}>
           {t('ui.menu.scenarios')}
         </button>
+        {/* The campaign of SPEC2 M24: twelve of the same kind of scenario, in a
+            chain that decides which of them are open (D-254). */}
+        <button type="button" className="button" onClick={() => onSelect('campaign')}>
+          {t('ui.menu.campaign')}
+        </button>
         <button type="button" className="button" onClick={() => onSelect('saves')}>
           {t('ui.menu.saveLoad')}
         </button>

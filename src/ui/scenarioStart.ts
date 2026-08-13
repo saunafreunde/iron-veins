@@ -37,3 +37,23 @@ export function startScenario(
   store.setOverlay(null);
   return options;
 }
+
+/**
+ * Starting one stage of the campaign (SPEC2 M24, D-254).
+ *
+ * `startScenario` and one more line, and the line is the whole difference: a
+ * campaign stage is booked as a completion when its world is WON, and a stage
+ * started from the ordinary scenario browser must not be. Everything else - the
+ * options, the world, the goals - is identical, because a campaign stage IS a
+ * shipped scenario.
+ */
+export function startCampaignStage(
+  client: ScenarioStarter,
+  scenario: ShippedScenario,
+  companyName: string,
+  companyColorIndex: number,
+): NewGameOptions {
+  const options = startScenario(client, scenario, companyName, companyColorIndex);
+  useSimStore.getState().setActiveCampaignStage(scenario.id);
+  return options;
+}

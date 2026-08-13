@@ -54,7 +54,7 @@ no entry below. A number may appear under several topics.
   D-196, D-197, D-198, D-199, D-200, D-203, D-204, D-207, D-211, D-213,
   D-215, D-216, D-220, D-221, D-222, D-224, D-225, D-226, D-228, D-229,
   D-232, D-233, D-234, D-235, D-236, D-237, D-238, D-239, D-245, D-246,
-  D-247, D-248, D-249, D-250, D-252, D-253
+  D-247, D-248, D-249, D-250, D-252, D-253, D-254
 - **Vehicles & fleet:** D-043, D-044, D-045, D-068, D-076, D-089, D-093,
   D-096, D-142, D-143, D-145, D-146, D-155, D-157, D-171, D-174, D-181, D-185,
   D-201, D-207, D-245, D-246
@@ -62,7 +62,7 @@ no entry below. A number may appear under several topics.
 - **Competitors, AI & tenders:** D-107, D-108, D-109, D-115, D-116, D-121,
   D-122, D-147, D-152, D-153, D-154, D-155, D-156, D-158, D-216, D-218,
   D-219, D-220, D-221, D-222, D-223, D-224, D-225, D-226, D-228, D-229,
-  D-230, D-238, D-250, D-252, D-253
+  D-230, D-238, D-250, D-252, D-253, D-254
 - **Rendering & art:** D-013, D-014, D-033, D-035, D-112, D-117, D-125, D-127,
   D-136, D-140, D-160, D-161, D-162, D-163, D-164, D-165, D-166, D-169, D-170,
   D-171, D-172, D-173, D-174, D-175, D-177, D-179, D-186, D-202, D-205, D-206,
@@ -70,7 +70,7 @@ no entry below. A number may appear under several topics.
 - **UI & input:** D-011, D-013, D-015, D-035, D-110, D-113, D-114, D-119,
   D-126, D-148, D-165, D-166, D-177, D-179, D-180, D-181, D-182, D-183, D-184,
   D-186, D-187, D-189, D-191, D-192, D-193, D-194, D-195, D-196, D-200, D-202,
-  D-210, D-241, D-242, D-247
+  D-210, D-241, D-242, D-247, D-254
 - **Performance & measurement:** D-002, D-120, D-135, D-136, D-161, D-162,
   D-163, D-164, D-167, D-170, D-171, D-172, D-173, D-174, D-176, D-177, D-184,
   D-185, D-186, D-187, D-191, D-192, D-193, D-196, D-200, D-201, D-202, D-205,
@@ -16194,3 +16194,205 @@ and the next bundle's to decide.
   Normal" is **reported open**, with the trace above, exactly as D-252 reported
   it. What changed is that it is now open for a reason about JUDGEMENT, which is
   the only kind of reason SPEC.md 15 allows an answer to be made of.
+
+---
+
+### D-254 Die Kampagne "Eisenadern": zwoelf Etappen als Textkette - und die sechs, die allein spielen, weil die KI ihres Jahrhunderts nichts baut
+
+**SPEC2 M24 verlangt "Kampagne 'Eisenadern': 12 Szenarien 1850->2050 ueber alle
+vier Klimata, Kettenformat (geordnete Liste + Unlock-Kanten) als Text-Fixture;
+Abschluss-Screens ueber den M17-`GameEndScreen`".** Das ist geliefert, und die
+eine Entscheidung, die dieser Bundle wirklich treffen musste, ist die, die
+D-250 ihm hinterlassen hat: **die Konkurrenten sind im Startjahr 1850 stumm und
+1880 halb stumm**, also kann eine Kampagne, die 1850 beginnt, ihre Schwierigkeit
+in den ersten Etappen nicht auf Gegner stuetzen.
+
+Kein Save-Bump (**v34 bleibt**), keine Migration, kein gehashtes Byte, kein
+Snapshot-Byte, kein Protokollfeld, kein RNG-Zug, keine Atlas-Zelle. Alle drei
+Pins nachgeprueft durch Ausfuehren und unbewegt: kanonisch `b7e632a7124e67ce`,
+Korpus `a00868b9911f12d6`, Soak `64fec78d6bf0cd5e` bei unveraenderten 35
+Kommandos und 16 Checkpoints. `npm run test:balance:full` gruen bei 136 Tests
+mit jedem 19.4-Band auf dem Euro.
+
+#### Eine Etappe ist ein gewoehnliches Szenario, und das ist die ganze Architektur
+
+`CAMPAIGN_SCENARIOS` sind zwoelf `ShippedScenario`. Nichts hier ist eine zweite
+Art von Szenario: sie gehen durch `newGameOptionsOf` -> `worldParamsFor` ->
+`World.create` wie die acht aus M17 (D-195s EINE Tuer), sie sind aus demselben
+Grund Determinismus-Fixtures, ihr Abschluss wird von der Zielmaschine aus D-193
+entschieden und vom Endscreen aus D-196 gemeldet. Was die Kampagne HINZUFUEGT,
+ist genau ein Graph - `CAMPAIGN_STAGES`, geordnete Liste plus Kanten - und der
+erreicht die Simulation nie.
+
+**Zwei Felder mussten dafuer in `ScenarioRules` wachsen**, und beide sind
+Weltregeln, die seit M23 existieren und die die acht nie brauchten:
+`startYear` (Pflicht, weil eine Bandmarke eine ZAHL VON TICKS ist und das
+Kalenderjahr, in dem sie faellt, allein vom Startjahr entschieden wird) und
+`mapgen` (optional, weil Abwesenheit der Continent-Preset auf neutralen Stufen
+ist und das die arithmetische Identitaet jeder Generator-Naht ist, D-247). Die
+acht M17-Szenarien nennen jetzt beide - `startYear: START_YEAR` ausgeschrieben,
+`mapgen` weiterhin abwesend - und **sperren `startYear` zusaetzlich**: ein
+Szenario, das den Seed pinnt und das Jahrhundert nicht, pinnt nichts (D-247s
+Argument fuer `mapgen`, eine Regel weiter). Gemessen statt angenommen: die acht
+erzeugen bitgleiche Welten (`SCENARIO_WORLD_CLAIMS` unveraendert, 53 Tests
+gruen), weil `World`s Konstruktor `?? START_YEAR` und `?? DEFAULT_MAP_GEN_KNOBS`
+schreibt und ein explizites 1950 dasselbe Byte ist.
+
+`scenarioYearOf` und `endOfYearIn` sind aus `catalog.ts` in den import-freien
+Blatt-Modul `src/scenarios/years.ts` gewandert (das `save/version.ts`-Muster).
+Solange jedes Szenario 1950 begann, waren "Bandmarke" und "Kalenderjahr"
+dieselbe Umrechnung; ueber zwei Jahrhunderte sind sie es nicht, und zwei Kopien
+dieser Arithmetik sind genau der Weg, auf dem ein Briefing ein Jahr verspricht,
+das sein eigenes Ziel nicht meint.
+
+#### Die Kette
+
+`01 -> {02, 03} -> 04 -> {05, 06} -> {07, 08} -> 09 -> {10, 11} -> 12`, zwoelf
+Knoten, EIN Wurzelknoten, zwei Verzweigungen, die beide wieder
+zusammenlaufen. Die Kanten zeigen VORWAERTS ("dies abzuschliessen oeffnet
+jenes") und `campaignPrerequisitesOf` liest dieselbe Tabelle rueckwaerts fuer
+den Screen; ein Knoten mit mehreren eingehenden Kanten braucht **alle** - "eine
+davon" wuerde aus einem Paar Etappen eine Wahl zwischen ihnen machen und die
+Haelfte der Kampagne unspielbar lassen, ohne sie zu sperren.
+
+`tests/unit/campaign.spec.ts` beweist die drei Eigenschaften einzeln, weil es
+drei verschiedene Fehler sind: **genau eine Wurzel** (zwei waeren eine Kampagne
+mit zwei Anfaengen), **nichts unerreichbar** (per iterativem Vorwaerts-Walk vom
+Wurzelknoten, Gesetz 8) und **kein Zyklus** (per topologischer Sortierung, die
+stehen bleibt, wenn einer existiert). Dazu: die LESEREIHENFOLGE ist selbst eine
+topologische Ordnung, damit der Screen die zwoelf in der Reihenfolge auflisten
+darf, in der sie gemeint sind. Und ein vierter Test spielt die Kette wirklich
+durch - leerer Fortschritt, immer die erste offene unfertige Etappe, gestartet
+ueber die echte Funktion -, was einen unerreichbaren Knoten oder einen Zyklus
+als abbrechende Schleife zeigt statt als Grapheigenschaft.
+
+#### Der Rest, den dieser Bundle nicht ueberspielen durfte (D-250)
+
+**Gemessen, nicht geglaubt.** Jede Etappe traegt eine Konkurrenz-Sonde: ihre
+eigene Welt, ihre eigenen Regeln, sechs Spieljahre, und was jeder Konkurrent am
+Ende besitzt, exakt gepinnt.
+
+- **Etappen 1-6 (1850 und 1880) liefern ohne Konkurrenten aus**, und beide
+  Briefings sagen es in Worten. Die Sonde baut jede dieser Welten mit ZWEI
+  hinzugefuegten Konkurrenten und pinnt, was sie erreichen: auf 01, 02, 03, 05
+  und 06 in sechs Spieljahren **nichts**, auf 04 vier und drei Stationen und
+  **keine einzige Fahrzeugbeschaffung**. Das ist D-250s "1880 halb stumm" in den
+  eigenen Welten dieser Kampagne, und es ist der Grund, warum diese sechs allein
+  spielen.
+- **Etappen 7-12 (1920 und 1950) liefern mit Konkurrenten**, und jeder dieser
+  sechs Seeds wurde durch SPIELEN ausgewaehlt: auf jedem besitzt mindestens ein
+  Konkurrent nach sechs Jahren eine Station UND eine Flotte. Das Briefing zitiert
+  diese Messung als Zahl ("nach sechs Jahren haelt einer von ihnen 2 Stationen
+  und 6 Fahrzeuge"), und `CAMPAIGN_BRIEFING_FIGURES` bindet die Zahl an die
+  Sonde - ein Seed-Wechsel bewegt beide Enden oder keins.
+
+Der Test haelt beide Richtungen: eine Etappe mit Konkurrenten muss eine Zeile
+mit Station UND Fahrzeug haben (Stationen ohne Flotte ist der D-158-Rumpf, und
+ein Briefing, das davon einen Rivalen macht, luegt), eine Etappe ohne muss eine
+Sonde haben, die null Fahrzeuge findet. Dazu eine Regel als Test statt als
+Absatz: `startYear < 1920` <=> `aiCompanies === 0`.
+
+**Der Seed-Scan hinter den zwoelf ist der eigentliche Befund** (alles 256 Tiles,
+sechs Spieljahre, zwei Konkurrenten):
+
+- **Das Generator-PRESET entscheidet, ob ein Konkurrent ueberhaupt je eine Linie
+  bemannt.** Zehn Seeds `MapPreset.Valley` bei 1950 temperiert ergaben nicht
+  eine einzige Konkurrenz-Station; `Continent` und `RiverPlain` ergeben etwa auf
+  jedem vierten Seed einen bemannten Konkurrenten.
+- **Bei 1920 bauen sie und bemannen fast nie**: ueber achtundzwanzig temperierte
+  Seeds (`Continent`, `RiverPlain`, `Highland`) hat **kein einziger** Konkurrent
+  je ein Fahrzeug gekauft - weshalb keine 1920er Etappe dieser Kampagne
+  temperiert ist.
+- **Die Weltregeln bewegen die Antwort.** Der erste Seed fuer Etappe 8 bemannte
+  einen Konkurrenten mit ausgeschalteten Regeln und hoerte damit auf, als die
+  drei Regeln dieser Etappe eingeschaltet wurden. Die Sonde laeuft deshalb unter
+  den AUSGELIEFERTEN Regeln, und der Seed wurde darunter neu gewaehlt.
+
+**Was ausdruecklich NICHT behauptet wird:** dass ein Konkurrent ein Gegner ist,
+den man fuerchten muss. D-226s Zwoelf-Seed-Bar und D-228s Antwort - die erste
+Eisenbahn kostet mehr als Kapital plus Kreditlinie einer Startfirma - stehen
+unveraendert. Garantiert ist nur, dass keine Etappe gegen Gegner balanciert ist,
+die sich nie bewegen.
+
+#### Die Briefings, an ihre Welten gebunden
+
+Jede der zwoelf Welten wurde erzeugt und gelesen, BEVOR ihr Text geschrieben
+wurde, und jede tragende Zahl steht in `CAMPAIGN_WORLD_CLAIMS` unter den
+D-197/D-198/D-199-Waechtern: jede Zahl beider Briefings in Lesereihenfolge
+aufgeloest, jeder Ortsname eine Stadt der eigenen Welt. **Zwei Zahlen sind auf
+der Allowlist** (zweimal die SPEC-Abschnittsnummer 8.4), und beide tragen ihre
+Begruendung.
+
+Drei Saetze reden ueber die KAMPAGNE statt ueber die eigene Karte ("mehr
+Industrien traegt keine andere Etappe", "so wenige", "mehr Orte"), und jeder ist
+gegen die Tabelle geprueft UND auf Eindeutigkeit - der Befund, mit dem D-198
+Passagiernetz und seinen Katalog-Anspruch geschlossen hat. Ein Meta-Test pflanzt
+die Faelschung, die hier am naechsten liegt: die Konkurrenz-Zahlen sind die
+einzige Familie, die ein Leser nicht auf der Karte nachzaehlen kann, also sind
+sie die, die jemand schreiben statt messen wuerde.
+
+**Gefunden beim Schreiben, weil der Numeral-Scanner es rot macht**: "Jahrhundert"
+enthaelt "hundert" und "Zwanzigstel" enthaelt "zwanzig", also liest
+`unrecognisedNumeralWords` beide als nicht extrahierte Zahlwoerter. Beide Woerter
+sind aus den Briefings umformuliert worden statt den Scanner zu schwaechen.
+
+#### Die Baender, und was nicht behauptet wird
+
+Die Schwellen ruhen auf denselben vier Messungen wie die acht (Kopf von
+`catalog.ts`) plus den zwei Aera-Zwillingen aus D-245 (1878er Omnibus ueber
+zwoelf Tiles mit vier Bussen: Amortisation im Jahr fuenf; 1878er Kohlebahn auf
+Szenario 2s eigenem Gleis: Jahr zwoelf). **Nicht behauptet wird, dass irgendein
+Gold-Band durchgespielt wurde** - genau D-195s Haltung. Getestet ist der Boden
+darunter: kein Ziel einer Etappe entscheidet sich im ersten Spieljahr eines
+Spielers, der nichts tut; jede Frachtmenge hat auf ihrer eigenen Karte einen
+Erzeuger und einen Abnehmer (der D-118-Test, per Welt); beide Staedte jedes
+Verbindungsziels liegen auf EINER Landmasse; und das eine Bevoelkerungsziel ist
+ausgespielt (Kupferfurt faellt unbedient auf 7.280 nach dreissig und 7.256 nach
+einunddreissig Spieljahren - der Schrumpf-Zweig aus D-232 -, das Ziel verlangt
+9.000).
+
+#### Der Abschluss laeuft ueber den M17-Endscreen
+
+`startCampaignStage` ist `startScenario` plus eine Zeile, und die Zeile ist der
+ganze Unterschied: eine Etappe, die aus dem gewoehnlichen Szenario-Browser
+gestartet wird, ist eine Partie und kein Kampagnenlauf und darf die Kette nicht
+bewegen. Der Endscreen bucht in einem Effekt, nur bei `GameEnd.Won`, und reicht
+`end.medal` unveraendert durch: **nichts an einem Kampagnenabschluss wird in der
+Oberflaeche entschieden** (D-196 - Verdikt und Medaille sind gehashter
+Weltzustand und replay-verifizierbar). Der Store behaelt die BESTE je erreichte
+Medaille, und `resetWorld` loescht die laufende Etappe, nie den Fortschritt.
+
+**Wo der Fortschritt liegt, ist bewusst noch nicht entschieden**: `profile.json`
+ist ein eigener MUSS-Punkt von SPEC2 M24 und bekommt seinen eigenen Bundle. Der
+Graph ist eine reine Funktion einer Menge abgeschlossener Ids, also aendert sich
+an ihm nichts, wenn die Datei kommt - was heute fehlt, ist die Persistenz ueber
+einen Neustart, und das steht hier als benannter Rest statt als stille Luecke.
+
+#### Was noch offen ist, benannt
+
+- **`profile.json` v1** (Fortschritt, Medaillen, Achievements) - der naechste
+  Bundle. Bis dahin lebt der Kampagnenfortschritt nur in der Sitzung.
+- **Die ~40 Achievements**, die KI-Persoenlichkeit im Firmenprofil und die
+  KI-News aus SPEC2 M24 - ebenfalls eigene Bundles.
+- **Ein Kampagnen-Medaillenlauf per M16-Replay** ist in der Fertig-wenn-Klausel
+  und ist hier NICHT eingeloest. Was es dafuer gibt: D-196 hat die Kette
+  Medaille -> Hash -> Replay bereits Ende-zu-Ende bewiesen, und eine Etappe ist
+  ein gewoehnliches Szenario, also gilt derselbe Beweis. Ein gespielter Lauf
+  ueber eine der zwoelf Karten ist er nicht, und dieser Eintrag behauptet es
+  nicht.
+- **Die Bandschaerfe der Aera-Etappen.** Die 1850er und 1880er Schwellen sind
+  gegen die zwei Aera-Zwillinge kalibriert und nicht gegen einen gespielten Lauf
+  auf ihrer eigenen Karte. D-250 nennt die Aera-Oekonomie als offene Arbeit; das
+  bleibt sie.
+
+#### Bundle-Budget
+
+Haupt-Chunk 1.041.208 -> **1.048.431 B**, gegen die alte Grenze von 1.048.000
+**431 B darueber** - die erste erzwungene statt vorsorgliche Anhebung dieser
+Kette. Aufgeteilt durch Loeschen und Neubauen: **+2.123 B** sind die sechzehn
+i18n-Schluessel in zwei Sprachen, **+5.100 B** die Oberflaeche
+(`CampaignScreen.tsx`, zwei Store-Felder mit zwei Aktionen,
+`startCampaignStage`). **Die zwoelf Definitionen selbst kosten den Entry-Chunk
+null**: `campaign-*.js` ist ein eigener 21.360-B-Chunk, den der Screen dynamisch
+laedt, und keine `src/sim`-Dekodierkette erreicht den Entry-Graphen durch ihn
+(D-191/D-192). Budget 1.048.000 -> **1.058.000 B** mit der Messung daneben.

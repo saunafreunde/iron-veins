@@ -211,8 +211,29 @@ const DIST = join(REPO_ROOT, 'dist');
  *    mapgen barrel, so the whole of mapgen is already in this graph.
  *
  * 1,048,000 is the new measurement plus ~0.8 %.
+ *
+ * **Raised again for SPEC2 M24 bundle 3** (the campaign "Eisenadern", D-254).
+ * **1,041,208 B -> 1,048,431 B, +7,223 B**, against 6,792 B of headroom under
+ * the old number - so the build was 431 B OVER it, and this is the first raise
+ * in the chain that was forced rather than prudent. Measured in two parts by
+ * the file's own method:
+ *
+ *  - **+2,123 B are the sixteen i18n keys in two languages** (deleting exactly
+ *    the `ui.campaign.*`, `ui.menu.campaign` and `ui.end.campaign.*` lines from
+ *    both catalogues rebuilds at 1,046,308 B) - the campaign menu entry, the
+ *    stage list, the lock and unlock sentences and the two lines the end screen
+ *    prints about a booked completion.
+ *  - **+5,100 B are the interface**: `CampaignScreen.tsx`, the two campaign
+ *    fields and their two actions in the store, and `startCampaignStage`.
+ *
+ * **The twelve stage definitions themselves cost the entry chunk nothing**, and
+ * that was the point of loading them the way `ScenarioBrowser` loads the eight:
+ * `campaign-*.js` is a 21,360 B chunk of its own, imported dynamically by the
+ * screen, and no `src/sim` decode chain reaches the entry graph through it.
+ *
+ * 1,058,000 is the new measurement plus ~0.9 %.
  */
-const MAIN_CHUNK_BUDGET_BYTES = 1_048_000;
+const MAIN_CHUNK_BUDGET_BYTES = 1_058_000;
 
 /** The verdict, separated from the measuring so a planted size can be judged. */
 interface BudgetVerdict {

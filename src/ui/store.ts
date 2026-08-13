@@ -53,6 +53,7 @@ export type OverlayKind =
   | 'menu'
   | 'newGame'
   | 'scenarios'
+  | 'campaign'
   | 'options'
   | 'saves'
   | 'replays'
@@ -280,6 +281,26 @@ export interface SimUiState extends SnapshotValues {
    * previous scenario's name.
    */
   activeScenario: { readonly id: string; readonly title: string } | null;
+  /**
+   * Which campaign stage is running, or null (SPEC2 M24, D-254).
+   *
+   * Beside `activeScenario` rather than inside it, because a scenario started
+   * from the browser is not a campaign run: the id here is what the end screen
+   * books a completion against, and a stage started outside the campaign screen
+   * must not book one. Cleared by `resetWorld` for the same reason the scenario
+   * identity is.
+   */
+  activeCampaignStageId: string | null;
+  /**
+   * Which campaign stages have been completed, and with which medal.
+   *
+   * The medal is `GoalMedal`, and a stage counts as completed exactly when its
+   * world ended with `GameEnd.Won` - every goal achieved (D-196). It is kept
+   * here and nowhere else for now: WHERE it is persisted across restarts is
+   * `profile.json`'s question and belongs to its own bundle (SPEC2 M24), and
+   * the campaign graph is a pure function of this set either way.
+   */
+  campaignCompleted: Readonly<Record<string, number>>;
   /** Which full-screen overlay is open, if any. */
   overlay: OverlayKind;
   /** Which entity list is open, or null. The V/L/H/T/I keys of section 17.2. */
@@ -442,6 +463,9 @@ export interface SimUiState extends SnapshotValues {
     } | null,
   ) => void;
   setActiveScenario: (scenario: { readonly id: string; readonly title: string } | null) => void;
+  setActiveCampaignStage: (stageId: string | null) => void;
+  /** Book a completed campaign stage, keeping the BEST medal ever earned. */
+  completeCampaignStage: (stageId: string, medal: number) => void;
   setOverlay: (overlay: OverlayKind) => void;
   toggleList: (list: 'vehicles' | 'lines' | 'stations' | 'towns' | 'industries') => void;
   /** Wired to the map view so a list row can jump to what it names. */
@@ -577,6 +601,8 @@ export const useSimStore = create<SimUiState>((set) => ({
   replayError: null,
   loadError: null,
   activeScenario: null,
+  activeCampaignStageId: null,
+  campaignCompleted: {},
   overlay: null,
   openList: null,
   selectedVehicleId: null,
@@ -680,6 +706,16 @@ export const useSimStore = create<SimUiState>((set) => ({
   setReplayError: (replayError) => set({ replayError, replayChecking: false }),
   setLoadError: (loadError) => set({ loadError }),
   setActiveScenario: (activeScenario) => set({ activeScenario }),
+  setActiveCampaignStage: (activeCampaignStageId) => set({ activeCampaignStageId }),
+  completeCampaignStage: (stageId, medal) =>
+    set((state) => {
+      // A replayed stage may earn a worse medal than the run before it, and a
+      // campaign that forgot the better one would punish a player for playing
+      // again. The set of completed ids never shrinks either.
+      const held = state.campaignCompleted[stageId];
+      if (held !== undefined && held >= medal) return {};
+      return { campaignCompleted: { ...state.campaignCompleted, [stageId]: medal } };
+    }),
   setOverlay: (overlay) => set({ overlay }),
   toggleList: (list) => set((state) => ({ openList: state.openList === list ? null : list })),
   centreOnTile: () => undefined,
@@ -709,6 +745,7 @@ export const useSimStore = create<SimUiState>((set) => ({
       // belongs to the goals in THAT world, and a stale title over a plain new
       // game would claim the player is in a scenario they left.
       activeScenario: null,
+      activeCampaignStageId: null,
       camera: null,
       towns: [],
       industries: [],

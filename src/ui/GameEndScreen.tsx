@@ -1,4 +1,4 @@
-import type { ReactElement } from 'react';
+import { useEffect, type ReactElement } from 'react';
 import { formatInteger, formatMoney, t } from '../i18n';
 import type { GameEndMarker, GoalMarker, ScoreTermMarker } from '../shared/protocol';
 import { GameEnd, GoalStatus } from '../sim/goals/types';
@@ -74,9 +74,29 @@ export function GameEndScreen({
   useSimStore((s) => s.locale);
   const goals = useSimStore((s) => s.goals);
   const companyName = useSimStore((s) => s.companyName);
+  const stageId = useSimStore((s) => s.activeCampaignStageId);
+  const completeCampaignStage = useSimStore((s) => s.completeCampaignStage);
 
   const titleKey = END_TITLE_KEYS[end.reason] ?? END_TITLE_KEYS[0];
   const bodyKey = END_BODY_KEYS[end.reason] ?? END_BODY_KEYS[0];
+
+  /**
+   * A campaign stage is completed here, and only on a WIN (SPEC2 M24, D-254).
+   *
+   * The end screen is where a campaign completion belongs because this is where
+   * the verdict arrives, and the verdict is the simulation's: `GameEnd.Won`
+   * means every goal achieved and `end.medal` is the weakest band any of them
+   * earned, both computed from hashed state and both replay-verifiable (D-196).
+   * Nothing is decided here - the screen books what the world decided.
+   *
+   * In an effect rather than in render, because booking progress is a side
+   * effect and a component may render twice; the store keeps the BEST medal, so
+   * a second booking of the same run changes nothing.
+   */
+  useEffect(() => {
+    if (stageId === null || end.reason !== GameEnd.Won) return;
+    completeCampaignStage(stageId, end.medal);
+  }, [stageId, end.reason, end.medal, completeCampaignStage]);
 
   return (
     <div className="gameend" role="dialog" aria-modal="false">
@@ -87,6 +107,16 @@ export function GameEndScreen({
         {end.reason === GameEnd.Won && (
           <p className="value value--success">
             {t('ui.end.medal', { medal: t(MEDAL_KEYS[end.medal] ?? MEDAL_KEYS[0]) })}
+          </p>
+        )}
+
+        {stageId !== null && (
+          <p className="row__meta">
+            {end.reason === GameEnd.Won
+              ? t('ui.end.campaign.booked', {
+                  medal: t(MEDAL_KEYS[end.medal] ?? MEDAL_KEYS[0]),
+                })
+              : t('ui.end.campaign.notBooked')}
           </p>
         )}
 

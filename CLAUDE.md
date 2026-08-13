@@ -4093,3 +4093,67 @@ edit.
   remains 3.9 % under Normal. Unlike the purse it is a PRICE the player pays in
   the same world and its constant claims nothing about whose it is, so it is
   named rather than changed.
+
+## M24 bundle 3 - the campaign "Eisenadern", and the six stages that play alone (D-254)
+
+**Twelve scenarios from 1850 to 2050 over all four climates, as an ordered list
+plus unlock edges - TEXT, like everything else in `src/scenarios/`.** No save
+bump (**v34 stands**), no migration, no hashed byte, no snapshot byte, no
+protocol field, no RNG draw, no atlas cell; all three pins re-run and unmoved
+(canonical `b7e632a7124e67ce`, corpus `a00868b9911f12d6`, soak
+`64fec78d6bf0cd5e` at 35 commands), `npm run test:balance:full` green at 136.
+
+- **A stage is an ordinary `ShippedScenario`**, so it goes through
+  `newGameOptionsOf` -> `worldParamsFor` -> `World.create` like the eight of
+  M17, it is a determinism fixture for the same reason, its verdict is D-193's
+  goal machine and its completion is D-196's end screen. What the campaign ADDS
+  is one graph, and the graph never reaches the simulation.
+- **`ScenarioRules` grew two fields, both world rules M23 already had**:
+  `startYear` (required - a band tick is a COUNT OF TICKS, so which calendar
+  year a deadline falls in is decided by the start year and nothing else) and
+  `mapgen` (optional - absence is the continent preset at neutral steps, which
+  is the arithmetic identity of every generator seam, D-247). The eight now
+  state `startYear` and LOCK it: a scenario that pins the seed and not the
+  century pins nothing. Measured, not assumed - the eight generate byte-identical
+  worlds and `SCENARIO_WORLD_CLAIMS` never moved.
+- **The chain is `01 -> {02, 03} -> 04 -> {05, 06} -> {07, 08} -> 09 -> {10, 11}
+  -> 12`**, and a joining stage needs ALL its predecessors, never any of them.
+  Three properties are asserted separately because they are three different
+  failures - one root, nothing unreachable (iterative walk, law #8), no cycle
+  (topological sort that stalls if one exists) - plus a fourth test that PLAYS
+  the chain through the real start function.
+- **D-250's residual is answered rather than described.** Every stage carries a
+  competitor probe: its own world, its own rules, six game years, what each
+  competitor owns pinned exactly. **Stages 1-6 (1850, 1880) ship SOLO** and say
+  so in both briefings, because the probe adds two competitors and measures
+  nothing at all on five of them and 4/3 stations with ZERO vehicles on the
+  1880 arctic one. **Stages 7-12 (1920, 1950) ship contested**, every seed
+  chosen by playing it, and their briefings quote the measured station and
+  vehicle counts, which `CAMPAIGN_BRIEFING_FIGURES` binds to the probe.
+- **The seed scan is the finding**: the generator PRESET decides whether a
+  competitor ever crews a line (ten `Valley` seeds at 1950 temperate produced
+  not one competitor station), at 1920 they build and almost never crew (over
+  twenty-eight temperate seeds NOT ONE competitor bought a vehicle - which is
+  why no 1920 stage here is temperate), and the world RULES move the answer, so
+  the probe runs under the shipped rules and stage 8's seed was re-picked under
+  them.
+- **Every briefing is bound to its world** (D-197/D-198/D-199): claims table,
+  numerals in reading order in both languages, place names from the generator's
+  own grammar. Two figures are allowlisted (the SPEC section number 8.4, twice).
+  Three sentences talk about the CAMPAIGN rather than about their own map and
+  are checked for truth AND uniqueness. Found while writing: "Jahrhundert"
+  contains "hundert" and "Zwanzigstel" contains "zwanzig", so the numeral
+  scanner reddens both - the briefings were reworded rather than the scanner
+  weakened.
+- **What is NOT delivered and says so**: `profile.json` v1, so campaign progress
+  lives in the session only; the ~40 achievements; the personality in the
+  company profile; and a played campaign medal run verified through M16 (the
+  chain medal -> hash -> replay is D-196's, and a stage is an ordinary scenario,
+  but no run over one of these twelve maps was recorded). The era bands rest on
+  D-245's two era twins and not on a played run of their own map - D-250's open
+  era economics, unchanged.
+- Main chunk 1,041,208 -> **1,048,431 B**, 431 B OVER the old line - the first
+  forced raise in the chain. Split by deletion: +2,123 B the sixteen i18n keys
+  in two languages, +5,100 B the interface. **The twelve definitions cost the
+  entry chunk nothing** - `campaign-*.js` is a 21,360 B chunk the screen imports
+  dynamically. Budget 1,048,000 -> **1,058,000 B** with the measurement beside it.

@@ -4,11 +4,11 @@ import {
   Difficulty,
   MapClimate,
   START_YEAR,
-  TICKS_PER_YEAR,
   WeatherRule,
 } from '../sim/constants';
 import { GoalKind } from '../sim/goals/types';
 import type { ShippedScenario } from './types';
+import { endOfYearIn } from './years';
 
 /**
  * The eight scenarios that ship with the game (SPEC2 M17).
@@ -97,13 +97,10 @@ import type { ShippedScenario } from './types';
 
 /** The last tick of `year` - "by the end of 1958" as the hook measures it. */
 function endOfYear(year: number): number {
-  return (year - START_YEAR + 1) * TICKS_PER_YEAR;
+  return endOfYearIn(START_YEAR, year);
 }
 
-/** The calendar year a band tick falls in; the browser prints this. */
-export function scenarioYearOf(tick: number): number {
-  return START_YEAR + Math.ceil(tick / TICKS_PER_YEAR) - 1;
-}
+export { scenarioYearOf } from './years';
 
 /** Money thresholds are cents like every other figure in the simulation. */
 function euro(amount: number): number {
@@ -185,6 +182,7 @@ const FRACHTRAUSCH: ShippedScenario = {
     mapSize: 256,
     climate: MapClimate.Temperate,
     difficulty: Difficulty.Normal,
+    startYear: START_YEAR,
     aiCompanies: 1,
     inflation: true,
     emissions: true,
@@ -195,7 +193,7 @@ const FRACHTRAUSCH: ShippedScenario = {
     elections: false,
     economy: false,
   },
-  lockedRules: ['climate', 'difficulty', 'goals', 'mapSize', 'mapgen', 'seed'],
+  lockedRules: ['climate', 'difficulty', 'goals', 'mapSize', 'mapgen', 'seed', 'startYear'],
   fromTick: 0,
   toTick: endOfYear(1975),
 };
@@ -309,6 +307,7 @@ const PASSAGIERNETZ: ShippedScenario = {
     mapSize: 256,
     climate: MapClimate.Temperate,
     difficulty: Difficulty.Normal,
+    startYear: START_YEAR,
     aiCompanies: 2,
     inflation: true,
     emissions: true,
@@ -319,7 +318,7 @@ const PASSAGIERNETZ: ShippedScenario = {
     elections: false,
     economy: false,
   },
-  lockedRules: ['climate', 'difficulty', 'goals', 'mapSize', 'mapgen', 'seed'],
+  lockedRules: ['climate', 'difficulty', 'goals', 'mapSize', 'mapgen', 'seed', 'startYear'],
   fromTick: 0,
   toTick: endOfYear(1975),
 };
@@ -409,6 +408,7 @@ const GEBIRGSLOGISTIK: ShippedScenario = {
     mapSize: 256,
     climate: MapClimate.Arctic,
     difficulty: Difficulty.Normal,
+    startYear: START_YEAR,
     aiCompanies: 1,
     inflation: true,
     emissions: true,
@@ -428,6 +428,7 @@ const GEBIRGSLOGISTIK: ShippedScenario = {
     'occupancyPenalty',
     'seed',
     'signalPenalty',
+    'startYear',
   ],
   fromTick: 0,
   toTick: endOfYear(1975),
@@ -507,6 +508,7 @@ const INSELHUEPFEN: ShippedScenario = {
     mapSize: 256,
     climate: MapClimate.Tropical,
     difficulty: Difficulty.Normal,
+    startYear: START_YEAR,
     aiCompanies: 1,
     inflation: true,
     emissions: true,
@@ -517,7 +519,7 @@ const INSELHUEPFEN: ShippedScenario = {
     elections: false,
     economy: false,
   },
-  lockedRules: ['climate', 'difficulty', 'goals', 'mapSize', 'mapgen', 'seed'],
+  lockedRules: ['climate', 'difficulty', 'goals', 'mapSize', 'mapgen', 'seed', 'startYear'],
   fromTick: 0,
   toTick: endOfYear(1975),
 };
@@ -604,6 +606,7 @@ const WIEDERAUFBAU: ShippedScenario = {
     mapSize: 256,
     climate: MapClimate.Temperate,
     difficulty: Difficulty.Hard,
+    startYear: START_YEAR,
     aiCompanies: 0,
     inflation: true,
     emissions: true,
@@ -614,7 +617,7 @@ const WIEDERAUFBAU: ShippedScenario = {
     elections: false,
     economy: false,
   },
-  lockedRules: ['climate', 'difficulty', 'goals', 'inflation', 'mapSize', 'mapgen', 'seed'],
+  lockedRules: ['climate', 'difficulty', 'goals', 'inflation', 'mapSize', 'mapgen', 'seed', 'startYear'],
   fromTick: 0,
   toTick: endOfYear(1975),
 };
@@ -704,6 +707,7 @@ const RATSDIPLOMATIE: ShippedScenario = {
     mapSize: 256,
     climate: MapClimate.Temperate,
     difficulty: Difficulty.Normal,
+    startYear: START_YEAR,
     aiCompanies: 3,
     inflation: false,
     emissions: true,
@@ -714,7 +718,7 @@ const RATSDIPLOMATIE: ShippedScenario = {
     elections: false,
     economy: false,
   },
-  lockedRules: ['climate', 'difficulty', 'goals', 'mapSize', 'mapgen', 'roadCongestion', 'seed'],
+  lockedRules: ['climate', 'difficulty', 'goals', 'mapSize', 'mapgen', 'roadCongestion', 'seed', 'startYear'],
   fromTick: 0,
   toTick: endOfYear(1975),
 };
@@ -781,6 +785,7 @@ const SPEEDRUN: ShippedScenario = {
     mapSize: 256,
     climate: MapClimate.Temperate,
     difficulty: Difficulty.Easy,
+    startYear: START_YEAR,
     aiCompanies: 0,
     inflation: false,
     emissions: false,
@@ -791,7 +796,7 @@ const SPEEDRUN: ShippedScenario = {
     elections: false,
     economy: false,
   },
-  lockedRules: ['climate', 'difficulty', 'goals', 'inflation', 'mapSize', 'mapgen', 'seed'],
+  lockedRules: ['climate', 'difficulty', 'goals', 'inflation', 'mapSize', 'mapgen', 'seed', 'startYear'],
   fromTick: 0,
   toTick: endOfYear(1957),
 };
@@ -866,6 +871,7 @@ const UEBERLEBEN: ShippedScenario = {
     mapSize: 256,
     climate: MapClimate.Desert,
     difficulty: Difficulty.Hard,
+    startYear: START_YEAR,
     aiCompanies: 4,
     inflation: true,
     emissions: true,
@@ -888,6 +894,7 @@ const UEBERLEBEN: ShippedScenario = {
     'roadCongestion',
     'seed',
     'signalPenalty',
+    'startYear',
   ],
   fromTick: 0,
   toTick: endOfYear(1975),

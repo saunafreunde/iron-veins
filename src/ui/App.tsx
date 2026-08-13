@@ -20,6 +20,7 @@ import { NewGameDialog } from './NewGameDialog';
 import { OptionsPanel } from './OptionsPanel';
 import { ReplayBar, ReplayBrowser } from './ReplayPanel';
 import { SaveLoadPanel } from './SaveLoadPanel';
+import { CampaignScreen } from './CampaignScreen';
 import { ScenarioBrowser } from './ScenarioBrowser';
 import { StoredCrashNotice } from './StoredCrashNotice';
 import { TutorialPanel } from './TutorialPanel';
@@ -341,6 +342,9 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
           )}
           {overlay === 'scenarios' && (
             <ScenarioBrowser client={client} onClose={() => setOverlay('menu')} />
+          )}
+          {overlay === 'campaign' && (
+            <CampaignScreen client={client} onClose={() => setOverlay('menu')} />
           )}
           {overlay === 'options' && <OptionsPanel onClose={() => setOverlay('menu')} />}
           {overlay === 'saves' && (
