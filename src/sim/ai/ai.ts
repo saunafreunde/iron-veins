@@ -23,6 +23,7 @@ import {
 } from '../constants';
 import { loanLimitCt } from '../economy/company';
 import { lineVehicles } from '../lines/metrics';
+import { reportAiLineClosed, reportAiLineOpened } from '../news/report';
 import type { Station } from '../station/types';
 import { aggregateConsist } from '../vehicles/consist';
 import { OrderLoad, OrderTarget, OrderUnload, VehicleState } from '../vehicles/VehicleStore';
@@ -518,6 +519,11 @@ function advanceProject(world: World, queue: CommandQueue, state: AiState): void
   queue.enqueue({ kind: CommandKind.SetAutoRenew, lineId, enabled: true }, tick, state.companyId);
   crewOntoLine(world, queue, state, lineId, project.cargo, vehicleIds);
   state.reviews.push({ lineId, reviewTick: world.tick, earnedAtReviewCt: 0 });
+  // The competitor's line is open and crewed, which is the moment SPEC2 M24
+  // calls "Linieneroeffnung". The crewing commands are still in the queue - the
+  // line exists, its schedule is written, and the fleet is what this cycle just
+  // ordered onto it, so the count is the honest one.
+  reportAiLineOpened(world, state.companyId, from, to, vehicleIds.length);
 }
 
 function buyVehicles(
@@ -740,11 +746,15 @@ function closeDeadLine(world: World, queue: CommandQueue, state: AiState): boole
       continue;
     }
 
+    // Read BEFORE the line is deleted: the name of the place it served is the
+    // only thing that makes the closure findable, and a deleted line has none.
+    const served = loadingStationOf(world, lineId);
     for (const vehicleId of crewIds) {
       queue.enqueue({ kind: CommandKind.SellVehicle, vehicleId }, world.tick + 1, state.companyId);
     }
     queue.enqueue({ kind: CommandKind.DeleteLine, lineId }, world.tick + 1, state.companyId);
     state.reviews.splice(index, 1);
+    if (served !== null) reportAiLineClosed(world, state.companyId, served);
     return true;
   }
   return false;

@@ -339,6 +339,11 @@ function companyMarkers(current: World): CompanyMarker[] {
     colorIndex: company.colorIndex,
     valueCt: companyValueCt(company),
     bankrupt: company.bankrupt,
+    // The one AI fact the interface is shown (SPEC2 M24). Looked up rather
+    // than carried on the company: `AiState` is where a personality lives and
+    // has been since M8, and a second copy on `CompanyState` would be a saved
+    // field that could drift from the one the evaluator reads.
+    personality: current.ai.find((state) => state.companyId === company.id)?.personality ?? -1,
   }));
 }
 

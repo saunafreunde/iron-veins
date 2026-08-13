@@ -115,6 +115,18 @@ export interface CompanyMarker {
   /** Net worth, so the list can be ranked (section 14.1). [cent] */
   readonly valueCt: number;
   readonly bankrupt: boolean;
+  /**
+   * A value of `Personality` for a competitor, or -1 for the player's own
+   * company (SPEC2 M24: "KI-Persoenlichkeit im Firmenprofil sichtbar").
+   *
+   * It rides the marker channel rather than the 20-Hz stride, like every other
+   * field of this record (E-05/Fehlerkatalog 37) - a personality is fixed when
+   * the competitor is created and never changes again, so once a game would
+   * still be too often. -1 rather than an optional field because the list
+   * renders every row through one branch, and "no personality" is a real
+   * answer for the one company that has none.
+   */
+  readonly personality: number;
 }
 
 /**

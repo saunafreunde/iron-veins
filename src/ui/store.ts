@@ -19,6 +19,7 @@ import type {
   WorkerToMainMessage,
 } from '../shared/protocol';
 import type { ReplayEntry, SaveEntry } from '../platform/Storage';
+import type { ProfileData } from '../platform/profileData';
 import { DEFAULT_SETTINGS, type AppSettings } from '../shared/settings';
 import { MapClimate, START_YEAR } from '../sim/constants';
 import { EconomyCurve } from '../sim/economy/curve';
@@ -54,6 +55,7 @@ export type OverlayKind =
   | 'newGame'
   | 'scenarios'
   | 'campaign'
+  | 'achievements'
   | 'options'
   | 'saves'
   | 'replays'
@@ -295,12 +297,33 @@ export interface SimUiState extends SnapshotValues {
    * Which campaign stages have been completed, and with which medal.
    *
    * The medal is `GoalMedal`, and a stage counts as completed exactly when its
-   * world ended with `GameEnd.Won` - every goal achieved (D-196). It is kept
-   * here and nowhere else for now: WHERE it is persisted across restarts is
-   * `profile.json`'s question and belongs to its own bundle (SPEC2 M24), and
-   * the campaign graph is a pure function of this set either way.
+   * world ended with `GameEnd.Won` - every goal achieved (D-196). Since M24's
+   * profile bundle it is HYDRATED from `profile.json` at boot and written back
+   * whenever it moves, which happens outside this file: the store holds the
+   * player's progress, `ui/profile.ts` decides where it is kept, and the
+   * campaign graph is a pure function of this set either way.
    */
   campaignCompleted: Readonly<Record<string, number>>;
+  /**
+   * The best medal every SHIPPED scenario was ever finished with (SPEC2 M24).
+   *
+   * Beside the campaign rather than inside it: a campaign stage is a scenario
+   * with a chain over it, and the eight of M17 have no chain at all - but a
+   * player who took gold on Frachtrausch has done something worth keeping. Same
+   * rule as the campaign's own: booked only on `GameEnd.Won`, the medal the
+   * simulation decided, and the better of the two is kept.
+   */
+  scenarioMedals: Readonly<Record<string, number>>;
+  /**
+   * Achievement id to the calendar year of the game it was earned in.
+   *
+   * Earned by `ui/achievements.ts` from the news log and the goal markers and
+   * from nothing else - the simulation has never heard of any of this (SPEC2
+   * M24). The year is what the panel shows beside the title; it is the game's
+   * year rather than a wall-clock date, because that is the fact the player
+   * remembers.
+   */
+  achievements: Readonly<Record<string, number>>;
   /** Which full-screen overlay is open, if any. */
   overlay: OverlayKind;
   /** Which entity list is open, or null. The V/L/H/T/I keys of section 17.2. */
@@ -466,6 +489,12 @@ export interface SimUiState extends SnapshotValues {
   setActiveCampaignStage: (stageId: string | null) => void;
   /** Book a completed campaign stage, keeping the BEST medal ever earned. */
   completeCampaignStage: (stageId: string, medal: number) => void;
+  /** Book a finished scenario, keeping the BEST medal ever earned (M24). */
+  recordScenarioMedal: (scenarioId: string, medal: number) => void;
+  /** Earn achievements, in the order the table lists them (M24). */
+  unlockAchievements: (ids: readonly string[], year: number) => void;
+  /** Put what `profile.json` remembered into the store, once, at boot (M24). */
+  adoptProfile: (profile: ProfileData) => void;
   setOverlay: (overlay: OverlayKind) => void;
   toggleList: (list: 'vehicles' | 'lines' | 'stations' | 'towns' | 'industries') => void;
   /** Wired to the map view so a list row can jump to what it names. */
@@ -603,6 +632,8 @@ export const useSimStore = create<SimUiState>((set) => ({
   activeScenario: null,
   activeCampaignStageId: null,
   campaignCompleted: {},
+  scenarioMedals: {},
+  achievements: {},
   overlay: null,
   openList: null,
   selectedVehicleId: null,
@@ -715,6 +746,34 @@ export const useSimStore = create<SimUiState>((set) => ({
       const held = state.campaignCompleted[stageId];
       if (held !== undefined && held >= medal) return {};
       return { campaignCompleted: { ...state.campaignCompleted, [stageId]: medal } };
+    }),
+  recordScenarioMedal: (scenarioId, medal) =>
+    set((state) => {
+      // The campaign's rule, one catalogue along: the better run is the one
+      // that counts, and a worse replay never takes a medal away.
+      const held = state.scenarioMedals[scenarioId];
+      if (held !== undefined && held >= medal) return {};
+      return { scenarioMedals: { ...state.scenarioMedals, [scenarioId]: medal } };
+    }),
+  unlockAchievements: (ids, year) =>
+    set((state) => {
+      // Nothing is ever re-earned: the year kept is the year it was FIRST
+      // earned in, because that is what the player did. A no-op returns the
+      // identical object, which is what lets the profile writer subscribe to
+      // this field without writing the file on every news delta.
+      let next: Record<string, number> | null = null;
+      for (const id of ids) {
+        if (state.achievements[id] !== undefined) continue;
+        next ??= { ...state.achievements };
+        next[id] = year;
+      }
+      return next === null ? {} : { achievements: next };
+    }),
+  adoptProfile: (profile) =>
+    set({
+      campaignCompleted: { ...profile.campaign },
+      scenarioMedals: { ...profile.scenarios },
+      achievements: { ...profile.achievements },
     }),
   setOverlay: (overlay) => set({ overlay }),
   toggleList: (list) => set((state) => ({ openList: state.openList === list ? null : list })),

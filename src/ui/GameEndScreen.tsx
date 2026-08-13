@@ -75,7 +75,9 @@ export function GameEndScreen({
   const goals = useSimStore((s) => s.goals);
   const companyName = useSimStore((s) => s.companyName);
   const stageId = useSimStore((s) => s.activeCampaignStageId);
+  const scenario = useSimStore((s) => s.activeScenario);
   const completeCampaignStage = useSimStore((s) => s.completeCampaignStage);
+  const recordScenarioMedal = useSimStore((s) => s.recordScenarioMedal);
 
   const titleKey = END_TITLE_KEYS[end.reason] ?? END_TITLE_KEYS[0];
   const bodyKey = END_BODY_KEYS[end.reason] ?? END_BODY_KEYS[0];
@@ -97,6 +99,19 @@ export function GameEndScreen({
     if (stageId === null || end.reason !== GameEnd.Won) return;
     completeCampaignStage(stageId, end.medal);
   }, [stageId, end.reason, end.medal, completeCampaignStage]);
+
+  /**
+   * The same booking for the SCENARIO itself (SPEC2 M24's "Szenario-Medaillen"),
+   * and it is deliberately not conditioned on the campaign: the eight scenarios
+   * of M17 have no chain, and the medal a player took on one of them is worth
+   * keeping whichever door they came through. A campaign stage is a scenario, so
+   * a won stage books both - the chain and the medal - which is why they are two
+   * records and not one.
+   */
+  useEffect(() => {
+    if (scenario === null || end.reason !== GameEnd.Won) return;
+    recordScenarioMedal(scenario.id, end.medal);
+  }, [scenario, end.reason, end.medal, recordScenarioMedal]);
 
   return (
     <div className="gameend" role="dialog" aria-modal="false">

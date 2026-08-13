@@ -62,7 +62,7 @@ no entry below. A number may appear under several topics.
 - **Competitors, AI & tenders:** D-107, D-108, D-109, D-115, D-116, D-121,
   D-122, D-147, D-152, D-153, D-154, D-155, D-156, D-158, D-216, D-218,
   D-219, D-220, D-221, D-222, D-223, D-224, D-225, D-226, D-228, D-229,
-  D-230, D-238, D-250, D-252, D-253, D-254
+  D-230, D-238, D-250, D-252, D-253, D-254, D-255
 - **Rendering & art:** D-013, D-014, D-033, D-035, D-112, D-117, D-125, D-127,
   D-136, D-140, D-160, D-161, D-162, D-163, D-164, D-165, D-166, D-169, D-170,
   D-171, D-172, D-173, D-174, D-175, D-177, D-179, D-186, D-202, D-205, D-206,
@@ -70,14 +70,14 @@ no entry below. A number may appear under several topics.
 - **UI & input:** D-011, D-013, D-015, D-035, D-110, D-113, D-114, D-119,
   D-126, D-148, D-165, D-166, D-177, D-179, D-180, D-181, D-182, D-183, D-184,
   D-186, D-187, D-189, D-191, D-192, D-193, D-194, D-195, D-196, D-200, D-202,
-  D-210, D-241, D-242, D-247, D-254
+  D-210, D-241, D-242, D-247, D-254, D-255
 - **Performance & measurement:** D-002, D-120, D-135, D-136, D-161, D-162,
   D-163, D-164, D-167, D-170, D-171, D-172, D-173, D-174, D-176, D-177, D-184,
   D-185, D-186, D-187, D-191, D-192, D-193, D-196, D-200, D-201, D-202, D-205,
   D-206, D-209, D-214, D-231, D-234, D-235, D-241, D-242, D-247, D-248
 - **Platform, tooling & build:** D-012, D-014, D-015, D-016, D-017, D-029,
   D-030, D-031, D-160, D-168, D-169, D-170, D-172, D-175, D-192, D-206, D-208,
-  D-227, D-242
+  D-227, D-242, D-255
 - **Crash safety:** D-132, D-139, D-190
 - **Testing method & fixtures:** D-010, D-038, D-072, D-074, D-084, D-133,
   D-167, D-183, D-186, D-188, D-189, D-190, D-191, D-192, D-193, D-194,
@@ -85,7 +85,7 @@ no entry below. A number may appear under several topics.
   D-205, D-207, D-206, D-208, D-209, D-210, D-212, D-213, D-215, D-216,
   D-217, D-219, D-220, D-221, D-222, D-228, D-229, D-230, D-231, D-233,
   D-234, D-235, D-236, D-241, D-242, D-248, D-249, D-250, D-251, D-252,
-  D-253
+  D-253, D-255
 - **Process & specification:** D-070, D-123, D-129, D-133, D-138, D-140,
   D-185, D-191, D-197, D-198, D-199, D-203, D-204, D-205, D-206, D-215,
   D-222, D-225, D-226, D-227, D-228, D-229, D-235, D-252, D-253
@@ -16396,3 +16396,194 @@ i18n-Schluessel in zwei Sprachen, **+5.100 B** die Oberflaeche
 null**: `campaign-*.js` ist ein eigener 21.360-B-Chunk, den der Screen dynamisch
 laedt, und keine `src/sim`-Dekodierkette erreicht den Entry-Graphen durch ihn
 (D-191/D-192). Budget 1.048.000 -> **1.058.000 B** mit der Messung daneben.
+
+
+### D-255 Das Spielerprofil ausserhalb der Welt: `profile.json` v1, einundvierzig Achievements aus zwei Ausgaengen - und die Konkurrenz, die endlich in den Nachrichten vorkommt
+
+**Der letzte Bundle von M24 loest die drei MUSS-Punkte ein, die D-254 als offen
+benannt hat**: `profile.json` v1 mit eigener Migrationskette, etwa vierzig
+Achievements als Daten, und die KI-Persoenlichkeit im Firmenprofil samt
+KI-Leben in den News. Kein Save-Bump (**v34 bleibt**), keine Migration, kein
+Snapshot-Byte, kein RNG-Zug, keine Atlas-Zelle. **Alle drei Pins stehen
+unbewegt** - kanonisch `b7e632a7124e67ce`, Korpus `a00868b9911f12d6`, Soak
+`64fec78d6bf0cd5e` bei unveraenderten 35 Kommandos und 16 Checkpoints -, und
+warum sie das trotz vier neuer Nachrichtenzeilen tun, ist die interessanteste
+Messung dieses Bundles (unten).
+
+#### `profile.json` ist eine eigene Kette, weil es kein Weltzustand ist
+
+Ein Spielstand ist eine WELT, ein Profil ist ein SPIELER. Deshalb liegt es in
+`src/platform` neben `Storage.ts`, hat eine eigene Version, eine eigene
+Migrationskette und eine eigene Datei, und `SAVE_VERSION` erfaehrt nie davon.
+Der Grund ist Gesetz 3 und nicht Ordnungsliebe: eine Simulation, die die
+Medaillen des Spielers liest, erzeugt aus demselben Seed fuer zwei Spieler zwei
+verschiedene Welten. `tests/unit/profile.spec.ts` laeuft ueber `src/sim` und
+faellt beim ersten Vorkommen von `profile.json`, `ProfileData` oder
+`readProfileData`, und ein zweiter Test haelt `save/format.ts` frei davon.
+
+Die Trennung ist wie bei den Einstellungen zweigeteilt: `profileData.ts` ist
+rein (Form, Version, Kette, Leser) und laesst sich ohne Dateisystem, Browser
+oder Tauri-Laufzeit treiben; `Profile.ts` ist Ein- und Ausgabe.
+
+**Die Kette hat heute genau ein Glied, und das ist ein echtes**: Version 1 ist
+die erste VERSIONIERTE Fassung, also ist eine Datei ohne `version` per
+Definition Version 0, und `PROFILE_MIGRATIONS[0]` bringt sie nach 1. Der Test
+verlangt genau ein Glied je Version unterhalb der aktuellen - eine Kette, die
+als Kommentar auf eine kuenftige Migration verweist, ist keine.
+
+**Drei Regeln, und alle drei existieren, damit ein Profil den Start niemals
+verhindern kann.** Sie sind Ende zu Ende getestet, nicht behauptet:
+
+- **Alles, was kein Profil ist, liest sich als leeres Profil.** Syntaxfehler,
+  Zahl, Array, `null`, ein Profil mit vermodertem Block - jedes davon ergibt
+  etwas, mit dem das Spiel startet. Ein defekter Block kostet nur sich selbst:
+  eine kaputte `achievements`-Liste laesst den Kampagnenfortschritt stehen.
+- **Ein Profil aus einer NEUEREN Version wird gelesen und danach eingefroren.**
+  Dieser Build nimmt die Bloecke, die er kennt - der Spieler sieht seinen
+  Fortschritt -, und `writeProfile` gibt `false` zurueck, ohne zu schreiben.
+  Ueberschreiben wuerde still wegwerfen, was die neuere Version dort abgelegt
+  hat, und wer einmal eine neuere Version gestartet hat, hat darum nicht
+  gebeten. Der Test prueft die Datei danach BYTE FUER BYTE, samt des Blocks,
+  den dieser Build nicht lesen kann. Der Riegel ist Modulzustand und kein
+  Parameter, weil genau ein vergessender Aufrufer die Datei zerstoert.
+- **Eine Medaille ausserhalb der vier Baender wird verworfen und nicht
+  geklemmt** - `normaliseSettings`' eigene Haltung zu einer Lautstaerke von
+  zwei: zu raten, was eine 7 bedeutet haben soll, ist schlechter als es zu
+  vergessen.
+
+**Geschrieben wird ueber ein ABONNEMENT, nicht an den Buchungsstellen.** Eine
+Einstellung hat eine Tuer; das Profil bewegen drei Dinge in drei Komponenten -
+eine gewonnene Kampagnen-Etappe, ein beendetes Szenario, ein verdienter Erfolg.
+`ui/profile.ts` abonniert die drei Store-Felder: ein Schreiber, keine
+Aufrufstelle, die es vergessen kann, und eine Buchung von einer Stelle, an die
+heute noch niemand gedacht hat, wird trotzdem persistiert. Der Vergleich laeuft
+ueber IDENTITAET, weshalb `unlockAchievements` bei "nichts Neues" dasselbe
+Objekt zurueckgibt - sonst schriebe der Watcher die Datei bei jedem
+News-Delta.
+
+#### Einundvierzig Achievements, aus genau zwei Ausgaengen
+
+SPEC2 M24 verlangt "~40 Achievements als Daten, ausgeloest ausschliesslich durch
+News-Log-Ereignisse und M17-Zielabschluesse - null Sim-Beteiligung". Geliefert
+sind 41 (35 aus News, 6 aus Zielen), und drei der vier Teilsaetze sind
+Eigenschaften, die ein Test haelt:
+
+- **Die Ausloeser sind drei Formen und alle drei lesen einen dieser beiden
+  Ausgaenge**: `news` (n Eintraege mit diesem Schluessel), `goal` (n Ziele
+  mindestens in dieser Medaille) und `allGoals`.
+- **Jeder genannte News-Schluessel ist einer, den die Simulation wirklich
+  postet.** Der Audit liest die `'news.*'`-Literale aus `src/sim` und haelt die
+  Tabelle dagegen (die D-118/D-169-Form): ein Achievement auf eine Nachricht,
+  die niemand schreibt, ist eines, das niemand je verdienen kann, und es saehe
+  von aussen genauso aus wie ein funktionierendes.
+- **Null Sim-Beteiligung, grep-beweisbar**: `achievements`, `ACHIEVEMENT` und
+  `Achievement` kommen unter `src/sim` nicht vor. Das kleingeschriebene
+  Einzelwort ist bewusst NICHT verboten - drei Dateien unter `src/sim/goals`
+  benutzen es als gewoehnliches Englisch ueber ein erreichtes ZIEL ("tick of the
+  achievement, or -1"), was einen Meilenstein aelter ist als dieser Mechanismus
+  und etwas anderes meint.
+
+**Zwei Folgen dieser Entscheidung, ausgesprochen statt entdeckt.** Ein
+Achievement wird INNERHALB einer Partie verdient: der Zaehler wird aus dem Log
+gefuellt, mit dem die Welt geladen wurde, und mit dem Delta fortgeschrieben, und
+eine neue Welt beginnt ihn neu. Was fuer immer bleibt, ist die Tatsache, dass es
+verdient wurde - das ist, was der Spieler sammelt. Und die Schwellen liegen
+darum alle bei hoechstens zehn, gegen einen News-Ring von zweihundert.
+
+**Der Watcher zaehlt die ERSTE Synchronisation mit, der Notification-Host nicht,
+und der Unterschied ist Absicht.** Ein geladener Rueckstand ist fuer eine
+Toast-Karte Geschichte (D-182); ein Spielstand mit zwoelf Industrie-Eroeffnungen
+im Log hat "Industriezeitalter" aber verdient, und es zu verweigern, weil der
+Spieler eine Pause gemacht hat, waere das Achievement, das ihn fuers Speichern
+bestraft. Beide lesen dieselbe Naht - `newNewsEntries` -, was ein Quell-Audit
+festhaelt.
+
+#### Die Persoenlichkeit, die seit M8 uebersetzt ist und niemand gelesen hat
+
+`PERSONALITY_KEYS` steht seit M8 exportiert und in zwei Sprachen uebersetzt in
+`ai/types.ts`, und **keine einzige Datei hat den Bezeichner je benutzt** - ein
+Spieler konnte drei Firmen ein Vierteljahrhundert lang verschieden handeln sehen
+und nie erfahren, dass der Unterschied ein benannter ist. `CompanyMarker` traegt
+jetzt `personality`, `-1` fuer die Firma des Spielers, und die Konkurrenzliste
+zeigt sie. Der Worker SCHLAEGT sie in `AiState` nach, statt sie auf
+`CompanyState` zu kopieren: es gibt genau eine Kopie dieser Tatsache, und der
+Bewerter besitzt sie. Der Marker-Kanal traegt sie, nicht der 20-Hz-Stride - eine
+Persoenlichkeit steht bei der Erschaffung fest und aendert sich nie wieder, also
+waere einmal je Spiel schon zu oft (E-05, Fehlerkatalog 37).
+
+#### Vier News-Zeilen fuer das Leben der Konkurrenz - und warum kein Pin sich bewegt
+
+Linieneroeffnung, Stilllegung, Insolvenz und Jahres-Ranglistenbewegung, alle
+vier ueber `postOnce`, alle vier an der Kante, an der das Ereignis wirklich
+passiert:
+
+- **Eroeffnung** in der letzten Projektstufe, wenn die Linie steht und bemannt
+  ist; **Stilllegung** in `closeDeadLine`, und zwar nur im ABSICHTLICHEN Zweig -
+  die beiden Zweige daneben (die Linie war schon weg, oder sie hatte keine
+  Fahrzeuge mehr) sind die KI, die ihr eigenes Gedaechtnis aufraeumt, und das
+  ist kein Ereignis in der Welt. Der Ort wird VOR dem Loeschen gelesen, weil
+  eine geloeschte Linie keinen Namen mehr hat.
+- **Insolvenz** in `reviewBankruptcy` und nicht im Tagespass: `reportSolvency`s
+  taegliches `postOnce` liest ein Flag und wuerde darum fuer immer die erste
+  bankrotte Firma melden, die der Walk trifft, und keine der anderen.
+- **Die Ranglistenbewegung erfindet keinen Zustand**, und genau das laesst sie
+  in einem Meilenstein ohne Save-Bump existieren: wenn sie laeuft, hat
+  `closeFinancialYear` den diesjaehrigen Firmenwert bereits an das Archiv jeder
+  Firma angehaengt (D-180s `valueHistory`, seit M6 gespeichert und gehasht), und
+  die Rangliste des Vorjahres ist dieselbe Liste einen Eintrag frueher gelesen.
+  Ein gemerkter "Platz im Vorjahr" waere historischer Eingang in eine
+  Sim-Entscheidung und damit Save-Zustand (Z4). Ein Platz, der sich nicht
+  bewegt hat, ist keine Nachricht; Gleichstand bricht auf der Firmen-Id, was
+  eine Totalordnung ist (Gesetz 3).
+
+**Der News-Log ist gehashter Weltzustand, also war die Erwartung, dass sich der
+Soak-Pin bewegt - und er tut es nicht.** Nachgeprueft durch Ausfuehren:
+`64fec78d6bf0cd5e` bei unveraenderten 35 Kommandos und 16 bitgleichen
+Checkpoints. Der Grund ist messbar und steht hier, statt als Glueck durchzugehen:
+auf Seed 4711 eroeffnet unter dem D-229-Gewinnboden **keine** Konkurrenzfirma je
+eine Linie (die 35 aufgezeichneten Kommandos sind der ganze Beweis), keine wird
+abgewickelt, und die Rangfolge kreuzt sich nie - drei Firmen, die ihr Kapital
+halten, wechseln die Plaetze nicht. Der kanonische Pin und der Korpus haben
+ueberhaupt keine Konkurrenten in ihrer Welt und konnten sich nicht bewegen. **Was
+das heisst, ist unangenehm und wird nicht geglaettet**: die vier Zeilen sind auf
+der gepinnten Welt totes Holz, und was sie wirklich schreiben, steht in
+`tests/unit/aiNews.spec.ts` - dort wird eine Linie wirklich eroeffnet, wirklich
+wieder geschlossen und eine Firma wirklich abgewickelt, auf einer flachen
+Testwelt, ueber die echten Pfade.
+
+#### Gemessen
+
+- `npm run typecheck`, `npm run lint`, `npx vitest run tests/unit` (144 Dateien,
+  1.987 Tests), `npm run test:balance:full` (15 Dateien, 136 Tests, jedes Band
+  auf dem Euro - Szenario 5 1.022.084 / 1.802.165 / 2.153.604 EUR, aiGame-Sweep
+  **7.293.303 EUR**, Punktzahl 5.889, Netzdesign 3,75, Harter Winter -4,36 %,
+  Klima-Matrix unveraendert), `npm run test:soak`, `npm run test:perf`,
+  `npx vitest run tests/determinism tests/corpus` (64 Tests).
+- **Tick p50 1,580 / 1,420 / 1,568 ms und p99 3,438 / 2,942 / 3,101 ms** ueber
+  drei Laeufe gegen die M10-Grundlinie 1,45 / 3,26 - zwei der drei p99 liegen
+  darunter, der dritte 0,18 ms darueber und damit weit im dokumentierten
+  +-0,7-ms-Laufrauschen. **Die Referenzflotte hat keine Konkurrenten**, also ist
+  der KI-News-Pfad dort inert; was sie wirklich kostet, ist eine Zeile im
+  Jahres-Hook plus zwei Kanten im Entscheidungszyklus, und dieser Eintrag sagt
+  das, statt eine Zahl zu erfinden.
+- **Haupt-Chunk 1.048.431 -> 1.069.575 B (+21.144)**, Budget 1.058.000 ->
+  **1.080.000 B**, aufgeteilt durch Loeschen und Neubauen: **+11.093 B** sind
+  die sechsundneunzig i18n-Schluessel in zwei Sprachen (41 Achievements mit
+  Titel UND Bedingung sind 82 Schluessel, bevor irgendetwas anderes dazukommt),
+  **+10.051 B** der Mechanismus. Das ist die zweite erzwungene Anhebung in
+  Folge und die groesste Stufe der Kette; sie steht mit der Messung daneben
+  (D-192).
+
+#### Was M24 danach noch offen laesst, benannt
+
+- **Der Kampagnen-Medaillenlauf per M16-Replay** aus der Fertig-wenn-Klausel ist
+  weiterhin NICHT eingeloest. D-196 hat die Kette Medaille -> Hash -> Replay
+  Ende zu Ende bewiesen und eine Etappe ist ein gewoehnliches Szenario, also
+  gilt derselbe Beweis - ein gespielter Lauf ueber eine der zwoelf Karten ist er
+  nicht, und D-254s Formulierung dazu steht unveraendert.
+- **Die Ordnung "Hard > Normal bei gleichem Seed"** bleibt offen und gemessen
+  (D-252/D-253). Dieser Bundle hat sie nicht angefasst.
+- **Ein Achievement, das ueber mehrere Partien zaehlt**, gibt es nicht und ist
+  bewusst keins: der Zaehler ist Eigenschaft einer Welt, das Profil haelt nur
+  die verdienten Ids. Eine Lebenszeit-Statistik waere ein zweiter Zaehlstand
+  neben dem News-Log und muesste selbst versioniert werden.

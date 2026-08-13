@@ -20,6 +20,8 @@ import { NewGameDialog } from './NewGameDialog';
 import { OptionsPanel } from './OptionsPanel';
 import { ReplayBar, ReplayBrowser } from './ReplayPanel';
 import { SaveLoadPanel } from './SaveLoadPanel';
+import { AchievementHost } from './AchievementHost';
+import { AchievementPanel } from './AchievementPanel';
 import { CampaignScreen } from './CampaignScreen';
 import { ScenarioBrowser } from './ScenarioBrowser';
 import { StoredCrashNotice } from './StoredCrashNotice';
@@ -346,6 +348,7 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
           {overlay === 'campaign' && (
             <CampaignScreen client={client} onClose={() => setOverlay('menu')} />
           )}
+          {overlay === 'achievements' && <AchievementPanel onClose={() => setOverlay('menu')} />}
           {overlay === 'options' && <OptionsPanel onClose={() => setOverlay('menu')} />}
           {overlay === 'saves' && (
             <SaveLoadPanel client={client} onClose={() => setOverlay('menu')} />
@@ -370,6 +373,10 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
             alarm that fired while the player was reading must still stop the
             clock (SPEC2 M14). */}
         <NotificationHost client={client} />
+        {/* And the achievement watcher of SPEC2 M24, for the same reason: the
+            news that earns one arrives while the player is in a menu just as
+            often as while they are looking at the map. */}
+        <AchievementHost />
       </div>
     );
   }
@@ -479,6 +486,10 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
       {/* The M14 notification routing: ticker strip and toast cards over the
           news the store already holds - pure presentation (D-110). */}
       <NotificationHost client={client} />
+
+      {/* The achievements of SPEC2 M24, earned from the same news log and from
+          the M17 goal markers - and from nothing else. */}
+      <AchievementHost />
 
       {/* Victory, defeat, a winding-up or the end of the century (SPEC2 M17).
           Over the map rather than instead of it, and dismissible: a player who

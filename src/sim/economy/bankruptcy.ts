@@ -1,5 +1,6 @@
 import { BANKRUPTCY_MONTHS } from '../constants';
 import { sellVehicle } from '../commands/build';
+import { reportAiBankrupt } from '../news/report';
 import { reviewSolvency } from './company';
 import type { CompanyState } from '../types';
 import type { World } from '../World';
@@ -35,4 +36,8 @@ export function reviewBankruptcy(world: World, company: CompanyState): void {
 
   world.actingCompanyId = previous;
   company.bankrupt = true;
+
+  // A competitor's end is news (SPEC2 M24); the player's own is
+  // `reportSolvency`'s daily line and the end screen behind it (D-196).
+  if (company.id !== world.playerCompanyId) reportAiBankrupt(world, company.id);
 }

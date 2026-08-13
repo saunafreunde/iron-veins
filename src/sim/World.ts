@@ -30,7 +30,7 @@ import { createAiCompanies } from './company/roster';
 import { LinkGraph, type CargoLinkSave } from './cargo/linkGraph';
 import { refreshCargoRouting } from './cargo/routing';
 import { NewsCategory, NewsLog, NewsSeverity, type NewsEntry } from './news/log';
-import { reportNews } from './news/report';
+import { reportLeagueMovement, reportNews } from './news/report';
 import { reviewBankruptcy } from './economy/bankruptcy';
 import { bookDepreciation } from './economy/depreciation';
 import { bookMonthlyEmissions, closeEmissionsYear } from './economy/emissions';
@@ -928,6 +928,11 @@ export class World {
         this.actingCompanyId = this.playerCompanyId;
         company.vehicleUpkeepPerYearCt = fleetUpkeepCtPerYear(this, company.id);
       }
+      // Where the player stands against the opposition after the year that has
+      // just closed (SPEC2 M24). Immediately after the loop above, because that
+      // loop is what appended this year's value to every company's archive -
+      // the league is read out of `valueHistory` and remembers nothing itself.
+      reportLeagueMovement(this);
       // One new works a year, by preference where nothing is served yet.
       openNewIndustries(this);
       // And, every fourth year, the councils of section 13.3 face the voters

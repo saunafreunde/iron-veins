@@ -439,6 +439,152 @@ export function reportNewIndustry(world: World, industry: Industry): void {
   });
 }
 
+// ------------------------------------------------------ the competitors' life
+//
+// SPEC2 M24 asks for "KI-Leben in den News via postOnce (Linieneroeffnung,
+// Stilllegung, Insolvenz, Jahres-Ranglistenbewegung)". All four are EDGE events
+// the simulation already reaches - a project's last stage, the review that
+// closes a line, the winding-up of 14.2, the year boundary - so none of them
+// needs a clock of its own and none of them is filtered by "does the player
+// have a station here": a competitor's line is news wherever it is, and a
+// player who cannot see the opposition is playing alone.
+//
+// `postOnce` rather than `post` for all four, per the milestone's own sentence.
+// It guards the one collapse that can happen here: two competitors doing the
+// same thing at the same place on the same day is one event as far as the log
+// is concerned, and that is the correct reading of it.
+
+/** A competitor that has just opened and crewed a line (section 15, step 2). */
+export function reportAiLineOpened(
+  world: World,
+  companyId: number,
+  from: Station,
+  to: Station,
+  vehicles: number,
+): void {
+  world.news.postOnce({
+    tick: world.tick,
+    category: NewsCategory.Network,
+    severity: NewsSeverity.Info,
+    messageKey: 'news.aiLineOpened',
+    params: {
+      company: world.companyOf(companyId).name,
+      from: from.name,
+      to: to.name,
+      vehicles,
+    },
+    tileIndex: world.map.tileIndex(from.x, from.y),
+  });
+}
+
+/**
+ * A competitor that has just shut a line down (section 15, step 3).
+ *
+ * Reported for the DELIBERATE closure - the review that judged the line not
+ * worth its upkeep and sold the fleet - and not for the housekeeping branches
+ * beside it, where the line was already gone or had no vehicles left. Those are
+ * the AI tidying its own memory, which is not an event in the world.
+ */
+export function reportAiLineClosed(world: World, companyId: number, at: Station): void {
+  world.news.postOnce({
+    tick: world.tick,
+    category: NewsCategory.Network,
+    severity: NewsSeverity.Info,
+    messageKey: 'news.aiLineClosed',
+    params: { company: world.companyOf(companyId).name, place: at.name },
+    tileIndex: world.map.tileIndex(at.x, at.y),
+  });
+}
+
+/**
+ * A competitor wound up (14.2). Posted where the winding-up HAPPENS rather than
+ * from the daily pass, because `reportSolvency`'s daily `postOnce` reads the
+ * flag and would therefore announce whichever bankrupt company the walk met
+ * first - for ever, and never the others.
+ */
+export function reportAiBankrupt(world: World, companyId: number): void {
+  world.news.postOnce({
+    tick: world.tick,
+    category: NewsCategory.Finance,
+    severity: NewsSeverity.Info,
+    messageKey: 'news.aiBankrupt',
+    params: { company: world.companyOf(companyId).name },
+    tileIndex: -1,
+  });
+}
+
+/**
+ * Where the player stands in the league after the year that has just closed,
+ * and only when that answer MOVED (SPEC2 M24's "Jahres-Ranglistenbewegung").
+ *
+ * It invents no state, which is the whole reason it can exist in a milestone
+ * with no save bump: `closeFinancialYear` has appended this year's company value
+ * to every company's `valueHistory` by the time this runs (D-180's yearly
+ * archive, saved and hashed since M6), so last year's ranking is the same list
+ * read one entry further back. A remembered "rank last year" would have been a
+ * historical input to a sim decision and therefore save state (Z4).
+ *
+ * A rank that did not move is not news: a hundred years of "still second" is
+ * how a log becomes something nobody opens (the argument `postOnce` itself is
+ * written for).
+ */
+export function reportLeagueMovement(world: World): void {
+  const companies = world.companies;
+  if (companies.length < 2) return;
+  // Both years have to exist for every company, or the two rankings would be
+  // taken over different fields. The first year of a game has one entry.
+  for (const company of companies) {
+    if (company.valueHistory.length < 2) return;
+  }
+
+  const now = leagueRankOf(world, 1);
+  const before = leagueRankOf(world, 2);
+  if (now === before) return;
+
+  world.news.postOnce({
+    tick: world.tick,
+    category: NewsCategory.Finance,
+    severity: now < before ? NewsSeverity.Info : NewsSeverity.Warning,
+    messageKey: 'news.leagueMove',
+    params: {
+      rank: now,
+      previous: before,
+      leader: leagueLeaderName(world),
+      year: world.date.year - 1,
+    },
+    tileIndex: -1,
+  });
+}
+
+/**
+ * The player's place in the league `back` entries from the end of the value
+ * archive, counting from 1. Ties break on the company id, which is a total
+ * order (law #3): two companies worth the same must not swap places because a
+ * walk happened to reach them in a different order.
+ */
+function leagueRankOf(world: World, back: number): number {
+  const mine = world.playerCompany.valueHistory;
+  const value = mine[mine.length - back]!;
+  let rank = 1;
+  for (const company of world.companies) {
+    if (company.id === world.playerCompanyId) continue;
+    const theirs = company.valueHistory[company.valueHistory.length - back]!;
+    if (theirs > value || (theirs === value && company.id < world.playerCompanyId)) rank++;
+  }
+  return rank;
+}
+
+/** Who is top of the league on the year that has just closed. */
+function leagueLeaderName(world: World): string {
+  let best = world.companies[0]!;
+  for (const company of world.companies) {
+    const theirs = company.valueHistory[company.valueHistory.length - 1]!;
+    const held = best.valueHistory[best.valueHistory.length - 1]!;
+    if (theirs > held || (theirs === held && company.id < best.id)) best = company;
+  }
+  return best.name;
+}
+
 /** A vehicle replaced by auto-renewal (11.3). */
 export function reportRenewal(world: World, id: number, replaced: number): void {
   world.news.post({

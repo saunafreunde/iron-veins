@@ -1212,3 +1212,22 @@ body {
 .score-term__detail {
   grid-column: 2 / 4;
 }
+
+/*
+ * The earned-achievement cards of SPEC2 M24. The notification stack's own
+ * shape, moved to the bottom right: the two can be on screen at the same
+ * moment - an achievement is usually earned BY the news entry that is being
+ * toasted - and two stacks in one corner would cover each other.
+ */
+.toaststack--achievements {
+  top: auto;
+  bottom: 96px;
+  z-index: 9;
+}
+
+/* One achievement in the panel's list: earned rows read normally, unearned
+   ones are dimmed rather than hidden - a locked list nobody can read is a
+   list that tells the player nothing to play towards. */
+.achievement--locked {
+  opacity: 0.55;
+}

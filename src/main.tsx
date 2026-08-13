@@ -9,6 +9,7 @@ import { recordSaveWritten, scanStoredCrashBundles } from './ui/crashReporter';
 import { captureThumbnail } from './ui/Minimap';
 import { refreshReplays, storeReplay } from './ui/replays';
 import { refreshSaves, storeSave } from './ui/saves';
+import { loadProfile } from './ui/profile';
 import { loadSettings } from './ui/settings';
 import { SimClient } from './ui/SimClient';
 import { useSimStore } from './ui/store';
@@ -75,7 +76,12 @@ client.start({
 // anything is drawn rather than a frame after it. Then the save shelf, and
 // then the crash shelf: a bundle a dead worker left behind is offered on the
 // start AFTER the crash (SPEC2 M10, D-139).
+// Then the profile of SPEC2 M24: the campaign progress, the scenario medals
+// and the achievements the player has collected across every game. It is read
+// before the writer is armed and can never fail loudly - a profile that will
+// not parse costs the player their medals and never their game.
 void loadSettings()
+  .then(() => loadProfile())
   .then(() => refreshSaves())
   .then(() => refreshReplays())
   .then(() => scanStoredCrashBundles());

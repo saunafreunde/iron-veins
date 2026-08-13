@@ -232,8 +232,33 @@ const DIST = join(REPO_ROOT, 'dist');
  * screen, and no `src/sim` decode chain reaches the entry graph through it.
  *
  * 1,058,000 is the new measurement plus ~0.9 %.
+ *
+ * **Raised again for SPEC2 M24 bundle 4** (`profile.json`, the achievements, the
+ * AI's personality and its news). **1,048,431 B -> 1,069,575 B, +21,144 B**,
+ * against 9,569 B of headroom - the second forced raise in a row, and the
+ * biggest single step of the chain. Measured in two parts by the file's own
+ * method:
+ *
+ *  - **+11,093 B are the ninety-six i18n keys in two languages** (deleting
+ *    exactly the `achievement.*`, `ui.achievements.*`, `ui.menu.achievements`
+ *    and four `news.ai*`/`news.leagueMove` lines from both catalogues rebuilds
+ *    at 1,058,482 B). Forty-one achievements carry a title AND the condition
+ *    that earns them, which is eighty-two keys before anything else: an
+ *    achievement whose condition is hidden is a riddle, and this game's posture
+ *    on riddles is the news log's.
+ *  - **+10,051 B are the mechanism**: the forty-one-entry table and the pure
+ *    evaluator (`ui/achievements.ts`), the watcher and the panel, the two
+ *    platform modules that read and write `profile.json`, the three store fields
+ *    with their four actions, and the personality line in `CompanyList`.
+ *
+ * **Nothing of the profile reaches `src/sim` and nothing of it is lazy**: the
+ * table is what the watcher consults on every news delta, so it belongs in the
+ * entry chunk; `@tauri-apps/plugin-fs` stays in its own chunk because
+ * `platform/Profile.ts` imports it dynamically, exactly as `Storage.ts` does.
+ *
+ * 1,080,000 is the new measurement plus ~1.0 %.
  */
-const MAIN_CHUNK_BUDGET_BYTES = 1_058_000;
+const MAIN_CHUNK_BUDGET_BYTES = 1_080_000;
 
 /** The verdict, separated from the measuring so a planted size can be judged. */
 interface BudgetVerdict {

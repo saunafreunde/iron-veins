@@ -42,6 +42,12 @@ export function MainMenu({
         <button type="button" className="button" onClick={() => onSelect('campaign')}>
           {t('ui.menu.campaign')}
         </button>
+        {/* What the player has collected across every game (SPEC2 M24): the
+            achievements, the campaign stages and the scenario medals that live
+            in `profile.json` rather than in any world. */}
+        <button type="button" className="button" onClick={() => onSelect('achievements')}>
+          {t('ui.menu.achievements')}
+        </button>
         <button type="button" className="button" onClick={() => onSelect('saves')}>
           {t('ui.menu.saveLoad')}
         </button>

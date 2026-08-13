@@ -4157,3 +4157,98 @@ protocol field, no RNG draw, no atlas cell; all three pins re-run and unmoved
   in two languages, +5,100 B the interface. **The twelve definitions cost the
   entry chunk nothing** - `campaign-*.js` is a 21,360 B chunk the screen imports
   dynamically. Budget 1,048,000 -> **1,058,000 B** with the measurement beside it.
+
+## M24 bundle 4 - the player's own file, and the opposition in the news (D-255)
+
+**The milestone's last bundle, and the three MUSS points D-254 left open.** No
+save bump (**v34 stands**), no migration, no snapshot byte, no RNG draw, no
+atlas cell. One protocol field on the MARKER channel and four new news lines -
+and **all three pins stand unmoved**, verified by running: canonical
+`b7e632a7124e67ce`, corpus `a00868b9911f12d6`, soak `64fec78d6bf0cd5e` at 35
+commands and 16 checkpoints. `npm run test:balance:full` green at 136 with every
+band on the euro (aiGame sweep 7,293,303 EUR).
+
+- **`profile.json` is its own chain, because it is not world state.** A save is
+  a WORLD, a profile is a PLAYER: campaign progress, scenario medals,
+  achievements. It lives in `src/platform` beside `Storage.ts` with its own
+  `PROFILE_VERSION`, its own migration chain and its own file, and
+  `SAVE_VERSION` never hears about it. The reason is law #3 and not tidiness - a
+  simulation that read a player's medals would build two different worlds from
+  one seed for two players - and a source walk over `src/sim` plus a second one
+  over `save/format.ts` is what holds it. `profileData.ts` is pure (shape,
+  version, chain, reader) so every rule is driven without a filesystem;
+  `Profile.ts` is the input and output. **The chain has one link and it is a
+  real one**: version 1 is the first VERSIONED profile, so a file with no
+  `version` is version 0 by definition, and the test demands one step per
+  version below the current.
+- **Three rules, all of them so that a profile can never stop the game
+  starting** (all tested end to end): anything that is not a profile reads as an
+  empty one - syntax error, number, array, `null` - and a rotten block costs
+  only itself; a profile from a NEWER build is read as far as it is
+  recognisable and then FROZEN, with `writeProfile` answering `false` and the
+  file left byte for byte as it was, including the block this build cannot read;
+  and a medal outside the four bands is dropped rather than clamped
+  (`normaliseSettings`' own posture on a volume of two).
+- **The writer is a SUBSCRIPTION, not a call site.** A setting has one door; the
+  profile is moved by three things in three components. `ui/profile.ts`
+  subscribes to the three store fields - one writer, nothing to forget, and a
+  booking from a place nobody has thought of yet is still persisted. The
+  comparison is by identity, which is why `unlockAchievements` returns the
+  identical object when it changes nothing.
+- **Forty-one achievements, out of exactly two outputs** (35 news, 6 goals), as
+  data. Every news key an achievement names is checked against the `'news.*'`
+  literals under `src/sim`, in both directions (the D-118/D-169 shape) - an
+  achievement keyed on a message nobody posts is one nobody can earn and would
+  look exactly like a working one. **Zero simulation involvement,
+  grep-provable**: `achievements`, `ACHIEVEMENT` and `Achievement` do not occur
+  under `src/sim`; the lower-case singular is deliberately NOT banned, because
+  three files under `src/sim/goals` use it as ordinary English about a GOAL.
+  **An achievement is earned WITHIN one game** - the tally is seeded from the
+  log the world was loaded with and extended by the delta, a new world starts it
+  again, and what survives is the earned id. Every threshold is at most ten
+  against a news ring of two hundred. The watcher counts the FIRST sync where
+  the notification host skips it: a loaded backlog is history for a toast, but a
+  save with twelve industry openings in its log has earned the achievement, and
+  refusing it would punish the player for saving.
+- **The personality that has been translated since M8 and read by nothing.**
+  `PERSONALITY_KEYS` was exported and in both catalogues since M8 and **no file
+  ever used the identifier** - a player could watch three companies behave
+  differently for a quarter century and never learn the difference was a stated
+  one. `CompanyMarker.personality` (-1 for the player) carries it and the
+  competitor list shows it; the worker LOOKS IT UP in `AiState` rather than
+  copying it onto `CompanyState`, so there is one copy of the fact and the
+  evaluator owns it.
+- **Four news lines for the competitors' life**, all through `postOnce` and all
+  at the edge where the event really happens: the line opened in the project's
+  last stage, the closure in `closeDeadLine`'s DELIBERATE branch only (the two
+  housekeeping branches beside it are the AI tidying its own memory, and the
+  place is read BEFORE the line is deleted), the winding-up inside
+  `reviewBankruptcy` (a daily `postOnce` over a flag would announce the first
+  bankrupt company for ever and none of the others), and the year-end league.
+  **The league line invents no state**, which is what lets it exist in a
+  milestone with no bump: `closeFinancialYear` has already appended this year's
+  value to every company's archive, so last year's ranking is the same list read
+  one entry earlier (D-180). A remembered rank would have been Z4 save state.
+  Ties break on the company id.
+- **The news log is hashed world state, so a pin move was expected - and there
+  was none.** Measured rather than taken as luck: the canonical and corpus
+  worlds have no competitors at all, and on the soak's seed 4711 under the
+  D-229 profit floor no competitor ever opens a line, none is wound up and the
+  standings never cross (the 35 recorded commands are the whole evidence).
+  **Said plainly: on the pinned worlds the four lines are dead wood**, and what
+  they really write is in `tests/unit/aiNews.spec.ts`, where a line is really
+  opened, really closed again and a company really wound up over the real paths.
+- Measured: tick **p50 1.580 / 1.420 / 1.568** and **p99 3.438 / 2.942 /
+  3.101 ms** over three runs against the M10 baseline 1.45 / 3.26 - two of the
+  three p99 below it, the third 0.18 ms above and well inside the documented
+  +-0.7 ms noise. The reference fleet has no competitors, so the AI and news
+  paths are inert on it, and the row says so. **Main chunk 1,048,431 ->
+  1,069,575 B, budget 1,058,000 -> 1,080,000 B** with the split measured by
+  deletion: +11,093 B the ninety-six i18n keys in two languages (41
+  achievements carry a title AND the condition that earns them), +10,051 B the
+  mechanism.
+- **What M24 still owes, named**: the campaign medal run verified through an
+  M16 replay (D-196 proved medal -> hash -> replay end to end and a stage is an
+  ordinary scenario, but no run over one of the twelve maps was recorded), and
+  the "Hard > Normal at the same seed" ordering of D-252/D-253, which this
+  bundle did not touch.
