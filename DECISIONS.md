@@ -57,7 +57,7 @@ no entry below. A number may appear under several topics.
   D-247, D-248, D-249, D-250, D-252, D-253, D-254, D-256, D-257
 - **Vehicles & fleet:** D-043, D-044, D-045, D-068, D-076, D-089, D-093,
   D-096, D-142, D-143, D-145, D-146, D-155, D-157, D-171, D-174, D-181, D-185,
-  D-201, D-207, D-245, D-246
+  D-201, D-207, D-245, D-246, D-259
 - **Water & air:** D-094, D-095, D-096, D-097, D-098, D-099, D-237
 - **Competitors, AI & tenders:** D-107, D-108, D-109, D-115, D-116, D-121,
   D-122, D-147, D-152, D-153, D-154, D-155, D-156, D-158, D-216, D-218,
@@ -66,18 +66,18 @@ no entry below. A number may appear under several topics.
 - **Rendering & art:** D-013, D-014, D-033, D-035, D-112, D-117, D-125, D-127,
   D-136, D-140, D-160, D-161, D-162, D-163, D-164, D-165, D-166, D-169, D-170,
   D-171, D-172, D-173, D-174, D-175, D-177, D-179, D-186, D-202, D-205, D-206,
-  D-208, D-209, D-212, D-214, D-217, D-241, D-246, D-248
+  D-208, D-209, D-212, D-214, D-217, D-241, D-246, D-248, D-259
 - **UI & input:** D-011, D-013, D-015, D-035, D-110, D-113, D-114, D-119,
   D-126, D-148, D-165, D-166, D-177, D-179, D-180, D-181, D-182, D-183, D-184,
   D-186, D-187, D-189, D-191, D-192, D-193, D-194, D-195, D-196, D-200, D-202,
-  D-210, D-241, D-242, D-247, D-254, D-255, D-258
+  D-210, D-241, D-242, D-247, D-254, D-255, D-258, D-259
 - **Performance & measurement:** D-002, D-120, D-135, D-136, D-161, D-162,
   D-163, D-164, D-167, D-170, D-171, D-172, D-173, D-174, D-176, D-177, D-184,
   D-185, D-186, D-187, D-191, D-192, D-193, D-196, D-200, D-201, D-202, D-205,
   D-206, D-209, D-214, D-231, D-234, D-235, D-241, D-242, D-247, D-248
 - **Platform, tooling & build:** D-012, D-014, D-015, D-016, D-017, D-029,
   D-030, D-031, D-160, D-168, D-169, D-170, D-172, D-175, D-192, D-206, D-208,
-  D-227, D-242, D-255, D-257
+  D-227, D-242, D-255, D-257, D-259
 - **Crash safety:** D-132, D-139, D-190
 - **Testing method & fixtures:** D-010, D-038, D-072, D-074, D-084, D-133,
   D-167, D-183, D-186, D-188, D-189, D-190, D-191, D-192, D-193, D-194,
@@ -85,7 +85,7 @@ no entry below. A number may appear under several topics.
   D-205, D-207, D-206, D-208, D-209, D-210, D-212, D-213, D-215, D-216,
   D-217, D-219, D-220, D-221, D-222, D-228, D-229, D-230, D-231, D-233,
   D-234, D-235, D-236, D-241, D-242, D-248, D-249, D-250, D-251, D-252,
-  D-253, D-255, D-256, D-257, D-258
+  D-253, D-255, D-256, D-257, D-258, D-259
 - **Process & specification:** D-070, D-123, D-129, D-133, D-138, D-140,
   D-185, D-191, D-197, D-198, D-199, D-203, D-204, D-205, D-206, D-215,
   D-222, D-225, D-226, D-227, D-228, D-229, D-235, D-252, D-253, D-256,
@@ -17263,3 +17263,242 @@ adds two rows to the D-114 table but does not make it editable), the web demo
 channel (E-13), the release automation, and the multiplayer groundwork of E-16
 with its protocol bump. Undo of a station build is named above as the next
 bundle's work.
+
+### D-259 The sound identity: a fanfare per traction class, a panner with a distance model, and one whistle for ten departures
+
+**SPEC.md 18 has been half delivered since M9 and the half that was missing is
+the half a player would notice.** The engine synthesised everything, injected
+its context and kept twelve loops - and every locomotive in the game left its
+platform in silence, every level crossing was mute, every station sounded like
+whatever happened to be driving past it, the "PannerNode an der
+Bildschirmposition" was a `StereoPannerNode` with a hand-rolled gain, and there
+was no compressor between sixteen simultaneous voices and the speakers. This
+bundle is SPEC2 M25's second MUSS point.
+
+**No save bump and nothing else either**: `SAVE_VERSION` stays **34**, no
+migration edit, zero hashed bytes, zero snapshot bytes, zero protocol fields,
+zero RNG draws, zero atlas cells, zero i18n lines. Not one file under
+`src/sim` changed, which is the strongest statement this entry can make about
+Z1: sound is pixels, and the simulation still does not know it exists. All
+three pins stand where D-258 left them - canonical `b7e632a7124e67ce`, corpus
+`a00868b9911f12d6`, soak `64fec78d6bf0cd5e` at 35 commands.
+
+#### 1. What a thing sounds like is DATA, and it lives beside the engine that plays it
+
+`src/audio/soundscape.ts` is the whole identity: five departure signals, a
+crossing bell, six ambience beds, the climate tilt, the panner geometry, the
+two debounce gates and the chord cycle of the pad. Nothing in it touches
+WebAudio; `AudioEngine.ts` is the only file in the project that builds a node.
+
+That split is what makes the milestone's own acceptance sentence - "jede
+Antriebsklasse eine eigene synthetisierte Abfahrtsfanfare" - a thing a test can
+READ rather than a thing somebody has to listen to: the five fundamentals of
+`DEPARTURE_SIGNALS` are asserted pairwise distinct, so a copied row is a red
+build. It is D-183's device ("the registry is the enumeration") applied to
+sound.
+
+**The steam whistle is SPEC.md 18's own sentence read literally** -
+"Dampfpfeife (Saegezahn + Rauschen, Huellkurve)" - and the test checks all
+three against the graph: the sawtooth oscillators' frequencies ARE the row's
+partials, there is exactly one noise source through a bandpass beside them, and
+one envelope over both. The four other classes are the same machine with the
+noise turned down and the partials moved, because a diesel horn is not a
+whistle at a different pitch. A battery vehicle - which has no engine to be
+heard over - is a single soft chime with `noiseShare` an exact zero, and the
+test asserts that its graph therefore has no buffer source at all.
+
+**Where the constants live, and why it is not `src/sim/constants.ts`.** That
+file's own first sentence is "every magic number of the SIMULATION". A whistle
+frequency touches neither money nor physics, so under Z1 it is on the pixel
+side of the border, and the precedent is every render module that already
+carries its own annotated table (`particles.ts`'s `PARTICLE_CAP` since D-174,
+`dayNight.ts`'s curve since D-127, `interpolation.ts`'s teleport threshold).
+Putting a hertz value in the simulation's constant table would make it look
+like world state, which is the confusion Z1 exists to prevent. Every constant
+in `soundscape.ts` still carries its unit and its origin.
+
+#### 2. A departure is a transition, and the debounce is the design rather than a safety net
+
+The engine reads its own events out of two consecutive reports of the same
+list it already gets: a departure is `VehicleState` moving from `Stopped`,
+`Loading`, `WaitingForCargo`, `InDepot` or `WaitingForSlot` into `Driving`.
+Nothing new travels from the simulation - no snapshot byte, no marker field, no
+message - which is what keeps SPEC.md 18 a render-side subsystem. The five
+literals are pinned against the real `VehicleState` by the test, the way
+`interpolation.spec.ts` has pinned its own copies since M12: importing
+`VehicleStore` for five integers would drag the store, the catalogue and the
+consist arithmetic into the entry chunk, which is D-191's measured trap.
+
+**`WaitingForPath` is deliberately not on that list.** A train held at a red
+restarts on open line several times a journey (D-060), and calling that a
+departure would put a whistle on every block boundary - the chorus the debounce
+exists to defeat, arriving through the front door. A departure in this game is
+leaving a PLATFORM or a shed.
+
+**SPEC2 M25 names the failure by name ("der 10-Zuege-Klaxon-Chor") and it is
+the NORMAL case in this game, not an unlikely one**: one takt slot releasing
+its trains together is what a working timetable looks like (D-149). So
+`EventGate` has two rules and both are needed - a WINDOW (0.9 s), which is what
+turns ten simultaneous departures into one whistle because the second asks zero
+seconds after the first, and a per-key COOLDOWN (20 s), which is what stops a
+single vehicle chirping every time it restarts and which the window alone would
+allow as long as it was slow about it. The crossing bell is the same class with
+its own numbers, keyed on the TILE rather than on the vehicle, so a level
+crossing rings once for the train and not once per train.
+
+**The gate's clock is `AudioContext.currentTime`**, not a wall clock: the gate
+is then on the same clock as the sounds it is gating, and a headless test
+simply advances it. **Falsified before it was kept**: with both windows set to
+zero the ten-departure test reads `expected 10 to be 1` and the window test
+`expected 4 to be 3`; both were watched red and reverted.
+
+#### 3. The panner is geometry now, not a balance knob
+
+`StereoPannerNode` knows only left and right, so M9 faked the falloff with a
+gain multiplied by a screen distance - which meant a lorry in the middle of the
+screen and one about to leave it were the same sound at a different balance.
+Every sounding node is a `PannerNode` now: the camera is the listener, the
+screen is a plane one `refDistance` in front of it, and a vehicle's own
+position on that plane is the whole answer. The inverse distance model does the
+rest, so "Lautstaerke faellt mit Zoom-Distanz" is arithmetic the browser
+performs rather than a formula this project maintains.
+
+The numbers are chosen against each other and the entry states what they buy:
+half the screen is 2 units against a plane depth of 1, so the centre of the
+screen is exactly the reference distance (gain 1), an edge is 2.24 units (0.45)
+and the far corner 3 (0.33). Both axes are **clamped**, because the sprite pool
+draws a margin and an input past the edge is legitimate - without the clamp a
+vehicle about to come back into view would already be inaudible.
+`pannerGainAt` exists purely so the test can state "behaves at the map edges"
+as a number - centre 1, monotone falling to the corner, never zero, never
+NaN, and equal to the corner beyond `maxDistance` - instead of asserting that a
+field was assigned.
+
+#### 4. The compressor sits after the mixer, because it has to see the sum
+
+Twelve vehicle loops, four ambience beds and a departure can sum past full
+scale, and what a browser does then is CLIP - a crack that has nothing to do
+with any of the sounds that caused it. `channels -> master -> compressor ->
+destination`: one per channel would duck the effects against the ambience
+instead of catching the total, which is the ordering the test asserts by
+reading what the compressor is connected to.
+
+#### 5. Station ambience: the renderer counts, the audio decides
+
+A bed is zoned filtered noise with an LFO on its own gain, four at a time,
+nearest first. Which of the six zones a station is in is decided by
+`ambienceZoneOf` from a census of the 13.1 zoning around it, with a quay and a
+runway OVERRULING the count - a container terminal in an industrial estate is a
+harbour to the ear, and an airfield is the loudest thing for a mile whatever is
+beside it.
+
+**The renderer hands over the CENSUS and never the zone**, and that is a
+layering decision rather than a detail: `src/render` owns the map layers, which
+the audio module must never read, and `src/audio` owns what a place should
+sound like. So there is no import from `src/render` to `src/audio` at all - the
+interface is the only place that knows both, exactly as it already was for the
+vehicle voices.
+
+**The climate tilt leaves temperate an exact identity in both columns**, which
+is this project's own convention for a new axis over an existing table (D-246's
+climate row, D-248's gable era, D-201's clear sky). **The hour is M13's own day
+curve read straight**: `emissiveIntensity` of the same interpolated phase the
+tint reads (D-172), so the ambience gets quiet exactly as fast as the windows
+come on, out of ONE source of truth rather than a second clock that would drift
+against the picture. It is deliberately NOT gated on the day/night SETTING - a
+player who turned the tint off did not turn the night off - and it is a FALL
+and never a switch (`AMBIENCE_NIGHT_QUIET_SHARE` = 0.65), because a works runs
+its shift at three in the morning.
+
+The census is cached per station and cleared when the station list is replaced,
+which is once a game day. Paying 121 tile reads per station eight times a
+second would be D-205's measured mistake (a per-tile cost taken inside a
+per-frame loop), and a bed that learns about a new row of houses one game day
+late is a bed nobody can tell from the right one.
+
+#### 6. A defect found on the way: the electric branch had never once been reached
+
+`MapView.powerOf` answered `PowerCode.Steam` for every train and `Diesel` for
+everything else, with a comment claiming trains are the only thing that can be
+electric. So the engine's electric branch - a frequency ramp tied to speed,
+written in M9 and the one sound in the game that is genuinely a function of a
+state variable - had never run in a real game, and a 2020 multiple unit hissed
+like a Pacific.
+
+The catalogue id has ridden the MARKER channel since M13 (`setFleet` records it
+per vehicle for the consist art), so the fix is a lookup and not a protocol
+field - Fehlerkatalog 37's rule kept. The kind-based guess stays as the
+fallback for the case where the lookup genuinely cannot answer: a COMPETITOR's
+vehicle is not in the player's fleet markers, so its spec id is -1.
+
+#### 7. The music was timeboxed and it degraded to a pad, which the clause allows by name
+
+SPEC2 M25: "generative Musik timeboxed - Abnahme sind die Event-Sounds, Musik
+darf wuerdevoll zu Ambience degradieren (Juroren-Veto gegen Musik als Gate)".
+What shipped is three triangle voices over a four-chord cycle in A minor,
+twelve seconds a chord with a six-second crossfade, scheduled AHEAD on the
+audio clock so a 120 ms polling timer does not make it stutter. No composition
+was attempted and none is claimed.
+
+**It builds nothing at all while the Music slider is at zero**, which is where
+SPEC.md 18 ships it and where it stays unless a player moves it - so the
+default game pays not one oscillator for it, and the test asserts that by
+counting created nodes. SPEC.md 18's actual music promise is a documented
+folder for the player's own files, and that is unchanged.
+
+#### 8. The glob test the clause asks for, with no allowlist
+
+`repoAssets.spec.ts` already refused audio extensions inside a broader binary
+pattern - behind an allowlist that exists for the Tauri icons and the migration
+corpus. SPEC2 M25 asks for the audio case by name ("ein Repo-Glob keine
+Audiodatei findet"), so it is now its own assertion over sixteen audio
+extensions **with no allowlist at all**: there is no sound in this game that is
+not synthesised at run time, and there never may be one. The general guard
+would have gone green on a repository with an mp3 in it the day somebody
+widened `ALLOWED_PREFIXES` for an unrelated reason.
+
+#### 9. The bundle budget went DOWN, and that is the D-192 device rather than luck
+
+The first build of this bundle measured **1,081,891 B against the 1,080,000 B
+budget - 1,891 B over**, which is exactly what that test is for. The growth was
+genuine interface code and no `src/sim` decode chain, so a raise would have
+been admissible; it was not taken, because the engine is loaded on the first
+gesture anyway and therefore belongs in its own chunk.
+
+`audioBridge.ts` imports it dynamically now. The one thing that defeated that
+import was the `Cue` table - the bridge needs five numbers to decide which
+command deserves which noise, and taking them from `AudioEngine.ts` drags the
+whole synthesis in. `src/audio/cues.ts` is the import-free leaf that fixes it,
+which is `src/sim/save/version.ts`'s own pattern (D-192).
+
+Measured: main chunk 1,071,641 -> **1,070,428 B**, i.e. **1,213 B LESS than
+before this bundle**, with the whole audio identity in an 11,723 B chunk
+(gzip 3,930 B) that arrives after the player first touches the window. Budget
+unchanged at 1,080,000 B, headroom 9,572 B. The stated price is written in the
+file: a command executed in the few milliseconds between the gesture and the
+chunk arriving makes no sound - which is the silence the player had a moment
+earlier anyway.
+
+#### 10. Tick, pins and what is NOT covered by a test
+
+Nothing in this bundle is in the tick path: not one file under `src/sim`
+changed, the census is on the interface's 120 ms audio timer, and the engine
+runs on the main thread. So the M25 ledger row stays +0,00 ms **by
+construction** and this entry does not invent a number for it.
+
+**A human has to listen once.** No test in this repository can hear anything -
+what is asserted is the object graph and the tables - so the things only a
+player can confirm are that the five fanfares are TELLABLE APART by ear, that
+the ambience beds are not irritating over an hour, that the pad is inoffensive
+at a raised slider, and that the compressor is not audibly pumping. The graph
+says the right nodes exist with the right numbers on them; it cannot say the
+result is pleasant. The same holds for `audioBridge`'s own path: `main.tsx`
+arms it on the first gesture and no harness drives that, so somebody has to
+click once and hear a build.
+
+#### 11. What M25 still owes after this bundle
+
+Accessibility and i18n scaling (plural rules, OS locale detection, hatching in
+the colour-blind mode, reduced motion, roving focus, key rebinding), the web
+demo channel (E-13), the release automation, and the multiplayer groundwork of
+E-16 with its protocol bump. Undo of a station build stays where D-258 left it.

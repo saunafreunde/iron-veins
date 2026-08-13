@@ -1,5 +1,10 @@
 import { useEffect, useRef, type ReactElement } from 'react';
-import { MapView, type TileInfo, type VehicleAudioInput } from '../render/MapView';
+import {
+  MapView,
+  type StationAmbienceInput,
+  type TileInfo,
+  type VehicleAudioInput,
+} from '../render/MapView';
 import { COMPANY_COLORS } from '../shared/palette';
 import { CommandKind, type Command } from '../sim/commands/types';
 import { TileMap } from '../sim/map/TileMap';
@@ -30,6 +35,8 @@ const AUDIO_REFRESH_MS = 120;
 
 /** Reused between refreshes so a running game allocates nothing for sound. */
 const audioScratch: VehicleAudioInput[] = [];
+/** The same, for the station ambience beds of SPEC2 M25. */
+const ambienceScratch: StationAmbienceInput[] = [];
 
 /**
  * Which module a station tool places - the SPEC2 M14 catchment preview needs
@@ -527,8 +534,16 @@ export function MapCanvas({ client }: { readonly client: SimClient }): ReactElem
     const audioTimer = window.setInterval(() => {
       const engine = audioEngine();
       if (engine === null) return;
+      // The world's mood BEFORE the beds, or the first refresh after a load
+      // would play yesterday's hour: both are pure functions of published
+      // fields (D-202's climate, D-172's day curve), so this is Z1's pixel
+      // side throughout and the simulation is never asked.
+      engine.setWorldMood(view.audioClimate(), view.audioDayPhase());
       const written = view.vehicleAudioInputs(audioScratch);
       engine.setVehicles(audioScratch.slice(0, written));
+      const stations = view.stationAmbienceInputs(ambienceScratch);
+      engine.setStations(ambienceScratch.slice(0, stations));
+      engine.updateMusic();
     }, AUDIO_REFRESH_MS);
 
     return () => {

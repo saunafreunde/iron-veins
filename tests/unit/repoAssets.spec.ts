@@ -79,6 +79,23 @@ describe('no binary asset in the git index (E-14 glob test)', () => {
     }
   });
 
+  /**
+   * The audio half of the same clause, asserted on its own (SPEC2 M25).
+   *
+   * The Fertig-wenn asks for it by name - "ein Repo-Glob keine Audiodatei
+   * findet" - and the general guard above would go green on a repository with
+   * an mp3 in it the day somebody widened `ALLOWED_PREFIXES` for an unrelated
+   * reason. This one has no allowlist at all, because there is no sound in
+   * this game that is not synthesised at run time (`src/audio/soundscape.ts`
+   * is the whole sound library) and there never may be one.
+   */
+  it('finds no audio file anywhere in the index, with no exception', () => {
+    const audio = /\.(mp3|ogg|oga|opus|wav|flac|aac|m4a|aiff?|wma|mid|midi|mod|xm|it|s3m)$/i;
+    const tracked = gitLines('ls-files');
+    expect(tracked.length).toBeGreaterThan(0);
+    expect(tracked.filter((file) => audio.test(file))).toEqual([]);
+  });
+
   it('keeps the asset cache and the bake output ignored', () => {
     // check-ignore exits non-zero when a path is NOT ignored - both pipeline
     // directories must stay outside the index by construction, not by care.

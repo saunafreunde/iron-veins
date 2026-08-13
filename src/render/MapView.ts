@@ -26,6 +26,8 @@ import { signalKind } from '../sim/map/signals';
 import type { TileMap } from '../sim/map/TileMap';
 import { SLOPE_COUNT, Terrain } from '../sim/map/terrain';
 import { BlockIndex } from '../sim/signals/blocks';
+import { hasVehicleSpec, vehicleSpec } from '../sim/vehicles/catalog';
+import { PowerCode, powerCode } from '../sim/vehicles/spec';
 import {
   DrawLayer,
   drawOrder,
@@ -334,7 +336,37 @@ export interface VehicleAudioInput {
   id: number;
   power: number;
   panX: number;
+  panY: number;
   throttle: number;
+  distance: number;
+  /** A value of VehicleState: the departure fanfare is a transition in it. */
+  state: number;
+  /** Tile of the level crossing it is moving onto, or -1 (SPEC2 M25). */
+  crossingTile: number;
+}
+
+/**
+ * One station as the audio engine wants it; reused between refreshes.
+ *
+ * The renderer hands over the CENSUS and never the zone. Which of the six
+ * ambience zones those counts mean is a decision about sound and lives in
+ * `src/audio/soundscape.ts` with the beds it selects; the renderer's business
+ * is the map layers, which are the one thing the audio module must not read.
+ * That keeps `src/render` free of any import from `src/audio` - the two are
+ * peers, and the interface is the only place that knows both.
+ */
+export interface StationAmbienceInput {
+  id: number;
+  /** Zoned building tiles within the census square, by 13.1 zone. */
+  residential: number;
+  commercial: number;
+  industrial: number;
+  /** A berth among its modules (section 10). */
+  hasQuay: boolean;
+  /** Any of the three airport sizes among its modules. */
+  hasRunway: boolean;
+  panX: number;
+  panY: number;
   distance: number;
 }
 import {
@@ -625,6 +657,26 @@ const CATCHMENT_SEGMENTS = 48;
 const ROAD_DEPOT_KIND = 2;
 const RAIL_PLATFORM_KIND = 3;
 const RAIL_DEPOT_KIND = 4;
+/** ModuleKind.Quay and the three airport sizes (SPEC2 M25's station ambience). */
+const QUAY_KIND = 8;
+const AIRSTRIP_KIND = 10;
+const INTERNATIONAL_AIRPORT_KIND = 12;
+
+/** BuildingKind values of the 13.1 zoning, likewise duplicated. */
+const BUILDING_RESIDENTIAL_KIND = 1;
+const BUILDING_COMMERCIAL_KIND = 2;
+const BUILDING_INDUSTRIAL_KIND = 3;
+
+/**
+ * How far around a station's centre the ambience census looks. [tiles]
+ *
+ * Origin: `STATION_CATCHMENT_SCAN_RADIUS` is 12 and that is what a station
+ * really SERVES, but a bed describes what stands AROUND the platform rather
+ * than everything the catchment can reach. Five tiles is a small town's own
+ * built radius (D-216's `builtRadiusFor` at its low end), so a stop in a
+ * village hears the village and a stop on the edge of one hears the country.
+ */
+const AMBIENCE_CENSUS_RADIUS_TILES = 5;
 
 /** VehicleKind.Train, likewise. */
 const TRAIN_KIND = 0;
@@ -1111,6 +1163,20 @@ export class MapView {
   private followVehicleId: number | null = null;
 
   private stations: readonly StationMarker[] = [];
+  /**
+   * The ambience census per station id (SPEC2 M25), cleared whenever the
+   * station list is replaced - once a game day. Nothing else reads it.
+   */
+  private readonly stationCensus = new Map<
+    number,
+    {
+      residential: number;
+      commercial: number;
+      industrial: number;
+      hasQuay: boolean;
+      hasRunway: boolean;
+    }
+  >();
   /** Company colour, applied to stations and vehicles as a tint. */
   private companyTint = 0xf08020;
   /** Day/night modulation (section 16.3), a SETTING per D-110/D-127. */
@@ -1508,6 +1574,9 @@ export class MapView {
     // renamed or demolished station on the next frame.
     this.stationById.clear();
     for (const station of stations) this.stationById.set(station.id, station);
+    // The ambience census is a reading of the map AROUND these stations, so a
+    // fresh list is exactly when it stops being true (SPEC2 M25).
+    this.stationCensus.clear();
   }
 
   setCompanyColor(hex: number): void {
@@ -4892,24 +4961,38 @@ export class MapView {
       const base = i * SNAPSHOT_VEHICLE_STRIDE;
       const state = data[base + SnapshotVehicle.State]!;
       const progress = data[base + SnapshotVehicle.ProgressMilli]!;
-      const moving = data[base + SnapshotVehicle.Tile] !== data[base + SnapshotVehicle.NextTile];
+      const tile = data[base + SnapshotVehicle.Tile]!;
+      const nextTile = data[base + SnapshotVehicle.NextTile]!;
+      const moving = tile !== nextTile;
+      const vehicleId = this.vehicleIds[i] ?? 0;
 
       const entry = out[written] ?? {
         id: 0,
         power: 0,
         panX: 0,
+        panY: 0,
         throttle: 0,
         distance: 0,
+        state: 0,
+        crossingTile: -1,
       };
-      entry.id = this.vehicleIds[i] ?? 0;
-      entry.power = this.powerOf(data[base + SnapshotVehicle.Kind]!);
+      entry.id = vehicleId;
+      entry.power = this.powerOf(data[base + SnapshotVehicle.Kind]!, vehicleId);
       entry.panX = Math.max(-1, Math.min(1, dx / Math.max(1, halfWidth)));
+      entry.panY = Math.max(-1, Math.min(1, dy / Math.max(1, halfHeight)));
       // One throttle proxy for sound AND exhaust since M13 (particles.ts).
       entry.throttle = vehicleThrottle(moving, progress);
       entry.distance = Math.min(
         1,
         Math.sqrt(dx * dx + dy * dy) / Math.max(1, Math.hypot(halfWidth, halfHeight)),
       );
+      entry.state = state;
+      // A level crossing is a tile that carries road AND track - the same
+      // pair `TileMap` has held since M4, asked of the tile the vehicle is
+      // moving ONTO, so the bell rings on the approach rather than under the
+      // wheels. The simulation is not consulted: the crossing's own shutting
+      // is a claim the trains obey (D-185) and never a published field.
+      entry.crossingTile = moving && this.isLevelCrossing(nextTile) ? nextTile : -1;
       out[written] = entry;
       written++;
       if (state < 0) break;
@@ -4918,15 +5001,164 @@ export class MapView {
   }
 
   /**
-   * What a vehicle burns, guessed from what it is.
+   * What the station ambience needs: the nearest stations to the middle of
+   * the screen, each with the zone its surroundings put it in.
+   *
+   * The census is CACHED per station and recomputed only when the station
+   * list itself is replaced, which happens once a game day. A census is 121
+   * tiles and this method runs eight times a second; paying for it per
+   * refresh would be the D-205 mistake (a per-tile cost taken inside a
+   * per-frame loop), and a bed that learns about a new row of houses one game
+   * day late is a bed nobody can tell from the right one.
+   */
+  stationAmbienceInputs(out: StationAmbienceInput[]): number {
+    const map = this.map;
+    if (map === null || this.stations.length === 0) return 0;
+    const screenSize = this.app.screen;
+    if (screenSize === undefined) return 0;
+
+    const halfWidth = screenSize.width / 2;
+    const halfHeight = screenSize.height / 2;
+    let written = 0;
+
+    for (const station of this.stations) {
+      const world = tileToWorld(station.x, station.y, map.baseHeight(station.x, station.y));
+      const dx = (world.x - this.centreX) * this.zoom;
+      const dy = (world.y - this.centreY) * this.zoom;
+      const distance = Math.min(
+        1,
+        Math.sqrt(dx * dx + dy * dy) / Math.max(1, Math.hypot(halfWidth, halfHeight)),
+      );
+      // Off screen is out of earshot: a bed is what the place the camera is
+      // looking at sounds like, not an inventory of the network.
+      if (distance >= 1) continue;
+
+      const entry = out[written] ?? {
+        id: 0,
+        residential: 0,
+        commercial: 0,
+        industrial: 0,
+        hasQuay: false,
+        hasRunway: false,
+        panX: 0,
+        panY: 0,
+        distance: 0,
+      };
+      entry.id = station.id;
+      this.censusAround(map, station, entry);
+      entry.panX = Math.max(-1, Math.min(1, dx / Math.max(1, halfWidth)));
+      entry.panY = Math.max(-1, Math.min(1, dy / Math.max(1, halfHeight)));
+      entry.distance = distance;
+      out[written] = entry;
+      written++;
+    }
+    return written;
+  }
+
+  /**
+   * The day phase the ambience reads: M13's own `emissiveIntensity` of the
+   * same interpolated phase the tint uses (D-172), 0 in daylight and 1 at the
+   * darkest.
+   *
+   * Deliberately NOT gated on the day/night SETTING. That switch decides
+   * whether the picture is tinted; the hour of the game day is true either
+   * way, and a player who turned the tint off did not turn the night off.
+   */
+  audioDayPhase(): number {
+    const phase = this.interpolator.hasFrame
+      ? this.interpolator.phase(this.frameAlpha)
+      : (this.tickSource?.() ?? 0);
+    return emissiveIntensity(phase);
+  }
+
+  /** The world's climate, as the ambience beds need it (D-202). */
+  audioClimate(): MapClimate {
+    return this.climate;
+  }
+
+  /** Road bits and track bits on one tile: the level crossing of section 8.4. */
+  private isLevelCrossing(tile: number): boolean {
+    const map = this.map;
+    if (map === null || tile < 0 || tile >= map.roadBits.length) return false;
+    return map.roadBits[tile] !== 0 && map.trackBits[tile] !== 0;
+  }
+
+  /**
+   * What stands around a station: the 13.1 zoning the town growth writes,
+   * counted over a square, plus the two module families that overrule it.
+   *
+   * The layer is read in place, never written (law #1). The result is cached
+   * per station id and cleared by `setStations`, so the walk happens once a
+   * game day per station rather than eight times a second.
+   */
+  private censusAround(map: TileMap, station: StationMarker, out: StationAmbienceInput): void {
+    const cached = this.stationCensus.get(station.id);
+    if (cached !== undefined) {
+      out.residential = cached.residential;
+      out.commercial = cached.commercial;
+      out.industrial = cached.industrial;
+      out.hasQuay = cached.hasQuay;
+      out.hasRunway = cached.hasRunway;
+      return;
+    }
+
+    let residential = 0;
+    let commercial = 0;
+    let industrial = 0;
+    const r = AMBIENCE_CENSUS_RADIUS_TILES;
+    const minX = Math.max(0, station.x - r);
+    const maxX = Math.min(map.size - 1, station.x + r);
+    const minY = Math.max(0, station.y - r);
+    const maxY = Math.min(map.size - 1, station.y + r);
+    for (let y = minY; y <= maxY; y++) {
+      for (let x = minX; x <= maxX; x++) {
+        const kind = map.buildingKind[y * map.size + x]!;
+        if (kind === BUILDING_RESIDENTIAL_KIND) residential++;
+        else if (kind === BUILDING_COMMERCIAL_KIND) commercial++;
+        else if (kind === BUILDING_INDUSTRIAL_KIND) industrial++;
+      }
+    }
+
+    let hasQuay = false;
+    let hasRunway = false;
+    for (const module of station.modules) {
+      if (module.kind === QUAY_KIND) hasQuay = true;
+      if (module.kind >= AIRSTRIP_KIND && module.kind <= INTERNATIONAL_AIRPORT_KIND) {
+        hasRunway = true;
+      }
+    }
+
+    const census = { residential, commercial, industrial, hasQuay, hasRunway };
+    this.stationCensus.set(station.id, census);
+    out.residential = residential;
+    out.commercial = commercial;
+    out.industrial = industrial;
+    out.hasQuay = hasQuay;
+    out.hasRunway = hasRunway;
+  }
+
+  /**
+   * What a vehicle burns.
    *
    * The snapshot carries the kind, not the power source: a locomotive's fuel
    * is a catalogue fact that never changes, and sending it every tick to save
-   * one lookup would be the wrong trade. Trains are the only thing in the game
-   * that can be electric, so this is the whole of the guess.
+   * one lookup would be the wrong trade (Fehlerkatalog 37). It arrives on the
+   * MARKER channel instead - `setFleet` already records every vehicle's
+   * catalogue id - and the catalogue answers the rest.
+   *
+   * **Until SPEC2 M25 this was a guess and the guess was wrong**: it answered
+   * `PowerCode.Steam` for every train and `Diesel` for everything else, so the
+   * electric branch of the audio engine - written in M9 - had never once been
+   * reached in a running game, and a 2020 multiple unit hissed like a
+   * Pacific. The fallback stays for the case the lookup cannot answer: a
+   * COMPETITOR's vehicle is not in the player's fleet markers, so its spec id
+   * is -1, and the kind is then genuinely all that is known.
    */
-  private powerOf(kind: number): number {
-    return kind === TRAIN_KIND ? 0 : 1;
+  private powerOf(kind: number, vehicleId: number): number {
+    const specId =
+      vehicleId >= 0 && vehicleId < MAX_VEHICLES ? this.vehicleSpecIds[vehicleId]! : -1;
+    if (specId >= 0 && hasVehicleSpec(specId)) return powerCode(vehicleSpec(specId).power);
+    return kind === TRAIN_KIND ? PowerCode.Steam : PowerCode.Diesel;
   }
 
   /** Mark a vehicle as selected, or clear it. Driven by the store. */
