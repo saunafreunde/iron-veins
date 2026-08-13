@@ -1,5 +1,6 @@
-import { useState, type ReactElement } from 'react';
+import { useEffect, useState, type ReactElement } from 'react';
 import { LOCALES, t } from '../i18n';
+import { bindingFromEvent } from '../shared/keybindings';
 import {
   NOTIFICATION_CATEGORY_COUNT,
   NOTIFICATION_MODE_COUNT,
@@ -8,7 +9,15 @@ import {
   VOLUME_CHANNEL_KEYS,
 } from '../shared/settings';
 import { NEWS_CATEGORY_KEYS } from '../sim/news/log';
-import { KEY_BINDINGS } from './keymap';
+import {
+  defaultBindings,
+  displayBinding,
+  keyAction,
+  rebindAction,
+  resolveBindings,
+  KEY_ACTIONS,
+  type KeyActionId,
+} from './keymap';
 import { setNotificationMode, setVolume, updateSettings } from './settings';
 import { useSimStore } from './store';
 
@@ -30,6 +39,113 @@ const TABS: readonly { readonly id: Tab; readonly key: string }[] = [
   { id: 'access', key: 'ui.options.accessibility' },
   { id: 'controls', key: 'ui.options.controls' },
 ];
+
+/**
+ * The controls tab, and the one screen in the game that LISTENS for a key
+ * instead of acting on it (SPEC2 M25).
+ *
+ * Capturing is a mode with exactly one row in it: while a row is armed the
+ * whole window's keydown belongs to this panel, so a rebinding cannot fire the
+ * action it is about to replace. Escape cancels rather than binds - it is the
+ * one fixed binding (keymap.ts) and it is what a player presses when they
+ * change their mind.
+ *
+ * A conflict is REFUSED and named. The alternative - unbinding whatever sat
+ * there - would leave the player believing both keys still worked, which is
+ * Fehlerkatalog 30's "partial" mistake in another currency.
+ */
+function ControlsTab(): ReactElement {
+  const bindings = useSimStore((s) => s.settings.keyBindings);
+  const [capturing, setCapturing] = useState<KeyActionId | null>(null);
+  const [conflict, setConflict] = useState<string | null>(null);
+
+  const resolved = resolveBindings(bindings);
+
+  useEffect(() => {
+    if (capturing === null) return;
+    const onKeyDown = (event: KeyboardEvent): void => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.key === 'Escape') {
+        setCapturing(null);
+        return;
+      }
+      const binding = bindingFromEvent(event);
+      // A bare modifier press is not an attempt at anything - stay armed.
+      if (binding === null) return;
+
+      const result = rebindAction(bindings, capturing, binding);
+      if (result.ok) {
+        updateSettings({ keyBindings: result.overrides });
+        setConflict(null);
+        setCapturing(null);
+        return;
+      }
+      setConflict(
+        result.reason === 'conflict'
+          ? t('ui.options.rebindConflict', {
+              action: t(keyAction(result.conflictWith)?.descriptionKey ?? ''),
+            })
+          : t('ui.options.rebindFixed'),
+      );
+      setCapturing(null);
+    };
+    // Capture phase: the application's own handler is on the window too, and
+    // the whole point is that it must not see this press.
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
+  }, [capturing, bindings]);
+
+  return (
+    <>
+      <p className="panel__hint">{t('ui.options.controlsHint')}</p>
+      {conflict !== null && (
+        <p className="panel__hint panel__hint--warning" role="alert">
+          {conflict}
+        </p>
+      )}
+      <ul className="keylist">
+        {KEY_ACTIONS.map((action) => (
+          <li key={action.id}>
+            {action.fixed === true ? (
+              <kbd className="key">{displayBinding(resolved[action.id])}</kbd>
+            ) : (
+              <button
+                type="button"
+                className={capturing === action.id ? 'key key--capturing' : 'key'}
+                aria-label={`${t(action.descriptionKey)} — ${t('ui.options.rebind')}`}
+                onClick={() => {
+                  setConflict(null);
+                  setCapturing(action.id);
+                }}
+              >
+                {capturing === action.id
+                  ? t('ui.options.rebindPress')
+                  : resolved[action.id] === undefined
+                    ? t('ui.options.rebindUnbound')
+                    : displayBinding(resolved[action.id])}
+              </button>
+            )}
+            <span>{t(action.descriptionKey)}</span>
+          </li>
+        ))}
+      </ul>
+      <div className="button-row">
+        <button
+          type="button"
+          className="button"
+          onClick={() => {
+            setConflict(null);
+            setCapturing(null);
+            updateSettings({ keyBindings: defaultBindings() });
+          }}
+        >
+          {t('ui.options.rebindReset')}
+        </button>
+      </div>
+    </>
+  );
+}
 
 export function OptionsPanel({ onClose }: { readonly onClose: () => void }): ReactElement {
   useSimStore((s) => s.locale);
@@ -171,6 +287,19 @@ export function OptionsPanel({ onClose }: { readonly onClose: () => void }): Rea
           </label>
           <p className="panel__hint">{t('ui.options.colorBlindHint')}</p>
 
+          {/* Reduced motion (SPEC2 M25). Beside the colour-blind switch
+              because it answers the same kind of question: what the world
+              looks like, never what it does. */}
+          <label className="panel__hint">
+            <input
+              type="checkbox"
+              checked={settings.reducedMotion}
+              onChange={(event) => updateSettings({ reducedMotion: event.target.checked })}
+            />{' '}
+            {t('ui.options.reducedMotion')}
+          </label>
+          <p className="panel__hint">{t('ui.options.reducedMotionHint')}</p>
+
           <label className="panel__hint">
             <input
               type="checkbox"
@@ -191,19 +320,7 @@ export function OptionsPanel({ onClose }: { readonly onClose: () => void }): Rea
         </>
       )}
 
-      {tab === 'controls' && (
-        <>
-          <p className="panel__hint">{t('ui.options.controlsHint')}</p>
-          <ul className="keylist">
-            {KEY_BINDINGS.map((binding) => (
-              <li key={binding.descriptionKey}>
-                <kbd className="key">{binding.display}</kbd>
-                <span>{t(binding.descriptionKey)}</span>
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
+      {tab === 'controls' && <ControlsTab />}
 
       <div className="button-row">
         <button type="button" className="button button--active" onClick={onClose}>

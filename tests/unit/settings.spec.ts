@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  detectLanguage,
+  firstBootSettings,
   DEFAULT_SETTINGS,
   normaliseSettings,
   UI_SCALES,
@@ -7,7 +9,7 @@ import {
   VOLUME_CHANNEL_KEYS,
 } from '../../src/shared/settings';
 import de from '../../src/i18n/de.json';
-import { KEY_BINDINGS } from '../../src/ui/keymap';
+import { KEY_ACTIONS } from '../../src/ui/keymap';
 import { HANDBOOK, HANDBOOK_CHAPTER_OF, HANDBOOK_CHAPTERS } from '../../src/ui/handbook';
 import { LESSONS } from '../../src/ui/tutorial';
 import { MINIMAP_MODE_COUNT, MINIMAP_MODE_KEYS } from '../../src/render/Minimap';
@@ -68,9 +70,57 @@ describe('reading a settings file', () => {
     expect(DEFAULT_SETTINGS.volumes[0]).toBeCloseTo(0.6);
   });
 
+  it('reads the two settings SPEC2 M25 added, and defaults them off', () => {
+    expect(DEFAULT_SETTINGS.reducedMotion).toBe(false);
+    expect(DEFAULT_SETTINGS.keyBindings).toEqual({});
+    // A file written before M25 has neither, and must not have motion taken
+    // away from it by an update the player did not ask for.
+    expect(normaliseSettings({ locale: 'en' }).reducedMotion).toBe(false);
+    expect(normaliseSettings({ reducedMotion: true }).reducedMotion).toBe(true);
+  });
+
   it('round-trips its own output', () => {
     const once = normaliseSettings({ locale: 'en', uiScalePercent: 200, autosave: false });
     expect(normaliseSettings(JSON.parse(JSON.stringify(once)))).toEqual(once);
+  });
+});
+
+/**
+ * First boot, and only first boot (SPEC2 M25).
+ *
+ * A stored file always wins, which is why this is a pure function the platform
+ * layer calls in exactly one place: a detector that re-ran on every start
+ * would take a player's own choice away from them the day their browser
+ * changed `navigator.languages`.
+ */
+describe('what the operating system is asked on a fresh machine', () => {
+  it('takes the first supported language, ignoring the region', () => {
+    expect(detectLanguage(['en-US', 'de'])).toBe('en');
+    expect(detectLanguage(['de-AT'])).toBe('de');
+    expect(detectLanguage(['de-CH', 'en'])).toBe('de');
+  });
+
+  it('skips a language this game does not have', () => {
+    expect(detectLanguage(['fr-FR', 'it', 'en-GB'])).toBe('en');
+  });
+
+  it('falls back to the shipped default when it recognises nothing', () => {
+    expect(detectLanguage([])).toBe(DEFAULT_SETTINGS.locale);
+    expect(detectLanguage(['fr', 'ja'])).toBe(DEFAULT_SETTINGS.locale);
+  });
+
+  it('inherits the reduced-motion preference of the system, and nothing else', () => {
+    const quiet = firstBootSettings({ languages: ['en'], prefersReducedMotion: true });
+    expect(quiet.reducedMotion).toBe(true);
+    expect(quiet.locale).toBe('en');
+    // Everything else is still the shipped default - the OS is asked two
+    // questions, not handed the settings screen.
+    expect({ ...quiet, locale: DEFAULT_SETTINGS.locale, reducedMotion: false }).toEqual(
+      DEFAULT_SETTINGS,
+    );
+    expect(firstBootSettings({ languages: [], prefersReducedMotion: false })).toEqual(
+      DEFAULT_SETTINGS,
+    );
   });
 });
 
@@ -78,9 +128,9 @@ describe('every M9 screen has words', () => {
   const catalogue = de as Record<string, string>;
 
   it('names every key binding', () => {
-    for (const binding of KEY_BINDINGS) {
-      expect(binding.descriptionKey in catalogue, binding.descriptionKey).toBe(true);
-      expect(binding.display.length).toBeGreaterThan(0);
+    for (const action of KEY_ACTIONS) {
+      expect(action.descriptionKey in catalogue, action.descriptionKey).toBe(true);
+      expect(action.defaultBinding.length).toBeGreaterThan(0);
     }
   });
 

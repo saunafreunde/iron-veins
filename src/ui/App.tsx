@@ -26,7 +26,8 @@ import { CampaignScreen } from './CampaignScreen';
 import { ScenarioBrowser } from './ScenarioBrowser';
 import { StoredCrashNotice } from './StoredCrashNotice';
 import { TutorialPanel } from './TutorialPanel';
-import { TOOL_KEYS } from './keymap';
+import { bindingFromEvent } from '../shared/keybindings';
+import { bindingIndex, resolveBindings, TOOL_OF_ACTION } from './keymap';
 import { quickLoad } from './saves';
 import { updateSettings } from './settings';
 import { MapCanvas } from './MapCanvas';
@@ -117,6 +118,9 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
   const setOverlay = useSimStore((s) => s.setOverlay);
   const setTool = useSimStore((s) => s.setTool);
   const settings = useSimStore((s) => s.settings);
+  // The player's own key table (SPEC2 M25). Subscribed on its own so a volume
+  // slider does not rebuild the keyboard index.
+  const keyBindings = useSimStore((s) => s.settings.keyBindings);
   const year = useSimStore((s) => s.year);
   const month = useSimStore((s) => s.month);
   // Replay mode is one field (SPEC2 M16): while it is set the interface offers
@@ -138,43 +142,39 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
   }, [speedIndex]);
 
   useEffect(() => {
+    // ONE index from binding to action, rebuilt only when the player's own
+    // table moves (SPEC2 M25). The handler runs on every key press in the
+    // application, so the resolve does not: it is a map lookup per press.
+    const index = bindingIndex(resolveBindings(keyBindings));
+
     const onKeyDown = (event: KeyboardEvent): void => {
       const target = event.target;
       if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return;
 
-      // A build tool the scheme assigns a letter to. Checked first so the
-      // list keys below cannot shadow one of them. Not while a recording is
-      // playing: arming a tool that cannot build anything is an invitation
-      // to click at a world that will refuse.
-      // Undo and redo (SPEC2 M25, E-12) - the two bindings D-114 left unbound
-      // because the machinery did not exist. Checked before the tool letters
-      // for the same reason those are checked first, and only with Ctrl: Z and
-      // Y are free in both schemes and neither is a tool.
-      if (event.ctrlKey && !event.altKey) {
-        const lower = event.key.toLowerCase();
-        if (lower === 'z' || lower === 'y') {
-          event.preventDefault();
-          if (!replaying) {
-            if (lower === 'z') client.undo();
-            else client.redo();
-          }
-          return;
-        }
-      }
+      const binding = bindingFromEvent(event);
+      if (binding === null) return;
+      const action = index.get(binding);
+      if (action === undefined) return;
 
-      const tool = TOOL_KEYS[event.key.toLowerCase()];
-      if (tool !== undefined && !event.ctrlKey && !event.altKey) {
+      // Everything below this line is a binding the player put there, and no
+      // text field is focused - so the browser's own meaning of the key is
+      // never what was wanted.
+      event.preventDefault();
+
+      // A build tool the scheme assigns a letter to. Not while a recording is
+      // playing: arming a tool that cannot build anything is an invitation to
+      // click at a world that will refuse.
+      const tool = TOOL_OF_ACTION[action];
+      if (tool !== undefined) {
         if (!replaying) setTool(tool);
         return;
       }
 
-      switch (event.key) {
-        case ' ':
-          event.preventDefault();
+      switch (action) {
+        case 'pause':
           client.setSpeed(speedIndex === 0 ? lastRunningSpeed.current : 0);
           return;
-        case 'Escape': {
-          event.preventDefault();
+        case 'escape': {
           // An armed tool goes first: Esc means "get me out of this", and it
           // only means the menu once there is nothing left to disarm. setTool
           // also clears the road anchor, the track preview and the connect
@@ -187,80 +187,80 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
           setOverlay(overlay === null ? 'menu' : null);
           return;
         }
-        case 'F1':
-          event.preventDefault();
+        case 'handbook':
           setOverlay(overlay === 'handbook' ? null : 'handbook');
           return;
         // The replay shelf of SPEC2 M16, on the F row beside the save shelf's
         // own keys: every letter with a mnemonic is a build tool or a list,
         // and the overlays already live here (D-114's table).
-        case 'F2':
-          event.preventDefault();
+        case 'replays':
           setOverlay(overlay === 'replays' ? null : 'replays');
           return;
-        case 'F5':
-          event.preventDefault();
+        case 'quickSave':
           // Saving a recording would put somebody else's game on the player's
           // shelf; the worker refuses it too.
           if (!replaying) client.save(SaveSlotKind.Quick, '');
           return;
-        case 'F9':
-          event.preventDefault();
+        case 'quickLoad':
           if (!replaying) void quickLoad(client);
+          return;
+        // Undo and redo (SPEC2 M25, E-12) - the two bindings D-114 left
+        // unbound because the machinery did not exist.
+        case 'undo':
+          if (!replaying) client.undo();
+          return;
+        case 'redo':
+          if (!replaying) client.redo();
           return;
         // The route assistant toggle of the D-114 table. Auto-signalling has
         // its own checkbox on the track tool; it never had a key of its own.
-        case 'm':
-        case 'M':
+        case 'assistant':
           setAssistant(!assistant);
           return;
-        case 'n':
-        case 'N':
+        case 'minimapMode':
           cycleMinimapMode();
           return;
         // The flow atlas overlay of SPEC2 M14 (D-114 table entry).
-        case 'a':
-        case 'A':
+        case 'flowAtlas':
           toggleFlow();
           return;
         // The utilisation heat map of SPEC2 M15 - U for Utilisation and for
         // Auslastung's own reading (D-114 table entry).
-        case 'u':
-        case 'U':
+        case 'heatmap':
           toggleHeat();
           return;
-        case '1':
-        case '2':
-        case '3':
-        case '4':
-          client.setSpeed(Number(event.key));
+        case 'speed1':
+          client.setSpeed(1);
           return;
-        case 'F3':
-          event.preventDefault();
+        case 'speed2':
+          client.setSpeed(2);
+          return;
+        case 'speed3':
+          client.setSpeed(3);
+          return;
+        case 'speed4':
+          client.setSpeed(4);
+          return;
+        case 'debug':
           toggleDebug();
           return;
         // The list keys of section 17.2. Five lists cannot all be on screen at
         // once, so each key toggles its own and closes whatever was open. L is
         // the LINE list, as the section says; the station list sits on H (see
         // keymap.ts).
-        case 'v':
-        case 'V':
+        case 'listVehicles':
           toggleList('vehicles');
           return;
-        case 'l':
-        case 'L':
+        case 'listLines':
           toggleList('lines');
           return;
-        case 'h':
-        case 'H':
+        case 'listStations':
           toggleList('stations');
           return;
-        case 't':
-        case 'T':
+        case 'listTowns':
           toggleList('towns');
           return;
-        case 'i':
-        case 'I':
+        case 'listIndustries':
           toggleList('industries');
           return;
         default:
@@ -271,6 +271,7 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [
     client,
+    keyBindings,
     speedIndex,
     toggleDebug,
     toggleFlow,
@@ -489,7 +490,7 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
         {/* The honest "x weitere" indicator of the M14 order: legs that
             exist but were cut by the top-N cap of the flow atlas. */}
         {showFlow && flowStats.omitted > 0 && (
-          <span className="appbar__label">{t('ui.flow.more', { omitted: flowStats.omitted })}</span>
+          <span className="appbar__label">{t('ui.flow.more', { count: flowStats.omitted })}</span>
         )}
       </footer>
 

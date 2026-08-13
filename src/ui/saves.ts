@@ -2,6 +2,7 @@ import {
   deleteSave,
   exportSave,
   importSave,
+  isDesktopRuntime,
   listSaves,
   readBackup,
   readSave,
@@ -26,6 +27,30 @@ import { useSimStore } from './store';
 /** How many autosaves are kept before the oldest is written over (section 19.1). */
 export const AUTOSAVE_SLOTS = 5;
 
+/**
+ * The same ring in a browser (E-13, SPEC2 M25's "Autosave-Ring-Cap fürs
+ * Web-Profil"). [saves]
+ *
+ * Three rather than five, and it is a storage decision rather than a taste
+ * one: the desktop writes into the player's own application-data directory,
+ * where a save is as permanent as any other file, while OPFS shares one origin
+ * quota with everything else the browser keeps for this site and is EVICTABLE
+ * under pressure. A quarter-century game's save is a few hundred kilobytes, so
+ * five of them plus their `.bak` copies is ten files of a quota the player
+ * never sees; three keeps the same "an hour of play ago" reach - the ring
+ * turns every six game months either way - at 40 % less of somebody else's
+ * disk.
+ */
+export const AUTOSAVE_SLOTS_WEB = 3;
+
+/**
+ * How deep the ring is here. Pure, so the rule is a test rather than a
+ * property of the machine the test happens to run on.
+ */
+export function autosaveSlots(desktop: boolean): number {
+  return desktop ? AUTOSAVE_SLOTS : AUTOSAVE_SLOTS_WEB;
+}
+
 /** How often an autosave is taken, in game months (section 19.1). */
 export const AUTOSAVE_EVERY_MONTHS = 6;
 
@@ -39,14 +64,15 @@ function pad(value: number): string {
 /**
  * The file name for a save.
  *
- * An autosave is one of five, chosen by the game month so the ring turns by
- * itself and no counter has to be stored anywhere. A manual save is named
- * after the date in the game, which is what a player actually looks for.
+ * An autosave is one of the ring's slots - five on the desktop, three in a
+ * browser - chosen by the game month so the ring turns by itself and no
+ * counter has to be stored anywhere. A manual save is named after the date in
+ * the game, which is what a player actually looks for.
  */
 function nameFor(slot: SaveSlotKind, year: number, month: number, existing: number): string {
   if (slot === SaveSlotKind.Quick) return QUICK_NAME;
   if (slot === SaveSlotKind.Auto) {
-    const index = (year * 12 + month) % AUTOSAVE_SLOTS;
+    const index = (year * 12 + month) % autosaveSlots(isDesktopRuntime());
     return `autosave-${index + 1}.ironsave`;
   }
   return `save-${year}-${pad(month + 1)}-${pad(existing + 1)}.ironsave`;

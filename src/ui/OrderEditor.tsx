@@ -272,7 +272,7 @@ export function OrderEditor({
               >
                 {WAIT_DAY_CHOICES.map((days) => (
                   <option key={days} value={days}>
-                    {t('ui.order.waitDays', { days })}
+                    {t('ui.order.waitDays', { count: days })}
                   </option>
                 ))}
               </select>

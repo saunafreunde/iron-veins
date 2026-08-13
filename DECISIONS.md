@@ -66,18 +66,18 @@ no entry below. A number may appear under several topics.
 - **Rendering & art:** D-013, D-014, D-033, D-035, D-112, D-117, D-125, D-127,
   D-136, D-140, D-160, D-161, D-162, D-163, D-164, D-165, D-166, D-169, D-170,
   D-171, D-172, D-173, D-174, D-175, D-177, D-179, D-186, D-202, D-205, D-206,
-  D-208, D-209, D-212, D-214, D-217, D-241, D-246, D-248, D-259
+  D-208, D-209, D-212, D-214, D-217, D-241, D-246, D-248, D-259, D-260
 - **UI & input:** D-011, D-013, D-015, D-035, D-110, D-113, D-114, D-119,
   D-126, D-148, D-165, D-166, D-177, D-179, D-180, D-181, D-182, D-183, D-184,
   D-186, D-187, D-189, D-191, D-192, D-193, D-194, D-195, D-196, D-200, D-202,
-  D-210, D-241, D-242, D-247, D-254, D-255, D-258, D-259
+  D-210, D-241, D-242, D-247, D-254, D-255, D-258, D-259, D-260
 - **Performance & measurement:** D-002, D-120, D-135, D-136, D-161, D-162,
   D-163, D-164, D-167, D-170, D-171, D-172, D-173, D-174, D-176, D-177, D-184,
   D-185, D-186, D-187, D-191, D-192, D-193, D-196, D-200, D-201, D-202, D-205,
   D-206, D-209, D-214, D-231, D-234, D-235, D-241, D-242, D-247, D-248
 - **Platform, tooling & build:** D-012, D-014, D-015, D-016, D-017, D-029,
   D-030, D-031, D-160, D-168, D-169, D-170, D-172, D-175, D-192, D-206, D-208,
-  D-227, D-242, D-255, D-257, D-259
+  D-227, D-242, D-255, D-257, D-259, D-260
 - **Crash safety:** D-132, D-139, D-190
 - **Testing method & fixtures:** D-010, D-038, D-072, D-074, D-084, D-133,
   D-167, D-183, D-186, D-188, D-189, D-190, D-191, D-192, D-193, D-194,
@@ -85,7 +85,7 @@ no entry below. A number may appear under several topics.
   D-205, D-207, D-206, D-208, D-209, D-210, D-212, D-213, D-215, D-216,
   D-217, D-219, D-220, D-221, D-222, D-228, D-229, D-230, D-231, D-233,
   D-234, D-235, D-236, D-241, D-242, D-248, D-249, D-250, D-251, D-252,
-  D-253, D-255, D-256, D-257, D-258, D-259
+  D-253, D-255, D-256, D-257, D-258, D-259, D-260
 - **Process & specification:** D-070, D-123, D-129, D-133, D-138, D-140,
   D-185, D-191, D-197, D-198, D-199, D-203, D-204, D-205, D-206, D-215,
   D-222, D-225, D-226, D-227, D-228, D-229, D-235, D-252, D-253, D-256,
@@ -17502,3 +17502,309 @@ Accessibility and i18n scaling (plural rules, OS locale detection, hatching in
 the colour-blind mode, reduced motion, roving focus, key rebinding), the web
 demo channel (E-13), the release automation, and the multiplayer groundwork of
 E-16 with its protocol bump. Undo of a station build stays where D-258 left it.
+
+## M25 bundle 3 - accessibility, i18n scaling and the web channel (2026-08-13)
+
+### D-260 A sentence that counts, a key the player may move, a shelf that survives the browser - and the header a host would not send
+
+Three of SPEC2 M25's MUSS points at once, because they are one audience: the
+accessibility and i18n-scaling list, the web demo channel of E-13, and the
+plural rules that were the reason "+ 1 wagons" had been shipped for fourteen
+milestones.
+
+**No save bump and nothing near one**: `SAVE_VERSION` stays **34**, no
+migration edit, zero hashed bytes, zero snapshot bytes, zero protocol fields,
+zero RNG draws, zero atlas cells. **Not one file under `src/sim` changed** -
+the same statement D-259 could make, and for the same reason: every one of
+these is a setting (D-110) or a platform capability, and Z1 puts all of them on
+the pixel side. All three pins stand where D-258 left them, verified by running
+and not presumed: canonical `b7e632a7124e67ce`, corpus `a00868b9911f12d6`,
+soak `64fec78d6bf0cd5e` at 35 commands and 16 checkpoints.
+
+#### 1. The plural rule is in `t()`, the selector is `count`, and CLDR decides
+
+`t('ui.fleet.plusWagons', { count: 1 })` reads `ui.fleet.plusWagons.one`. The
+lookup order is total and it is the whole design: an exact key wins, then the
+category the count selects, then `other`. So
+
+- a key with no plural rows behaves EXACTLY as it did before the rule existed
+  (the D-201 device: the old path is the new path's identity branch, which is
+  why 1,344 of 1,350 catalogue rows are untouched and unaffected),
+- a pluralised key resolves even when the caller passed no count at all or
+  passed a formatted string instead of a number - it falls to `other` rather
+  than to the bare key, which would have rendered `ui.flow.more` on screen,
+- and the English fallback chain of M0 still works, one row deeper.
+
+**The category comes from `Intl.PluralRules`**, not from `count === 1` written
+out twice. German and English happen to share the one/other split, so a
+hand-written rule would look right until the third language arrives and then be
+wrong in a way nobody can see from the catalogue.
+
+**The selector is `count` and nothing else.** A rule that guessed which of a
+sentence's numbers it counts would be right in German and wrong in English on
+the same day, so a sentence that wants a plural names its number `count` -
+which is why `ui.order.waitDays`, `ui.line.roundDays` and `ui.flow.more`
+renamed their placeholder and their three call sites with it.
+
+**Six sentences were converted and the choice of six is a decision.**
+`ui.fleet.plusWagons` (the one the milestone names), `news.vehicleRenewed`
+(which said "1 Fahrzeug(e)" - a parenthesis is what a program writes when it
+cannot count), `ui.order.waitDays`, `ui.line.roundDays`, `ui.flow.more` and
+`ui.contracts.rivals`. **What was deliberately NOT converted, with the reason
+each time**: `news.bottleneck` and `news.deadlockCycle`, whose count is two or
+more BY CONSTRUCTION (an Engpass is defined as two trains refused at one tile,
+a ring needs two members); `ui.station.days`, whose figure is a decimal and
+whose category would be `other` at 1.0 in both languages anyway; and every
+`{months}`-shaped news sentence under `src/sim`, because **a news entry's
+params are hashed world state** - renaming `months` to `count` in
+`industry/events.ts` would have moved the canonical pin, the corpus and the
+soak fixture for a plural. That is the one place where the honest answer was to
+leave a sentence alone.
+
+**Two guards, both of which fail on a mistake nobody would otherwise see.**
+A key may not carry a bare row AND plural rows (the bare row wins the lookup,
+so the plural rows would be dead code), and every `.one` needs its `.other` in
+both catalogues. Plus: a pluralised row that has any placeholder must have
+`{count}` - a row selecting on a number it does not print is right by accident
+until the two differ.
+
+`hasTranslation()` exists because `key in de` stopped being the right question
+the moment a sentence learned to count; `news.spec.ts` asks it now.
+
+#### 2. The operating system is asked exactly twice, and only on the first boot
+
+`firstBootSettings({ languages, prefersReducedMotion })` is a pure function and
+`readSettings` calls it in the one branch where there is no file: `de-AT`
+starts in German, `en-US` in English, and a system that has asked for less
+motion gets it without opening a menu.
+
+**A stored file always wins, even when every field in it is a default.** A
+player who chose English on a German system chose it, and a detector that ran
+on every start would take that away from them the day their browser changed
+`navigator.languages`. Region subtags are ignored - `de-CH` reads the German
+catalogue, because the alternative is falling back to the wrong language over a
+spelling difference.
+
+**A file written before M25 does NOT inherit the system's reduced-motion
+preference**, and that asymmetry is deliberate: an existing player's world
+would change appearance on an update they did not ask for. First boot is where
+the system is consulted; `normaliseSettings` defaults the field off.
+
+#### 3. Hatching, and the one overlay that needed it
+
+The colour-blind switch has swapped the company and cargo palettes since M9,
+which is enough where the question is "whose is that" - the Okabe-Ito set is
+deficiency-safe as a set. It is **not** enough for the one overlay whose whole
+meaning is a green-amber-red RAMP: the utilisation heat map of M15. Under
+deuteranopia its three bands are three shades of one mud, and no palette swap
+fixes that, because the player has to read where on a quantity a piece of track
+sits.
+
+So each band gets a hatch: sparse diagonal, closer counter-diagonal, dense
+vertical. **The density carries the order**, so nobody has to remember which
+angle means what, and the whole thing survives a greyscale screenshot.
+`render/hatching.ts` is pure geometry - the lines are laid out in the tile's own
+unit space, where the diamond is `|u| + |v| <= 1`, clipped there against four
+half planes and mapped back - so one clipper covers every zoom and both atlas
+pages. **Exact clipping rather than approximate**: a hatch line that ran over
+the diamond's edge would paint into the next tile and read as THAT tile's band,
+which is a wrong reading rather than an ugly one. The test walks all three
+bands and asserts every endpoint inside the diamond.
+
+**Found while doing it**: `flowStrokeColor` used the ordinary company palette,
+so the one overlay that draws several companies over each other was the one
+place the colour-blind setting had never reached, while the minimap beside it
+had swapped since M9. One palette pair, two consumers now.
+
+Both overlays are event-driven caches, so `setColorBlind` invalidates their
+flags rather than adding a per-frame check - `setDayNight`'s own device.
+
+#### 4. Reduced motion stops the things that move for their own sake
+
+Smoke, exhaust, rain, snow and the water's three-frame cycle. Every one of them
+is a pure function of the blink counter, so a world played with the setting on
+is **bit-identical** to one played without it; that is Z1 and it is why this
+belongs to `AppSettings` and not to `NewGameParams`.
+
+Three details worth the lines they cost. The water is PINNED at its first frame
+rather than skipped, because the tiles still have to be water. The particle
+pool is emptied the moment the setting is turned on - a player who has just
+asked for less movement should not have to wait out the plumes already in the
+air - but the step keeps running while it is on, so whatever was airborne ages
+out instead of vanishing mid-frame. And the vehicle-exhaust gate is folded into
+`vehicleParticles`, the flag `drawVehicles` already carried, so the hot path
+gained a boolean and not a branch per vehicle.
+
+The hint sentence says exactly what it does. It said "and no transitions in the
+interface" in its first draft; there are no CSS transitions in this interface
+today, so the clause was deleted rather than left as a claim a reader could not
+verify.
+
+#### 5. Roving focus: one tab stop per list, not four hundred
+
+A list of four hundred vehicles with a tab stop on every row is a list a
+keyboard cannot get past. `ui/roving.ts` decides where the cursor goes and
+`ListPanel` holds it: the active row carries `tabIndex` 0, every other row -1,
+and the arrow keys move focus for real rather than through
+`aria-activedescendant`, so Enter and Space keep the meaning the browser gives
+them.
+
+**Clamped, not wrapped** - a list that jumps from its last row back to the first
+loses a keyboard user holding the arrow key down; Home and End are the way to
+the ends. An empty list consumes nothing, or a filter that matched nothing would
+swallow the browser's own scrolling. And the cursor is clamped on every render,
+because a filter that shortens the list otherwise leaves it pointing past the
+end, where nothing is focusable and the next press looks like a broken key.
+
+#### 6. D-114's table becomes `actionId -> binding`, and a conflict is REFUSED
+
+Thirty actions, each with the binding section 17.2 gave it, plus the player's
+overrides in `AppSettings.keyBindings` - sparse, so an action nobody moved uses
+the table's own default and a later build's new action reaches everybody rather
+than nobody.
+
+**The layering was the first decision.** `src/shared/keybindings.ts` answers
+"is that a binding at all" - canonical form, validity, how it is printed - and
+knows nothing about actions, because `platform/Storage.ts` reads the settings
+file and a settings reader that imported the interface's action table would drag
+half the interface into the layer below it. `ui/keymap.ts` answers which ids
+exist and what happens on a collision.
+
+**Shift is not part of a binding**, and that is written down rather than
+discovered: a capital letter is the same physical key, 17.2's scheme is bare
+letters and Ctrl combinations, and a Shift binding is one that cannot be typed
+the same way on every layout. `bindingFromEvent` lower-cases a character key,
+which is literally what the pre-M25 handler did with `toLowerCase()`.
+
+**Resolution is three passes and a total order.** The fixed action first
+(Escape, which the player may not move - an accessibility feature that let
+somebody bind away their only way out of an armed tool would be the opposite of
+one), then the overrides in TABLE order, then the defaults. An override that
+collides with an earlier row is dropped and that action falls back to its own
+default; only where another action has TAKEN a default does an action end with
+no key, which the options screen prints as a dash and the player can repair.
+**Two actions on one key is impossible by construction**, including for a
+hand-edited file - which is the state the screen cannot produce and a text
+editor can.
+
+**A rebinding that collides is refused and the conflicting action is named.**
+Silently unbinding whatever sat there would leave the player believing both keys
+still worked, which is Fehlerkatalog 30's "partial" mistake in another currency.
+Binding an action back onto its own default REMOVES the override, so a settings
+file only ever carries what really differs.
+
+The capture mode listens on the window's CAPTURE phase, so the application's own
+handler cannot fire the action that is about to be replaced; Escape cancels
+rather than binds.
+
+Two knock-on facts: `App.tsx`'s keydown handler is now one map lookup into an
+index rebuilt only when the player's table moves, and it `preventDefault()`s
+every matched binding (it is only reached outside a text field, and the
+browser's own meaning of the key is never what was wanted). The four speed keys
+became four actions rather than one row reading "1 - 4", because a row standing
+for four keys is a row a rebinding screen cannot offer and the conflict check
+would have nothing to compare.
+
+#### 7. The web channel, and what could not be verified here
+
+**The shim.** `public/coi-serviceworker.js` puts
+`Cross-Origin-Opener-Policy: same-origin` and
+`Cross-Origin-Embedder-Policy: require-corp` on every response it passes
+through; `platform/isolation.ts` registers it and reloads the page **exactly
+once**. The one reload is E-13's own accepted price and the loop guard is a
+session flag: a browser where even the shim does not isolate costs one reload
+per tab, never a loop, and a new tab may still try because the reason may have
+been fixed. Already-isolated CLEARS the flag; the desktop never registers
+anything, because Tauri's own headers are already right.
+
+**The hard SharedArrayBuffer requirement stays, and no line of this bundle
+softens it** (E-13, law #10). There is no single-threaded path behind the shim:
+where isolation is still missing, `SimClient.start` shows the fatal message it
+has shown since M0. `main.tsx` awaits the decision before starting the
+simulation, so a page that is about to be replaced does not first build a world
+and flash that message.
+
+**What the tests prove.** The spec loads the SHIPPED shim - not a copy - drives
+the handler it registers with a fake fetch event and asserts both headers on the
+response, that the status, body and content type survive, that an error status
+is carried through rather than swallowed, that a cache-only cross-origin request
+is left alone, and that install calls `skipWaiting` so the reload happens once.
+The reload decision is asserted in all five of its outcomes.
+
+**What could NOT be verified here, stated plainly.** That a real browser then
+hands out a `SharedArrayBuffer` is not observable in a headless suite: there is
+no service-worker registration, no navigation, and `crossOriginIsolated` is a
+property of a document nobody in this suite has. **What would prove it**: serve
+`dist/` from a static host that sends NEITHER header (`python -m http.server`
+is one), open the page, watch it reload once, and read
+`crossOriginIsolated === true` plus `typeof SharedArrayBuffer !== 'undefined'`
+in the console - the game starting at all is the same evidence, since the client
+refuses without both. That is the owner's step and it is named rather than
+claimed.
+
+**OPFS.** The browser's shelf was a `Map` that died with the tab, which made the
+web channel a demo nobody could come back to. `platform/opfs.ts` writes into the
+Origin Private File System - saves, recordings and both shelf indexes - and
+`Storage.ts` falls back to the old in-memory map when there is none. Every
+primitive answers `null` or `false` instead of throwing, the posture
+`readSettings` has had since M9: a private window, a hardened profile or a
+Safari with directories but no `createWritable` must cost the player their
+SHELF, never their game. The one-generation `.bak` the desktop keeps is kept
+here too, on the same rule.
+
+The handles are typed structurally rather than through `lib.dom`, and that is
+not a style choice: the DOM types for OPFS differ between TypeScript versions
+and this project bans `any` and `@ts-ignore` outright. It is also what lets the
+test drive the whole backend against a fake origin filesystem - and the
+"browser restart" in that test is real: the module registry is reset and only
+the fake filesystem carries over, so a shelf that still lived in memory would
+read empty exactly where the old one did.
+
+**The settings stay in `localStorage`** deliberately: a few hundred bytes that
+must be readable before anything is drawn, whose loss costs the player nothing
+but their preferences. Moving them into OPFS would add a failure mode to the
+boot path in exchange for nothing. `localStorage` also stays as the index
+FALLBACK, which doubles as the migration path for a browser save written before
+this bundle.
+
+**The autosave ring is three in a browser against five on the desktop**
+(`autosaveSlots`, pure). Not taste: the desktop writes into the player's own
+application-data directory where a save is as permanent as any other file,
+while OPFS shares one evictable origin quota with everything else the browser
+keeps for this site. The ring still turns every six game months, so the reach
+back in game time is the same.
+
+#### 8. What this cost, measured
+
+Main chunk **1,070,428 -> 1,082,561 B (+12,133)**, and the budget is raised
+1,080,000 -> **1,094,000 B** with the split measured by deletion (D-192's rule):
+**+2,077 B are the new catalogue rows in two languages** (rebuilt at 1,080,484 B
+with exactly those rows reverted) and **+10,056 B are the mechanism** - the
+plural lookup, the action table and its resolver, the binding vocabulary, the
+capture mode, the roving cursor, the hatch geometry, the OPFS backend and the
+isolation decision. **No new static `src/sim` import chain**: the three new
+`src/shared` and `src/ui` modules import nothing at all, and the two platform
+modules import nothing but each other's callers. The shim is not in the figure -
+it is a file in `public/`, which is the only shape a service worker can have.
+
+**The tick row is +0,00 ms by construction**: no file under `src/sim` changed,
+and the two render additions are inside overlays that rebuild on an event
+(D-177/D-186) rather than per frame.
+
+#### 9. What only a human can confirm
+
+That the web build really is isolated behind the shim on a header-less host
+(the procedure is in section 7 above). That the hatch is legible for the
+deficiency it is for - the geometry is asserted, the READING is not. That the
+capture mode feels right on a keyboard, since no harness presses a key at a
+real options screen. And that the OS-locale detection picks the right language
+on a machine whose system language is neither German nor English, where the
+rule says "fall back to German" and only a person can say whether that is the
+better answer than English for them.
+
+#### 10. What M25 still owes after this bundle
+
+The release automation (`release.yml`, the generated attributions file, the
+code-signing integration point and the commercial-readiness checklist), the
+multiplayer groundwork of E-16 with its protocol bump, and the modding
+constitution line of E-17. Undo of a station build stays where D-258 left it.

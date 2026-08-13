@@ -216,6 +216,8 @@ export function MapCanvas({ client }: { readonly client: SimClient }): ReactElem
   const connectPlan = useSimStore((s) => s.connectPlan);
   const roadStopPreview = useSimStore((s) => s.roadStopPreview);
   const dayNight = useSimStore((s) => s.settings.dayNight);
+  const colorBlind = useSimStore((s) => s.settings.colorBlind);
+  const reducedMotion = useSimStore((s) => s.settings.reducedMotion);
   const editorOverlay = useSimStore((s) => s.editorOverlay);
   const month = useSimStore((s) => s.month);
   const year = useSimStore((s) => s.year);
@@ -522,6 +524,8 @@ export function MapCanvas({ client }: { readonly client: SimClient }): ReactElem
     // published cells plus the render frame counter (E-01, Fehlerkatalog 39).
     view.setWeatherSource(() => client.readWeather());
     view.setDayNight(useSimStore.getState().settings.dayNight);
+    view.setColorBlind(useSimStore.getState().settings.colorBlind);
+    view.setReducedMotion(useSimStore.getState().settings.reducedMotion);
     void view.attach(host);
 
     /**
@@ -620,6 +624,16 @@ export function MapCanvas({ client }: { readonly client: SimClient }): ReactElem
   useEffect(() => {
     viewRef.current?.setDayNight(dayNight);
   }, [dayNight]);
+
+  // The two accessibility settings of SPEC2 M25, each on its own effect for
+  // the reason the day/night one is: a volume slider must not repaint the map.
+  useEffect(() => {
+    viewRef.current?.setColorBlind(colorBlind);
+  }, [colorBlind]);
+
+  useEffect(() => {
+    viewRef.current?.setReducedMotion(reducedMotion);
+  }, [reducedMotion]);
 
   useEffect(() => {
     /*

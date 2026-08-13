@@ -257,8 +257,35 @@ const DIST = join(REPO_ROOT, 'dist');
  * `platform/Profile.ts` imports it dynamically, exactly as `Storage.ts` does.
  *
  * 1,080,000 is the new measurement plus ~1.0 %.
+ *
+ * **Raised again for SPEC2 M25 bundle 3** (the accessibility and i18n-scaling
+ * work plus the web channel), with the measurement and the same rule. Two
+ * builds of the same tree, `NODE_ENV=production` on both: **1,070,428 B ->
+ * 1,082,561 B, +12,133 B**, against 9,572 B of headroom under the old number,
+ * so this bundle had to book what it weighs. Split by deleting exactly the new
+ * catalogue rows from both languages and rebuilding (1,080,484 B):
+ *
+ *  - **+2,077 B are the i18n rows in two languages**: six sentences split into
+ *    a singular and a plural row, the four speed lines that replaced one
+ *    "1 - 4" row, six rebinding captions, the reduced-motion pair, and two
+ *    hints that grew a clause.
+ *  - **+10,056 B are the mechanism**: the plural lookup and its CLDR rules in
+ *    `t()`, the action table and its resolver (`ui/keymap.ts` roughly doubled),
+ *    the binding vocabulary in `src/shared`, the capture mode in the controls
+ *    tab, the roving cursor, the hatch geometry, the OPFS backend and the
+ *    isolation decision.
+ *
+ * **No new static `src/sim` import chain that decodes, serialises or steps a
+ * world**, which is what this budget exists to catch: `shared/keybindings.ts`
+ * and `ui/roving.ts` import nothing at all, `platform/opfs.ts` and
+ * `platform/isolation.ts` import nothing but each other's callers, and
+ * `render/hatching.ts` is pure arithmetic. The service-worker shim is NOT in
+ * this figure at all - it is a file in `public/`, fetched by the browser as a
+ * top-level script, which is the only shape a service worker can have.
+ *
+ * 1,094,000 is the new measurement plus ~1.1 %.
  */
-const MAIN_CHUNK_BUDGET_BYTES = 1_080_000;
+const MAIN_CHUNK_BUDGET_BYTES = 1_094_000;
 
 /** The verdict, separated from the measuring so a planted size can be judged. */
 interface BudgetVerdict {

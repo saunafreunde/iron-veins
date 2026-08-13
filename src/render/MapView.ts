@@ -53,6 +53,15 @@ import {
   flowStrokeColor,
   selectTopFlows,
 } from './flowAtlas';
+import {
+  hatchBandOf,
+  hatchSegments,
+  HATCH_ALPHA,
+  HATCH_INK,
+  HATCH_MAX_SEGMENTS,
+  HATCH_SEGMENT_STRIDE,
+  HATCH_WIDTH_PX,
+} from './hatching';
 import { HEAT_REFRESH_TICKS, heatAlpha, heatColor } from './heatmap';
 import { utilisationOf } from '../sim/net/throughput';
 import { weatherRegionOf } from '../sim/weather/field';
@@ -1181,6 +1190,21 @@ export class MapView {
   private companyTint = 0xf08020;
   /** Day/night modulation (section 16.3), a SETTING per D-110/D-127. */
   private dayNight = true;
+  /**
+   * The colour-blind mode of 17.4, as the MAP needs it (SPEC2 M25): the
+   * utilisation overlay hatches its three bands and the flow arrows take the
+   * deficiency-safe company palette. A setting, never a rule (D-110).
+   */
+  private colorBlind = false;
+  /**
+   * Reduced motion (SPEC2 M25). Everything it stops - smoke, exhaust, rain,
+   * snow, the water's three-frame cycle - is a pure function of the blink
+   * counter, so a world played with it on is bit-identical to one played
+   * without it (Z1).
+   */
+  private reducedMotion = false;
+  /** Segment scratch for the colour-blind hatch; one tile at a time. */
+  private readonly hatchScratch = new Float64Array(HATCH_MAX_SEGMENTS * HATCH_SEGMENT_STRIDE);
   /** Where the renderer reads the published tick for the day/night curve. */
   private tickSource: (() => number) | null = null;
   /** Last world tint applied, so an unchanged frame does not dirty the tree. */
@@ -1614,6 +1638,36 @@ export class MapView {
     // runs at all, not even invisible sprites.
     this.builtRevision = -1;
     this.clearChunkCaches();
+  }
+
+  /**
+   * Turn the colour-blind mode on or off (options screen, D-110).
+   *
+   * Both overlays it reaches are event-driven caches, so the flags they
+   * compare against are invalidated here rather than checked per frame - the
+   * same device `setDayNight` uses one line up.
+   */
+  setColorBlind(on: boolean): void {
+    if (this.colorBlind === on) return;
+    this.colorBlind = on;
+    this.heatDrawnTick = -1;
+    this.flowDrawnHash = -1;
+  }
+
+  /**
+   * Turn reduced motion on or off (options screen, SPEC2 M25).
+   *
+   * Turning it ON empties the particle field at once: a player who has just
+   * asked for less movement should not have to wait out the plumes that are
+   * already in the air.
+   */
+  setReducedMotion(on: boolean): void {
+    if (this.reducedMotion === on) return;
+    this.reducedMotion = on;
+    if (on && this.particlePool.count > 0) {
+      this.particlePool.clear();
+      this.syncParticles();
+    }
   }
 
   /** Turn the block overlay on or off (F3). */
@@ -2111,7 +2165,9 @@ export class MapView {
     // blink counter - the deterministic frame counter, never the wall clock
     // (Fehlerkatalog 39). Resolved BEFORE the rebuild paths so a rebuild or
     // a chunk bake in this frame already draws the current row.
-    this.waterRow = waterRowForCounter(this.blink);
+    // Reduced motion pins the water at its first frame rather than skipping
+    // the swap: the tiles still have to BE water, they just stop cycling.
+    this.waterRow = waterRowForCounter(this.reducedMotion ? 0 : this.blink);
 
     // The claimed-block set of the M13 signal aspects, refreshed BEFORE any
     // rebuild so freshly placed lamps read current truth (B5).
@@ -2553,6 +2609,15 @@ export class MapView {
       return;
     }
     layer.visible = true;
+    // Reduced motion (SPEC2 M25): nothing is spawned and the pool is left to
+    // run empty. The layer stays visible and the step still runs, so whatever
+    // was in the air when the setting was flipped ages out rather than
+    // vanishing mid-frame.
+    if (this.reducedMotion) {
+      this.particlePool.step();
+      this.syncParticles();
+      return;
+    }
     this.spawnIndustrySmoke(map);
     // The weather goes in LAST, and that is the cap decision (D-174/D-202):
     // `spawn` refuses at the cap, so whatever is spawned last is what a full
@@ -4431,7 +4496,10 @@ export class MapView {
     this.badgeUsed = 0;
     const badges = !abstract && this.zoom >= BADGE_MIN_ZOOM;
     const vehicleParticles =
-      !abstract && this.particleLayer !== null && this.zoom >= VEHICLE_PARTICLE_MIN_ZOOM;
+      !abstract &&
+      !this.reducedMotion &&
+      this.particleLayer !== null &&
+      this.zoom >= VEHICLE_PARTICLE_MIN_ZOOM;
 
     for (let i = 0; i < count; i++) {
       const base = i * SNAPSHOT_VEHICLE_STRIDE;
@@ -5238,6 +5306,7 @@ export class MapView {
       const colour = flowStrokeColor(
         data[base + SnapshotFlow.OwnerId]!,
         data[base + SnapshotFlow.LineId]!,
+        this.colorBlind,
       );
       const alpha = measured ? FLOW_MEASURED_ALPHA : FLOW_ESTIMATE_ALPHA;
 
@@ -5329,6 +5398,26 @@ export class MapView {
         const centre = tileToWorld(x, y, map.railHeight(x, y));
         this.diamondOn(layer, centre.x, centre.y);
         layer.fill({ color: heatColor(fraction), alpha: heatAlpha(fraction) });
+
+        // The second channel of SPEC2 M25: under the colour-blind setting the
+        // three bands also differ in hatch direction and density, so the ramp
+        // survives a deficiency - and a greyscale screenshot.
+        if (!this.colorBlind) continue;
+        const segments = hatchSegments(
+          centre.x,
+          centre.y + TILE_H / 2,
+          TILE_W / 2,
+          TILE_H / 2,
+          hatchBandOf(fraction),
+          this.hatchScratch,
+        );
+        for (let segment = 0; segment < segments; segment++) {
+          const at = segment * HATCH_SEGMENT_STRIDE;
+          layer
+            .moveTo(this.hatchScratch[at]!, this.hatchScratch[at + 1]!)
+            .lineTo(this.hatchScratch[at + 2]!, this.hatchScratch[at + 3]!);
+        }
+        layer.stroke({ width: HATCH_WIDTH_PX / this.zoom, color: HATCH_INK, alpha: HATCH_ALPHA });
       }
     }
 

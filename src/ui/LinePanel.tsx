@@ -43,7 +43,7 @@ function roundDays(line: LineMarker): number {
 
 function roundLabel(line: LineMarker): string {
   if (line.stops.length < 2) return '—';
-  const days = t('ui.line.roundDays', { days: roundDays(line) });
+  const days = t('ui.line.roundDays', { count: roundDays(line) });
   // The D-077 estimate marker: a tilde before the figure, spelled out in the
   // detail panel below.
   return line.roundMeasured ? days : `~${days}`;

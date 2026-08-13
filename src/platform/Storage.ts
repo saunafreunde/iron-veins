@@ -1,8 +1,17 @@
 import {
   DEFAULT_SETTINGS,
+  firstBootSettings,
   normaliseSettings,
   type AppSettings,
 } from '../shared/settings';
+import {
+  opfsDelete,
+  opfsHas,
+  opfsRead,
+  opfsReadText,
+  opfsWrite,
+  opfsWriteText,
+} from './opfs';
 import {
   OPENABLE_EXTENSIONS,
   REPLAY_EXTENSION,
@@ -22,10 +31,18 @@ import {
  *
  * Both targets are real. The desktop shell writes into
  * `%APPDATA%/IronVeins/`, which is what section 19.1 asks for. A browser has
- * no such place, so it uses `localStorage` for the settings and keeps saves in
- * memory with a download as the way out. That is not a lesser fallback bolted
- * on: `npm run dev` is how this game is developed, and a save system that only
+ * no such place, so it uses `localStorage` for the settings and - since SPEC2
+ * M25 (E-13) - the Origin Private File System for the saves and the
+ * recordings, with the old in-memory shelf underneath as the answer for a
+ * profile that has no OPFS. That is not a lesser fallback bolted on:
+ * `npm run dev` is how this game is developed, and a save system that only
  * works in the packaged build cannot be tested until the very end.
+ *
+ * The SETTINGS stay in `localStorage` deliberately. They are a few hundred
+ * bytes that have to be readable before anything is drawn, they are the one
+ * thing whose loss costs the player nothing but their preferences, and moving
+ * them into OPFS would add a failure mode to the boot path in exchange for
+ * nothing.
  */
 
 const SETTINGS_FILE = 'settings.json';
@@ -59,21 +76,137 @@ function hasTauriRuntime(): boolean {
   return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 }
 
+/**
+ * Whether this is the desktop shell.
+ *
+ * Exported because two decisions above this layer depend on it and both were
+ * writing the check out again: the autosave ring is shorter in a browser
+ * (SPEC2 M25, where the quota is shared with every other site and evictable),
+ * and the COOP/COEP shim must not be installed inside Tauri, whose own headers
+ * are already right.
+ */
+export function isDesktopRuntime(): boolean {
+  return hasTauriRuntime();
+}
+
+// ------------------------------------------------- the browser's own shelves
+//
+// A browser has no application-data directory, and until SPEC2 M25 it had no
+// shelf either: saves lived in a `Map` that died with the tab, which made the
+// web channel a demo nobody could come back to. OPFS (E-13) is the real
+// storage, and the `Map` stays underneath it as the answer for a browser that
+// has none - a private window, a hardened profile, a Safari with no
+// `createWritable`. Which one is in use is never asked ahead of time: every
+// write TRIES OPFS and falls back on `false`, so a browser that loses the
+// capability mid-session keeps working.
+
+/** In-memory shelf for a browser with no OPFS, keyed `dir/name`. */
+const memoryFiles = new Map<string, Uint8Array>();
+
+/** In-memory index text for the same, keyed by file name. */
+const memoryText = new Map<string, string>();
+
+function memoryKey(dir: string, name: string): string {
+  return `${dir}/${name}`;
+}
+
+async function webWriteBytes(dir: string, name: string, bytes: Uint8Array): Promise<void> {
+  if (await opfsWrite(dir, name, bytes)) return;
+  memoryFiles.set(memoryKey(dir, name), bytes);
+}
+
+async function webReadBytes(dir: string, name: string): Promise<Uint8Array | null> {
+  return (await opfsRead(dir, name)) ?? memoryFiles.get(memoryKey(dir, name)) ?? null;
+}
+
+async function webHasBytes(dir: string, name: string): Promise<boolean> {
+  return (await opfsHas(dir, name)) || memoryFiles.has(memoryKey(dir, name));
+}
+
+async function webDeleteBytes(dir: string, name: string): Promise<void> {
+  await opfsDelete(dir, name);
+  memoryFiles.delete(memoryKey(dir, name));
+}
+
+/**
+ * The shelf INDEXES, which are text and tiny.
+ *
+ * They go to OPFS beside the files they describe, so a browser restart brings
+ * back a list as well as the bytes. `localStorage` is still read as a fallback
+ * AND as the migration path: every browser save written before M25 left its
+ * index there, and dropping it would have hidden files that are still on disk.
+ */
+async function webWriteIndexText(name: string, key: string, text: string): Promise<void> {
+  if (await opfsWriteText('', name, text)) return;
+  memoryText.set(name, text);
+  try {
+    window.localStorage.setItem(key, text);
+  } catch {
+    return;
+  }
+}
+
+async function webReadIndexText(name: string, key: string): Promise<string | null> {
+  const stored = await opfsReadText('', name);
+  if (stored !== null) return stored;
+  const remembered = memoryText.get(name);
+  if (remembered !== undefined) return remembered;
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
 // ------------------------------------------------------------------ settings
 
-/** Read the settings, or the defaults when there is nothing to read. */
+/**
+ * What the operating system has already been asked (SPEC2 M25).
+ *
+ * The one line in this project that reads `navigator.languages` and the one
+ * that reads the reduced-motion media query; the RULE built out of them is
+ * pure and lives in `shared/settings.ts`, which is what makes it testable
+ * without a browser. Everything here is defensive because both APIs are
+ * missing in some embedder or other, and a missing one must mean "no
+ * preference", not a broken boot.
+ */
+function osPreferences(): AppSettings {
+  const languages =
+    typeof navigator !== 'undefined' && Array.isArray(navigator.languages)
+      ? navigator.languages
+      : [];
+  let prefersReducedMotion = false;
+  try {
+    prefersReducedMotion =
+      typeof window !== 'undefined' &&
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  } catch {
+    prefersReducedMotion = false;
+  }
+  return firstBootSettings({ languages, prefersReducedMotion });
+}
+
+/**
+ * Read the settings, or - on a machine that has never run this game - the
+ * defaults the operating system has already answered for (SPEC2 M25).
+ *
+ * First boot only, and the distinction is the whole point: a stored file wins
+ * even when every field in it is a default, because a player who chose English
+ * on a German system chose it.
+ */
 export async function readSettings(): Promise<AppSettings> {
   try {
     if (hasTauriRuntime()) {
       const { exists, readTextFile, BaseDirectory } = await import('@tauri-apps/plugin-fs');
       if (!(await exists(SETTINGS_FILE, { baseDir: BaseDirectory.AppConfig }))) {
-        return DEFAULT_SETTINGS;
+        return osPreferences();
       }
       const text = await readTextFile(SETTINGS_FILE, { baseDir: BaseDirectory.AppConfig });
       return normaliseSettings(JSON.parse(text));
     }
     const text = window.localStorage.getItem(SETTINGS_KEY);
-    return text === null ? DEFAULT_SETTINGS : normaliseSettings(JSON.parse(text));
+    return text === null ? osPreferences() : normaliseSettings(JSON.parse(text));
   } catch {
     // A settings file that cannot be read costs the player their preferences.
     // It must never cost them the game, so there is no rethrow here.
@@ -131,9 +264,6 @@ const INDEX_FILE = 'saves.json';
 const TMP_SUFFIX = '.tmp';
 const BAK_SUFFIX = '.bak';
 
-/** In-memory shelf for the browser, where there is nowhere else to put one. */
-const memorySaves = new Map<string, Uint8Array>();
-
 async function readIndex(): Promise<SaveEntry[]> {
   try {
     if (hasTauriRuntime()) {
@@ -142,7 +272,7 @@ async function readIndex(): Promise<SaveEntry[]> {
       const text = await readTextFile(INDEX_FILE, { baseDir: BaseDirectory.AppData });
       return (JSON.parse(text) as SaveIndex).entries;
     }
-    const text = window.localStorage.getItem(SAVE_INDEX_KEY);
+    const text = await webReadIndexText(INDEX_FILE, SAVE_INDEX_KEY);
     return text === null ? [] : (JSON.parse(text) as SaveIndex).entries;
   } catch {
     return [];
@@ -157,7 +287,7 @@ async function writeIndex(entries: readonly SaveEntry[]): Promise<void> {
     await writeTextFile(INDEX_FILE, text, { baseDir: BaseDirectory.AppData });
     return;
   }
-  window.localStorage.setItem(SAVE_INDEX_KEY, text);
+  await webWriteIndexText(INDEX_FILE, SAVE_INDEX_KEY, text);
 }
 
 /** Every save on the shelf, newest first. */
@@ -205,11 +335,14 @@ export async function writeSave(entry: SaveEntry, bytes: Uint8Array): Promise<vo
     }
     await rename(path + TMP_SUFFIX, path, { oldPathBaseDir: baseDir, newPathBaseDir: baseDir });
   } else {
-    const previous = memorySaves.get(entry.name);
-    if (previous !== undefined) {
-      memorySaves.set(entry.name + BAK_SUFFIX, previous);
+    // The same one-generation backup the desktop keeps, on the same rule: the
+    // previous bytes survive one more write, so a save that turns out corrupt
+    // still has yesterday's version beside it.
+    const previous = await webReadBytes(SAVE_DIR, entry.name);
+    if (previous !== null) {
+      await webWriteBytes(SAVE_DIR, entry.name + BAK_SUFFIX, previous);
     }
-    memorySaves.set(entry.name, bytes);
+    await webWriteBytes(SAVE_DIR, entry.name, bytes);
   }
 
   const entries = (await readIndex()).filter((existing) => existing.name !== entry.name);
@@ -224,7 +357,7 @@ export async function readSave(name: string): Promise<Uint8Array | null> {
       const { readFile, BaseDirectory } = await import('@tauri-apps/plugin-fs');
       return await readFile(`${SAVE_DIR}/${name}`, { baseDir: BaseDirectory.AppData });
     }
-    return memorySaves.get(name) ?? null;
+    return await webReadBytes(SAVE_DIR, name);
   } catch {
     return null;
   }
@@ -249,7 +382,7 @@ export async function hasBackup(name: string): Promise<boolean> {
         baseDir: BaseDirectory.AppData,
       });
     }
-    return memorySaves.has(name + BAK_SUFFIX);
+    return await webHasBytes(SAVE_DIR, name + BAK_SUFFIX);
   } catch {
     return false;
   }
@@ -266,8 +399,8 @@ export async function deleteSave(name: string): Promise<void> {
         await remove(`${SAVE_DIR}/${name}${BAK_SUFFIX}`, { baseDir });
       }
     } else {
-      memorySaves.delete(name);
-      memorySaves.delete(name + BAK_SUFFIX);
+      await webDeleteBytes(SAVE_DIR, name);
+      await webDeleteBytes(SAVE_DIR, name + BAK_SUFFIX);
     }
   } catch {
     // Already gone is the outcome that was wanted.
@@ -352,9 +485,6 @@ const REPLAY_DIR = 'replays';
 const REPLAY_INDEX_FILE = 'replays.json';
 const REPLAY_INDEX_KEY = 'ironveins.replays';
 
-/** In-memory replay shelf for the browser, mirroring {@link memorySaves}. */
-const memoryReplays = new Map<string, Uint8Array>();
-
 /** One recording on the shelf, as the replay browser lists it. */
 export interface ReplayEntry {
   /** File name without the directory; the id everything else refers to. */
@@ -388,7 +518,7 @@ async function readReplayIndex(): Promise<ReplayEntry[]> {
       const text = await readTextFile(REPLAY_INDEX_FILE, { baseDir: BaseDirectory.AppData });
       return (JSON.parse(text) as ReplayIndex).entries;
     }
-    const text = window.localStorage.getItem(REPLAY_INDEX_KEY);
+    const text = await webReadIndexText(REPLAY_INDEX_FILE, REPLAY_INDEX_KEY);
     return text === null ? [] : (JSON.parse(text) as ReplayIndex).entries;
   } catch {
     return [];
@@ -403,7 +533,7 @@ async function writeReplayIndex(entries: readonly ReplayEntry[]): Promise<void> 
     await writeTextFile(REPLAY_INDEX_FILE, text, { baseDir: BaseDirectory.AppData });
     return;
   }
-  window.localStorage.setItem(REPLAY_INDEX_KEY, text);
+  await webWriteIndexText(REPLAY_INDEX_FILE, REPLAY_INDEX_KEY, text);
 }
 
 /** Every recording on the shelf, newest first. */
@@ -423,7 +553,7 @@ export async function writeReplay(entry: ReplayEntry, bytes: Uint8Array): Promis
     await mkdir(REPLAY_DIR, { baseDir, recursive: true });
     await writeFile(`${REPLAY_DIR}/${entry.name}`, bytes, { baseDir });
   } else {
-    memoryReplays.set(entry.name, bytes);
+    await webWriteBytes(REPLAY_DIR, entry.name, bytes);
   }
 
   const entries = (await readReplayIndex()).filter((existing) => existing.name !== entry.name);
@@ -438,7 +568,7 @@ export async function readReplay(name: string): Promise<Uint8Array | null> {
       const { readFile, BaseDirectory } = await import('@tauri-apps/plugin-fs');
       return await readFile(`${REPLAY_DIR}/${name}`, { baseDir: BaseDirectory.AppData });
     }
-    return memoryReplays.get(name) ?? null;
+    return await webReadBytes(REPLAY_DIR, name);
   } catch {
     return null;
   }
@@ -451,7 +581,7 @@ export async function deleteReplay(name: string): Promise<void> {
       const { remove, BaseDirectory } = await import('@tauri-apps/plugin-fs');
       await remove(`${REPLAY_DIR}/${name}`, { baseDir: BaseDirectory.AppData });
     } else {
-      memoryReplays.delete(name);
+      await webDeleteBytes(REPLAY_DIR, name);
     }
   } catch {
     // Already gone is the outcome that was wanted.

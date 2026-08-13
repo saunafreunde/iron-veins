@@ -4588,3 +4588,95 @@ corpus `a00868b9911f12d6`, soak `64fec78d6bf0cd5e` at 35 commands.
   inoffensive at a raised slider, that the compressor does not pump - and that
   `main.tsx`'s gesture arming really starts the engine, which no harness drives.
   Every test here asserts the object graph and the tables; none can hear.
+
+## M25 bundle 3 - a sentence that counts, a key that moves, a browser that remembers (D-260)
+
+SPEC2 M25's accessibility and i18n-scaling list plus the web demo channel of
+E-13. **No save bump** (v34 stands), no migration edit, zero hashed bytes, zero
+snapshot bytes, zero protocol fields, zero RNG draws, zero atlas cells - and
+**not one file under `src/sim` changed**, which is the same statement D-259
+could make and for the same reason: every item here is a setting (D-110) or a
+platform capability, and Z1 puts all of them on the pixel side. All three pins
+stand, verified by running: canonical `b7e632a7124e67ce`, corpus
+`a00868b9911f12d6`, soak `64fec78d6bf0cd5e` at 35 commands.
+
+- **The plural rule lives in `t()` and the selector is `count`** (D-260).
+  Lookup order is total - exact key, then the category `Intl.PluralRules`
+  selects, then `other` - so a key with no plural rows behaves EXACTLY as
+  before (D-201's identity branch, 1,344 of 1,350 rows untouched) and a
+  pluralised key still resolves when the caller passed no count or a formatted
+  string. **CLDR, not `count === 1` written out twice**: German and English
+  share the one/other split, so a hand-written rule would look right until the
+  third language. Six sentences converted, including the one the milestone
+  names ("+ 1 wagons") and the one that said "1 Fahrzeug(e)". **What was NOT
+  converted is the finding**: `news.bottleneck` and `news.deadlockCycle` count
+  two or more by construction, `ui.station.days` carries a decimal, and every
+  `{months}`-shaped news sentence stays as it is because **a news entry's
+  params are hashed world state** - renaming one to `count` would have moved
+  all three pins for a plural. Two catalogue guards: no bare row beside plural
+  rows (it would win the lookup and make them dead), and every `.one` has its
+  `.other` in both languages.
+- **The operating system is asked twice, on the first boot only** (D-260).
+  `firstBootSettings({ languages, prefersReducedMotion })` is pure and
+  `readSettings` calls it in the one branch where there is no file. A stored
+  file always wins, even when every field in it is a default; region subtags
+  are ignored (`de-CH` reads German rather than falling back to English over a
+  spelling difference). A file written BEFORE M25 does not inherit the
+  reduced-motion preference - an existing player's world must not change
+  appearance on an update they did not ask for.
+- **Hatching is for the one overlay a palette swap cannot fix** (D-260). The
+  company palette has been deficiency-safe since M9; the utilisation heat map
+  of M15 is a green-amber-red RAMP, which under deuteranopia is three shades of
+  one mud. Three bands, three hatch directions, **density carrying the order**
+  so nobody has to remember which angle means what - and legible in greyscale.
+  `render/hatching.ts` clips in the tile's own unit space (`|u| + |v| <= 1`)
+  against four half planes, EXACTLY: a line over the diamond's edge would read
+  as the next tile's band. Found on the way: `flowStrokeColor` had never taken
+  the colour-blind palette, so the one overlay drawing several companies over
+  each other was the one place the setting did not reach.
+- **Reduced motion stops smoke, exhaust, rain, snow and the water cycle**
+  (D-260) - all pure functions of the blink counter, so a world played with it
+  on is bit-identical to one played without it. The water is PINNED at frame
+  zero rather than skipped (the tiles still have to be water), the pool is
+  emptied when the setting is turned on but keeps stepping while it is on, and
+  the vehicle gate folds into the flag `drawVehicles` already carried.
+- **Roving focus: one tab stop per list, not four hundred** (D-260). Clamped
+  rather than wrapped, Home and End for the ends, an empty list consumes
+  nothing, and the cursor is clamped on every render - a filter that shortens
+  the list otherwise points it past the end, where nothing is focusable and the
+  next press looks like a broken key.
+- **D-114's table is `actionId -> binding`, and a conflict is REFUSED** (D-260).
+  Thirty actions, sparse overrides in `AppSettings`. The vocabulary
+  (`src/shared/keybindings.ts`) knows nothing about actions, because the
+  settings READER is `platform/Storage.ts` and it may not import the interface.
+  **Shift is not part of a binding** - a capital letter is the same key, which
+  is literally what the old handler's `toLowerCase()` did. Resolution is three
+  passes and a total order (the fixed Escape, then overrides in table order,
+  then defaults), so **two actions on one key is impossible by construction**,
+  including for a hand-edited file; an action can end with no key, which the
+  screen prints as a dash. A colliding rebinding names the other action rather
+  than silently unbinding it (Fehlerkatalog 30 in another currency), and
+  binding back onto the default REMOVES the override.
+- **The web channel: a shim, OPFS, a shorter ring - and the honest gap**
+  (D-260, E-13). `public/coi-serviceworker.js` adds COOP/COEP to every
+  response; `platform/isolation.ts` registers it and reloads **exactly once**,
+  with a session flag as the loop guard, nothing at all inside Tauri. **The
+  hard SharedArrayBuffer requirement stays and no line softens it** - there is
+  no single-threaded path behind the shim (law #10). Saves, recordings and both
+  shelf indexes go to OPFS with the in-memory map underneath; the settings stay
+  in `localStorage` (readable before anything is drawn, and their loss costs
+  only preferences). The autosave ring is **three in a browser against five on
+  the desktop** - OPFS shares one evictable origin quota with everything else
+  the site keeps. **Tested as shipped**: the spec loads the real shim file,
+  drives its fetch handler and asserts both headers, and the OPFS backend is
+  driven through `Storage.ts` with the module registry reset in between as a
+  real browser restart. **Not verifiable headless and therefore named rather
+  than claimed: that a real browser then reports `crossOriginIsolated`** -
+  serve `dist/` from a host that sends neither header, watch the single reload,
+  read `crossOriginIsolated` and `SharedArrayBuffer` in the console.
+- Measured: main chunk 1,070,428 -> **1,082,561 B (+12,133)**, budget raised
+  1,080,000 -> **1,094,000 B** with the split measured by deletion (+2,077 B
+  the catalogue rows in two languages, +10,056 B the mechanism); no new static
+  `src/sim` import chain. **Tick row +0,00 ms by construction** - no `src/sim`
+  file changed and both render additions sit in overlays that rebuild on an
+  event (D-177/D-186), never per frame.

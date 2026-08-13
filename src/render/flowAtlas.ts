@@ -1,4 +1,4 @@
-import { COMPANY_COLORS } from '../shared/palette';
+import { COMPANY_COLORS, COMPANY_COLORS_CVD } from '../shared/palette';
 import { SNAPSHOT_FLOW_STRIDE, SnapshotFlow } from '../shared/snapshot';
 
 /**
@@ -96,6 +96,18 @@ export const FLOW_LINE_SHADE_STEP = 0.12;
 
 /** The company palette as integer tints, parsed once at module load. */
 const COMPANY_TINTS: readonly number[] = COMPANY_COLORS.map((hex) =>
+  Number.parseInt(hex.slice(1), 16),
+);
+
+/**
+ * The same, in the colour-blind palette (17.4, SPEC2 M25).
+ *
+ * The arrows used the ordinary company colours while the minimap beside them
+ * already swapped - so the one overlay that draws several companies over each
+ * other was the one place the setting did not reach. One palette pair, two
+ * consumers.
+ */
+const COMPANY_TINTS_CVD: readonly number[] = COMPANY_COLORS_CVD.map((hex) =>
   Number.parseInt(hex.slice(1), 16),
 );
 
@@ -251,9 +263,10 @@ export function flowHead(cx: number, cy: number, x2: number, y2: number, sizePx:
  * stays the dominant read. Line id 0 (and free-order traffic) is the pure
  * company colour.
  */
-export function flowStrokeColor(ownerId: number, lineId: number): number {
+export function flowStrokeColor(ownerId: number, lineId: number, colorBlind = false): number {
   if (ownerId < 0) return FLOW_ESTIMATE_COLOR;
-  const base = COMPANY_TINTS[ownerId % COMPANY_TINTS.length]!;
+  const palette = colorBlind ? COMPANY_TINTS_CVD : COMPANY_TINTS;
+  const base = palette[ownerId % palette.length]!;
   if (lineId < 0) return base;
   return lightenColor(base, (lineId % FLOW_LINE_SHADE_STEPS) * FLOW_LINE_SHADE_STEP);
 }

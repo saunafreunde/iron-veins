@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import de from '../../src/i18n/de.json';
+import { hasTranslation } from '../../src/i18n';
 import { INDUSTRY_CLOSURE_MONTHS, NEWS_LOG_SIZE, TICKS_PER_MONTH } from '../../src/sim/constants';
 import { IndustryType, newIndustry } from '../../src/sim/industry/types';
 import { NewsCategory, NewsLog, NewsSeverity, NEWS_CATEGORY_KEYS } from '../../src/sim/news/log';
@@ -88,7 +89,10 @@ describe('what the simulation reports', () => {
     // Every entry can be found on the map, and every one names a real string.
     for (const news of world.news.all) {
       if (news.category === NewsCategory.Industry) expect(news.tileIndex).toBeGreaterThanOrEqual(0);
-      expect(news.messageKey in de).toBe(true);
+      // `hasTranslation` rather than `key in de`: a sentence that learned to
+      // count (SPEC2 M25) has plural rows and no bare row, so membership is
+      // the wrong question about the catalogue now.
+      expect(hasTranslation(news.messageKey), news.messageKey).toBe(true);
     }
   });
 

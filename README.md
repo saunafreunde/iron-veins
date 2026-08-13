@@ -42,8 +42,18 @@ world.
 | Your own music | `assets/music/` — the game ships none and looks for nothing |
 
 Autosave writes one of five slots every six game months and never touches a
-save you made yourself. In a browser build there is no application directory,
-so settings go to `localStorage` and saves are exported as downloads.
+save you made yourself. In a browser build there is no application directory:
+settings go to `localStorage`, and the saves and recordings go to the Origin
+Private File System - real storage that survives closing the tab, with a ring
+of three autosaves rather than five because that quota is shared with
+everything else the browser keeps for this site and can be evicted. A browser
+without OPFS keeps them in memory for the session, and every save can be
+exported as a download either way.
+
+A web build on a host that sends no COOP/COEP headers installs a service worker
+that adds them and reloads the page once; without cross-origin isolation there
+is no `SharedArrayBuffer`, and there is deliberately no single-threaded
+fallback. The system panel says which it got.
 
 ---
 

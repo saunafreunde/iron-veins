@@ -1063,6 +1063,14 @@ body {
   font-size: 0.8rem;
 }
 
+/* A key row waiting for the player to press their new key (SPEC2 M25). The
+   whole row widens because the prompt is a sentence, not a keycap. */
+.key--capturing {
+  border-color: var(--accent);
+  color: var(--accent);
+  justify-self: stretch;
+}
+
 /* A tutorial lesson: a checklist that ticks itself off. */
 .checklist {
   margin: 0;

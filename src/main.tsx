@@ -1,6 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { t } from './i18n';
+import { browserIsolationEnvironment, ensureCrossOriginIsolation } from './platform/isolation';
 import { getPlatformInfo, reportStartupDiagnostics } from './platform/Platform';
 import { DEFAULT_MAP_SIZE, Difficulty, MapClimate } from './sim/constants';
 import { App } from './ui/App';
@@ -61,15 +62,30 @@ client.onReplayWritten = (message) => {
   void storeReplay(message.bytes, message.meta, message.label, Date.now());
 };
 
-client.start({
-  // Main-thread randomness is fine - the seed becomes part of the world state
-  // and everything downstream of it is derived deterministically.
-  seed: Math.floor(Math.random() * 0x1_0000_0000),
-  difficulty: Difficulty.Normal,
-  climate: MapClimate.Temperate,
-  mapSize: DEFAULT_MAP_SIZE,
-  companyName: t('ui.defaultCompanyName'),
-  companyColorIndex: 1,
+/**
+ * The web channel's admission ticket comes FIRST (E-13, SPEC2 M25).
+ *
+ * On a host that sends no COOP/COEP the service-worker shim supplies them, and
+ * the page then reloads exactly once; starting the simulation before that
+ * would mean building a world in a document that is about to be replaced - and
+ * showing the player the "no shared memory" screen for the half second before
+ * it happens. Every other outcome starts the game as it always did, including
+ * `unavailable`: the hard SharedArrayBuffer requirement is `SimClient.start`'s
+ * own, it is where the honest message lives, and there is no single-threaded
+ * fallback behind it (law #10).
+ */
+void ensureCrossOriginIsolation(browserIsolationEnvironment()).then((outcome) => {
+  if (outcome === 'reloading') return;
+  client.start({
+    // Main-thread randomness is fine - the seed becomes part of the world state
+    // and everything downstream of it is derived deterministically.
+    seed: Math.floor(Math.random() * 0x1_0000_0000),
+    difficulty: Difficulty.Normal,
+    climate: MapClimate.Temperate,
+    mapSize: DEFAULT_MAP_SIZE,
+    companyName: t('ui.defaultCompanyName'),
+    companyColorIndex: 1,
+  });
 });
 
 // Settings first, so the language, the scale and the palette are right before

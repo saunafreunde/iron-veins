@@ -9,6 +9,8 @@
  * same commands are identical whatever is in here.
  */
 
+import { normaliseBindingOverrides } from './keybindings';
+
 /** UI scale steps of section 17.4, as percentages. */
 export const UI_SCALES: readonly number[] = [100, 125, 150, 200];
 
@@ -94,6 +96,23 @@ export interface AppSettings {
    * a pure function of the snapshot tick, so the simulation never sees it.
    */
   readonly dayNight: boolean;
+  /**
+   * Stop the things that move for their own sake (SPEC2 M25): smoke, exhaust,
+   * rain and snow, the water's three-frame cycle, and every transition and
+   * animation in the interface. Render-only in the strictest sense - a world
+   * played with it on is bit-identical to one played without it, because the
+   * particles and the water row have never been anything but pixels (Z1).
+   */
+  readonly reducedMotion: boolean;
+  /**
+   * Key bindings the player changed, as `actionId -> binding` (SPEC2 M25,
+   * D-114's table made editable). Sparse on purpose: an action that is not in
+   * here uses the table's own default, so a build that adds an action gives it
+   * to everybody rather than leaving it unbound for anyone who ever opened the
+   * controls screen. `src/shared/keybindings.ts` decides what a binding is;
+   * `src/ui/keymap.ts` decides which ids exist and refuses a conflict.
+   */
+  readonly keyBindings: Readonly<Record<string, string>>;
   /** Volume per channel, 0..1, indexed by VolumeChannel. */
   readonly volumes: readonly number[];
   /** Master switch for the whole audio engine. */
@@ -122,12 +141,61 @@ export const DEFAULT_SETTINGS: AppSettings = {
   uiScalePercent: 100,
   colorBlind: false,
   dayNight: true,
+  reducedMotion: false,
+  keyBindings: {},
   volumes: [0.6, 0.4, 0, 0.5],
   audioEnabled: true,
   autosave: true,
   offerTutorial: true,
   notifications: DEFAULT_NOTIFICATIONS,
 };
+
+/** The locales the catalogues carry, as primary language subtags. */
+export const SUPPORTED_LANGUAGES: readonly string[] = ['de', 'en'];
+
+/**
+ * What the OS says, when there is no settings file to say otherwise (SPEC2
+ * M25: "OS-Locale-Erkennung beim Erststart").
+ *
+ * First boot ONLY, and that is the whole design: a stored file always wins,
+ * because a player who chose English on a German system chose it, and a
+ * detector that re-ran on every start would take it away from them once a
+ * browser update changed `navigator.languages`. Region subtags are ignored -
+ * `de-AT` and `de-CH` read the German catalogue, since the alternative is a
+ * fallback to the wrong language for a spelling difference.
+ *
+ * Pure: the caller hands over the tags, so the rule is tested without a
+ * navigator and the platform layer has the one line that reads one.
+ */
+export function detectLanguage(tags: readonly string[]): string {
+  for (const tag of tags) {
+    if (typeof tag !== 'string') continue;
+    const primary = tag.split('-')[0]!.toLowerCase();
+    if (SUPPORTED_LANGUAGES.includes(primary)) return primary;
+  }
+  return DEFAULT_SETTINGS.locale;
+}
+
+/**
+ * The settings a machine that has never run this game starts with: the
+ * defaults, plus what the operating system has already been asked about.
+ *
+ * Reduced motion is here for the same reason the language is: a player who
+ * has told their system that motion hurts has already answered the question,
+ * and asking it again in a menu they may never open is the accessibility
+ * failure this setting exists to avoid. Both are defaults, not locks - the
+ * options screen overrules either, and the choice is then in the file.
+ */
+export function firstBootSettings(env: {
+  readonly languages: readonly string[];
+  readonly prefersReducedMotion: boolean;
+}): AppSettings {
+  return {
+    ...DEFAULT_SETTINGS,
+    locale: detectLanguage(env.languages),
+    reducedMotion: env.prefersReducedMotion,
+  };
+}
 
 /**
  * Make a settings object out of whatever was on disk.
@@ -178,6 +246,13 @@ export function normaliseSettings(raw: unknown): AppSettings {
     colorBlind: value['colorBlind'] === true,
     // Absent in files written before M10; on unless explicitly turned off.
     dayNight: value['dayNight'] !== false,
+    // Absent before M25. Off unless the file says otherwise: a file that
+    // predates the setting was written by a build whose world moved, and
+    // inheriting the OS preference here would change what an existing player
+    // sees on an update they did not ask for. First boot is where the system
+    // is consulted (`firstBootSettings`).
+    reducedMotion: value['reducedMotion'] === true,
+    keyBindings: normaliseBindingOverrides(value['keyBindings']),
     volumes,
     audioEnabled: value['audioEnabled'] !== false,
     autosave: value['autosave'] !== false,

@@ -22,6 +22,10 @@ export function applySettings(settings: AppSettings): void {
     const root = document.documentElement;
     root.style.setProperty('--ui-scale', String(settings.uiScalePercent / 100));
     root.dataset['colorBlind'] = settings.colorBlind ? 'on' : 'off';
+    // The map reads this through `MapCanvas` (a React effect on the same
+    // field); the attribute is here so a stylesheet rule can reach it too,
+    // which is what makes the setting whole rather than map-only.
+    root.dataset['reducedMotion'] = settings.reducedMotion ? 'on' : 'off';
     root.lang = settings.locale;
   }
 }

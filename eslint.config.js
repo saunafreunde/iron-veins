@@ -272,5 +272,17 @@ export default tseslint.config(
     },
   },
 
+  // ------------------------------------------- the service-worker shim (E-13)
+  // `public/` is served verbatim, so the COOP/COEP shim of SPEC2 M25 is plain
+  // JavaScript running in a service worker rather than a module vite builds.
+  // It is linted like everything else; it just lives in a different global
+  // scope, where `self`, `fetch`, `Headers` and `Response` are the vocabulary.
+  {
+    files: ['public/**/*.js'],
+    languageOptions: {
+      globals: { ...globals.serviceworker },
+    },
+  },
+
   prettier,
 );
