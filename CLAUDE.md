@@ -4251,4 +4251,102 @@ band on the euro (aiGame sweep 7,293,303 EUR).
   M16 replay (D-196 proved medal -> hash -> replay end to end and a stage is an
   ordinary scenario, but no run over one of the twelve maps was recorded), and
   the "Hard > Normal at the same seed" ordering of D-252/D-253, which this
-  bundle did not touch.
+  bundle did not touch. **Bundle 5 below closes the first and answers the second
+  without closing it** (D-256): the medal run is an artefact now, and the
+  ordering is measured on the instrument the clause needed rather than on the
+  one it named - where it holds by less than one line and reverses under its own
+  exposure control, so it is reported open with both sets of numbers.
+
+## M24 bundle 5 - the instrument a difficulty level can be measured on (D-256)
+
+M24's last two open clauses and two defects an independent verifier named. **No
+save bump** (v34 stands), no migration, no hashed byte, no snapshot byte, no
+protocol field, no RNG draw, no atlas cell, no i18n line; the only file under
+`src/` is `src/scenarios/campaign.ts`, and what changed there is two briefings.
+All three pins re-run and unmoved (`b7e632a7124e67ce` / `a00868b9911f12d6` /
+`64fec78d6bf0cd5e` at 35 commands).
+
+- **The difficulty clause measured the wrong thing, and the right instrument is
+  LINE SURVIVAL.** SPEC2 M24 asks for a Hard competitor with a measurably
+  higher company value than a Normal one; at equal capital (D-253) Hard is
+  5.6 % BELOW Normal over sixteen seeds and above it on 5 of 16, with EASY - the
+  shallowest chain look-ahead - on top. D-253 named the reason and did not take
+  it: a balance sheet at year twenty-five cannot tell a line that was never
+  built from a line that died (D-225). `tests/balance/aiLineSurvival.ts` is the
+  instrument that can - every line every competitor opens, with its opening and
+  closing tick, sampled once a game day (exact by construction:
+  `AI_DECISION_INTERVAL_TICKS` is two game days and a competitor issues at most
+  one line command per cycle) and **cross-checked against the accepted
+  `CreateLine` commands of D-220's outcome sink**, which agree exactly.
+  Measured over the sixteen acceptance seeds: opened **61 / 35 / 32**, standing
+  at year 25 **28 / 17 / 16**, share **45.9 / 48.6 / 50.0 %** - monotone in the
+  one knob that differs across all three rows and was NOT measured inert in
+  D-252 (the chain look-ahead; candidate depth and fleet headroom differ across
+  all three too and are exactly inert, the terrain probe separates only Normal
+  from Hard). Per seed Hard is above Normal on 3, level on 10, below on exactly
+  1 and undefined on 2, against 5/2/9 on company value.
+- **And the clause is still NOT closed, which is the finding rather than an
+  apology.** The survival ordering fails two tests of its own and the instrument
+  is what shows both, which is what makes it an honest instrument instead of a
+  flattering one. **Resolution**: at 61/35/32 lines ONE line is worth 16/29/31
+  per mille and the gaps are **27** (Easy->Normal) and **14** (Normal->Hard) -
+  both under one line, so one Hard line closing instead of surviving reads 15/32
+  = 46.9 % and puts Hard BELOW Normal; `SURVIVAL_BANDS` bands each level at
+  +-100 per mille and gives that same arithmetic as its reason, so the band
+  argument is wider than the ordering. **Control**: a Hard competitor opens its
+  lines in game year 10.60 on average against Easy's 7.82, and the raw share
+  counts a line opened in year twenty-four as a survivor; at equal exposure
+  (12.5 game years of risk) the ordering is gone and reversed - **45.0 / 42.9 /
+  36.8 %** - and the mean life of a line that DID close carries no ordering at
+  all (3.23 / 2.70 / 2.88 years). So what a deeper chain test demonstrably buys
+  is FEWER and LATER lines, not more durable ones, the ordering is PRINTED and
+  pinned as today's number rather than claimed (D-248's posture), and nothing in
+  `DIFFICULTY_AI_TRAITS` was touched to make a number green (D-197). Every other
+  candidate reading - crewed companies 17/12/10, lines/vehicles/stations
+  28/17/16, 168/102/90, 104/63/55, the age of the oldest surviving line - ranks
+  Easy first, because Easy builds the most.
+- **`AI_ACCEPTANCE_SEEDS` is in the repository now** (`tests/balance/
+  determinism.ts`, the first four ARE `AI_SWEEP_SEEDS`): the sixteen-seed bar
+  D-228, D-229, D-252 and D-253 all measured on lived in throwaway probes, so a
+  later bundle could reproduce their conclusions only by guessing. The
+  difficulty file sweeps all sixteen - forty-eight quarter centuries, measured
+  654.7 s against the four-seed file's 194 s and booked in SPEC2 6.3 - because
+  the four-seed view has now disagreed with the sixteen-seed one twice in three
+  bundles (D-220). **It paid for itself on its first run**:
+  `RefitVehicle|insufficientFunds` occurs on one of the sixteen seeds (2718, x4
+  against 8 accepted, from game year 22.1) and came through D-220's
+  declared-set guard as an undeclared pair - D-158's bottleneck one command
+  further on, now declared with its measurement.
+- **A briefing lied and the guard could not see it** (stage 11, seed 1102): "von
+  der naechsten Erzgrube bis zum naechsten Stahlwerk sind es 32 Tiles" was a
+  TRUE distance between the WRONG pair - the nearest of that map's sixteen
+  ore-to-steel pairs is 28.3 tiles, not 32.2. The briefing says 28 now, the
+  claim is the pair it means, and `CorridorClaim.nearest` asserts the sentence
+  itself: no pair of those two industry types stands closer. Seven stages make
+  that claim and the other six were measured true; stage 02's stronger
+  "shortest chain this map offers" is held by `shortestChain` (23.0 tiles, the
+  next producer-to-acceptor pair is 81.3). D-198's Frachtrausch finding, one
+  claim type along.
+- **A documentation overclaim made true**: D-254, this file and the campaign
+  header all said stages 1-6 ship solo "and say so in both briefings", and
+  stage 06 said it in neither. It does now, and a test reads every solo briefing
+  for the sentence AND every contested one for its absence.
+- **The campaign medal run exists** (`tests/determinism/campaignMedal.spec.ts`,
+  9.4 s): stage 08 played through the player's own commands - road, two stops, a
+  shed, four omnibuses running - a medal decided by the goal machine, recorded
+  as an `.ironreplay`, verified, and the goal block reproduced field by field
+  from the newest checkpoint AND from the genesis, where the campaign map is
+  regenerated from the stage's own seed on the way through. **The stage was
+  chosen by measurement**: on stage 01 (1850) the same four buses never leave
+  the depot tile - 3,200 N against 2,600 kg cannot start on the height step at
+  its door - and deliver nothing in ten game years; on stage 04 (1880) they
+  deliver 1,003 units in year one and nothing in the next five; on stage 08
+  (1920) they deliver 5,127 in year one and 42,082 by the eighth.
+- **Named residual, found while building that artefact and deliberately not
+  fixed here: a `ConnectStations` goal is met by the SCHEDULE.**
+  `townsConnected` asks the cargo link graph, which is built from vehicle ORDERS
+  (an undriven leg is credited a straight line at 54 km/h, D-077). Measured on
+  stage 06, where the road between the two towns is refused `onWater`: four
+  buses that can reach neither stop, and the goal Achieved at tick 200 with a
+  gold medal. Changing it moves `goals.spec`, `gameScore` and the shipped
+  scenario claims, so it is its own bundle.

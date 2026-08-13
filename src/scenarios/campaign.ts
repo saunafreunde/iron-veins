@@ -41,9 +41,12 @@ import { endOfYearIn } from './years';
  * years, and what each competitor owns at the end of them, pinned exactly.
  *
  *  - **Stages 1 to 6 (1850 and 1880) ship with no competitor at all**, and both
- *    briefings say so in words. The probe builds each of those worlds with TWO
- *    competitors added and pins what they reach: on the four 1850/1880 worlds of
- *    stages 1, 2, 3, 5 and 6 they build NOTHING in six years, and on stage 4 -
+ *    briefings say so in words - which stage 06 did NOT until D-256, where the
+ *    text was corrected and the claim bound to a test that reads every solo
+ *    briefing for the sentence and every contested one for its absence. The
+ *    probe builds each of those worlds with TWO competitors added and pins what
+ *    they reach: on the five 1850/1880 worlds of stages 1, 2, 3, 5 and 6 they
+ *    build NOTHING in six years, and on stage 4 -
  *    an 1880 world - they build four and three stations respectively and crew
  *    NEITHER of them. That is D-250's "partly at 1880" reproduced in this
  *    campaign's own worlds, and it is why those six stages are solo: a scenario
@@ -580,12 +583,13 @@ const STAGE_06: ShippedScenario = {
       'andere Etappe dieser Kampagne -, davon drei Forstbetriebe. Wer hier Geld ' +
       'verdienen will, faehrt Menschen. Zwischen Quillmouth und Yarrowbridge liegen 28 ' +
       'Tiles und 15 Hoehenstufen Auf und Ab. Beide Streckenkosten aus 8.4 sind ' +
-      'eingeschaltet.',
+      'eingeschaltet. Kein Konkurrent baut hier mit.',
     en:
       '1880, the tropics. Five industries on the whole map - no other stage of this ' +
       'campaign carries fewer - three of them forestries. Anyone earning money here ' +
       'carries people. Between Quillmouth and Yarrowbridge lie 28 tiles and 15 height ' +
-      'levels of climb. Both route costs of 8.4 are on.',
+      'levels of climb. Both route costs of 8.4 are on. No competitor builds alongside ' +
+      'you here.',
   },
   goals: [
     {
@@ -1034,8 +1038,11 @@ const STAGE_10: ShippedScenario = {
  * Seed 1102, desert, highland preset, 256 tiles, 1950, two competitors, Hard.
  * Measured: forty towns, four at 8,000, SEVENTEEN at 2,500 or more - more than
  * any other stage - and eleven industries: four iron ore mines, four steel
- * mills, two coal mines and a power station. The ore mine at 139,51 is 32.2
- * tiles from the steel mill at 168,65.
+ * mills, two coal mines and a power station. The ore mine at 196,69 is 28.3
+ * tiles from the steel mill at 168,65, and that is the CLOSEST of the sixteen
+ * ore-to-steel pairs this map offers - which is what the briefing's "nearest"
+ * says and what `CorridorClaim.nearest` now holds it to (D-256; the sentence
+ * quoted 32 tiles, which is the pair 139,51 -> 168,65, the third shortest).
  *
  * Harsh weather, which the balance suite measures at 4.36 % of a freight year
  * on the reference coal line (D-204), and the century on top of it.
@@ -1047,13 +1054,13 @@ const STAGE_11: ShippedScenario = {
   briefing: {
     de:
       '1950, Wueste. Elf Industrien: vier Eisenerzgruben, vier Stahlwerke, zwei ' +
-      'Kohlegruben. Von der naechsten Erzgrube bis zum naechsten Stahlwerk sind es 32 ' +
+      'Kohlegruben. Von der naechsten Erzgrube bis zum naechsten Stahlwerk sind es 28 ' +
       'Tiles. Siebzehn Orte ab 2.500 Einwohnern - mehr traegt keine andere Etappe. Das ' +
       'Wetter steht auf rau, die Konjunktur laeuft, 250.000 EUR Startkapital. Zwei ' +
       'Konkurrenten: nach sechs Jahren haelt einer 3 Stationen und 12 Fahrzeuge.',
     en:
       '1950, desert. Eleven industries: four iron ore mines, four steel mills, two coal ' +
-      'mines. From the nearest ore mine to the nearest steel mill is 32 tiles. Seventeen ' +
+      'mines. From the nearest ore mine to the nearest steel mill is 28 tiles. Seventeen ' +
       'towns at 2,500 inhabitants or more - no other stage carries more. Weather is set ' +
       'to harsh, the century runs, 250,000 EUR of starting capital. Two competitors: ' +
       'after six years one holds 3 stations and 12 vehicles.',

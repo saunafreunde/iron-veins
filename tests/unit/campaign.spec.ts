@@ -105,6 +105,26 @@ interface CorridorClaim {
   readonly levels: number;
   /** The lowest and the highest level, where a sentence names them. [levels] */
   readonly heights?: readonly [number, number];
+  /**
+   * Set where a briefing calls this pair the NEAREST one of its kind: no pair
+   * of industries of these two types stands closer on this map.
+   *
+   * The distance alone is not that claim, and stage 11 is why the flag exists
+   * (D-256): its corridor was pinned at 32.2 tiles and measured true, its
+   * briefing said "from the nearest ore mine to the nearest steel mill", and
+   * the nearest of the sixteen ore-to-steel pairs on that map is 28.3. A pinned
+   * number can be a true measurement of the wrong pair - which is D-198's
+   * Frachtrausch finding ("three of the four" was wrong by one) one claim type
+   * along. Seven of the twelve stages make this claim and it now holds on all
+   * seven; the one that did not is the one that was corrected.
+   */
+  readonly nearest?: true;
+  /**
+   * Set where a briefing calls this the SHORTEST CHAIN the map offers: no pair
+   * of industries where one makes what the other takes stands closer, whatever
+   * their types. Only stage 02 says it, and it is measured true.
+   */
+  readonly shortestChain?: true;
 }
 
 /**
@@ -186,7 +206,16 @@ const CAMPAIGN_WORLD_CLAIMS: Readonly<Record<string, WorldClaim>> = {
     towns: [],
     briefingTowns: [],
     corridors: [
-      { from: atIndustry(6), to: atIndustry(10), distance: 23, climb: 1, water: 0, levels: 1 },
+      {
+        from: atIndustry(6),
+        to: atIndustry(10),
+        distance: 23,
+        climb: 1,
+        water: 0,
+        levels: 1,
+        nearest: true,
+        shortestChain: true,
+      },
     ],
     landmassTiles: [48_648, 305],
     competitors: {
@@ -259,7 +288,15 @@ const CAMPAIGN_WORLD_CLAIMS: Readonly<Record<string, WorldClaim>> = {
     towns: [[6, 'Kupferfurt', 8_000]],
     briefingTowns: [6],
     corridors: [
-      { from: atIndustry(3), to: atIndustry(6), distance: 24.7, climb: 1, water: 0, levels: 1 },
+      {
+        from: atIndustry(3),
+        to: atIndustry(6),
+        distance: 24.7,
+        climb: 1,
+        water: 0,
+        levels: 1,
+        nearest: true,
+      },
     ],
     industriesOfType: [[IndustryType.Farm, 4]],
     passiveGrowth: {
@@ -309,8 +346,24 @@ const CAMPAIGN_WORLD_CLAIMS: Readonly<Record<string, WorldClaim>> = {
     towns: [],
     briefingTowns: [],
     corridors: [
-      { from: atIndustry(5), to: atIndustry(2), distance: 16.1, climb: 5, water: 0, levels: 1 },
-      { from: atIndustry(10), to: atIndustry(2), distance: 8.1, climb: 1, water: 0, levels: 1 },
+      {
+        from: atIndustry(5),
+        to: atIndustry(2),
+        distance: 16.1,
+        climb: 5,
+        water: 0,
+        levels: 1,
+        nearest: true,
+      },
+      {
+        from: atIndustry(10),
+        to: atIndustry(2),
+        distance: 8.1,
+        climb: 1,
+        water: 0,
+        levels: 1,
+        nearest: true,
+      },
     ],
     industriesOfType: [
       [IndustryType.IronOreMine, 3],
@@ -336,7 +389,15 @@ const CAMPAIGN_WORLD_CLAIMS: Readonly<Record<string, WorldClaim>> = {
     ],
     briefingTowns: [9, 11],
     corridors: [
-      { from: atIndustry(11), to: atIndustry(8), distance: 18.4, climb: 6, water: 1, levels: 6 },
+      {
+        from: atIndustry(11),
+        to: atIndustry(8),
+        distance: 18.4,
+        climb: 6,
+        water: 1,
+        levels: 6,
+        nearest: true,
+      },
       { from: atTown(9), to: atTown(11), distance: 40.8, climb: 13, water: 0, levels: 7 },
     ],
     industriesOfType: [[IndustryType.PowerPlant, 4]],
@@ -357,7 +418,15 @@ const CAMPAIGN_WORLD_CLAIMS: Readonly<Record<string, WorldClaim>> = {
     towns: [],
     briefingTowns: [],
     corridors: [
-      { from: atIndustry(9), to: atIndustry(8), distance: 14, climb: 0, water: 0, levels: 0 },
+      {
+        from: atIndustry(9),
+        to: atIndustry(8),
+        distance: 14,
+        climb: 0,
+        water: 0,
+        levels: 0,
+        nearest: true,
+      },
     ],
     industriesOfType: [
       [IndustryType.PowerPlant, 4],
@@ -400,7 +469,15 @@ const CAMPAIGN_WORLD_CLAIMS: Readonly<Record<string, WorldClaim>> = {
     towns: [],
     briefingTowns: [],
     corridors: [
-      { from: atIndustry(6), to: atIndustry(3), distance: 32.2, climb: 8, water: 0, levels: 6 },
+      {
+        from: atIndustry(4),
+        to: atIndustry(3),
+        distance: 28.3,
+        climb: 4,
+        water: 0,
+        levels: 2,
+        nearest: true,
+      },
     ],
     industriesOfType: [
       [IndustryType.IronOreMine, 4],
@@ -427,7 +504,15 @@ const CAMPAIGN_WORLD_CLAIMS: Readonly<Record<string, WorldClaim>> = {
     ],
     briefingTowns: [9, 24],
     corridors: [
-      { from: atIndustry(10), to: atIndustry(2), distance: 28.1, climb: 7, water: 1, levels: 4 },
+      {
+        from: atIndustry(10),
+        to: atIndustry(2),
+        distance: 28.1,
+        climb: 7,
+        water: 1,
+        levels: 4,
+        nearest: true,
+      },
       { from: atTown(9), to: atTown(24), distance: 71.1, climb: 15, water: 0, levels: 5 },
     ],
     industriesOfType: [[IndustryType.Refinery, 3]],
@@ -711,6 +796,49 @@ function corridor(
     if (map.landmassId[map.tileIndex(x, y)]! < 0) water++;
   }
   return { climb, minH, maxH, water, distance: Math.hypot(a.x - b.x, a.y - b.y) };
+}
+
+/**
+ * The shortest straight line between an industry of `from`'s type and one of
+ * `to`'s type - the measurement behind {@link CorridorClaim.nearest}.
+ *
+ * It asks the map, not the claim: "the nearest ore mine to the nearest steel
+ * mill" is a statement about every pair on the map, and a pinned distance
+ * between two named industries cannot say it (D-256).
+ */
+function nearestOfTypes(world: World, from: CorridorEnd, to: CorridorEnd): number {
+  expect('industry' in from && 'industry' in to, 'a nearest claim addresses industries').toBe(true);
+  const fromType = world.industries[(from as { industry: number }).industry]!.type;
+  const toType = world.industries[(to as { industry: number }).industry]!.type;
+  let best = Infinity;
+  for (const a of world.industries) {
+    if (a.type !== fromType) continue;
+    for (const b of world.industries) {
+      if (b.type !== toType || a === b) continue;
+      const distance = Math.hypot(a.x - b.x, a.y - b.y);
+      if (distance < best) best = distance;
+    }
+  }
+  return best;
+}
+
+/**
+ * The shortest straight line between any industry and one that takes what it
+ * makes - the measurement behind {@link CorridorClaim.shortestChain}.
+ */
+function shortestChainTiles(world: World): number {
+  let best = Infinity;
+  for (const a of world.industries) {
+    const outputs = industrySpec(a.type).outputs;
+    for (const b of world.industries) {
+      if (a === b) continue;
+      const inputs = industrySpec(b.type).inputs;
+      if (!outputs.some((cargo) => inputs.includes(cargo))) continue;
+      const distance = Math.hypot(a.x - b.x, a.y - b.y);
+      if (distance < best) best = distance;
+    }
+  }
+  return best;
 }
 
 function landmassOfTown(world: World, townId: number): number {
@@ -1050,6 +1178,18 @@ describe('every load-bearing claim a campaign briefing makes is true of its worl
           expect([measured.minH, measured.maxH], `${where} heights`).toEqual([...line.heights]);
           expect(line.heights[1] - line.heights[0], `${where} heights vs levels`).toBe(line.levels);
         }
+        if (line.nearest === true) {
+          expect(
+            Math.round(nearestOfTypes(world, line.from, line.to) * 10) / 10,
+            `${where} is the nearest pair of its two industry types`,
+          ).toBe(line.distance);
+        }
+        if (line.shortestChain === true) {
+          expect(
+            Math.round(shortestChainTiles(world) * 10) / 10,
+            `${where} is the shortest producer-to-acceptor pair on the map`,
+          ).toBe(line.distance);
+        }
       }
 
       if (claim.landmassTiles !== undefined) {
@@ -1180,6 +1320,34 @@ describe('no stage rests on opponents that never move', () => {
       }
     });
   }
+
+  it('says in BOTH briefings that a solo stage is solo, and never says it elsewhere', () => {
+    // **D-254 claimed this in three places and stage 06 did not do it** (D-256):
+    // the campaign header, the decision entry and the CLAUDE.md digest all said
+    // "stages 1-6 ship solo and say so in both briefings", and "Fuenf Werke"
+    // said nothing about competitors at all. A player reading it had no way to
+    // know whether the map was empty or whether the briefing had simply not
+    // mentioned the two companies building on it.
+    //
+    // The guard is a phrase table rather than a substring, because German says
+    // it two ways ("Kein Konkurrent ..." and "Konkurrenten bauen hier noch
+    // keine"), and it runs in BOTH directions: a contested stage that claimed
+    // to be alone would be the same defect with the sign flipped.
+    const SOLO_PHRASES: Readonly<Record<'de' | 'en', readonly RegExp[]>> = {
+      de: [/kein konkurrent/i, /konkurrenten bauen hier noch keine/i],
+      en: [/no competitor/i],
+    };
+    for (const scenario of CAMPAIGN_SCENARIOS) {
+      const solo = scenario.rules.aiCompanies === 0;
+      for (const locale of ['de', 'en'] as const) {
+        const text = scenario.briefing[locale];
+        const says = SOLO_PHRASES[locale].some((phrase) => phrase.test(text));
+        expect(says, `${scenario.id}/${locale}: solo=${solo} but the briefing says ${says}`).toBe(
+          solo,
+        );
+      }
+    }
+  });
 
   it('ships competitors exactly where the era supports them', () => {
     // The rule the campaign was built to, stated as a test rather than as a

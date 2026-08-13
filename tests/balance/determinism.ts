@@ -161,6 +161,40 @@ export const AI_SWEEP_SEEDS: readonly number[] = [4_711, 4_713, 4_712, 4_714];
  */
 export const AI_SWEEP_DEFAULT_SIZE = 2;
 
+/**
+ * **The sixteen acceptance seeds**: the bar every AI-wide claim since D-228 has
+ * been measured on, written down here for the first time (D-256).
+ *
+ * D-228 (the rail question), D-229 (the profit-floor sweep) and D-252/D-253
+ * (the difficulty levels) all measured "over sixteen seeds" with the list living
+ * in a throwaway probe, so a later bundle could reproduce the CONCLUSION only by
+ * guessing the seeds. `aiDifficulty.spec.ts` sweeps it, which is why it lives
+ * beside the four-seed list it extends: **the first four ARE
+ * {@link AI_SWEEP_SEEDS}, in that order**, so the difficulty file and the
+ * `aiGame` acceptance run agree about which worlds they are talking about.
+ *
+ * Why sixteen and not four, in one sentence: the four-seed view has now
+ * disagreed with the sixteen-seed one twice in three bundles (D-252's capital
+ * confound, D-253's ordering, which holds on 3 of the 4 swept seeds and on 5 of
+ * the 16), and D-220 is the entry that says what a claim measured on the seeds
+ * a suite happens to play is worth.
+ */
+export const AI_ACCEPTANCE_SEEDS: readonly number[] = [
+  ...AI_SWEEP_SEEDS,
+  2_718,
+  31_415,
+  60_613,
+  12_345,
+  77_003,
+  918_273,
+  131_313,
+  860_213,
+  8_675_309,
+  246_813,
+  555_777,
+  22_071_969,
+];
+
 /** The seeds this run sweeps: the first two, or all of them in the full job. */
 export function aiSweepSeeds(): readonly number[] {
   return fullBalanceMode() ? AI_SWEEP_SEEDS : AI_SWEEP_SEEDS.slice(0, AI_SWEEP_DEFAULT_SIZE);

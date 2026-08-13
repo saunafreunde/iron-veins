@@ -184,6 +184,21 @@ export const DECLARED_REFUSALS: ReadonlyMap<string, string> = new Map([
       '2718 against 8 accepted and x3 on 12345 against 21, both on the SECOND or ' +
       'third line of a company that had already spent on way and stops (D-223)',
   ],
+  [
+    `RefitVehicle|${RejectReason.InsufficientFunds}`,
+    'the same bottleneck one command further on: `crewOntoLine` refits every ' +
+      'vehicle it has just bought to the line cargo, and a company that could ' +
+      'not pay for the fleet cannot pay for the refit either. **Found by the ' +
+      'sixteen-seed sweep of D-256 and by nothing before it** - measured x4 ' +
+      'against 8 accepted ON ONE of the sixteen (seed 2718, played alone: four ' +
+      'refusals, eight accepted, the first at tick 1,590,935 = game year 22.10, ' +
+      'on the Hard arm, in the last years of the company that is wound up ' +
+      'there). Four is also the SWEEP total, which is what says no other seed ' +
+      'produces one; the sweep trace prints it as `x4 (accepted 50)` because ' +
+      'the accepted count there is the sixteen seeds added up. The consequence ' +
+      'is named rather than hidden: the vehicle keeps the cargo it was bought ' +
+      'with.',
+  ],
 ]);
 
 /**
