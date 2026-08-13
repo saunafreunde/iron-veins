@@ -139,14 +139,18 @@ rewrites nothing - the cached-rm is what forces the re-checkout.
 and three bundle reports said it was** (D-227, which supersedes the claim).
 Measured: the working tree is LF throughout, `core.autocrlf` is `false`, and a
 CRLF file would produce a diff on EVERY line (1,622 lines for an 811-line file),
-where the 31 failing files produce 3 to 520 lines each, all of them table
+where the failing files produce 3 to 520 lines each, all of them table
 padding, emphasis markers, collapsed JSON arrays and hand wrapping around
 `printWidth: 100`. **The cause is that the formatter has never been run on
 them**: `format:check` is in `package.json` and in no CI job, there is no hook,
-and 25 of the 31 were already dirty at the commit that added them. SPEC.md and
-SPEC2.md - 1,002 of the roughly 1,300 dirty lines - are a permanent case,
-because this file's first sentence says SPEC.md is the brief VERBATIM. Repairing
-the rest is its own session with its own diff.
+and 25 of the 31 dirty files of 2026-08-11 were already dirty at the commit that
+added them. **The COUNT is dated, because it grows with every bundle that nobody
+formats**: 31 files on 2026-08-11 (D-227), **42 files on 2026-08-13** (D-257,
+re-measured with `npx prettier --check .`) - eleven of them written since, none
+of them repaired. SPEC.md and SPEC2.md - 1,002 of the roughly 1,300 dirty lines
+of the first measurement - are a permanent case, because this file's first
+sentence says SPEC.md is the brief VERBATIM. Repairing the rest is its own
+session with its own diff.
 
 ## Rendering
 
@@ -4256,6 +4260,10 @@ band on the euro (aiGame sweep 7,293,303 EUR).
   ordering is measured on the instrument the clause needed rather than on the
   one it named - where it holds by less than one line and reverses under its own
   exposure control, so it is reported open with both sets of numbers.
+  **Bundle 6 closes it** (D-257): the table is rebuilt on those measurements -
+  the harmful knob out of the level, the helpful one carrying it - and the
+  ordering is re-measured over sixteen seeds on both instruments and closed as
+  NOT ACHIEVABLE with an evaluation-only change. **M24 owes nothing after it.**
 
 ## M24 bundle 5 - the instrument a difficulty level can be measured on (D-256)
 
@@ -4350,3 +4358,67 @@ All three pins re-run and unmoved (`b7e632a7124e67ce` / `a00868b9911f12d6` /
   buses that can reach neither stop, and the goal Achieved at tick 200 with a
   gold medal. Changing it moves `goals.spec`, `gameScore` and the shipped
   scenario claims, so it is its own bundle.
+
+## M24 bundle 6 - the difficulty table rebuilt on its own measurements, and the clause closed (D-257)
+
+**M24's last open clause, closed - as NOT ACHIEVABLE with an evaluation-only
+change, which is an honest close and not an abandonment.** Four bundles measured
+`DIFFICULTY_AI_TRAITS` knob by knob and two independent verifications confirmed
+the numbers; what was missing was a decision. **No save bump** (v34 stands), no
+migration, no hashed byte, no snapshot byte, no protocol field, no RNG draw, no
+i18n line, no atlas cell - and all three pins re-run and unmoved
+(`b7e632a7124e67ce` / `a00868b9911f12d6` / `64fec78d6bf0cd5e` at 35 commands),
+which is a consequence rather than luck: the Normal row is untouched and the
+pinned worlds are Normal worlds.
+
+- **The table is what it measured now, and one column left it.** Three knobs are
+  provably inert (`candidatesTried` never binds - the longest candidate list is
+  FIVE; `fleetHeadroom` is inert at Hard because the 12.3 advisor already asks
+  for the cap; the 14.4 tender board never fires because a tender wants finished
+  goods in a TOWN). ONE knob helps: the terrain probe (+326,566 EUR, +5.6 %,
+  D-252), and it carries the level at 0 / 0 / 8. **ONE knob HURT and it was the
+  one that defined Hard**: the chain look-ahead, +16.9 % at depth 0 and -4.3 %
+  at depth 2, worst at Hard on every D-256 exposure threshold from 7.5 game
+  years up. It is `AI_CHAIN_LOOKAHEAD` = 1 now, one depth for every level -
+  **a knob that makes a competitor worse the further it is turned is not a
+  difficulty setting.** Depth 0 measures richest on money and is refused for two
+  reasons that are each sufficient: it is D-109's rule deleted (D-225 measured
+  the concrete death) and it would move the NORMAL competitor, i.e. re-band
+  scenario 5, `aiGame` and the soak from inside a closing bundle. **A named
+  departure from SPEC2 M24's MUSS list**, which names the chain depth as a
+  column; the mechanism stays and stays parameterised, only the LEVEL stopped
+  deciding it.
+- **Re-measured over the sixteen acceptance seeds on both instruments** (25
+  years, three competitors, equal competitor capital): value **26,535,840 /
+  26,215,097 / 25,998,151 EUR** - Hard 216,946 BELOW Normal, above it on 6 of 16
+  seeds, level on 2, below on 8 - and survival **50.0 / 48.6 / 51.4 %** on
+  36 / 35 / 35 opened lines, where Hard's whole 28-per-mille lead is worth ONE
+  line (29 per mille) and the exposure control puts Hard last (42.9 / 42.9 /
+  40.9 %). **Normal is identical to the cent** and the four `aiGame` seeds
+  inside it still total 7,293,303 EUR (D-248), which is what says the rebuild
+  moved the levels and not the game.
+- **So the clause is closed and SPEC2 M24's Fertig-wenn says what difficulty
+  DOES change**: the player's opening capital (800,000 / 500,000 / 250,000 EUR,
+  factor 3.2) and loan rate (4.0 / 4.0 / 6.5 %), plus surviving knobs whose sum
+  is under both instruments' resolution. D-257 records what a future pass would
+  have to change to make an ordering true (give Normal probes and re-record the
+  three AI pins; make the candidate list long enough for a depth to bind; give a
+  competitor a business a tender can be won with; measure over more than sixteen
+  seeds).
+- **The per-level regression band stays on BOTH instruments** - value +-11 %,
+  survival +-100 per mille - plus a new falsifiable bound that states the close
+  itself: Normal and Hard within 2.5 % of company value and two lines of
+  survival. **A future pass that really makes Hard better goes red there**, and a
+  red is a re-measurement, never a re-band.
+- **One pinned campaign probe moved and it moved upwards**: stage 12 (arctic,
+  1950, Hard) has 4/6, 4/12 and 2/6 stations and vehicles after six years
+  against 4/0, 2/6 and 0/0, so its briefing quotes four stations and twelve
+  vehicles in both languages. Stages 10 and 11 are Hard too and did not move.
+- **Two stale documentation numbers, made true or dated**: `format:check` is red
+  on **42** files today against D-227's 31 of 2026-08-11 - the same diagnosis,
+  eleven bundles later, and both files now carry the count WITH ITS DATE - and
+  D-256's claim about `tests/balance/determinism.ts` is corrected (the sixteen
+  seeds are the SUCCESSOR bar, not a reconstruction of the throwaway probes of
+  D-228/D-229, and the two properties that are checkable - sixteen distinct
+  seeds, the `aiGame` four as the prefix - are now held by
+  `tests/unit/balanceDeterminism.spec.ts` instead of by prose).

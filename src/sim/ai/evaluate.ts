@@ -27,6 +27,7 @@ import {
   AI_TENDER_SAFETY,
   AI_TRAIN_PRICE_CT,
   AI_CASH_RESERVE_CT,
+  AI_CHAIN_LOOKAHEAD,
   COUNCIL_RATING_NEVER,
   DIFFICULTY_AI_TRAITS,
   type DifficultyAiTraits,
@@ -82,13 +83,20 @@ import type { World } from '../World';
  * at all: the level moved the player's start capital and loan interest and
  * left all three levels playing the identical opponent.
  * {@link DIFFICULTY_AI_TRAITS} is the data table SPEC2 M24 asks for and
- * {@link aiTraits} is the one place it is read - six knobs, every one of them
- * about JUDGEMENT (how many candidates are considered, how far down a chain the
- * evaluator looks, whether the way is measured or estimated, how much fleet
- * headroom a line is given, whether the 14.4 tenders are taken on, and from
- * what council rating the 13.3 building rights are bought). Not one of them
- * touches a price, a credit line or a permission, and the Normal row is the
- * exact identity of the pre-M24 competitor.
+ * {@link aiTraits} is the one place it is read - five knobs, every one of them
+ * about JUDGEMENT (how many candidates are considered, whether the way is
+ * measured or estimated, how much fleet headroom a line is given, whether the
+ * 14.4 tenders are taken on, and from what council rating the 13.3 building
+ * rights are bought). Not one of them touches a price, a credit line or a
+ * permission, and the Normal row is the exact identity of the pre-M24
+ * competitor.
+ *
+ * **A sixth knob was there for four bundles and D-257 took it out**: the chain
+ * look-ahead is {@link AI_CHAIN_LOOKAHEAD} now, one depth for every level,
+ * because it was measured to make a competitor worse the further it was turned
+ * - on the balance sheet AND on the exposure-controlled survival share the
+ * clause's own instrument reports. The knob that carries the level is the
+ * terrain probe, which is the one that was measured to help.
  */
 
 export interface Opportunity {
@@ -327,7 +335,12 @@ function collectFor(
   // Rail and the two temperaments keep their industry focus: that is what
   // keeps the five distinguishable.
   if (personality === Personality.TownNetwork) collectTownPairs(world, found, rail, companyId);
-  else collectIndustryPairs(world, found, rail, companyId, traits.chainLookahead);
+  // The chain depth is the same on every level since D-257: a knob that makes
+  // a competitor worse the further it is turned is not a difficulty setting,
+  // and this one is anti-correlated with company value AND with the
+  // exposure-controlled survival share. It stays a PARAMETER of the collector
+  // so an ablation can still be run against it without editing the collector.
+  else collectIndustryPairs(world, found, rail, companyId, AI_CHAIN_LOOKAHEAD);
   if (personality === Personality.Road) collectTownPairs(world, found, rail, companyId);
   collectTownDeliveries(world, found, rail, companyId);
 

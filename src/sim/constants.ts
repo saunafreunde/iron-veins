@@ -859,6 +859,41 @@ export const AI_BUILD_CAPITAL_FACTOR = 1.4;
 export const AI_CANDIDATES_TRIED = 60;
 
 /**
+ * How many legs past a producing sink the chain test looks. [legs]
+ *
+ * One, in every difficulty level, and it is D-109's fourth finding: a pair
+ * ending at a works which has to be collected FROM is only worth building when
+ * the next leg exists to be built. Depth 0 is no test at all and builds lines
+ * that die with the works they feed; depth 2 refuses a pair whose chain stalls
+ * one works further out than depth 1 can see, which is the failure D-225
+ * measured (seed 918273's steel mill woke when a second line brought it ore,
+ * nobody carried the steel away, and the 7.3 closure clock took the sink of
+ * BOTH lines with it in 1958).
+ *
+ * **It was a column of {@link DIFFICULTY_AI_TRAITS} for four bundles - 0 / 1 /
+ * 2 - and D-257 took it out, because a knob that makes a competitor WORSE the
+ * further it is turned is not a difficulty setting.** Two instruments say the
+ * same thing about it and they are the two the difficulty clause is measured
+ * on. Company value at year twenty-five is ANTI-correlated with the depth in
+ * both directions (D-252, one knob at a time over eight seeds): depth 0 is
+ * **+3,360,849 EUR of 19,878,907 (+16.9 %)**, depth 2 is **-249,391 of
+ * 5,790,628 (-4.3 %)**. And the D-256 survival share - built precisely because
+ * a balance sheet cannot tell a line that was never built from a line that
+ * died - agrees once its own exposure confound is taken out: at equal exposure
+ * the deepest level kept the FEWEST of its lines (45.0 / 42.9 / 36.8 % for
+ * depth 0 / 1 / 2), and it opened them almost three game years later.
+ *
+ * **Depth 0 measures richest on the money instrument and is deliberately NOT
+ * taken** (D-257): it is D-109's rule deleted, D-225 measured what that costs
+ * in one concrete death, and adopting it would move the NORMAL competitor -
+ * i.e. re-band scenario 5, the `aiGame` sweep and the soak fixture from inside
+ * a closing bundle, which is Fehlerkatalog 34. One is what every AI band in
+ * this project was measured on, so this constant is the identity of all of
+ * them.
+ */
+export const AI_CHAIN_LOOKAHEAD = 1;
+
+/**
  * Lines one competitor will run at once.
  *
  * Twenty-five years is long enough to build a network, and section 19.4's
@@ -4012,6 +4047,22 @@ export const AI_TENDER_SAFETY = 2;
  * introduces the table (Fehlerkatalog 34). Each field is therefore BRANCHED on
  * its identity value rather than multiplied through it, and
  * `tests/unit/aiDifficulty.spec.ts` holds that equality by construction.
+ *
+ * **The table is what it MEASURED, since D-257, and a sixth column left it.**
+ * Four bundles measured these knobs one at a time over eight and then sixteen
+ * seeds, and the answer was uncomfortable rather than ambiguous: three knobs
+ * are provably inert on today's worlds ({@link DifficultyAiTraits.candidatesTried}
+ * never binds, {@link DifficultyAiTraits.fleetHeadroom} is inert at Hard,
+ * {@link DifficultyAiTraits.tenders} never fires), exactly ONE knob helps -
+ * {@link DifficultyAiTraits.terrainProbes} - and the chain look-ahead, the one
+ * column that separated all three rows, made a competitor WORSE the further it
+ * was turned. A knob like that cannot carry a difficulty level in either
+ * direction, so it is out of this table and lives at ONE value for every level
+ * as {@link AI_CHAIN_LOOKAHEAD}; **the level is carried by the knobs with
+ * teeth**, and where they cannot reach the entry says so instead of dressing an
+ * inert column up as a level (D-257). SPEC2 M24 names the chain depth as a
+ * column of this table by hand: that departure is D-257's, with its
+ * measurement, and SPEC2's own Fertig-wenn note carries it.
  */
 export interface DifficultyAiTraits {
   /**
@@ -4039,33 +4090,6 @@ export interface DifficultyAiTraits {
    */
   readonly candidatesTried: number;
   /**
-   * How many legs past a producing sink the chain test looks. [legs]
-   *
-   * Normal is 1: D-109's fourth finding, that a pair ending at a works which
-   * has to be collected FROM is only worth building when the next leg exists
-   * to be built. Easy is 0 - no test at all, which is the pre-D-109 AI and
-   * builds lines that die with the works they feed. Hard is 2, which is the
-   * failure D-225 measured written down as a rule: seed 918273's steel mill
-   * woke when the AI's second line brought it ore, nobody ever carried the
-   * steel away, and the 7.3 closure clock took the sink of BOTH lines with it
-   * in 1958. A depth-2 test refuses the pair whose chain stalls one works
-   * further out than a depth-1 test can see.
-   *
-   * **Company value at year twenty-five is ANTI-correlated with this field, in
-   * both directions, and it is shipped in the semantic order anyway** (D-252).
-   * Measured one knob at a time over eight seeds at each level's own capital:
-   * depth 0 is **+3,360,849 EUR of 19,878,907 (+16.9 %) and 16 lines against
-   * 11**, depth 2 is **-249,391 of 5,790,628 (-4.3 %) and 3 lines against 4**.
-   * What a deeper test buys is a line that is still there in ten years -
-   * D-225's steel mill closed in 1958 and took the sink of two lines with it -
-   * and a balance sheet at year twenty-five cannot tell a line that was never
-   * built from a line that died, only count the money. So the ordering here is
-   * the ordering of JUDGEMENT, the price is recorded rather than tuned away,
-   * and measuring the chain collapse directly is its own instrument and its
-   * own bundle.
-   */
-  readonly chainLookahead: number;
-  /**
    * How many of the top-ranked candidates get their way MEASURED by the very
    * planner the build command runs, instead of estimated as a straight line.
    * [candidates]
@@ -4081,6 +4105,20 @@ export interface DifficultyAiTraits {
    * eight of them is a fraction of what one build cycle spends anyway. Priced
    * per candidate in `tests/unit/aiDifficulty.spec.ts` against SPEC2 M24's
    * 1 ms clause.
+   *
+   * **This is the one knob of the table that was measured to HELP, so it is the
+   * one that carries the level** (D-252, D-257): at eight probes it is worth
+   * **+326,566 EUR (+5.6 %)**, one more line and one fewer winding-up over
+   * eight seeds. Eight is also the whole of its reach on today's worlds - the
+   * longest candidate list that has ever occurred is FIVE - so a bigger number
+   * would buy nothing and is not offered as if it did.
+   *
+   * **It separates Hard from Normal and cannot separate Easy from Normal**,
+   * which is stated rather than papered over: probes below zero do not exist,
+   * and giving NORMAL probes would move the default competitor, i.e. re-band
+   * scenario 5, the `aiGame` sweep and the soak fixture from inside a closing
+   * bundle (Fehlerkatalog 34). What a future pass would have to do to make Easy
+   * a measurably worse judge than Normal is in D-257.
    */
   readonly terrainProbes: number;
   /**
@@ -4146,7 +4184,6 @@ export interface DifficultyAiTraits {
 export const DIFFICULTY_AI_TRAITS: readonly DifficultyAiTraits[] = [
   {
     candidatesTried: 20,
-    chainLookahead: 0,
     terrainProbes: 0,
     fleetHeadroom: 0.75,
     tenders: false,
@@ -4154,7 +4191,6 @@ export const DIFFICULTY_AI_TRAITS: readonly DifficultyAiTraits[] = [
   },
   {
     candidatesTried: AI_CANDIDATES_TRIED,
-    chainLookahead: 1,
     terrainProbes: 0,
     fleetHeadroom: 1,
     tenders: false,
@@ -4162,7 +4198,6 @@ export const DIFFICULTY_AI_TRAITS: readonly DifficultyAiTraits[] = [
   },
   {
     candidatesTried: AI_CANDIDATES_TRIED * 2,
-    chainLookahead: 2,
     terrainProbes: 8,
     fleetHeadroom: 1.25,
     tenders: true,

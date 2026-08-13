@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
   AI_CANDIDATES_TRIED,
+  AI_CHAIN_LOOKAHEAD,
   AI_DECISION_INTERVAL_TICKS,
   AI_MAX_VEHICLES_PER_LINE,
   AI_START_CAPITAL_CT,
@@ -37,8 +38,12 @@ import { World } from '../../src/sim/World';
  * handed to the COMPETITORS too, which is the defect D-253 closed: the player's
  * purse follows the level, a competitor's is the Normal baseline in all three.
  *
- * `DIFFICULTY_AI_TRAITS` is the data table that closes it. This file holds the
- * three things that would otherwise rot:
+ * `DIFFICULTY_AI_TRAITS` is the data table that closes it, rebuilt in D-257 on
+ * the four bundles of measurement behind it - the chain look-ahead left the
+ * table for `AI_CHAIN_LOOKAHEAD` because it made a competitor WORSE the further
+ * it was turned, and the terrain probe, the one knob measured to help, carries
+ * the level. This file holds the four things that would otherwise rot (the
+ * fourth is that missing column, asserted absent):
  *
  *  1. **The Normal row is the identity.** Every AI measurement this project has
  *     ever taken - the five bands of section 19.4, scenario 5, the `aiGame`
@@ -123,7 +128,6 @@ describe('the difficulty table SPEC.md 15 asks for', () => {
    */
   it('is the exact identity of the pre-M24 competitor at Normal', () => {
     expect(NORMAL.candidatesTried).toBe(AI_CANDIDATES_TRIED);
-    expect(NORMAL.chainLookahead).toBe(1);
     expect(NORMAL.terrainProbes).toBe(0);
     expect(NORMAL.fleetHeadroom).toBe(1);
     expect(NORMAL.tenders).toBe(false);
@@ -132,11 +136,34 @@ describe('the difficulty table SPEC.md 15 asks for', () => {
     expect(COUNCIL_RATING_NEVER).toBeGreaterThan(100);
   });
 
+  /**
+   * **The chain look-ahead is not in the table, and that is asserted rather
+   * than left to a reader** (D-257). It was a column - 0 / 1 / 2 - and it was
+   * the only one that separated all three rows, which is exactly why the level
+   * could not be ordered: it was measured anti-correlated with company value
+   * in both directions (D-252) and, once its own exposure confound was taken
+   * out, with the D-256 survival share too. A knob that makes a competitor
+   * worse the further it is turned cannot carry a difficulty in either
+   * direction, so it lives at ONE depth for every level.
+   */
+  it('keeps the chain look-ahead out of the level, at one depth for everybody', () => {
+    expect(AI_CHAIN_LOOKAHEAD).toBe(1);
+    for (const row of [EASY, NORMAL, HARD]) {
+      expect(Object.keys(row)).not.toContain('chainLookahead');
+    }
+    // The collector is fed the constant and nothing per level: `aiTraits` is
+    // the one accessor and the depth may not travel through it again.
+    const evaluateSource = readFileSync(join(SIM_DIR, 'ai/evaluate.ts'), 'utf-8');
+    expect(evaluateSource).toContain(
+      'collectIndustryPairs(world, found, rail, companyId, AI_CHAIN_LOOKAHEAD)',
+    );
+    expect(evaluateSource).not.toContain('traits.chainLookahead');
+  });
+
   it('orders the three levels on every knob it has', () => {
     const rows: readonly DifficultyAiTraits[] = [EASY, NORMAL, HARD];
     for (const pick of [
       (row: DifficultyAiTraits): number => row.candidatesTried,
-      (row: DifficultyAiTraits): number => row.chainLookahead,
       (row: DifficultyAiTraits): number => row.terrainProbes,
       (row: DifficultyAiTraits): number => row.fleetHeadroom,
     ]) {

@@ -516,12 +516,16 @@ const CAMPAIGN_WORLD_CLAIMS: Readonly<Record<string, WorldClaim>> = {
       { from: atTown(9), to: atTown(24), distance: 71.1, climb: 15, water: 0, levels: 5 },
     ],
     industriesOfType: [[IndustryType.Refinery, 3]],
+    // Re-measured in D-257: this is the one stage of the twelve whose probe
+    // moved when the Hard row of `DIFFICULTY_AI_TRAITS` stopped carrying a
+    // chain look-ahead of two. It moved UPWARDS - 4/0, 2/6, 0/0 before - so
+    // the stage's briefing quotes four stations and twelve vehicles now.
     competitors: {
       added: 0,
       own: [
-        [4, 0],
+        [4, 6],
+        [4, 12],
         [2, 6],
-        [0, 0],
       ],
     },
   },

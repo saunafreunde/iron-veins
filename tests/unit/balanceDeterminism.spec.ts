@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { MapClimate, MAP_CLIMATE_COUNT } from '../../src/sim/constants';
 import {
+  AI_ACCEPTANCE_SEEDS,
   AI_SWEEP_DEFAULT_SIZE,
   AI_SWEEP_SEEDS,
   aiSweepSeeds,
@@ -175,6 +176,23 @@ describe('the balance suite as a desync guard', () => {
       // stops covering the world the rest of the project's AI evidence is
       // about, and the twin would replay a world no assertion had looked at.
       expect(AI_SWEEP_SEEDS[0]).toBe(4_711);
+    });
+
+    /**
+     * **The sixteen-seed acceptance bar, held from outside** (D-257).
+     *
+     * D-256 put `AI_ACCEPTANCE_SEEDS` in the repository and claimed two things
+     * about it in prose - sixteen worlds, and the four `aiGame` sweeps first,
+     * in that order - with nothing reading either. Both are cheap to check and
+     * both matter: the count is what the sixteen-seed conclusions of D-252,
+     * D-253, D-256 and D-257 are quoted for, and the PREFIX is what lets the
+     * difficulty file read `aiGame`'s own four-seed total out of its sweep
+     * instead of playing four more quarter centuries for it.
+     */
+    it('extends the sweep into the sixteen-seed acceptance bar, prefix first', () => {
+      expect(AI_ACCEPTANCE_SEEDS).toHaveLength(16);
+      expect(new Set(AI_ACCEPTANCE_SEEDS).size).toBe(AI_ACCEPTANCE_SEEDS.length);
+      expect(AI_ACCEPTANCE_SEEDS.slice(0, AI_SWEEP_SEEDS.length)).toEqual(AI_SWEEP_SEEDS);
     });
   });
 

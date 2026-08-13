@@ -23,83 +23,84 @@ import { LOOP_ISSUES, looping, recordOutcomes, refusalTrace, undeclared } from '
 import { AI_ACCEPTANCE_SEEDS, fullBalanceMode, hashTwin } from './determinism';
 
 /**
- * **The difficulty bands of SPEC2 M24 - and the instrument its Fertig-wenn
- * needed, built after two bundles reported the clause unmet on the one it
- * names** (D-252, D-253, D-256).
+ * **The difficulty bands of SPEC2 M24 - and the close of its ordering clause,
+ * on the table the measurements rebuilt** (D-252, D-253, D-256, D-257).
  *
  * SPEC2 M24 asks that "ein Hard-KI-Lauf auf der Referenzkarte bei gleichem Seed
  * messbar hoeheren Firmenwert erreicht als Normal (eigene Testbaender je
- * Stufe)". The bands per level are here, measured. The ORDERING in company
- * value is not, and both earlier bundles said so with their traces:
+ * Stufe)". The bands per level are here and are measured. **The ordering is
+ * not, on either instrument, and D-257 closes the clause as NOT ACHIEVABLE with
+ * an evaluation-only change rather than leaving it open a fourth time.**
+ *
+ * Four bundles measured `DIFFICULTY_AI_TRAITS` knob by knob and the answer was
+ * uncomfortable rather than ambiguous: three knobs are provably inert on
+ * today's worlds (`candidatesTried` never binds - the longest candidate list
+ * over eight seeds is FIVE; `fleetHeadroom` is inert at Hard because the 12.3
+ * advisor already asks for the cap; the 14.4 tender board never fires because a
+ * tender wants finished goods in a TOWN), ONE knob helps (`terrainProbes`), and
+ * the chain look-ahead - the only column that separated all three rows - made a
+ * competitor WORSE the further it was turned. D-257 rebuilt the table on that
+ * evidence: the chain depth left the table for {@link AI_CHAIN_LOOKAHEAD}, one
+ * value for every level, and the terrain probe carries Hard.
+ *
+ * **After the rebuild, at equal capital (D-253), sixteen acceptance seeds, 25
+ * years, three competitors, 256 temperate map:**
  *
  * | level  | value at year 25 | created    | per euro | crewed | seeds | lines | vehicles |
  * | ------ | ---------------- | ---------- | -------- | ------ | ----- | ----- | -------- |
- * | Easy   |       29,873,058 | +5,873,058 |   1.2447 |     17 | 14/16 |    28 |      168 |
+ * | Easy   |       26,535,840 | +2,535,840 |   1.1057 |     13 | 11/16 |    18 |      108 |
  * | Normal |       26,215,097 | +2,215,097 |   1.0923 |     12 | 10/16 |    17 |      102 |
- * | Hard   |       24,735,440 |   +735,440 |   1.0306 |     10 |  9/16 |    16 |       90 |
+ * | Hard   |       25,998,151 | +1,998,151 |   1.0833 |     10 |  9/16 |    18 |      102 |
  *
- * (Sixteen acceptance seeds, 25 years, three competitors, 256 temperate map,
- * every level's competitors opening on the same 24,000,000 EUR since D-253 took
- * the player's handicap off them.)
- *
- * **The measurement was against the wrong instrument, and D-253 named the
- * reason without taking the consequence.** What distinguishes Hard is a deeper
- * chain look-ahead; what a deeper chain test buys is a line that is still
- * standing in ten years; and a balance sheet at year twenty-five cannot tell a
- * line that was never built from a line that died - it can only count the
- * money. So D-256 measured the OPPONENT instead of its bank account
- * (`aiLineSurvival.ts`), over the same sixteen seeds, and the four readings do
- * not agree with each other. That disagreement IS the finding:
- *
- * | reading                                  | Easy | Normal |  Hard | ordered? |
+ * | reading (D-256's instrument)             | Easy | Normal |  Hard | ordered? |
  * | ---------------------------------------- | ---- | ------ | ----- | -------- |
- * | lines opened                             |   61 |     35 |    32 | Hard fewest |
- * | still standing at year 25                |   28 |     17 |    16 | - |
- * | **survival share**                       | 45.9 | 48.6 % | 50.0 % | monotone, by under ONE line |
- * | mean game year a line was opened in      | 7.82 |   9.70 | 10.60 | Hard LATEST |
- * | mean life of a line that closed [yr]     | 3.23 |   2.70 |  2.88 | no |
- * | survival with 12.5 years of exposure     | 45.0 |   42.9 | 36.8 % | **reversed** |
+ * | lines opened                             |   36 |     35 |    35 | no |
+ * | still standing at year 25                |   18 |     17 |    18 | no |
+ * | **survival share [%]**                   | 50.0 |   48.6 |  51.4 | no - Easy above Normal |
+ * | mean game year a line was opened in      | 9.96 |   9.70 | 10.05 | no |
+ * | mean life of a line that closed [yr]     | 2.67 |   2.70 |  2.77 | no |
+ * | survival at 12.5 years of exposure [%]   | 42.9 |   42.9 |  40.9 | **Hard last** |
  *
- * Per seed the survival share puts Hard ABOVE Normal on 3 of 16, level on 10,
- * BELOW on exactly 1 (seed 4714) and undefined on 2 (nobody opened a line, or
- * Hard opened none) - against 5 above / 2 level / 9 below on company value.
+ * **Normal is bit-identical to every earlier measurement** - 26,215,097 EUR to
+ * the cent, and the four `aiGame` seeds inside it still total 7,293,303 EUR
+ * (D-248) - which is what says the rebuild moved the LEVELS and not the game.
  *
- * **What this file BANDS, what it only pins, and why the clause is still
- * OPEN.** The band per level is the claim: each level's survival share inside
- * its own band, over sixteen seeds, as a regression net. The ORDERING is
- * printed and pinned as today's deterministic number and is deliberately NOT
- * offered as the clause met, because it fails two tests of its own - and the
- * instrument is what makes both visible, which is the argument that it is an
- * honest instrument rather than a flattering one:
+ * **What the two instruments say about Hard against Normal, and why that is a
+ * close and not another open clause:**
  *
- *  - **resolution.** At 61 / 35 / 32 opened lines ONE line is worth 16 / 29 /
- *    31 per mille, and the measured gaps are 27 (Easy to Normal) and 14
- *    (Normal to Hard). Both are narrower than a single line: had one of Hard's
- *    thirty-two lines closed instead of survived it would read 15/32 = 46.9 %
- *    and stand BELOW Normal. `SURVIVAL_BANDS` bands each level at +-100 per
- *    mille and gives that same arithmetic as its reason, so the file's own band
- *    argument is wider than the ordering it would have to claim.
- *  - **confound.** A Hard competitor opens its lines almost three game years
- *    later than an Easy one, so its lines have had less time to die. Hold the
- *    exposure constant and the ordering is GONE and points the other way
- *    (45.0 / 42.9 / 36.8 %). That is not a different question; it is the same
- *    share with a known bias taken out, and when a raw estimate and its
- *    de-biased twin disagree, the de-biased one is the estimate.
+ *  - **money.** Hard is 216,946 EUR BELOW Normal over sixteen seeds (-0.8 % of
+ *    the total, -9.8 % of what the field created), above it on 6 seeds, level
+ *    on 2 and below on 8. The terrain probe's +5.6 % from D-252's eight-seed
+ *    one-knob ablation does not reproduce over sixteen seeds once the chain
+ *    depth is equal: what is left is chaotic divergence with no sign.
+ *  - **survival.** Hard is 28 per mille above Normal, and ONE line is worth 29
+ *    per mille at these denominators - the whole gap is a single line deciding
+ *    the other way. Its own exposure control (D-256) puts Hard LAST
+ *    (40.9 % against 42.9 %), and Easy - which has no probe at all - reads
+ *    above Normal on the raw share.
  *
- * So D-256 reports the clause OPEN with both sets of numbers instead of banking
- * the one reading that came out the wanted way - an instrument chosen BECAUSE
- * it answers the way somebody wanted is D-197's defect one level up - and no
- * trait table was touched to make anything green (the whole point of D-252's
- * table is that it is ordered by JUDGEMENT and its price is recorded). The
- * posture is D-248's on the climate matrix's harsh-sky arm: assert what is
- * resolvable, print the ordering without claiming it.
+ * So the surviving knobs cannot order the levels on either instrument, and
+ * nothing was turned until a number went green (D-197). The clause is amended
+ * in SPEC2 M24 in the D-235/D-253 bracketed form to say what difficulty really
+ * changes - the PLAYER'S opening capital and loan rate, plus what each
+ * surviving knob is worth - and D-257 records what a future pass would have to
+ * change to make an ordering true.
  *
- * **Sixteen seeds, not four, and that is the second lesson of the bundle.** The
- * four-seed view has disagreed with the sixteen-seed one twice in three bundles:
- * on those four Hard beats Normal in company value on 3 of 4 (and on 16 it loses
- * on 9), and the survival ordering below is 3-1-10 over sixteen where four would
- * have shown 2-1-1. D-220 is the entry that says what a claim measured on the
- * seeds a suite happens to play is worth.
+ * **What this file asserts** is therefore three things, none of them an
+ * ordering: a value band and a survival band per level (the regression net, so
+ * a later change cannot move a level silently), the INDISTINGUISHABILITY of
+ * Normal and Hard stated as a falsifiable bound (a future pass that really made
+ * Hard better goes red here, and that is a re-measurement, never a re-band),
+ * and the identity of the Normal row. Every ordering is printed for the reader
+ * and claimed by nobody - D-248's posture on the climate matrix's harsh-sky
+ * arm.
+ *
+ * **Sixteen seeds, not four, and that is the standing lesson.** The four-seed
+ * view has disagreed with the sixteen-seed one three times in four bundles
+ * (D-252's capital confound, D-253's ordering, and D-257's money reading, where
+ * the first four seeds alone would have shown Hard above Normal on 3 of 4).
+ * D-220 is the entry that says what a claim measured on the seeds a suite
+ * happens to play is worth.
  */
 
 const YEARS = 25;
@@ -111,12 +112,15 @@ const MAP_SIZE = 256;
  *
  * The price is stated rather than discovered: forty-eight quarter centuries.
  * Measured on the reference machine, one file at a time, the whole file costs
- * **654.7 s** against the 194 s of the four-seed version - about +7.7 minutes
- * on the `soak` job, which runs on every push. (775.6 s on a second run that
- * shared the box with another suite; the spread is this machine's, not the
- * file's - D-220 measured the same 40-70 s range on one quarter century.) That is what an ordering claim
- * over sixteen worlds costs, and a four-seed version of it would be the failure
- * D-220 exists to prevent rather than a saving (SPEC2 6.3 carries the booking).
+ * **654.7 s (2026-08-13, D-256) and 456.2 s the same day on a quieter box
+ * (D-257)** against the 194 s of the four-seed version - so about +5 to +8
+ * minutes on the `soak` job, which runs on every push. (775.6 s on a third run
+ * that shared the box with another suite; the spread is this machine's, not the
+ * file's - D-220 measured the same 40-70 s range on one quarter century, and
+ * every figure here is quoted WITH ITS DATE for that reason.) That is what an
+ * ordering claim over sixteen worlds costs, and a four-seed version of it would
+ * be the failure D-220 exists to prevent rather than a saving (SPEC2 6.3
+ * carries the booking).
  *
  * It paid for itself on the first run: `RefitVehicle|insufficientFunds`, which
  * only seed 2718 produces and which four seeds had therefore never shown, went
@@ -261,40 +265,56 @@ function queueOf(world: World): CommandQueue {
 }
 
 /**
- * The value bands, measured on the SIXTEEN acceptance seeds (D-256).
+ * The value bands, measured on the SIXTEEN acceptance seeds (D-256, re-measured
+ * on the rebuilt table in D-257).
  *
- * They moved because the sweep did: the four-seed bands of D-253 (Easy
- * 8,598,241, Normal 7,293,303, Hard 6,922,890 EUR) were four quarter centuries
- * per level and these are sixteen, so the numbers are four times the size and
- * not a re-band of the same measurement. **Normal's four-seed figure is
- * asserted separately below** and is still 7,293,303 EUR to the euro - the
- * number `aiGame`'s own sweep has recorded since D-248 - so the identity that
- * says "the Normal row of the traits table IS the pre-M24 competitor" did not
- * quietly change hands when the sweep grew.
+ * Easy and Hard moved because their rows did - the chain look-ahead left the
+ * table, so Easy stopped playing the pre-D-109 AI (29,873,058 -> 26,535,840)
+ * and Hard stopped paying for depth 2 (24,735,440 -> 25,998,151). **Normal did
+ * not move by a cent**, which is the identity this whole table is built on, and
+ * the four-seed figure inside it is asserted separately below and is still
+ * `aiGame`'s own 7,293,303 EUR (D-248).
  *
  * Each is banded at about +-11 % of its measurement, the width the file has
  * carried since D-252.
  */
 const BANDS: ReadonlyMap<string, readonly [number, number]> = new Map([
-  ['Easy', [26_600_000_00, 33_200_000_00]],
+  ['Easy', [23_600_000_00, 29_500_000_00]],
   ['Normal', [23_300_000_00, 29_100_000_00]],
-  ['Hard', [22_000_000_00, 27_500_000_00]],
+  ['Hard', [23_100_000_00, 28_900_000_00]],
 ]);
 
 /**
  * The survival bands, per mille of the lines a level's competitors opened.
  *
- * Measured 459 / 486 / 500 over the sixteen seeds, banded +-100 per mille -
- * wide on purpose, because the denominators are 61, 35 and 32 lines and one
- * line is worth 16 to 31 per mille. The band is the regression net; the
- * ORDERING below is the sharp claim, and it is asserted separately so a failure
- * says which of the two moved.
+ * Measured 500 / 486 / 514 over the sixteen seeds on the rebuilt table (D-257;
+ * 459 / 486 / 500 before it), banded +-100 per mille - wide on purpose, because
+ * the denominators are 36, 35 and 35 lines and ONE line is worth 28 to 29 per
+ * mille. The band is this file's regression net on the instrument; the
+ * differences BETWEEN the levels are inside one line and are printed rather
+ * than asserted as an ordering.
  */
 const SURVIVAL_BANDS: ReadonlyMap<string, readonly [number, number]> = new Map([
-  ['Easy', [359, 559]],
+  ['Easy', [400, 600]],
   ['Normal', [386, 586]],
-  ['Hard', [400, 600]],
+  ['Hard', [414, 614]],
 ]);
+
+/**
+ * How far apart Normal and Hard may drift before this file has something new to
+ * say - the CLOSE of the ordering clause, stated as a falsifiable bound (D-257).
+ *
+ * Measured: Hard is 216,946 EUR below Normal on 26,215,097 (0.83 %) and 28 per
+ * mille above it in surviving lines, where one line is worth 29. Both are
+ * inside the instruments' own resolution, which is exactly why the clause is
+ * closed as not achievable with an evaluation-only change instead of being
+ * reported open a fourth time. The bounds below are three times the measured
+ * separation on money and two lines on survival: **a future pass that really
+ * made a Hard competitor better goes RED here**, and a red is a re-measurement
+ * and an entry, never a widened band.
+ */
+const LEVELS_INDISTINGUISHABLE_VALUE_SHARE = 0.025;
+const LEVELS_INDISTINGUISHABLE_SURVIVAL_LINES = 2;
 
 const LEVELS: ReadonlyArray<readonly [string, Difficulty]> = [
   ['Easy', Difficulty.Easy],
@@ -373,32 +393,30 @@ describe.runIf(fullBalanceMode())('Schwierigkeit mit Zaehnen (SPEC2 M24)', () =>
   });
 
   /**
-   * **The clause's own question, asked of the quantity that can answer it - and
-   * PINNED rather than claimed.**
+   * **The close: on the rebuilt table a Hard competitor and a Normal one are
+   * the same game to within both instruments' resolution** (D-257).
    *
-   * SPEC2 M24 wants a Hard opponent to be measurably better than a Normal one at
-   * the same seed. In company value it is measurably WORSE (the table at the
-   * head of this file); in lines that are still standing after a quarter century
-   * it is better, monotonically in the one knob that differs across all three
-   * rows and was NOT measured inert in D-252 - the chain look-ahead, 0 / 1 / 2.
-   * (Candidate depth and fleet headroom differ across all three rows too and
-   * measure exactly inert; the terrain probe separates only Normal from Hard.)
+   * SPEC2 M24 wants a Hard opponent measurably better than a Normal one at the
+   * same seed. What separates them since D-257 is the terrain probe, the tender
+   * board and the exclusive-rights threshold - the tender board never fires, the
+   * rights cost about ten thousand euro, and the probe measures to nothing over
+   * sixteen seeds once the chain depth is equal.
    *
-   * **The two expectations below are a pin on today's deterministic numbers and
-   * NOT the clause met.** The margins are 27 and 14 per mille against 16 to 31
-   * per mille for ONE line, so one line deciding the other way reverses them;
-   * the head of this file carries that arithmetic and the exposure control that
-   * points the other way, and SPEC2 M24's B5 note reports the clause open. The
-   * pin still earns its place: it is what goes red the day the AI's line
-   * lifecycle moves, and a red here is a re-measurement, never a re-band.
+   * So this test states the FINDING as a bound instead of pretending to an
+   * ordering: the two levels differ by less than
+   * {@link LEVELS_INDISTINGUISHABLE_VALUE_SHARE} of company value and by less
+   * than {@link LEVELS_INDISTINGUISHABLE_SURVIVAL_LINES} lines of survival. It
+   * is falsifiable in the direction that matters - a future pass that really
+   * made Hard better goes red here and gets an entry, which is the whole point
+   * of closing a clause rather than leaving it open.
    */
-  it('pins the ordering of the levels by surviving lines, and prints its resolution', () => {
+  it('closes the ordering clause: Normal and Hard are one game to the instruments', () => {
     const easy = reading('Easy');
     const normal = reading('Normal');
     const hard = reading('Hard');
     console.log(
-      `survival share: Easy ${(easy.survivalPerMille / 10).toFixed(1)} % < ` +
-        `Normal ${(normal.survivalPerMille / 10).toFixed(1)} % < ` +
+      `survival share: Easy ${(easy.survivalPerMille / 10).toFixed(1)} % / ` +
+        `Normal ${(normal.survivalPerMille / 10).toFixed(1)} % / ` +
         `Hard ${(hard.survivalPerMille / 10).toFixed(1)} %`,
     );
     const perLine = (one: SurvivalReading): number => (one.opened === 0 ? 0 : 1_000 / one.opened);
@@ -407,19 +425,60 @@ describe.runIf(fullBalanceMode())('Schwierigkeit mit Zaehnen (SPEC2 M24)', () =>
         `${perLine(normal).toFixed(0)} / ${perLine(hard).toFixed(0)} per mille, ` +
         `the gaps are ${normal.survivalPerMille - easy.survivalPerMille} and ` +
         `${hard.survivalPerMille - normal.survivalPerMille} - both under one line, ` +
-        `so this ordering is PINNED and not claimed (D-256)`,
+        `so NO ordering is claimed (D-257 closes the clause)`,
     );
 
+    const normalValue = level('Normal').valueCt;
+    const hardValue = level('Hard').valueCt;
+    const valueGap = Math.abs(hardValue - normalValue) / normalValue;
+    console.log(
+      `  money: Hard ${((hardValue - normalValue) / 100).toFixed(0)} EUR against Normal, ` +
+        `${(valueGap * 100).toFixed(2)} % of it`,
+    );
+    expect(valueGap, 'Hard and Normal have stopped being one game in money').toBeLessThan(
+      LEVELS_INDISTINGUISHABLE_VALUE_SHARE,
+    );
+
+    const survivalGap = Math.abs(hard.survivalPerMille - normal.survivalPerMille);
+    const oneLine = perLine(hard);
     expect(
-      hard.survivalPerMille,
+      survivalGap,
       `Hard ${hard.alive}/${hard.opened} against Normal ${normal.alive}/${normal.opened}`,
-    ).toBeGreaterThanOrEqual(normal.survivalPerMille);
-    expect(
-      normal.survivalPerMille,
-      `Normal ${normal.alive}/${normal.opened} against Easy ${easy.alive}/${easy.opened}`,
-    ).toBeGreaterThanOrEqual(easy.survivalPerMille);
-    // And the levels are not the same game: Hard commits to the fewest lines.
-    expect(hard.opened, 'Hard opened as many lines as Easy').toBeLessThan(easy.opened);
+    ).toBeLessThan(LEVELS_INDISTINGUISHABLE_SURVIVAL_LINES * oneLine);
+  });
+
+  /**
+   * **The clause's own question on the MONEY instrument, per seed** (D-257).
+   *
+   * SPEC2 M24 asks for a measurably higher company value at the same seed, so
+   * the comparison is printed seed by seed rather than only in the aggregate -
+   * an aggregate can be carried by one rich world, which is the failure D-220
+   * is about.
+   */
+  it('counts the value ordering seed by seed', () => {
+    const normal = level('Normal');
+    const hard = level('Hard');
+    const easy = level('Easy');
+    let above = 0;
+    let below = 0;
+    let equal = 0;
+    for (const seed of SEEDS) {
+      const normalCt = normal.valueBySeed.get(seed)!;
+      const hardCt = hard.valueBySeed.get(seed)!;
+      const easyCt = easy.valueBySeed.get(seed)!;
+      console.log(
+        `  seed ${String(seed).padStart(8)}: easy ${(easyCt / 100).toFixed(0).padStart(10)} ` +
+          `normal ${(normalCt / 100).toFixed(0).padStart(10)} ` +
+          `hard ${(hardCt / 100).toFixed(0).padStart(10)}`,
+      );
+      if (hardCt > normalCt) above++;
+      else if (hardCt < normalCt) below++;
+      else equal++;
+    }
+    console.log(
+      `value per seed: Hard above Normal on ${above}, level on ${equal}, below on ${below}`,
+    );
+    expect(above + below + equal).toBe(SEEDS.length);
   });
 
   /**
@@ -430,12 +489,14 @@ describe.runIf(fullBalanceMode())('Schwierigkeit mit Zaehnen (SPEC2 M24)', () =>
    * quietly scored: on one nobody opened a line at either level, and on one Hard
    * opened none at all.
    *
-   * A pin, on the same terms as the aggregate above: ten of the sixteen are
-   * LEVEL, and the seeds that separate carry one to four lines each, so this is
-   * a record of today's distribution rather than evidence that a Hard line
-   * lasts longer. It prints the distribution for the reader either way.
+   * A record of today's distribution and not evidence that a Hard line lasts
+   * longer: measured 3 above, 10 level, 1 below, 2 incomparable, and the seeds
+   * that separate carry one to four lines each. The two bounds below are what
+   * that distribution supports - no seed-wide collapse - and they are
+   * deliberately not an ordering (D-257 closes the clause; the head of this
+   * file says on which numbers).
    */
-  it('is at or above Normal on all but one of the sixteen seeds', () => {
+  it('keeps its lines on all but one of the sixteen seeds', () => {
     let above = 0;
     let below = 0;
     let equal = 0;
@@ -460,20 +521,22 @@ describe.runIf(fullBalanceMode())('Schwierigkeit mit Zaehnen (SPEC2 M24)', () =>
   });
 
   /**
-   * **The confound, asserted so the ordering above can never be read as
-   * durability** - the D-253 device, one instrument along.
+   * **The exposure control, kept because it is what made the raw share
+   * unusable** - the D-253 device, one instrument along (D-256, re-measured in
+   * D-257).
    *
-   * The survival share counts a line opened in year twenty-four as a survivor,
-   * and the three levels do not build at the same time: measured mean opening
-   * year 7.82 / 9.70 / 10.60. Controlled for exposure the ordering is GONE -
-   * among lines that had {@link EXPOSURE_YEARS} game years to fail in, the
-   * shares are 45.0 / 42.9 / 36.8 % - and the mean life of a line that DID close
-   * carries no ordering either (3.23 / 2.70 / 2.88 years). So what a deeper
-   * chain look-ahead demonstrably buys is FEWER and LATER lines, and this file
-   * says that in the same breath as it asserts the share, because the honest
-   * reading of the clause depends on both halves.
+   * The raw survival share counts a line opened in year twenty-four as a
+   * survivor, and the three levels do not build at the same time. On the
+   * rebuilt table the mean opening years are 9.96 / 9.70 / 10.05 - Hard latest,
+   * Easy in between, no ordering - and among the lines that had
+   * {@link EXPOSURE_YEARS} game years to fail in the shares are
+   * **42.9 / 42.9 / 40.9 %**, i.e. Hard LAST on the reading with the bias taken
+   * out, while the mean life of a line that DID close (2.67 / 2.70 / 2.77 yr)
+   * carries no ordering either. That is the second half of D-257's close, and
+   * it is printed here in the same file that bands the raw share so the two can
+   * never be read apart.
    */
-  it('names the confound under that ordering instead of hiding behind it', () => {
+  it('reads the same lines with their exposure held constant', () => {
     const rows = LEVELS.map(([name]) => [name, reading(name)] as const);
     for (const [name, one] of rows) {
       console.log(
@@ -483,13 +546,17 @@ describe.runIf(fullBalanceMode())('Schwierigkeit mit Zaehnen (SPEC2 M24)', () =>
           `(${one.exposedAlive}/${one.exposed} with ${EXPOSURE_YEARS} years to fail in)`,
       );
     }
-    const [easy, normal, hard] = rows.map(([, one]) => one);
-    expect(hard!.meanOpenedYear, 'Hard opens later than Normal').toBeGreaterThan(
-      normal!.meanOpenedYear,
-    );
-    expect(normal!.meanOpenedYear, 'Normal opens later than Easy').toBeGreaterThan(
-      easy!.meanOpenedYear,
-    );
+    // Every level opens its lines around the middle of the quarter century and
+    // every one of them is measured with a real exposed sample - the two
+    // properties the control needs to mean anything. The ORDER of the three is
+    // printed above and claimed nowhere.
+    for (const [name, one] of rows) {
+      expect(one.exposed, `${name}: nothing exposed for ${EXPOSURE_YEARS} years`).toBeGreaterThan(
+        0,
+      );
+      expect(one.meanOpenedYear, `${name}: opened absurdly early`).toBeGreaterThan(1);
+      expect(one.meanOpenedYear, `${name}: opened absurdly late`).toBeLessThan(YEARS);
+    }
   });
 
   /**

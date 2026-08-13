@@ -54,7 +54,7 @@ no entry below. A number may appear under several topics.
   D-196, D-197, D-198, D-199, D-200, D-203, D-204, D-207, D-211, D-213,
   D-215, D-216, D-220, D-221, D-222, D-224, D-225, D-226, D-228, D-229,
   D-232, D-233, D-234, D-235, D-236, D-237, D-238, D-239, D-245, D-246,
-  D-247, D-248, D-249, D-250, D-252, D-253, D-254, D-256
+  D-247, D-248, D-249, D-250, D-252, D-253, D-254, D-256, D-257
 - **Vehicles & fleet:** D-043, D-044, D-045, D-068, D-076, D-089, D-093,
   D-096, D-142, D-143, D-145, D-146, D-155, D-157, D-171, D-174, D-181, D-185,
   D-201, D-207, D-245, D-246
@@ -62,7 +62,7 @@ no entry below. A number may appear under several topics.
 - **Competitors, AI & tenders:** D-107, D-108, D-109, D-115, D-116, D-121,
   D-122, D-147, D-152, D-153, D-154, D-155, D-156, D-158, D-216, D-218,
   D-219, D-220, D-221, D-222, D-223, D-224, D-225, D-226, D-228, D-229,
-  D-230, D-238, D-250, D-252, D-253, D-254, D-255, D-256
+  D-230, D-238, D-250, D-252, D-253, D-254, D-255, D-256, D-257
 - **Rendering & art:** D-013, D-014, D-033, D-035, D-112, D-117, D-125, D-127,
   D-136, D-140, D-160, D-161, D-162, D-163, D-164, D-165, D-166, D-169, D-170,
   D-171, D-172, D-173, D-174, D-175, D-177, D-179, D-186, D-202, D-205, D-206,
@@ -77,7 +77,7 @@ no entry below. A number may appear under several topics.
   D-206, D-209, D-214, D-231, D-234, D-235, D-241, D-242, D-247, D-248
 - **Platform, tooling & build:** D-012, D-014, D-015, D-016, D-017, D-029,
   D-030, D-031, D-160, D-168, D-169, D-170, D-172, D-175, D-192, D-206, D-208,
-  D-227, D-242, D-255
+  D-227, D-242, D-255, D-257
 - **Crash safety:** D-132, D-139, D-190
 - **Testing method & fixtures:** D-010, D-038, D-072, D-074, D-084, D-133,
   D-167, D-183, D-186, D-188, D-189, D-190, D-191, D-192, D-193, D-194,
@@ -85,10 +85,11 @@ no entry below. A number may appear under several topics.
   D-205, D-207, D-206, D-208, D-209, D-210, D-212, D-213, D-215, D-216,
   D-217, D-219, D-220, D-221, D-222, D-228, D-229, D-230, D-231, D-233,
   D-234, D-235, D-236, D-241, D-242, D-248, D-249, D-250, D-251, D-252,
-  D-253, D-255, D-256
+  D-253, D-255, D-256, D-257
 - **Process & specification:** D-070, D-123, D-129, D-133, D-138, D-140,
   D-185, D-191, D-197, D-198, D-199, D-203, D-204, D-205, D-206, D-215,
-  D-222, D-225, D-226, D-227, D-228, D-229, D-235, D-252, D-253, D-256
+  D-222, D-225, D-226, D-227, D-228, D-229, D-235, D-252, D-253, D-256,
+  D-257
 
 ---
 
@@ -12001,6 +12002,17 @@ CLAUDE.md's environment note stays a correct repair procedure for a checkout
 that predates D-168 on an `autocrlf=true` machine, and it is no longer offered
 as the explanation for THIS repository's red check.
 
+**Every figure above is a measurement of 2026-08-11, and the count has moved
+since: re-measured 2026-08-13 (D-257), `npx prettier --check .` reports 42
+files, not 31.** That is this entry's own diagnosis coming true rather than a
+new defect - eleven bundles' worth of new files arrived dirty because nothing
+gates the formatter, and files that a later bundle happened to rewrite left the
+set again (`src/ui/FleetPanel.tsx`, named above, is clean today). Nothing was
+reformatted then and nothing is reformatted now. **Any later entry quoting a
+file count quotes it WITH ITS DATE**, because the number is a property of when it
+was taken and not of the repository - which is exactly how the 31 came to be
+stale in CLAUDE.md's environment note for eleven bundles.
+
 ---
 
 ## The rail question, decided on evidence (2026-08-11)
@@ -16810,3 +16822,196 @@ buses that can reach neither, and the connection goal Achieved at tick 200 with
 a gold medal. That is a goal-machine change with a ripple through `goals.spec`,
 `gameScore` and the shipped scenario claims, so it is named here as its own
 bundle rather than smuggled into this one.
+
+
+---
+
+## M24 close - the difficulty table rebuilt on its own measurements (2026-08-13)
+
+### D-257 A knob that makes a competitor worse is not a difficulty setting: `DIFFICULTY_AI_TRAITS` rebuilt from the evidence, and SPEC2 M24's ordering clause closed as NOT ACHIEVABLE with an evaluation-only change
+
+**Four bundles measured this table and the fifth acts on the measurement.**
+D-252 built `DIFFICULTY_AI_TRAITS` and priced every knob one at a time; D-253
+found the capital confound under it and removed it; D-256 built the instrument
+the clause really needed (line survival) and reported the ordering open on both.
+Two independent verifications since have measured the same numbers. What was
+missing was not more data - it was a decision, and this entry takes it.
+
+**No save bump** (`difficulty` has been a saved, hashed world rule since D-110
+and this bundle adds no field): `SAVE_VERSION` stays **34**, zero snapshot bytes,
+zero protocol fields, zero RNG draws, zero i18n lines, zero atlas cells, no
+migration edit. **All three pins re-run and unmoved** - canonical
+`b7e632a7124e67ce`, corpus `a00868b9911f12d6`, soak `64fec78d6bf0cd5e` at 35
+commands and 16 checkpoints - which is a consequence rather than luck: the
+Normal row is untouched and the pinned worlds are Normal worlds.
+
+#### 1. What was measured, and is not in doubt
+
+- **Three knobs are provably inert.** `candidatesTried` never binds: the longest
+  candidate list over eight seeds x twenty-five years x five personalities is
+  **FIVE**, because the drain gate and the D-221/D-229 profit floor decide the
+  length long before the depth does. `fleetHeadroom` is inert at Hard: the 12.3
+  advisor already asks for the cap, so 1.25 reproduces the Normal run to the
+  euro. The 14.4 tender board never fires: a tender wants Goods, Food, Steel or
+  Planks delivered to a TOWN, and a competitor runs bus lines between towns and
+  hauls into a works.
+- **One knob helps.** The terrain probe at eight probes measured **+326,566 EUR
+  (+5.6 %)**, one more line and one fewer winding-up over eight seeds (D-252).
+- **One knob hurts, and it was the one that defined Hard.** The chain
+  look-ahead: **+16.9 % at depth 0, -4.3 % at depth 2** on company value, in both
+  directions away from Normal's depth 1. Swept against the D-256 exposure
+  threshold from 2.5 to 20 game years, Hard is the WORST level at every
+  threshold from 7.5 upwards.
+
+#### 2. The table, rebuilt - and what decided each knob
+
+| knob | Easy | Normal | Hard | what decided it |
+| --- | --- | --- | --- | --- |
+| `candidatesTried` | 20 | 60 | 120 | measured INERT (list length 5); kept because SPEC2 M24 names it and because the length is a property of the MAP - a 1024 map with three hundred industries is where 20 begins to cost something |
+| `terrainProbes` | 0 | 0 | 8 | the only knob measured to HELP (+5.6 %, D-252); 8 is its whole reach, since the list is never longer than five |
+| `fleetHeadroom` | 0.75 | 1 | 1.25 | inert at Hard (advisor at the cap), worth +0.7 % at Easy - so it separates EASY and nothing else |
+| `tenders` | no | no | yes | never fires today; kept, named, and its inertness is the expected reading until the AI hauls finished goods into a town |
+| `exclusiveRightsRating` | never | never | 75 | fires and costs about **10,028 EUR** over eight seeds - the price of the rights it buys |
+| `chainLookahead` | 0 | 1 | 2 | **OUT of the table** (below) |
+
+**The chain look-ahead is `AI_CHAIN_LOOKAHEAD` now - one depth, every level,
+and the depth is 1.** A knob that makes a competitor worse the further it is
+turned cannot carry a difficulty in either direction: turned up it is the
+anti-correlation above, and turned DOWN it would make Easy the strongest
+opponent in the game. Depth 0 measures richest on the money instrument and is
+deliberately not taken, for two reasons that are each sufficient: it is D-109's
+rule deleted, and D-225 measured in one concrete death what that costs (seed
+918273's steel mill woke, nobody carried the steel away, and the 7.3 closure
+clock took the sink of two lines with it in 1958); and it would move the NORMAL
+competitor, i.e. re-band scenario 5, the `aiGame` sweep and the soak fixture
+from inside a closing bundle, which is Fehlerkatalog 34. Depth 1 is what every
+AI band in this project was measured on.
+
+**This is a named departure from SPEC2 M24's MUSS text**, which lists
+"Chain-Lookahead-Tiefe" as a column of the table by hand. The mechanism is
+unchanged and still parameterised - `collectIndustryPairs` still takes the depth,
+so an ablation needs no edit - only the LEVEL stopped deciding it. SPEC.md 15
+sanctions better evaluation functions on higher levels; it does not sanction a
+column that has to exist even when it is measured to do the opposite, and D-197
+is the entry about numbers that are kept because somebody wanted them.
+
+#### 3. Re-measured over the sixteen acceptance seeds, on BOTH instruments
+
+Sixteen `AI_ACCEPTANCE_SEEDS`, 25 game years, three competitors, 256 temperate
+map, every level's competitors opening on the same 24,000,000 EUR (D-253).
+Measured 2026-08-13, whole file 456.2 s.
+
+| level | value at year 25 | created | per euro | crewed | seeds | lines | vehicles | wound up |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Easy | 26,535,840 | +2,535,840 | 1.1057 | 13 | 11/16 | 18 | 108 | 0 |
+| Normal | **26,215,097** | +2,215,097 | 1.0923 | 12 | 10/16 | 17 | 102 | 0 |
+| Hard | 25,998,151 | +1,998,151 | 1.0833 | 10 | 9/16 | 18 | 102 | 2 |
+
+| survival reading (D-256) | Easy | Normal | Hard |
+| --- | --- | --- | --- |
+| lines opened | 36 | 35 | 35 |
+| standing at year 25 | 18 | 17 | 18 |
+| **share** | 50.0 % | 48.6 % | 51.4 % |
+| mean game year a line opened in | 9.96 | 9.70 | 10.05 |
+| mean life of a line that closed | 2.67 yr | 2.70 yr | 2.77 yr |
+| **share at 12.5 years of exposure** | 42.9 % | 42.9 % | **40.9 %** |
+
+**Normal is bit-identical to every earlier measurement** - 26,215,097 EUR to the
+cent, and the four `aiGame` seeds inside it still total **7,293,303 EUR**
+(D-248's own figure) - which is the evidence that the rebuild moved the LEVELS
+and not the game. Easy moved 29,873,058 -> 26,535,840 (it stopped playing the
+pre-D-109 AI) and Hard 24,735,440 -> **25,998,151** (+1,262,711; it stopped
+paying for depth 2).
+
+#### 4. The close: NOT ACHIEVABLE with an evaluation-only change
+
+**On money**, Hard is 216,946 EUR BELOW Normal (-0.83 % of the total, -9.8 % of
+what the field created), above it on 6 seeds, level on 2, below on 8. D-252's
++5.6 % for the terrain probe does NOT reproduce over sixteen seeds once the
+chain depth is equal - what is left is chaotic divergence with no sign, which is
+what a knob worth single-digit percent looks like against a simulation whose one
+coal train swings 45-75 k EUR from year to year (D-203).
+
+**On survival**, Hard is 28 per mille above Normal, and ONE line is worth **29**
+per mille at these denominators - the entire gap is a single line deciding the
+other way. Its own exposure control puts Hard LAST (40.9 % against 42.9 %), and
+Easy - which has no probe at all - reads above Normal on the raw share.
+
+So the clause "ein Hard-KI-Lauf ... erreicht messbar hoeheren Firmenwert als
+Normal" is **CLOSED AS NOT ACHIEVABLE with an evaluation-only change**, and
+SPEC2 M24's Fertig-wenn carries the amendment in the D-235/D-253 bracketed form.
+**What a difficulty level really changes, measured:**
+
+- **The player's opening capital**: 800,000 / 500,000 / 250,000 EUR
+  (`START_CAPITAL_CT`) - a factor of **3.2** from Easy to Hard, against a trait
+  table worth single-digit percent. This is the level, and it always was.
+- **The player's loan rate**: 4.0 / 4.0 / 6.5 % a year
+  (`LOAN_INTEREST_RATE_PER_YEAR`). Ablated in D-253 it is worth +1.8 % and one
+  winding-up to the field; it is a PRICE the player pays in the same world, so
+  it stays.
+- **The surviving knobs are worth, in total, less than the instruments can
+  resolve**: the probe measures to nothing at equal chain depth, the rights cost
+  about 10,028 EUR, the tender board never fires, the candidate depth never
+  binds, and the fleet headroom binds only at Easy.
+
+**What a future pass would have to change to make the ordering true**, in the
+order of how much it would move:
+
+1. **Give Normal something to be worse than.** The probe cannot separate Easy
+   from Normal (probes below zero do not exist) and giving NORMAL probes would
+   move the default competitor - i.e. re-band scenario 5, the `aiGame` sweep and
+   the soak fixture. A pass that is allowed to re-record those is allowed to put
+   the probe at 0 / 4 / 8 and measure a real ladder.
+2. **Make the candidate list long enough for a depth to bind.** It is five; the
+   drain gate and the D-221/D-229 floor decide it. A bigger map (1024 with three
+   hundred industries) or a cheaper first line is where `candidatesTried` starts
+   being a knob at all.
+3. **Give a competitor a business a tender can be won with** - D-225's onward
+   leg, i.e. a line that hauls finished goods INTO a town. Until that exists the
+   tender board is decoration.
+4. **Measure over more than sixteen seeds, or over more than three competitors
+   per seed.** At 35 lines a level, one line is 29 per mille; no ordering
+   narrower than a line can be evidence, whatever the table says.
+
+**And the per-level regression band stays, on both instruments**, so a later
+change cannot move the levels silently: value bands about +-11 % (Easy
+23.6-29.5 M, Normal 23.3-29.1 M, Hard 23.1-28.9 M), survival bands +-100 per
+mille (500 / 486 / 514), plus a new falsifiable bound that states the close
+itself - Normal and Hard within 2.5 % of company value and within two lines of
+survival. **A future pass that really makes Hard better goes RED there**, which
+is the difference between closing a clause and abandoning it.
+
+#### 5. Ripple, and the one thing that moved
+
+- **Campaign stage 12 (`eisenadern-12`, arctic, 1950, Hard) is the only one of
+  the twelve whose competitor probe moved**, and it moved upwards: what the three
+  competitors own after six game years is 4/6, 4/12 and 2/6 stations and
+  vehicles, against 4/0, 2/6 and 0/0 before. The claim was re-measured, not
+  adjusted, and the briefing that quotes it says four stations and twelve
+  vehicles now in both languages (`CAMPAIGN_BRIEFING_FIGURES` binds the two).
+  Stages 10 and 11 are Hard as well and did not move; the three Easy stages ship
+  solo and their probes are unchanged.
+- **Everything else is unchanged and was re-run rather than presumed**: the three
+  pins above, `npm run test:balance:full`, the unit suite and the soak.
+
+#### 6. Two stale documentation numbers, made true or dated
+
+- **`npm run format:check`.** CLAUDE.md's D-227 paragraph said "31 failing
+  files"; measured today with `npx prettier --check .` it is **42**. Nothing
+  regressed - it is D-227's own diagnosis coming true, because no CI job runs the
+  formatter and every bundle since has added files. Both CLAUDE.md and D-227 now
+  carry the number WITH ITS DATE, and D-227 says explicitly that any later entry
+  quoting a file count quotes it with its date. Nothing was reformatted; that is
+  still its own session.
+- **`tests/balance/determinism.ts`.** D-256's own claim about it was that
+  `AI_ACCEPTANCE_SEEDS` is "the bar every AI-wide claim since D-228 has been
+  measured on". That cannot be verified from the repository - those probes are
+  gone - so the sentence now says what is true: this list is the SUCCESSOR bar,
+  and the two properties that ARE checkable are checked from outside in
+  `tests/unit/balanceDeterminism.spec.ts` (sixteen distinct seeds; the first four
+  are `AI_SWEEP_SEEDS`, in that order, which is what lets the difficulty file
+  read `aiGame`'s four-seed total out of its own sweep). The file's own cost
+  figure is dated too: 654.7 s in D-256, **456.2 s and 437.7 s** on two runs of
+  2026-08-13 - the same forty-eight quarter centuries on a quieter box, which is
+  the run-to-run spread D-220 already recorded for this fixture and not a
+  speed-up.

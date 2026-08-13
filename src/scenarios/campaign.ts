@@ -1138,9 +1138,12 @@ const STAGE_11: ShippedScenario = {
  * from the refinery at 153,156; Gorsebourne (#9) and Far-Gorsestead (#24) are
  * 71.1 tiles apart.
  *
- * The competitor probe finds company 2 running two stations and six vehicles
- * after six years, company 1 holding four stations and no fleet, company 3
- * nothing - which is the AI this project measured and not a better one (D-226).
+ * The competitor probe finds all three competitors on the field after six
+ * years: company 2 with four stations and twelve vehicles, company 1 with four
+ * stations and six, company 3 with two stations and six - re-measured in D-257,
+ * where the Hard row of `DIFFICULTY_AI_TRAITS` stopped paying for a chain
+ * look-ahead of two and this map's opponents built more (it read 4/0, 2/6 and
+ * 0/0 before). Still the AI this project measured and not a better one (D-226).
  */
 const STAGE_12: ShippedScenario = {
   id: 'eisenadern-12',
@@ -1153,16 +1156,16 @@ const STAGE_12: ShippedScenario = {
       'Orte ab 2.500 Einwohnern - weniger traegt keine andere Etappe -, dreizehn ' +
       'Industrien, davon drei Raffinerien. Von der naechsten Bohrstelle bis zur ' +
       'naechsten Raffinerie sind es 28 Tiles; zwischen Gorsebourne und Far-Gorsestead ' +
-      'liegen 71 Tiles. Drei Konkurrenten: nach sechs Jahren haelt einer 2 Stationen ' +
-      'und 6 Fahrzeuge. 250.000 EUR Startkapital.',
+      'liegen 71 Tiles. Drei Konkurrenten: nach sechs Jahren haelt einer 4 Stationen ' +
+      'und 12 Fahrzeuge. 250.000 EUR Startkapital.',
     en:
       '1950, the arctic - and everything is on: the century, council elections, harsh ' +
       'weather, both route costs of 8.4, road congestion and the carbon levy. Seven ' +
       'towns at 2,500 inhabitants or more - no other stage carries fewer - thirteen ' +
       'industries, three of them refineries. From the nearest well to the nearest ' +
       'refinery is 28 tiles; between Gorsebourne and Far-Gorsestead lie 71 tiles. Three ' +
-      'competitors: after six years one holds 2 stations and 6 vehicles. 250,000 EUR of ' +
-      'starting capital.',
+      'competitors: after six years one holds 4 stations and 12 vehicles. 250,000 EUR ' +
+      'of starting capital.',
   },
   goals: [
     {

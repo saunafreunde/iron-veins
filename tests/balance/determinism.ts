@@ -162,16 +162,20 @@ export const AI_SWEEP_SEEDS: readonly number[] = [4_711, 4_713, 4_712, 4_714];
 export const AI_SWEEP_DEFAULT_SIZE = 2;
 
 /**
- * **The sixteen acceptance seeds**: the bar every AI-wide claim since D-228 has
- * been measured on, written down here for the first time (D-256).
+ * **The sixteen acceptance seeds**: the bar every AI-wide claim from here on is
+ * measured on, written down for the first time in D-256.
  *
  * D-228 (the rail question), D-229 (the profit-floor sweep) and D-252/D-253
- * (the difficulty levels) all measured "over sixteen seeds" with the list living
- * in a throwaway probe, so a later bundle could reproduce the CONCLUSION only by
- * guessing the seeds. `aiDifficulty.spec.ts` sweeps it, which is why it lives
- * beside the four-seed list it extends: **the first four ARE
- * {@link AI_SWEEP_SEEDS}, in that order**, so the difficulty file and the
- * `aiGame` acceptance run agree about which worlds they are talking about.
+ * (the difficulty levels) each measured "over sixteen seeds" with the list
+ * living in a throwaway probe, so a later bundle could reproduce those
+ * CONCLUSIONS only by guessing the seeds. **This list is the successor bar, not
+ * a reconstruction of theirs**, and D-257 corrected the sentence that said
+ * otherwise: those probes are gone, so which sixteen worlds they played cannot
+ * be verified from the repository and is not claimed here. What IS true of this
+ * list is checkable and is checked, in `tests/unit/balanceDeterminism.spec.ts`:
+ * sixteen distinct seeds, and **the first four ARE {@link AI_SWEEP_SEEDS}, in
+ * that order**, so the difficulty file and the `aiGame` acceptance run agree
+ * about which worlds they are talking about.
  *
  * Why sixteen and not four, in one sentence: the four-seed view has now
  * disagreed with the sixteen-seed one twice in three bundles (D-252's capital
