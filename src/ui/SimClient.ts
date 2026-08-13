@@ -1,4 +1,5 @@
 import { t } from '../i18n';
+import { PROTOCOL_VERSION } from '../shared/netProtocol';
 import type {
   MainToWorkerMessage,
   NewGameOptions,
@@ -330,6 +331,30 @@ export class SimClient {
     null;
 
   /**
+   * The debug door of SPEC2 E-16, and the only way the per-tick digest is ever
+   * switched on.
+   *
+   * Deliberately not a setting and not a screen: it is a diagnostic that costs
+   * roughly what the simulation costs (D-261 has the measurement), it belongs
+   * to whoever is chasing a divergence, and a checkbox in the options would
+   * invite a player to pay for it. `main.tsx` hangs it on the global object
+   * under one namespaced key, which is what "behind a debug flag" means here.
+   */
+  setTickDigest(enabled: boolean): void {
+    this.post({ type: 'setTickDigest', enabled });
+  }
+
+  /** Ask for what the ring holds; the answer arrives at {@link onTickDigests}. */
+  requestTickDigests(): void {
+    this.post({ type: 'requestTickDigests' });
+  }
+
+  /** Called with the ring's contents, oldest first, after a request. */
+  onTickDigests:
+    | ((entries: readonly { readonly tick: number; readonly digest: string }[]) => void)
+    | null = null;
+
+  /**
    * Ask the worker to write the running world as a `.ironscenario` (M22).
    *
    * The briefing goes out with the request and the bytes come back, exactly
@@ -385,6 +410,20 @@ export class SimClient {
         store.setGenerating(message.phase, message.seedAttempt);
         return;
       case 'ready':
+        // The message contract, compared rather than assumed (SPEC2 E-16).
+        // Page and worker are chunks of one build today, so this can only fire
+        // on a half-stale deploy - which the shim's single reload (E-13) makes
+        // a real possibility. A warning and not a fatal error: the world is
+        // already running and the fields this build reads are the ones it
+        // asked for, so refusing to show it would turn a warning into an
+        // outage. It is in English, like every other line that is for whoever
+        // gets the bug report rather than for the player.
+        if (message.protocolVersion !== PROTOCOL_VERSION) {
+          console.warn(
+            `Iron Veins: the simulation worker speaks protocol ${message.protocolVersion}, ` +
+              `this page speaks ${PROTOCOL_VERSION}. Reload with the cache cleared.`,
+          );
+        }
         store.setCompany(message.companyName, message.companyColorIndex);
         store.setWorld({
           mapSize: message.mapSize,
@@ -495,6 +534,9 @@ export class SimClient {
         return;
       case 'replayFailed':
         store.setReplayError({ reasonKey: message.reasonKey, detail: message.detail });
+        return;
+      case 'tickDigests':
+        this.onTickDigests?.(message.entries);
         return;
     }
   }

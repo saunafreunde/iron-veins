@@ -10,3 +10,6 @@ package-lock.json
 # per line. Reflowing them at printWidth would put every field of every command
 # on its own line and quadruple four files nobody edits by hand.
 src/sim/bench/maps
+# Generated build artefact (SPEC2 M25): plain-text notices, rewritten by every
+# release build.
+public/THIRD-PARTY.txt

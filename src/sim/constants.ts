@@ -4238,3 +4238,35 @@ export const UNDO_RING_DEPTH = 50;
  * undo, in the shape it would really appear in).
  */
 export const UNDO_MAX_PATCH_CELLS = 40_000;
+
+// ------------------------------- multiplayer groundwork (SPEC2 M25, E-16)
+
+/**
+ * Ticks between a command being ISSUED and the tick it would execute on, in a
+ * future lockstep session. [ticks]
+ *
+ * Origin: the classic lockstep delay, read off this game's own clock rather
+ * than off a networking textbook. A tick is 50 ms (20 Hz, architecture law
+ * #2), so four ticks are 200 ms - a round trip that covers a European
+ * connection with margin, and the smallest delay at which a peer can receive,
+ * acknowledge and schedule an input before the tick it belongs to runs.
+ *
+ * It is RESERVED: nothing in this build reads it to decide anything, because
+ * there is no transport and no session (E-16 forbids both). It exists so that
+ * `multiplayer/inputDelay.ts` states the arithmetic in one place with a
+ * number beside it instead of leaving the design note innumerate.
+ */
+export const NET_INPUT_DELAY_TICKS = 4;
+
+/**
+ * How many consecutive per-tick digests the debug ring remembers. [ticks]
+ *
+ * Origin: 1,024 ticks are 51 game-seconds of simulation at 20 Hz, i.e. five
+ * game days - long enough that a peer noticing a mismatch has the whole
+ * window in which the two histories were still identical, and short enough
+ * that the ring is two Int32Arrays of 4 kB each whatever the world size.
+ *
+ * A power of two so the wrap is a mask rather than a modulo (law #7 applies:
+ * the ring is written from the scheduler once per tick when the flag is on).
+ */
+export const NET_TICK_DIGEST_RING_CAPACITY = 1024;

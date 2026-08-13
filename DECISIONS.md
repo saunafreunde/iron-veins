@@ -14,11 +14,11 @@ no entry below. A number may appear under several topics.
   D-024, D-093, D-106, D-128, D-137, D-142, D-145, D-146, D-149, D-153, D-178,
   D-181, D-184, D-185, D-188, D-189, D-190, D-191, D-193, D-194, D-195,
   D-196, D-200, D-201, D-202, D-204, D-232, D-233, D-236, D-240, D-244,
-  D-245, D-258
+  D-245, D-258, D-261
 - **Commands, snapshot & worker boundary:** D-004, D-005, D-006, D-011, D-032,
   D-100, D-111, D-145, D-146, D-148, D-162, D-174, D-176, D-179, D-187, D-189,
   D-192, D-193, D-196, D-200, D-202, D-218, D-240, D-241, D-242, D-243,
-  D-244, D-258
+  D-244, D-258, D-261
 - **Lines & timetables:** D-145, D-146, D-147, D-148, D-149, D-150, D-151,
   D-152, D-155, D-159
 - **Map generation & terrain:** D-018, D-019, D-020, D-021, D-022, D-023,
@@ -30,7 +30,7 @@ no entry below. A number may appear under several topics.
   D-111, D-130, D-131, D-134, D-142, D-144, D-145, D-146, D-147, D-153, D-178,
   D-181, D-184, D-185, D-188, D-189, D-190, D-191, D-192, D-193, D-194,
   D-197, D-198, D-200, D-207, D-213, D-231, D-232, D-233, D-236, D-238,
-  D-239, D-240, D-241, D-243, D-244, D-245, D-247, D-258
+  D-239, D-240, D-241, D-243, D-244, D-245, D-247, D-258, D-261
 - **Rail & track:** D-042, D-043, D-044, D-045, D-046, D-047, D-053, D-141,
   D-153, D-157, D-184, D-230
 - **Signals & reservations:** D-054, D-055, D-056, D-057, D-058, D-059, D-060,
@@ -77,7 +77,7 @@ no entry below. A number may appear under several topics.
   D-206, D-209, D-214, D-231, D-234, D-235, D-241, D-242, D-247, D-248
 - **Platform, tooling & build:** D-012, D-014, D-015, D-016, D-017, D-029,
   D-030, D-031, D-160, D-168, D-169, D-170, D-172, D-175, D-192, D-206, D-208,
-  D-227, D-242, D-255, D-257, D-259, D-260
+  D-227, D-242, D-255, D-257, D-259, D-260, D-261
 - **Crash safety:** D-132, D-139, D-190
 - **Testing method & fixtures:** D-010, D-038, D-072, D-074, D-084, D-133,
   D-167, D-183, D-186, D-188, D-189, D-190, D-191, D-192, D-193, D-194,
@@ -85,11 +85,11 @@ no entry below. A number may appear under several topics.
   D-205, D-207, D-206, D-208, D-209, D-210, D-212, D-213, D-215, D-216,
   D-217, D-219, D-220, D-221, D-222, D-228, D-229, D-230, D-231, D-233,
   D-234, D-235, D-236, D-241, D-242, D-248, D-249, D-250, D-251, D-252,
-  D-253, D-255, D-256, D-257, D-258, D-259, D-260
+  D-253, D-255, D-256, D-257, D-258, D-259, D-260, D-261
 - **Process & specification:** D-070, D-123, D-129, D-133, D-138, D-140,
   D-185, D-191, D-197, D-198, D-199, D-203, D-204, D-205, D-206, D-215,
   D-222, D-225, D-226, D-227, D-228, D-229, D-235, D-252, D-253, D-256,
-  D-257
+  D-257, D-261
 
 ---
 
@@ -17808,3 +17808,297 @@ The release automation (`release.yml`, the generated attributions file, the
 code-signing integration point and the commercial-readiness checklist), the
 multiplayer groundwork of E-16 with its protocol bump, and the modding
 constitution line of E-17. Undo of a station build stays where D-258 left it.
+
+## M25 bundle 4 - release automation, multiplayer groundwork, and the close (2026-08-13)
+
+### D-261 A tag is a release, a digest names the tick two peers parted on, and the three things only an owner may decide
+
+The last implementation bundle of the expansion, and it closes what M25 still
+owed: the release automation, the multiplayer groundwork of E-16 with its
+protocol bump, and the modding constitution line of E-17.
+
+**No save bump, and it needed none**: `SAVE_VERSION` stays **34**, no migration
+edit, zero hashed bytes, zero snapshot bytes, zero RNG draws, zero atlas cells,
+zero i18n lines. All three pins stand where D-258 left them, verified by
+running and not presumed: canonical `b7e632a7124e67ce`, corpus
+`a00868b9911f12d6`, soak `64fec78d6bf0cd5e` at 35 commands and 16 checkpoints.
+**The protocol version is the one thing this bundle bumps** - 1 to 2 - and it
+versions the MESSAGE CONTRACT, which is neither the world nor the shared-buffer
+layout.
+
+#### 1. A release is a pure function of a tag
+
+`.github/workflows/release.yml` runs on `v*`: a web build on Linux, the MSI and
+the NSIS installer on Windows, and a **draft** GitHub release that gathers both.
+`workflow_dispatch` runs the same two build jobs without a tag, so the pipeline
+can be exercised without cutting a version - the whole workflow, not a shortened
+imitation of it, because a release path that is only ever run for real is a
+release path nobody has tested.
+
+**It deliberately does not re-run the test suite**, and that is a decision
+rather than an omission. `ci.yml` runs on every push including the commit the
+tag points at; a forty-minute duplicate here would either double the wait for a
+release or - the real risk - tempt somebody to skip one of the two. What this
+workflow guarantees is that the artefacts come from the tagged commit. What
+guarantees the tagged commit is sound is the CI run on it, and `release.spec.ts`
+asserts that split in both directions: the release workflow must NOT contain
+`npm run test:soak` and `ci.yml` must.
+
+**The release is a DRAFT.** Publishing it is an owner decision, for the reason
+section 4 below sets out at length: a workflow can build an installer, but it
+must not decide that a licence text, a product name and a privacy note are ready
+to be shipped under.
+
+#### 2. The attribution file is generated, and it REFUSES
+
+`tools/make-attribution.mjs` walks the npm RUNTIME dependency closure - the
+`dependencies` graph, transitively, which is exactly the set whose code ships
+inside the application - and writes `public/THIRD-PARTY.txt`, from where vite
+copies it into `dist/` and the Tauri bundler into the installer. It is
+**gitignored**, like the baked atlases and for the same reason (E-14): it is a
+pure function of `package.json` plus the installed tree, so committing it would
+commit a derived file that goes stale at the next install.
+
+**The walk is iterative with an explicit visited set**, which is architecture
+law #8 applied outside the simulation and not ceremony: an npm graph really has
+cycles, and the synthetic tree in the test contains one (`beta` depends back on
+`alpha`) so the property is exercised rather than assumed. The result is
+**sorted**, so two builds of one commit write the same bytes - the bake's own
+promise (D-160), in another currency.
+
+**It throws rather than shipping a package that states no licence**, and the
+same for a package it cannot read at all. That refusal is the whole point of the
+artefact: shipping something the project has no right to ship becomes impossible
+by accident rather than something review is supposed to catch. Measured on the
+real tree: **23 runtime packages, 16 MIT, 2 ISC, 2 BSD-3-Clause, 1 "Apache-2.0
+OR MIT", 2 "MIT OR Apache-2.0"** - permissive throughout, no copyleft, no
+attribution obligation beyond the file itself.
+
+**Two gaps are NAMED in the file's own header rather than left invisible**: the
+Rust crates behind the Tauri shell, whose notices the bundler emits with the
+installer, and the Kenney kits, which are downloaded and baked at build time and
+are in no repository file at all - so no dependency walk could ever see them.
+They are CC0 and ask for nothing; the credit is given because it is deserved. A
+credits file whose gaps are invisible is worse than one that has none.
+
+#### 3. The code-signing gate has two branches and the second one shouts
+
+SPEC2 M25 asks for an integration point that "signs when the certificate secret
+exists and warns clearly when it does not", and both halves are here. A step
+turns the presence of `WINDOWS_CERTIFICATE` into an output - a secret cannot be
+read in a job-level `if:` - and the unsigned path raises a GitHub `::warning`
+annotation that says what it costs: **SmartScreen will warn every user who has
+not seen the binary before.** The signing path hands Tauri the two environment
+variables it already understands, so nothing here reimplements signtool.
+
+An unsigned release that shipped quietly would be a support queue nobody could
+connect to this file. The annotation is what stops that being possible.
+
+#### 4. Three owner decisions, with defaults proposed and none of them taken
+
+The commercial-readiness checklist is the appendix of `RELEASE.md`, and every
+item in it is marked as the owner's. What is written beside each is a PROPOSED
+DEFAULT and nothing more.
+
+- **Licence and EULA.** The repository states no licence, which is the strictest
+  position there is and the right one while nothing has shipped. Proposed: a
+  plain EULA naming Levando GmbH as licensor, shipped as `EULA.txt` and shown by
+  the NSIS installer. The open question is one only the owner can answer -
+  sold, given away, or demo plus paid version - because the three need three
+  different agreements.
+- **Name and trademark.** Unchecked, and said so. Proposed: EUIPO and DPMA in
+  Nice classes 9 and 41 for both "Iron Veins" and "Eisenadern" before the first
+  paid release. Recorded beside it because it will be asked: "Transport Tycoon"
+  is a registered mark, this game is a successor in GENRE, and nothing in it
+  uses that name, its artwork or its data - but marketing copy that leans on the
+  comparison is where that stops being true.
+- **The crash-bundle privacy note.** The mechanism is not a decision and is
+  written down as fact, read off `assembleBundle` rather than remembered: the
+  bundle is written offline, only when the player asks, and contains the
+  application and save versions, the time, the error and stack, the seed, map
+  size, tick and state hash, whether this is the desktop build, the last
+  commands as text, the autosave and a `.ironreplay`. So its personal content is
+  **the player's own save and the company name they typed into it**, and not the
+  operating-system version, the user agent, any path outside the application's
+  own data directory, the clipboard or any account. Verified rather than
+  asserted: a source walk over `src/` finds no `fetch`, `WebSocket`,
+  `XMLHttpRequest`, `EventSource` or `RTCPeerConnection` anywhere, and
+  `tauri.conf.json` configures no updater. The open question is again the
+  owner's: whether there is an address to send one to, because that address and
+  not the file is where data-protection law starts.
+
+#### 5. The per-tick digest, measured - and E-16's estimate corrected
+
+E-16 prescribes a cheap per-tick digest - "`hashDynamicState` ohne
+Ledger-Arrays" - behind a debug flag, at "~0,1 ms nur bei Flag". It is
+implemented literally: `hashWorldTick` is `hashDynamicState` with
+`includeLedger` false, **the SAME walk one branch shorter**, because a desync
+detector that fingerprints a different set of fields from the determinism suite
+disagrees with the authority it exists to protect. What the branch drops is the
+six per-company arrays (`accounts`, `yearAccounts`, `lastYearAccounts`,
+`monthHistory`, `valueHistory`, `cargoDeliveredUnits`), every one of which only
+a monthly or yearly hook can move.
+
+**And the estimate is wrong, which is worth more than the feature.** Measured on
+the 1,500-vehicle fixture Z6 prescribes, medians over twelve calls: full
+`hashWorld` **280.6 ms**, `hashWorldLive` **6.50 ms**, `hashWorldTick`
+**6.28 ms**. So the per-tick digest is **63x** E-16's figure and roughly **4.3x
+the whole tick** (1.45 ms baseline). That estimate was written before the
+fixture existed and is Fehlerkatalog 36 in the flesh - a budget promise without
+a baseline - so it is corrected here rather than quietly met.
+
+**Two consequences, both stated rather than smoothed away.** The tick-budget row
+is untouched, because the flag ships OFF and the digest is taken in the
+SCHEDULER after `step`, outside `tick()`: the shipped worker pays one null
+comparison per tick for it. And a session that turns it on pays about what the
+simulation costs, which is what a debug instrument may cost and what a shipped
+one may not - which is exactly why it is a global-object door in `main.tsx`
+(`ironVeins.tickDigest(true)`) and not a checkbox in the options.
+
+**The ledger branch is worth 3.4 % of the walk** (6.50 -> 6.28 ms), and the
+honest reading of that is that E-16 named the wrong economy: what dominates is
+the VEHICLE PATHS, up to a few hundred tiles each, hashed in full. A genuinely
+per-tick-cheap digest would be positions, speeds, the generator state and cash -
+and it is NOT shipped, deliberately, because it would fingerprint a different
+set of fields from `hashWorld`, and the property that makes this digest
+trustworthy is that it is a subset of the authority's own walk. Whoever wants
+one now has the measurement to argue from.
+
+**`TickDigestRing` is what makes the digest an instrument rather than a number.**
+1,024 entries - five game days at 20 Hz - as two `Int32Array`s of hi/lo halves,
+so recording allocates nothing and a kilobyte a second of hex strings is never
+built. `firstDisagreement` compares two peers' rings over their INTERSECTION and
+answers with a **tick**: ticks only one side holds are not evidence of anything,
+so it returns -1 rather than guessing. The ring is cleared on every world swap,
+because tick 4,000 of the world that just left and tick 4,000 of the world that
+arrived are two different ticks with one number.
+
+**Nothing reads it.** A source walk over `src/sim` fails the build if any file
+but `multiplayer/tickDigest.ts` and the scheduler names `hashWorldTick`,
+`TickDigestRing` or `firstDisagreement` - the D-186 posture for
+`TileMap.throughput`, and the reason is the same: a digest that steered a
+simulation decision would be an unsaved input to a saved one, Z4 broken in
+silence.
+
+#### 6. The reserved envelope fields, and why they cost no byte
+
+`CommandEnvelope` grows `checksum?` and `sessionId?`, and **nothing in this
+build writes either**. The envelope IS the wire unit - it is what a peer would
+send, what a log stores and what a replay judges - so a wire integrity field
+belongs on it and nowhere else. Optional, because a field that were written
+today would enter every command log: it would move no world hash (the log is
+history and `hashWorld` does not cover it) but it WOULD change the bytes of
+every corpus fixture and of the soak recording, for a value that means nothing
+yet.
+
+Three properties hold that, and all three are tested:
+
+- a source walk over `src/` demands that every file which knows about
+  `CommandEnvelope` writes neither field, with two allowlisted (the parser, and
+  the record in `netProtocol.ts` that describes the pair) and each of those
+  checked for not being a stale excuse;
+- an ordinary save is encoded and decoded and the log that comes back carries
+  neither KEY - not an undefined value, no key at all, which is what leaves the
+  bytes the bytes they always were;
+- and a log that DOES carry them survives the round trip unchanged, because
+  forward compatibility is the other half of a reservation: a recording that
+  dropped fields it did not understand would stop being evidence about the
+  envelopes it really contained.
+
+**`envelopeChecksum` covers the envelope HEADER and deliberately not the
+payload** - tick, seq, company, command kind - and the split is D-191's, one
+instrument down. A checkpoint commits to the SCHEDULE of its segment and not to
+what the commands did, because a moved, dropped or duplicated envelope is what a
+schedule commitment catches and a bent payload is what a STATE digest catches.
+Here: this field catches the first, section 5's ring catches the second.
+Covering the payload would need a canonical encoding of every command variant,
+i.e. a second serializer beside `save/format.ts` - the D-133 defect, where a
+second parser falls silently behind the command set. An envelope that claims NO
+checksum verifies as fine, because that is what every envelope this build writes
+looks like; requiring the field is a session policy, and E-16 leaves sessions
+out.
+
+**`PROTOCOL_VERSION` is 2**, in the import-free leaf `src/shared/netProtocol.ts`
+(the `save/version.ts` pattern of D-192, so the main thread reads the number
+without pulling the simulation into its bundle). Version 1 is everything up to
+M25 bundle 3 - never written down, which is the honest reading of "no version".
+The worker sends it on `ready` and `SimClient` compares and warns; today that
+can only fire on a half-stale deploy, which E-13's single reload makes a real
+possibility rather than a theoretical one, and tomorrow it is what a peer
+compares.
+
+#### 7. The input-delay note is arithmetic, so it can be wrong in public
+
+E-16 asks for a design note, and a note in prose is a note nobody can falsify.
+`src/sim/multiplayer/inputDelay.ts` carries it with two functions under it.
+
+**Lockstep, not rollback, and the refusal is a property of THIS simulation.**
+Rollback needs a cheap per-tick copy of the whole state; here a checkpoint
+measures 25-39 kB compressed and 24-41 ms to encode (M16), twenty a second is
+the entire frame budget, and a rollback buffer is allocation in the hot path -
+architecture law #7 by construction. And the game does not need it: an input
+here is `BuildRoad`, not a punch, and 200 ms between click and road is under the
+threshold at which a build feels laggy, with the interface's own preview (D-119)
+already acknowledging it.
+
+`NET_INPUT_DELAY_TICKS` is **4** - 200 ms at 20 Hz - in `constants.ts` with unit
+and origin, RESERVED and read by nothing. `executionTickFor` schedules; and the
+one rule that makes the delay a protocol rather than a hope is that a command
+whose tick the simulation has passed is **REFUSED**, never run late:
+`arrivesInTime`. Executing it late would put it after commands issued after it,
+which is a different command ORDER and therefore a different world -
+`CommandQueue.enqueue` already throws on a non-monotonic tick, and the test
+asserts that too, so the refusal is what stops a session ever reaching the
+crash.
+
+The note also lists what a session would still have to add - transport, session
+establishment, the host's authority over speed, what happens when a peer stalls,
+reconnection from a checkpoint, and whether competitors are simulated by
+everybody or by the host - and none of it is here.
+
+#### 8. E-17: the constitution line between CONTENT and TUNING
+
+The last thing M25 owed, and it is a line rather than a mechanism. E-17 puts
+modding and data packs outside this programme entirely; what it asks to be
+PROTOCOLLED now is where the seam would be, so a later pack programme can dock
+without a rebuild. Recorded here, as it stands in the tree today:
+
+**CONTENT - what a pack could one day replace.** The catalogues and the tables
+that describe a WORLD rather than price it: `vehicles/catalog.ts` (traction,
+wagons, road, water, air, including M23's sixty pre-1950 generations), the
+industry chains and their recipes, `CLIMATE_INDUSTRY_SETS` and their four arms,
+the town-name syllable tables in both languages, `src/scenarios/` (the eight
+shipped scenarios and the twelve campaign stages, which are already TEXT with no
+file behind them), the benchmark command logs of `src/sim/bench/maps/`, and the
+i18n catalogues.
+
+**TUNING - what never leaves `constants.ts`.** Every number with a unit and an
+origin: tariffs, upkeep, decay, the growth formula's weights, the AI's floors
+and traits, the score's full marks, the weather tables, the century curve's
+shape. CLAUDE.md's own standing rule already says every constant lives there
+with unit and origin, and the balance suite owns them (the M6 rule: when a band
+leaves its range the constants move, never the test).
+
+**The seam is where the balance bands bite.** A pack may add a locomotive; it
+may not restate what a tonne-kilometre pays, because eleven balance scenarios
+are calibrated against that number and a pack that moved it would silently
+re-band every one of them. That is the whole content of the line, and it is why
+pack format, id namespaces and pack hashing are a follow-on programme and not a
+sentence here.
+
+#### 9. What this cost
+
+Zero tick milliseconds by construction - the flag ships off and the digest is
+taken outside `tick()`. The main-chunk figure and its split are in ledger 6.1.1;
+what the ENTRY chunk can see of this bundle is `netProtocol.ts` (two constants
+and a type) and the two `SimClient` methods, because `src/sim/multiplayer/**` is
+imported only by the worker.
+
+#### 10. What only a human can confirm
+
+That a tag really produces the artefacts - no harness runs a GitHub workflow,
+and the desktop job needs a Windows runner with the Rust toolchain, so the first
+real tag is the acceptance step and it is the owner's. That the signed path
+works, which needs a certificate that does not exist yet. And that the three
+owner decisions in the appendix are the right ones, which is what "owner
+decision" means.

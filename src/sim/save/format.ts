@@ -1253,11 +1253,27 @@ function parseCommandLog(value: unknown, path: string): CommandEnvelope[] {
         `${path}[${i}].companyId`,
       );
     }
+    // The two RESERVED integrity fields of E-16 are carried THROUGH rather
+    // than dropped. Nothing in this build writes one (see `CommandEnvelope`),
+    // so no file this build produces has them and no byte of any existing save
+    // moves; but a log that arrives with them - from a peer, from a later
+    // build - must come out of the parser the way it went in, or a recording
+    // would stop being evidence about the envelopes it really contained. They
+    // are validated as integers when present and absent otherwise, which is
+    // the same posture the container takes towards every optional section.
+    const checksum = raw['checksum'];
+    const sessionId = raw['sessionId'];
     log.push({
       tick: asInt(raw['tick'], `${path}[${i}].tick`),
       seq: asInt(raw['seq'], `${path}[${i}].seq`),
       companyId,
       command: parseCommand(raw['command'], `${path}[${i}].command`),
+      ...(checksum === undefined
+        ? {}
+        : { checksum: asInt(checksum, `${path}[${i}].checksum`) }),
+      ...(sessionId === undefined
+        ? {}
+        : { sessionId: asInt(sessionId, `${path}[${i}].sessionId`) }),
     });
   }
   return log;

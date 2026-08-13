@@ -9,3 +9,7 @@ src-tauri/gen/
 # artifacts, never commits - the repo-assets glob test proves it stays that way.
 assets-cache/
 public/assets-baked/
+# The third-party notices of SPEC2 M25: generated from the dependency tree by
+# `npm run attribution` at build time, so committing it would commit a derived
+# file that goes stale at the next install.
+public/THIRD-PARTY.txt

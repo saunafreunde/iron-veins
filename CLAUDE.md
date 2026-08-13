@@ -16,6 +16,74 @@ of this size from collapsing; they are not style preferences.
 
 ---
 
+## The state of the game - read this first if you are new
+
+Written at the close of the expansion (M25, 2026-08-13). Everything below is
+true of the tree today; the rest of this file is the milestone-by-milestone
+record of how it got that way, and it is long because every number in it was
+measured rather than guessed.
+
+**What it is.** A transport tycoon: you take out a loan, lay road or rail
+between towns and industries, buy vehicles, give them schedules, and try to be
+worth more in 2050 than the three competitors who are doing the same thing.
+Runs entirely offline - desktop through Tauri, or in a browser through the E-13
+service-worker shim - with no backend and no game engine.
+
+**What you can do in it, today.** Start in 1850, 1880, 1920 or 1950 on one of
+four climates and five generator presets, or import a heightmap as the relief.
+Build road, rail, canal, port and airport; signal a railway and run several
+trains on it; group vehicles into LINES with a shared order list and a takt
+timetable. Watch towns grow houses and streets, elect councils, and shrink when
+nobody serves them. Play with or without weather, elections, a hundred-year
+business cycle, inflation, the carbon levy and the two 8.4 route-cost rules -
+each of them a world rule that is off unless you chose it. Play the twelve-stage
+campaign "Eisenadern", the eight standalone scenarios, or build your own in the
+scenario workshop and export it. Any save can be watched as a replay, scrubbed
+by year, and VERIFIED - re-simulated and compared to what it claims. Undo and
+redo work on builds, demolitions and terraform.
+
+**What it sounds and looks like.** Kenney CC0 kits, baked at build time into
+dimetric sprite atlases; terrain, track, road and water drawn procedurally
+because they need the sixteen-slope geometry and the season and era repaints
+that no kit has. Every sound is synthesised at run time - there is not one audio
+file in the repository, and a test makes sure there never is.
+
+**The three things a newcomer most often gets wrong.**
+
+1. **The simulation is not the renderer and never sees it.** `src/sim` runs in
+   a worker at a fixed 20 Hz and publishes a snapshot; `src/render` reads that
+   snapshot and interpolates between two of them for 60 Hz motion. Law #1 and
+   the lint rules under it are the whole reason this project can promise
+   determinism at all.
+2. **Determinism is the product, not a nicety.** Same seed plus same command
+   log means a bit-identical world, on Windows and on Linux, pinned in CI
+   against a canonical hash. It is what buys saves, replays, verified medals,
+   the desync net under the balance suite and any future multiplayer. Nothing
+   here is worth breaking it for.
+3. **The balance tests own the constants.** When a scenario leaves its band,
+   the table in `constants.ts` moves, never the test. Eleven scenarios pin
+   tariffs, upkeep, the closure clock, the network-value formula, the score and
+   a hard winter, and each of them prints why it earns what it earns.
+
+**Where things are.** `src/sim` simulation, `src/render` PixiJS, `src/ui` React
+plus the store and the worker client, `src/shared` what both sides need,
+`src/platform` the only place that touches Tauri, `src/i18n` German and English
+kept in sync, `tools/` build-time generators, `tests/` unit, determinism,
+balance, perf and soak. `SPEC.md` is the brief, `SPEC2.md` the expansion's,
+`DECISIONS.md` the reasons, `RELEASE.md` how a release is cut and what an owner
+still has to decide before one is sold.
+
+**What is honestly still open**, so nobody rediscovers it as a bug: a player
+practically never meets a railway competitor, because the first railway costs
+more than a starting company's whole capital plus its credit line (D-228); the
+competitors are silent at an 1850 start and partly at 1880, and the profit floor
+was deliberately not lowered to hide it (D-250); roads on slopes are flat
+patches, because a road cell has no slope dimension (D-212); the installers are
+unsigned until a certificate exists; and `npm run format:check` is red on 42
+files that have simply never been through the formatter (D-227, D-257).
+
+---
+
 ## The ten architecture laws
 
 1. **Sim never sees render.** `src/sim/**` must not import `src/render/**`,
@@ -2889,7 +2957,10 @@ three pins unchanged, every balance band re-run and identical to the digit.
   eight minutes, and Tauri fetched WiX and NSIS itself. Neither is signed, so
   Windows shows a SmartScreen warning on a machine that has not seen the binary
   before. Installing and playing it through is the acceptance step that is the
-  user's to run.
+  user's to run. **Since M25 bundle 4 a git tag does all of it without
+  handwork** - `release.yml`, the generated third-party notices and the signing
+  gate that warns when there is no certificate; `RELEASE.md` is how a release is
+  cut and what an owner still has to decide before one is sold (D-261).
 
 ## Drawing the world (after M9)
 
@@ -4680,3 +4751,114 @@ stand, verified by running: canonical `b7e632a7124e67ce`, corpus
   `src/sim` import chain. **Tick row +0,00 ms by construction** - no `src/sim`
   file changed and both render additions sit in overlays that rebuild on an
   event (D-177/D-186), never per frame.
+
+## M25 bundle 4 - a tag is a release, a digest names the tick (D-261)
+
+The last implementation bundle of the expansion: the release automation, the
+multiplayer groundwork of E-16 and the modding constitution line of E-17. **No
+save bump** (v34 stands), no migration edit, zero hashed bytes, zero snapshot
+bytes, zero RNG draws, zero atlas cells, zero i18n lines; all three pins re-run
+and unmoved (`b7e632a7124e67ce` / `a00868b9911f12d6` / `64fec78d6bf0cd5e` at 35
+commands). **`PROTOCOL_VERSION` 1 -> 2 is the one bump here**, and it versions
+the MESSAGE CONTRACT - neither the world nor the shared-buffer layout.
+
+- **A release is a pure function of a tag** (D-261). `release.yml` on `v*`: web
+  build on ubuntu, MSI + NSIS on windows, and a **draft** release that gathers
+  both, with `workflow_dispatch` running the same two build jobs as a full dry
+  run. **It deliberately does not re-run the suite** - `ci.yml` runs on every
+  push including the tagged commit, and a forty-minute duplicate would only
+  tempt somebody to skip one of the two; `release.spec.ts` holds that split in
+  BOTH directions. Draft, because publishing is an owner decision.
+- **The attribution file is GENERATED and it REFUSES.**
+  `tools/make-attribution.mjs` walks the npm runtime closure - iteratively with
+  a visited set, because an npm graph really has cycles - and writes a sorted
+  `public/THIRD-PARTY.txt`, gitignored like the baked atlases and for the same
+  reason. A package with no `license` field, or one it cannot read, is a FAILED
+  release rather than a shorter credits list. Measured: **23 runtime packages,
+  permissive throughout** (16 MIT, 2 ISC, 2 BSD-3-Clause, 3 dual). The two gaps
+  are named in the file's own header - the Rust crates behind Tauri, and the
+  Kenney kits, which no dependency walk could see because they are in no
+  repository file at all.
+- **The signing gate has two branches and the second one shouts.** Signed when
+  `WINDOWS_CERTIFICATE` exists; otherwise a GitHub `::warning` that says what it
+  costs - SmartScreen on every machine that has not seen the binary. An unsigned
+  release that shipped quietly would be a support queue nobody could connect to
+  the file that caused it.
+- **Three owner decisions, defaults proposed and none taken** (`RELEASE.md`'s
+  appendix): the licence and EULA (the repo states none, which is the strictest
+  position and the right one until something ships), the name and trademark
+  check (unchecked, and said so), and the crash-bundle privacy note - whose
+  MECHANISM is a fact rather than a decision and is written down as one, read off
+  `assembleBundle`: offline, user-initiated, and its personal content is the
+  player's own save and the company name they typed into it. Verified by a source
+  walk: no `fetch`, `WebSocket`, `XMLHttpRequest`, `EventSource` or
+  `RTCPeerConnection` anywhere under `src/`, and no updater in `tauri.conf.json`.
+- **The per-tick digest is E-16's design taken literally and then MEASURED, and
+  the measurement corrects the specification.** `hashWorldTick` is
+  `hashDynamicState` with the ledger arrays skipped - the SAME walk one branch
+  shorter, because a desync detector that fingerprints a different set of fields
+  from the determinism suite disagrees with the authority it protects. E-16
+  promises "~0,1 ms nur bei Flag". Measured on the 1500-vehicle fixture, medians
+  of twelve: **`hashWorldTick` 6.281 ms, `hashWorldLive` 6.502, `hashWorld`
+  280.627** - **63x the estimate** and ~4.3x the whole tick. That estimate
+  predates the fixture Z6 exists for and is Fehlerkatalog 36 in the flesh, so it
+  is corrected rather than quietly met. **The ledger branch is worth 3.4 % of the
+  walk**; what dominates is the vehicle PATHS. A genuinely cheap per-tick digest
+  (positions, speeds, rng, cash) is NOT shipped, deliberately - it would
+  fingerprint a different set of fields from `hashWorld`, and being a subset of
+  the authority's own walk is the property that makes this one trustworthy.
+- **The flag ships OFF and the tick row is +0.00 ms by construction**: the digest
+  is taken in the SCHEDULER after `step`, outside `tick()`, so the shipped worker
+  pays one null comparison per tick. It is switched on through a global-object
+  door in `main.tsx` (`ironVeins.tickDigest(true)`) and not through the options,
+  because a player must never be able to buy that cost by accident.
+  `TickDigestRing` keeps 1,024 ticks as two Int32Arrays of hi/lo halves (no
+  string per tick), is cleared on every world swap, and `firstDisagreement`
+  compares two peers over the INTERSECTION and answers with a **tick** - ticks
+  only one side holds are not evidence, so it returns -1 rather than guessing.
+  **Nothing reads it**: a source walk fails the build if any `src/sim` file but
+  its own and the scheduler names it (D-186's posture).
+- **The reserved envelope fields cost no byte because nothing writes them.**
+  `CommandEnvelope.checksum?` and `.sessionId?` - the envelope IS the wire unit,
+  so a wire integrity field belongs there and nowhere else. Held three ways: a
+  source walk over every file that knows about `CommandEnvelope`; a real save
+  whose read-back log carries neither KEY (not an undefined value, no key); and a
+  foreign log that DOES carry them surviving the round trip unchanged, because
+  forward compatibility is the other half of a reservation.
+  `envelopeChecksum` covers the HEADER and deliberately not the payload -
+  D-191's split one instrument down, where a moved envelope is what a header
+  commitment catches and a bent payload is what a state digest catches.
+- **The input-delay note is arithmetic so it can be wrong in public**
+  (`multiplayer/inputDelay.ts`). Lockstep, not rollback, and the refusal is a
+  property of THIS simulation: a checkpoint is 25-39 kB and 24-41 ms to encode,
+  twenty a second is the whole frame budget, and a rollback buffer is allocation
+  in the hot path (law #7). `NET_INPUT_DELAY_TICKS` = 4 = 200 ms at 20 Hz,
+  RESERVED and read by nothing. The one rule that makes the delay a protocol:
+  a command whose tick the simulation has passed is **REFUSED**, never run late -
+  running it late is a different command ORDER and therefore a different world,
+  which `CommandQueue.enqueue` already turns into a throw.
+- **E-17's constitution line, protocolled**: CONTENT is what a later pack could
+  replace (the vehicle catalogue including the sixty pre-1950 generations, the
+  industry chains, the climate sets, the syllable tables, `src/scenarios/`, the
+  benchmark logs, the i18n catalogues); TUNING never leaves `constants.ts`
+  (every number with a unit and an origin). **The seam is where the balance bands
+  bite**: a pack may add a locomotive, it may not restate what a tonne-kilometre
+  pays, because eleven scenarios are calibrated against that number.
+- Measured at the close: tick **p50 1.944 / 1.469 / 1.459** and **p99 3.269 /
+  3.026 / 3.163 ms** against the M10 baseline 1.45 / 3.26 - two of three p99
+  below it, the third 0.01 ms over, and the first p50 is the run immediately
+  after a build on the same machine. Main chunk 1,082,561 -> **1,083,108 B
+  (+547)** against an unchanged 1,094,000 B budget, 10,892 B of headroom.
+- **What only a human can confirm**: that a tag really produces the artefacts -
+  no harness runs a GitHub workflow and the desktop job needs a Windows runner
+  with the Rust toolchain, so the first real tag is the acceptance step and it is
+  the owner's; that the signed path works, which needs a certificate that does
+  not exist yet; and that the three decisions in the appendix are the right ones,
+  which is what "owner decision" means.
+
+**M25 owes nothing, and with it the expansion is complete**: undo and redo
+(D-258), the sound identity (D-259), accessibility, i18n scaling and the web
+channel (D-260), and the release, multiplayer and modding lines (D-261). What
+remains open across the whole programme is the named-residual list under "Still
+outstanding" above and in the state-of-the-game section at the top - none of it
+discovered late, all of it measured and written down where it was found.

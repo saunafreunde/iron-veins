@@ -20,13 +20,15 @@
     "test:balance": "vitest run tests/balance",
     "test:balance:full": "node tools/run-full-balance.mjs",
     "test:soak": "vitest run tests/soak",
+    "attribution": "node tools/make-attribution.mjs",
+    "build:web": "npm run attribution && npm run build",
     "icons": "node tools/make-icons.mjs",
     "assets:fetch": "node tools/assets-fetch.ts",
     "assets:bake": "node tools/assets-bake.ts",
     "record:fixture": "node tools/record-fixture.mjs",
     "tauri": "tauri",
     "version:sync": "node tools/sync-version.mjs",
-    "build:desktop": "npm run version:sync && npm run tauri build"
+    "build:desktop": "npm run version:sync && npm run attribution && npm run tauri build"
   },
   "dependencies": {
     "@msgpack/msgpack": "^3.0.0",

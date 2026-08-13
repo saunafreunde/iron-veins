@@ -684,6 +684,33 @@ export interface CommandEnvelope {
    */
   readonly companyId: number;
   readonly command: Command;
+  /**
+   * RESERVED for the multiplayer groundwork of SPEC2 E-16, and written by
+   * nothing in this build.
+   *
+   * The checksum covers the envelope HEADER only - tick, seq, company and the
+   * command's kind - and `multiplayer/envelope.ts` is the one place that
+   * computes it; `EnvelopeIntegrity` in `src/shared/netProtocol.ts` says why
+   * the payload is deliberately outside it.
+   *
+   * WHY OPTIONAL AND WHY HERE. The envelope IS the wire unit: it is what a
+   * peer would send, what a log stores and what a replay judges, so a wire
+   * integrity field belongs on it and nowhere else. Optional, because a field
+   * that were written today would enter every `.ironsave`'s command log and
+   * move nothing about the world - the log is history and `hashWorld` does not
+   * cover it - but it would still change the bytes of every corpus fixture and
+   * the soak recording for a value that means nothing yet. So the local build
+   * leaves both absent (a property `tests/unit/multiplayer.spec.ts` asserts by
+   * walking the source), the parser preserves them when a file carries them,
+   * and `PROTOCOL_VERSION` records that a receiver may now expect them.
+   *
+   * `SAVE_VERSION` does not move for this: nothing about the WORLD changed, no
+   * migration has anything to do, and a save written by this build is
+   * byte-identical to one written before the fields existed.
+   */
+  readonly checksum?: number;
+  /** RESERVED, as {@link CommandEnvelope.checksum} - the session it came from. */
+  readonly sessionId?: number;
 }
 
 /**

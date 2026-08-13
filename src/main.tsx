@@ -63,6 +63,27 @@ client.onReplayWritten = (message) => {
 };
 
 /**
+ * The debug flag of SPEC2 E-16, and it is a flag rather than a switch on a
+ * screen for a measured reason: the per-tick digest walks the whole dynamic
+ * state twenty times a game second and costs about what the simulation itself
+ * costs (D-261). A player must never be able to turn that on by accident, and
+ * whoever is chasing a divergence between two machines must be able to turn it
+ * on without a build.
+ *
+ * `ironVeins.tickDigest(true)`, then `ironVeins.dumpTickDigests()` on both
+ * machines, then compare - `firstDisagreement` in
+ * `src/sim/multiplayer/tickDigest.ts` is the comparison, and it answers with a
+ * TICK. Nothing else in the application reads this object.
+ */
+client.onTickDigests = (entries) => {
+  console.warn(`Iron Veins: ${entries.length} tick digests`, entries);
+};
+(globalThis as unknown as Record<string, unknown>)['ironVeins'] = {
+  tickDigest: (enabled: boolean) => client.setTickDigest(enabled),
+  dumpTickDigests: () => client.requestTickDigests(),
+};
+
+/**
  * The web channel's admission ticket comes FIRST (E-13, SPEC2 M25).
  *
  * On a host that sends no COOP/COEP the service-worker shim supplies them, and

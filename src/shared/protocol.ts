@@ -640,6 +640,18 @@ export type MainToWorkerMessage =
    * came from instead of being handed a table over a black screen.
    */
   | { readonly type: 'runBenchmark'; readonly mapId: string }
+  /**
+   * Turn the per-tick desync digest of SPEC2 E-16 on or off.
+   *
+   * CONTROL traffic, never a command (D-004): it changes what the scheduler
+   * MEASURES and nothing about what the simulation does, so a replay recorded
+   * with it on and one recorded with it off are the same recording. Off is the
+   * default and the flag does not survive a new game or a load - a digest ring
+   * belongs to one history.
+   */
+  | { readonly type: 'setTickDigest'; readonly enabled: boolean }
+  /** Hand back what the ring holds, oldest first; empty when the flag is off. */
+  | { readonly type: 'requestTickDigests' }
   | { readonly type: 'shutdown' };
 
 /** Everything the player chooses on the new-game screen (section 20, M9). */
@@ -770,6 +782,17 @@ export type WorkerToMainMessage =
        * world after a load.
        */
       readonly editorMode: boolean;
+      /**
+       * The message contract this worker speaks (SPEC2 M25, E-16).
+       *
+       * `PROTOCOL_VERSION` from `src/shared/netProtocol.ts`, sent rather than
+       * assumed: the page and the worker are chunks of one build today, but
+       * the COOP/COEP shim of E-13 reloads the page once on a header-less host
+       * and a half-stale deploy is the one way they can differ - and a peer, one
+       * day, will differ for better reasons. The main thread compares and
+       * complains; it does not try to translate.
+       */
+      readonly protocolVersion: number;
     }
   | { readonly type: 'companyChanged'; readonly name: string; readonly colorIndex: number }
   | { readonly type: 'commandRejected'; readonly reasonKey: string }
@@ -912,4 +935,16 @@ export type WorkerToMainMessage =
    * A replay operation that could not be carried out, named by a translation
    * key: a file that is not a recording, or one this build must not judge.
    */
-  | { readonly type: 'replayFailed'; readonly reasonKey: string; readonly detail: string };
+  | { readonly type: 'replayFailed'; readonly reasonKey: string; readonly detail: string }
+  /**
+   * What the per-tick digest ring holds, oldest first (SPEC2 M25, E-16).
+   *
+   * Sent only in answer to `requestTickDigests`, never on a cadence: at 20 Hz a
+   * message per tick would be the snapshot-stride growth Fehlerkatalog 37
+   * forbids, moved into the message channel. A peer that suspects a desync
+   * asks; nothing asks while everything agrees.
+   */
+  | {
+      readonly type: 'tickDigests';
+      readonly entries: readonly { readonly tick: number; readonly digest: string }[];
+    };

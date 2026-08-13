@@ -82,6 +82,8 @@ import { decodeSave, encodeSave } from './save/serialize';
 import { encodeScenario } from './save/scenario';
 import { councilRating, exclusiveRightsCostCt, TOWN_MEASURE_COUNT } from './town/council';
 import { ticksToNextElection } from './town/elections';
+import { TickDigestRing } from './multiplayer/tickDigest';
+import { PROTOCOL_VERSION } from '../shared/netProtocol';
 import { calendarFromTick, hashWorldLive, World } from './World';
 
 /**
@@ -143,6 +145,21 @@ let replay: ReplaySession | null = null;
  * of layers that nothing is stepping.
  */
 let suspended: Uint8Array | null = null;
+
+/**
+ * The per-tick desync digest of SPEC2 E-16, or null while the debug flag is
+ * off - which is where it ships and where every measurement in this project
+ * was taken.
+ *
+ * It lives HERE, in the scheduler, and not in the simulation: it is an
+ * observer, it costs a full state walk per tick, and nothing under `src/sim`
+ * outside `multiplayer/tickDigest.ts` may read it (the D-186 posture for the
+ * derived throughput counters, held by a source walk in
+ * `tests/unit/multiplayer.spec.ts`). Turning it on cannot change a world: the
+ * ring is written after `step`, from a pure function of the state that step
+ * produced.
+ */
+let tickDigests: TickDigestRing | null = null;
 
 let speedIndex = 0;
 let accumulatorMs = 0;
@@ -744,6 +761,11 @@ function runFrame(): void {
     // The queue is handed over with the world: a checkpoint commits to the
     // schedule of its own year as well as to the state (D-191).
     if (replay === null) checkpoints.record(current, queue);
+    // Per STEP for the same reason the checkpoint is: the digest exists to name
+    // the TICK two peers parted on, and a frame runs up to forty of them. Null
+    // unless somebody asked for it (SPEC2 E-16), so the shipped scheduler pays
+    // one null comparison per tick for it.
+    if (tickDigests !== null) tickDigests.record(current);
     accumulatorMs -= TICK_MS;
     ticks++;
   }
@@ -1047,6 +1069,11 @@ function adoptWorld(current: World, sink: SnapshotWriter): void {
   current.undo.clear();
   current.undo.enabled = replay === null;
   pendingPatches.clear();
+  // A digest ring belongs to ONE history. The flag stays where the player put
+  // it - it is a debug setting, not world state - but the entries go, because
+  // tick 4,000 of the world that was here and tick 4,000 of the world that
+  // just arrived are two different ticks with one number (SPEC2 E-16).
+  tickDigests?.clear();
   speedIndex = 0;
   accumulatorMs = 0;
   lastFrameMs = performance.now();
@@ -1081,6 +1108,7 @@ function adoptWorld(current: World, sink: SnapshotWriter): void {
     industries: industryMarkers(current.industries),
     economyCurve: current.economyCurve.toData(),
     editorMode: current.editorMode,
+    protocolVersion: PROTOCOL_VERSION,
   });
 }
 
@@ -1317,6 +1345,21 @@ function handleMessage(message: MainToWorkerMessage): void {
       void runBenchmark(message.mapId);
       return;
 
+    case 'setTickDigest':
+      // A fresh ring on every switch-on: a ring that survived being turned off
+      // would hand a peer a history with a hole in it, which is worse than no
+      // history at all - the tick it names would be the first one AFTER the
+      // gap rather than the one they parted on.
+      tickDigests = message.enabled ? new TickDigestRing() : null;
+      return;
+
+    case 'requestTickDigests':
+      scope.postMessage({
+        type: 'tickDigests',
+        entries: tickDigests === null ? [] : tickDigests.entries(),
+      });
+      return;
+
     case 'shutdown':
       if (timer !== null) {
         clearInterval(timer);
@@ -1326,6 +1369,7 @@ function handleMessage(message: MainToWorkerMessage): void {
       suspended = null;
       world = null;
       writer = null;
+      tickDigests = null;
       return;
   }
 }

@@ -1269,8 +1269,17 @@ function rebuildReservations(world: World): void {
  */
 export { calendarFromTick, epochYearsAt };
 
-/** Fields that change every tick, hashed by both the full and the live digest. */
-function hashDynamicState(h: Fnv1a64, world: World): void {
+/**
+ * Fields that change every tick, hashed by both the full and the live digest.
+ *
+ * `includeLedger` is true for both of those and false only for the per-tick
+ * debug digest of SPEC2 E-16 - see the comment at the company ledger below for
+ * what it drops and why. Exported so `multiplayer/tickDigest.ts` can be the
+ * SAME walk rather than a second one: a desync detector that fingerprints a
+ * different set of fields from the determinism suite is a detector that
+ * disagrees with the authority it exists to protect.
+ */
+export function hashDynamicState(h: Fnv1a64, world: World, includeLedger = true): void {
   h.u32(world.tick);
   h.u32(world.seed);
   h.u32(world.difficulty);
@@ -1362,16 +1371,28 @@ function hashDynamicState(h: Fnv1a64, world: World): void {
     // month, and anything left out here silently stops being covered by the
     // determinism suite - which is exactly how a counter drifts for a
     // milestone and nobody notices.
-    for (const amount of c.accounts) h.int(amount);
-    for (const amount of c.yearAccounts) h.int(amount);
-    for (const amount of c.lastYearAccounts) h.int(amount);
-    for (const amount of c.monthHistory) h.int(amount);
-    h.u32(c.valueHistory.length);
-    for (const value of c.valueHistory) h.int(value);
-    // Lifetime tonnage per cargo (SPEC2 M17). Saved state, so hashed like
-    // every other saved figure (D-134) - and it is what a CargoDeliveredTotal
-    // goal reads, so a bent counter is a different medal.
-    for (const units of c.cargoDeliveredUnits) h.f64(units);
+    //
+    // `includeLedger` is false for exactly one caller - the per-tick debug
+    // digest of SPEC2 E-16 (`multiplayer/tickDigest.ts`) - and for exactly one
+    // reason: these six arrays are the only per-company state in the walk that
+    // cannot move inside a tick. Every one of them is written by the MONTHLY
+    // and YEARLY hooks (`closeFinancialMonth`, `closeFinancialYear`) or by a
+    // delivery that has already moved a cargo stack the digest covers, so a
+    // desync detector taking them per tick pays for what it can never see
+    // change between two consecutive ticks. Nothing else about the walk moves,
+    // and the two digests are the SAME function so they cannot drift apart.
+    if (includeLedger) {
+      for (const amount of c.accounts) h.int(amount);
+      for (const amount of c.yearAccounts) h.int(amount);
+      for (const amount of c.lastYearAccounts) h.int(amount);
+      for (const amount of c.monthHistory) h.int(amount);
+      h.u32(c.valueHistory.length);
+      for (const value of c.valueHistory) h.int(value);
+      // Lifetime tonnage per cargo (SPEC2 M17). Saved state, so hashed like
+      // every other saved figure (D-134) - and it is what a CargoDeliveredTotal
+      // goal reads, so a bent counter is a different medal.
+      for (const units of c.cargoDeliveredUnits) h.f64(units);
+    }
   }
 
   h.u32(world.towns.length);
