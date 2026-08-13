@@ -170,7 +170,25 @@ describe('the workshop commands go through the one parser', () => {
       expect(Object.keys(de), key).toContain(key);
       expect(Object.keys(en), key).toContain(key);
     }
-    expect(labels).toHaveLength(Object.keys(CommandKind).length - 42);
+    // One label per WORKSHOP kind, derived from the real table.
+    //
+    // This used to read `Object.keys(CommandKind).length - 42`, which was the
+    // same claim only while the five workshop kinds were the last five the
+    // game had: SPEC2 M25 added `ApplyPatch` and the arithmetic went red about
+    // a milestone it has nothing to do with. The coupling that was meant is
+    // the one below - every workshop kind is a kind, and every one of them has
+    // a label - and a sixth workshop kind still fails it.
+    const workshopKinds = [
+      'TerraformBrushRegion',
+      'PlaceTownSeed',
+      'PlaceIndustryAt',
+      'PaintForest',
+      'PaintRiver',
+    ];
+    expect(labels).toEqual(
+      workshopKinds.map((name) => `editor.tool.${name[0]!.toLowerCase()}${name.slice(1)}`),
+    );
+    for (const name of workshopKinds) expect(Object.keys(CommandKind)).toContain(name);
   });
 });
 

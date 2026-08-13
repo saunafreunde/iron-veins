@@ -234,6 +234,11 @@ function asInt(value: unknown, path: string): number {
   return value;
 }
 
+/** An array of integers, each validated and each naming its own position. */
+function asIntArray(value: unknown, path: string): number[] {
+  return asArray(value, path).map((entry, i) => asInt(entry, `${path}[${i}]`));
+}
+
 function asUint32(value: unknown, path: string): number {
   const int = asInt(value, path);
   if (int < 0 || int > 0xffffffff) {
@@ -1044,6 +1049,27 @@ export function parseCommand(value: unknown, path: string): Command {
         x: asInt(raw['x'], `${path}.x`),
         y: asInt(raw['y'], `${path}.y`),
         radius: asInt(raw['radius'], `${path}.radius`),
+      };
+
+    // Undo and redo (SPEC2 M25). The patch travels IN the command, so it
+    // travels through the one parser like every other payload - which is what
+    // makes an undone build replayable from a checkpoint that never saw the
+    // session ring that produced it (commands/undo.ts).
+    case CommandKind.ApplyPatch:
+      return {
+        kind: CommandKind.ApplyPatch,
+        direction: asInt(raw['direction'], `${path}.direction`),
+        sourceKind: asInt(raw['sourceKind'], `${path}.sourceKind`),
+        monthIndex: asInt(raw['monthIndex'], `${path}.monthIndex`),
+        layers: asIntArray(raw['layers'], `${path}.layers`),
+        indices: asIntArray(raw['indices'], `${path}.indices`),
+        before: asIntArray(raw['before'], `${path}.before`),
+        after: asIntArray(raw['after'], `${path}.after`),
+        guardLayers: asIntArray(raw['guardLayers'], `${path}.guardLayers`),
+        guardIndices: asIntArray(raw['guardIndices'], `${path}.guardIndices`),
+        guardValues: asIntArray(raw['guardValues'], `${path}.guardValues`),
+        money: asIntArray(raw['money'], `${path}.money`),
+        shoreline: asBoolean(raw['shoreline'], `${path}.shoreline`),
       };
 
     case CommandKind.BuyExclusiveRights:

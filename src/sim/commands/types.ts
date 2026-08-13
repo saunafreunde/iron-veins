@@ -60,6 +60,8 @@ export const CommandKind = {
   PaintForest: 46,
   /** Cut a watercourse down to the sea (SPEC2 M22). */
   PaintRiver: 47,
+  /** Take a build, a demolition or a terraform back, or put it in again (M25). */
+  ApplyPatch: 48,
 } as const;
 export type CommandKind = (typeof CommandKind)[keyof typeof CommandKind];
 
@@ -562,7 +564,62 @@ export interface PaintRiverCommand {
   readonly radius: number;
 }
 
+/**
+ * Undo or redo one recorded build, demolition or terraform (SPEC2 M25, E-12).
+ *
+ * The command IS the inverse patch: the cells the recorded command moved, with
+ * the value on either side, plus the money it booked to the cent - D-092's
+ * "never recomputed" taken literally. That is what lets the outcome be a pure
+ * function of (world, command), which in turn is what lets the session ring be
+ * session-only: a payload-free "undo the last thing" would answer differently
+ * in a world that had been saved and loaded, and a replay re-simulated from a
+ * checkpoint would report a desync of its own making.
+ *
+ * The parallel arrays are all the same length and are the wire form of one list
+ * of cells; `commands/undo.ts` owns the layer numbering and the validation, and
+ * refuses the WHOLE patch when a single cell has moved underneath it
+ * (Fehlerkatalog 30 - a partial undo is worse than none).
+ */
+export interface ApplyPatchCommand {
+  readonly kind: typeof CommandKind.ApplyPatch;
+  /** -1 takes the recorded change back, +1 puts it in again. */
+  readonly direction: number;
+  /** The CommandKind the patch was recorded from. Reported, never re-executed. */
+  readonly sourceKind: number;
+  /** Accounting month the money was booked in; a closed month is refused. */
+  readonly monthIndex: number;
+  /** Layer of each cell, indexing `UNDO_LAYERS`. */
+  readonly layers: readonly number[];
+  /** Index of each cell inside its layer. */
+  readonly indices: readonly number[];
+  /** Value each cell held before the recorded command ran. */
+  readonly before: readonly number[];
+  /** Value it held after. */
+  readonly after: readonly number[];
+  /**
+   * Cells the command did NOT change, on the ground it touched - checked and
+   * never written.
+   *
+   * The cells above are only what MOVED, and a guard built out of them alone
+   * would miss the case that matters most: a road is laid, a waypoint is put
+   * on it, and the undo pulls the road out from under the marker. Every tile a
+   * patch names therefore carries its whole context - the nine tile layers and
+   * the four corner heights around it - so an undo proceeds only when the
+   * ground it is about to rewrite looks exactly as the recording left it.
+   * A guard cell has one value rather than two, because a cell the command did
+   * not change reads the same before it and after it.
+   */
+  readonly guardLayers: readonly number[];
+  readonly guardIndices: readonly number[];
+  readonly guardValues: readonly number[];
+  /** The company figures the command moved, after minus before. [cent etc.] */
+  readonly money: readonly number[];
+  /** True when land and water changed places, so the derived layers move too. */
+  readonly shoreline: boolean;
+}
+
 export type Command =
+  | ApplyPatchCommand
   | TerraformBrushRegionCommand
   | PlaceTownSeedCommand
   | PlaceIndustryAtCommand
@@ -731,5 +788,30 @@ export const RejectReason = {
    * is refused, never invented).
    */
   RiverNeedsSeaLevel: 'cmd.reject.riverNeedsSeaLevel',
+  /** An inverse patch whose payload is not an edit of this map (SPEC2 M25). */
+  InvalidPatch: 'cmd.reject.invalidPatch',
+  /**
+   * The world moved underneath an undo: at least one cell no longer holds what
+   * the recording left there. Refused WHOLE (Fehlerkatalog 30, E-12).
+   */
+  PatchStale: 'cmd.reject.patchStale',
+  /**
+   * The money cannot go back where it came from - the month it was booked in
+   * has closed and its ledger row with it, so reversing it would leave a world
+   * that is not the world where the command never ran (D-092).
+   */
+  PatchMonthClosed: 'cmd.reject.patchMonthClosed',
+  /** Ctrl+Z with an empty ring, and Ctrl+Y with nothing to put back. */
+  NothingToUndo: 'cmd.reject.nothingToUndo',
+  NothingToRedo: 'cmd.reject.nothingToRedo',
+  /**
+   * An undo asked for while a command of the same frame is still waiting.
+   *
+   * The ring is last-in-first-out and its top is decided at ISSUE time, so
+   * taking one entry off while an unexecuted build is still queued would take
+   * back the edit UNDER the one the player is looking at. Refused rather than
+   * guessed; the window is one frame wide.
+   */
+  UndoBusy: 'cmd.reject.undoBusy',
 } as const;
 export type RejectReason = (typeof RejectReason)[keyof typeof RejectReason];

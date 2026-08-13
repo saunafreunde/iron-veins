@@ -10,6 +10,7 @@ import {
 } from '../constants';
 import { repayLoan, takeLoan } from '../economy/company';
 import { affordable, buildBudgetCt, chargeBuild } from './editorRule';
+import { applyPatch } from './undo';
 import {
   paintForest,
   paintRiver,
@@ -146,6 +147,15 @@ export function executeCommand(world: World, command: Command): CommandOutcome {
 
     case CommandKind.PaintRiver:
       return paintRiver(world, command.x, command.y, command.radius);
+
+    // Undo and redo (SPEC2 M25, E-12). One case for both directions, because
+    // the patch carries the value on either side of every cell it names - a
+    // redo is the same payload read the other way round. The whole decision
+    // lives in the payload and the world, so a recording replayed from a
+    // checkpoint reaches the identical state without the session ring that
+    // produced it (commands/undo.ts).
+    case CommandKind.ApplyPatch:
+      return applyPatch(world, command);
 
     case CommandKind.BuildTrack:
       return buildTrack(

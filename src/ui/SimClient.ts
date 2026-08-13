@@ -199,6 +199,31 @@ export class SimClient {
     return true;
   }
 
+  /**
+   * Ask for the last build, demolition or terraform to be taken back, or put
+   * back in (SPEC2 M25, E-12; Ctrl+Z and Ctrl+Y in the D-114 table).
+   *
+   * A REQUEST and not a command, and that is the design rather than a
+   * shortcut: an inverse patch carries the money it reverses to the cent
+   * (D-092), so an interface that assembled one could print cash. The worker
+   * owns the session ring and builds the command from what the simulation
+   * recorded; everything the player sees back - "nothing to undo", "the world
+   * has moved" - arrives as an ordinary `commandRejected` sentence.
+   *
+   * Refused on this side while a recording plays, for `send`'s own reason.
+   */
+  undo(): boolean {
+    if (useSimStore.getState().replay !== null) return false;
+    this.post({ type: 'undo' });
+    return true;
+  }
+
+  redo(): boolean {
+    if (useSimStore.getState().replay !== null) return false;
+    this.post({ type: 'redo' });
+    return true;
+  }
+
   // ------------------------------------------------------------ the replay
   //
   // Five verbs over the theatre of SPEC2 M16. All of them are questions for

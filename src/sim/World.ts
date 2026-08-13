@@ -1,5 +1,6 @@
 import { calendarFromTick, epochYearsAt } from './calendar';
 import { executeCommand } from './commands/execute';
+import { isUndoable, UndoRecorder } from './commands/undo';
 import type { CommandQueue } from './commands/queue';
 import type { CommandEnvelope, CommandOutcome } from './commands/types';
 import {
@@ -470,6 +471,18 @@ export class World {
    * up, and it is why they were worth recording.
    */
   readonly news = new NewsLog();
+  /**
+   * What the player could take back right now (SPEC2 M25, E-12).
+   *
+   * NOT world state: never saved, never hashed, and read by no simulation
+   * decision - what an `ApplyPatch` does is decided by its own payload, and
+   * this only decides which command the ISSUER offers to build. It lives on
+   * the world because the diff it records is measured around command
+   * execution, which happens here; `commands/undo.ts` carries the argument and
+   * `tests/unit/undoRing.spec.ts` proves the world half by hashing a game
+   * played with recording on against the same game with it off.
+   */
+  readonly undo = new UndoRecorder();
 
   /**
    * The open tenders of section 14.4, plus the ones settled recently enough
@@ -971,7 +984,19 @@ export class World {
       // The envelope says who is acting, which is what lets an AI company use
       // the very same commands the player does (section 15).
       this.actingCompanyId = due.companyId;
+      // The undo ring of SPEC2 M25 measures what a command really moved,
+      // around the execution rather than inside it - so no build command knows
+      // it is being recorded and no later one can forget to say so. Only the
+      // PLAYER's own builds, and only while a live session asked for it: a
+      // competitor's quarter century of building is a diff nobody will ever
+      // undo (commands/undo.ts).
+      const recording =
+        this.undo.enabled &&
+        due.companyId === this.playerCompanyId &&
+        isUndoable(due.command.kind);
+      if (recording) this.undo.begin(this);
       const outcome = executeCommand(this, due.command);
+      if (recording) this.undo.finish(this, due.command.kind, outcome.ok);
       this.actingCompanyId = this.playerCompanyId;
       if (sink !== null) sink(due, outcome);
       due = queue.shiftDue(this.tick);

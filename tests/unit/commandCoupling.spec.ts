@@ -35,7 +35,17 @@ const UI_DIR = fileURLToPath(new URL('../../src/ui/', import.meta.url));
  * that IS issued and is still listed is as red as one that is issued by
  * nobody.
  */
-const NO_UI_ISSUER: readonly string[] = [];
+const NO_UI_ISSUER: readonly string[] = [
+  // Undo and redo (SPEC2 M25, E-12). The interface HAS the buttons - Ctrl+Z
+  // and Ctrl+Y in the D-114 table - but it may not build this command, and the
+  // reason is not tidiness: the payload carries the money the patch reverses,
+  // to the cent, so a panel that assembled its own would be a panel that can
+  // print cash. It asks through the control channel (D-004) and `SimWorker`,
+  // which owns the session ring, builds the command out of what the simulation
+  // itself recorded. `tests/unit/undoRing.spec.ts` holds the other end: the
+  // interface's request path and the ring it pops from.
+  'ApplyPatch',
+];
 
 /**
  * Command construction sites: `kind: CommandKind.X` is how a command literal
@@ -235,6 +245,26 @@ const SAMPLES: Record<keyof typeof CommandKind, Command> = {
   PlaceIndustryAt: { kind: CommandKind.PlaceIndustryAt, x: 45, y: 46, industryType: 7 },
   PaintForest: { kind: CommandKind.PaintForest, x: 47, y: 48, radius: 2 },
   PaintRiver: { kind: CommandKind.PaintRiver, x: 49, y: 50, radius: 1 },
+  // Field order matches what parseCommand emits, because the round trip below
+  // compares JSON text. The money vector is `readMoney`'s own length, and the
+  // three parallel cell arrays are the same length as each other - both are
+  // validated by `applyPatch`, not by the parser, which is why a sample with a
+  // ragged pair would still round-trip here (undoRing.spec.ts refuses it).
+  ApplyPatch: {
+    kind: CommandKind.ApplyPatch,
+    direction: -1,
+    sourceKind: CommandKind.BuildRoad,
+    monthIndex: 7,
+    layers: [2, 8],
+    indices: [1_234, 1_234],
+    before: [0, 255],
+    after: [5, 0],
+    guardLayers: [3, 9],
+    guardIndices: [1_234, 1_234],
+    guardValues: [0, 0],
+    money: [-220_000, -220_000, 220_000, 0, 220_000, 0, 4_000, 0, 0, 0, 0, 0, 0, 0, 0, 220_000, 0, 0],
+    shoreline: false,
+  },
 };
 
 function auditParserRoundTrip(

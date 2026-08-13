@@ -543,6 +543,19 @@ export type MainToWorkerMessage =
   | { readonly type: 'setSpeed'; readonly speedIndex: number }
   | { readonly type: 'command'; readonly command: Command }
   /**
+   * Take the last build, demolition or terraform back, or put it in again
+   * (SPEC2 M25, E-12).
+   *
+   * A REQUEST rather than a command, and the distinction is the whole design:
+   * the inverse patch carries the money it reverses to the cent, so an
+   * interface that assembled one could print cash. The worker owns the session
+   * ring, pops it, and enqueues the `ApplyPatch` the simulation itself recorded
+   * - which then travels the ordinary queue, the ordinary log and the ordinary
+   * replay like any other command (D-004's control-traffic split).
+   */
+  | { readonly type: 'undo' }
+  | { readonly type: 'redo' }
+  /**
    * Write a save. The worker answers with `saveWritten`; the main thread is the
    * only side that may touch a disk (architecture law #1).
    */

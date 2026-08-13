@@ -2880,7 +2880,11 @@ three pins unchanged, every balance band re-run and identical to the digit.
   the wrong way): what bounds the effect is the share of the year the
   expensive sky owns, and the frost-weight sweep in D-203 is still the map
   for raising it - honestly, in M23, not by tuning a constant here.
-- **Undo and redo** (section 17.2). See D-114.
+- **Undo and redo** (section 17.2) are DONE - D-114's own deferral, delivered on
+  the inverse patch of M25 bundle 1 (D-258, digested at the end of this file).
+  What is still owed there is the undo of a station BUILD, which creates an
+  entity rather than moving map bytes, and it is named with its reason in
+  `NOT_UNDOABLE`.
 - The installer BUILDS: `npm run build:desktop` produced both bundles in about
   eight minutes, and Tauri fetched WiX and NSIS itself. Neither is signed, so
   Windows shows a SmartScreen warning on a machine that has not seen the binary
@@ -4422,3 +4426,75 @@ pinned worlds are Normal worlds.
   D-228/D-229, and the two properties that are checkable - sixteen distinct
   seeds, the `aiGame` four as the prefix - are now held by
   `tests/unit/balanceDeterminism.spec.ts` instead of by prose).
+
+## M25 bundle 1 - undo and redo, the inverse patch (D-258)
+
+The item D-114 wrote down as deliberately not done. **No save bump and it was
+verified rather than assumed** - v34 stands, no migration edit, zero hashed
+bytes, zero snapshot bytes, zero RNG draws, zero atlas cells; all three pins
+re-run and unmoved (`b7e632a7124e67ce` / `a00868b9911f12d6` /
+`64fec78d6bf0cd5e` at 35 commands). One `CommandKind` (`ApplyPatch` = 48) and
+two control messages are the whole growth.
+
+- **The inverse of a build is a PATCH, not a demolition** (D-258). E-12's
+  sentence says "Abriss + der historisch verbuchte Betrag" and the first half
+  fails the milestone's own acceptance: `BuildRoad` over existing road only ADDS
+  bits, `buildTrack` pulls a signal down when a spur makes a junction, and a
+  demolition refunds half. So the inverse is the CELLS the command really moved
+  - measured by diffing ten map layers across its execution, never a hand-written
+  list of "what this kind touches" - plus the company's seven scalars and its
+  whole ledger row, read before and after and stored as deltas. That is D-092
+  applied to a mechanism: the refund is what was booked, never recomputed.
+- **The patch travels IN the command, and that is what avoids the save bump.**
+  A payload-free `Undo` popping a ring inside the simulation would make a
+  saved-then-loaded world answer the same command differently and a replay
+  re-simulated from a checkpoint report a desync of its own making - law #3
+  broken in the silence Z4 was written about. With the cells (and both their
+  values) in the payload the outcome is a pure function of (world, command), the
+  ring is ISSUER memory like the player's hand, and no byte of the world moves.
+  Held by two audits: a source walk fails the build if anything under `src/sim`
+  but `commands/undo.ts` and `SimWorker.ts` mentions `undoStack`, and a played
+  world hashes identically with the recorder on and off.
+- **The interface may not author one.** The payload carries money, so a panel
+  that built its own could print cash. Ctrl+Z is control traffic (D-004); the
+  WORKER pops the ring and builds the command. `ApplyPatch` is therefore the one
+  entry on `commandCoupling.spec.ts`'s `NO_UI_ISSUER` list. The ring is popped at
+  ISSUE time and the entry returns only on acceptance; a refused one is DROPPED,
+  because a patch the world moved underneath can only be refused again.
+- **All-or-refused, and "the world moved" means the GROUND, not the bytes.**
+  Checking only the cells that moved would let a road be pulled out from under a
+  waypoint planted on it afterwards - the waypoint changes no cell of the road
+  patch. So a patch carries the CONTEXT of every tile it names (the nine tile
+  layers plus the four corner heights around it) as guard cells, checked and
+  never written. Three refusals with their own sentences: `invalidPatch`,
+  `patchStale`, `patchMonthClosed` - the last because putting a January bill back
+  into a February ledger row would leave a world that is not the world where the
+  build never happened.
+- **Twelve kinds are undoable** (raise/lower/level/brush, road, track, signal and
+  waypoint, build and demolish) and `NOT_UNDOABLE` carries every other kind WITH
+  ITS REASON, both directions audited: not a build; creates a station entity
+  (the five module builds - named as the next bundle's work); or writes state no
+  layer holds (the council memory of `DemolishBuilding`, the workshop's town,
+  industry and river commands).
+- **The acceptance is the hash assertion, per kind.**
+  `tests/determinism/undoRedo.spec.ts` plays every undoable kind on a GENERATED
+  128 world - generated, because on flat ground the cascade the clause names
+  never fires - and compares `hashWorld` AND a fingerprint over every map layer
+  (which is what catches the derived `oceanMask`/`landmassId` the hash does not
+  cover). It includes a cascade that pulled corners the command never named
+  (asserted on the patch, not hoped for), a lowering at the water line, and an
+  undo REFUSED because a waypoint arrived - byte-identical afterwards, and
+  applying again once the waypoint goes. **The Fertig-wenn is its own test**:
+  fifty roads plus fifty undos against a world that did nothing, logs of 100 and
+  0 commands, identical hash. The one thing an undo must NOT put back is
+  asserted too - the two revision counters go FORWARD, because the renderer and
+  the block index key on them.
+- **Recording is opt-in and off by default**: a quarter century of AI building
+  is a diff nobody will ever undo, and it would cost every balance run. Measured:
+  main chunk 1,069,575 -> **1,071,641 B** against an unchanged 1,080,000 budget
+  (+1,557 B of it the sixteen i18n lines, measured by deletion); ten layer copies
+  and ten layer scans per PLAYER build in a live session, never in a tick and
+  never headless, which is why the ledger row stays +0.00 ms.
+- **Not covered by a test, and a human's to confirm**: the worker's own issue
+  path. `SimWorker.ts` has never had a harness (D-136's reason), so pressing
+  Ctrl+Z in the running game once is the acceptance step that is the owner's.

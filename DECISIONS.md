@@ -14,23 +14,23 @@ no entry below. A number may appear under several topics.
   D-024, D-093, D-106, D-128, D-137, D-142, D-145, D-146, D-149, D-153, D-178,
   D-181, D-184, D-185, D-188, D-189, D-190, D-191, D-193, D-194, D-195,
   D-196, D-200, D-201, D-202, D-204, D-232, D-233, D-236, D-240, D-244,
-  D-245
+  D-245, D-258
 - **Commands, snapshot & worker boundary:** D-004, D-005, D-006, D-011, D-032,
   D-100, D-111, D-145, D-146, D-148, D-162, D-174, D-176, D-179, D-187, D-189,
   D-192, D-193, D-196, D-200, D-202, D-218, D-240, D-241, D-242, D-243,
-  D-244
+  D-244, D-258
 - **Lines & timetables:** D-145, D-146, D-147, D-148, D-149, D-150, D-151,
   D-152, D-155, D-159
 - **Map generation & terrain:** D-018, D-019, D-020, D-021, D-022, D-023,
   D-025, D-027, D-197, D-198, D-199, D-216, D-231, D-234, D-240, D-242,
   D-246, D-247, D-249
 - **Terraforming & structures:** D-028, D-034, D-050, D-051, D-052, D-124,
-  D-141, D-240, D-244
+  D-141, D-240, D-244, D-258
 - **Save format, migrations & replays:** D-007, D-025, D-026, D-027, D-048,
   D-111, D-130, D-131, D-134, D-142, D-144, D-145, D-146, D-147, D-153, D-178,
   D-181, D-184, D-185, D-188, D-189, D-190, D-191, D-192, D-193, D-194,
   D-197, D-198, D-200, D-207, D-213, D-231, D-232, D-233, D-236, D-238,
-  D-239, D-240, D-241, D-243, D-244, D-245, D-247
+  D-239, D-240, D-241, D-243, D-244, D-245, D-247, D-258
 - **Rail & track:** D-042, D-043, D-044, D-045, D-046, D-047, D-053, D-141,
   D-153, D-157, D-184, D-230
 - **Signals & reservations:** D-054, D-055, D-056, D-057, D-058, D-059, D-060,
@@ -48,7 +48,7 @@ no entry below. A number may appear under several topics.
   D-206, D-213, D-216, D-217, D-231, D-232, D-233, D-234, D-235
 - **Economy, finance & emissions:** D-008, D-090, D-091, D-092, D-105, D-154,
   D-180, D-193, D-196, D-228, D-229, D-236, D-237, D-238, D-239, D-245,
-  D-253
+  D-253, D-258
 - **Balancing & scenarios:** D-038, D-039, D-040, D-041, D-066, D-087, D-088,
   D-116, D-151, D-152, D-156, D-158, D-159, D-187, D-190, D-194, D-195,
   D-196, D-197, D-198, D-199, D-200, D-203, D-204, D-207, D-211, D-213,
@@ -70,7 +70,7 @@ no entry below. A number may appear under several topics.
 - **UI & input:** D-011, D-013, D-015, D-035, D-110, D-113, D-114, D-119,
   D-126, D-148, D-165, D-166, D-177, D-179, D-180, D-181, D-182, D-183, D-184,
   D-186, D-187, D-189, D-191, D-192, D-193, D-194, D-195, D-196, D-200, D-202,
-  D-210, D-241, D-242, D-247, D-254, D-255
+  D-210, D-241, D-242, D-247, D-254, D-255, D-258
 - **Performance & measurement:** D-002, D-120, D-135, D-136, D-161, D-162,
   D-163, D-164, D-167, D-170, D-171, D-172, D-173, D-174, D-176, D-177, D-184,
   D-185, D-186, D-187, D-191, D-192, D-193, D-196, D-200, D-201, D-202, D-205,
@@ -85,7 +85,7 @@ no entry below. A number may appear under several topics.
   D-205, D-207, D-206, D-208, D-209, D-210, D-212, D-213, D-215, D-216,
   D-217, D-219, D-220, D-221, D-222, D-228, D-229, D-230, D-231, D-233,
   D-234, D-235, D-236, D-241, D-242, D-248, D-249, D-250, D-251, D-252,
-  D-253, D-255, D-256, D-257
+  D-253, D-255, D-256, D-257, D-258
 - **Process & specification:** D-070, D-123, D-129, D-133, D-138, D-140,
   D-185, D-191, D-197, D-198, D-199, D-203, D-204, D-205, D-206, D-215,
   D-222, D-225, D-226, D-227, D-228, D-229, D-235, D-252, D-253, D-256,
@@ -17015,3 +17015,251 @@ is the difference between closing a clause and abandoning it.
   2026-08-13 - the same forty-eight quarter centuries on a quieter box, which is
   the run-to-run spread D-220 already recorded for this fixture and not a
   speed-up.
+
+## M25 bundle 1 - undo and redo (2026-08-13)
+
+### D-258 The inverse of a build is a PATCH, and it travels inside the command: undo and redo through the normal queue, session-only, all-or-refused
+
+**The item D-114 wrote down as deliberately not done, delivered on the
+machinery it was waiting for.** Section 17.2 has asked for undo and redo since
+the brief; D-114 left `Ctrl+Z` and `Ctrl+Y` unbound with a written reason ("a
+partial undo that silently covered half the commands would be worse than none")
+and E-12 then settled the shape and deferred it behind the M16 checkpoint ring.
+Both exist now, so the keys are bound.
+
+**No save bump, and it was verified rather than assumed**: `SAVE_VERSION` stays
+**34**, no migration edit, zero hashed bytes, zero snapshot bytes, zero RNG
+draws, zero atlas cells. Two MainToWorker message types (`undo`, `redo`) and one
+`CommandKind` (`ApplyPatch` = 48) are the whole growth. All three pins were
+re-run and are unmoved: canonical `b7e632a7124e67ce`, corpus `a00868b9911f12d6`,
+soak `64fec78d6bf0cd5e` at 35 commands and 16 checkpoints.
+
+#### 1. The inverse is a byte patch, not a demolition
+
+E-12's own sentence is "Bau: Abriss + exakt der historisch verbuchte Betrag",
+and taking the first half literally fails the milestone's own acceptance
+clause: **a demolition is not the inverse of a build.**
+
+- `BuildRoad` over a tile that already carries road ADDS bits (D-218's join);
+  `demolishRoad` clears the tile, so the pair is not a round trip.
+- `buildTrack` pulls a signal down on the way when a spur turns a signalled
+  tile into a junction, and no demolition puts it back.
+- `demolishRoad` refunds `DEMOLITION_REFUND` (half); the exact reversal of a
+  build is the whole of what it charged.
+
+So an inverse is **the cells the command really moved**, measured by diffing
+the map across its execution, plus the exact money it booked. That is what lets
+"undone == never-done" be a hash assertion instead of a hope, and it is D-092's
+rule ("the amount historically booked, never recomputed") applied to a
+mechanism rather than to a number.
+
+**Measured rather than listed.** The recorder copies ten map layers aside
+before the command (`UNDO_LAYERS`: cornerHeight, terrain, roadBits, trackBits,
+railType, signal, structure, structureHeight, owner, waypoint - every one of
+them a layer `hashWorld` covers) and diffs them afterwards. A hand-written list
+of "the cells this kind touches" is a list that is wrong the first time a
+command grows a case, and a wrong list is a wrong undo nobody notices until a
+pin moves. The money side is the same device: a vector of the company's seven
+scalars plus its whole eleven-account ledger row, read before and after, stored
+as deltas.
+
+#### 2. The patch travels IN the command, and that is what avoids the save bump
+
+The obvious design - a payload-free `Undo` command that pops a ring inside the
+simulation - fails law #3 in exactly the silence Z4 was written about. The ring
+is session-only, so a world that was saved and loaded would answer the same
+command differently from the world that saved it, and a recording re-simulated
+from a checkpoint would report a desync of its own making (D-244's
+`replayGenesis` finding, one instrument along). Two ways out exist and only one
+is honest:
+
+- **save the ring** - then it is not session-only, it is a save bump, a
+  migration and a re-recorded pin, for state that describes an interface;
+- **put the patch in the command** - then the outcome is a pure function of
+  (world, command), the ring influences nothing inside the simulation, and no
+  byte of the world has to change. `ApplyPatch` carries the cells with the
+  value on BOTH sides, so a redo is the same payload read the other way round
+  rather than a second recording.
+
+**The ring is therefore ISSUER memory, like the player's own hand**, and it
+lives on the `World` only because the diff it records is measured around
+command execution. Two audits hold that where prose cannot: a source walk fails
+the build if anything under `src/sim` except `commands/undo.ts` and
+`SimWorker.ts` so much as mentions `undoStack`, and a played world with the
+recorder ON hashes identically to the same world with it OFF.
+
+**Recording is opt-in and off by default**, which is not tidiness either: a
+quarter-century AI game issues thousands of builds nobody will ever undo, and a
+ten-layer diff per command would be a cost every balance run pays for an
+interactive feature. `SimWorker.adoptWorld` turns it on for a game and off for
+a recording being played back.
+
+#### 3. The interface may not author a patch
+
+The payload carries the money it reverses to the cent, so a panel that
+assembled its own would be a panel that can print cash. The interface asks
+through the control channel (D-004's split: `{type:'undo'}` is control traffic,
+not a command) and `SimWorker` - which owns the ring - builds the command out of
+what the simulation recorded. `ApplyPatch` is therefore the single entry on
+`commandCoupling.spec.ts`'s `NO_UI_ISSUER` list, with that reason; the audit
+fails in both directions, so the entry cannot outlive it.
+
+The ring is popped at ISSUE time and the entry goes back only on acceptance: an
+accepted undo becomes a redo, an accepted redo goes back on the undo ring, and a
+**refused one is dropped** - a patch the world has moved underneath can only be
+refused again, and leaving it in place would make Ctrl+Z a key that does nothing
+for ever. One guard comes with that: an undo asked for while a command of the
+same frame is still queued is refused (`undoBusy`), because the ring's top is
+decided at issue time and taking one off while an unexecuted build waits would
+take back the edit UNDER the one the player is looking at. The window is one
+frame wide.
+
+#### 4. All-or-refused, and the guard that makes "the world moved" mean the ground
+
+Fehlerkatalog 30 vetoes a partial undo, so every cell is checked before one byte
+is written. Checking only the cells the command MOVED is not enough, and the
+case that shows it is small: lay a road, put a waypoint on it, undo the road -
+the waypoint changed no cell of the road patch, so a cell-only guard would
+happily pull the road out from under the marker and leave a roadside sign
+standing in a field, a state no command of this game can produce.
+
+**So a patch carries the CONTEXT of the ground it names**: for every tile it
+touches, the nine tile layers and the four corner heights around it, recorded as
+guard cells that are checked and never written. A guard cell holds ONE value
+because the command did not move it, which is why the same guard serves the undo
+and the redo. Three refusals, each its own sentence (section 17.3):
+`invalidPatch` (the payload does not describe an edit of this map),
+`patchStale` (the ground moved), `patchMonthClosed`.
+
+**The month guard is the one restriction worth knowing about.** The ledger row,
+`expensesThisMonthCt` and `profitThisYearCt` are the calendar's own figures, and
+putting a January bill back into a February row would leave a world that is not
+the world where the build never happened - which is the only thing this feature
+promises. So an undo whose patch booked money is refused once its accounting
+month has closed. A workshop edit books nothing (D-240's "free means free in
+both directions") and is therefore undoable across months.
+
+#### 5. What is undoable, and what is not, with the reason
+
+`UNDOABLE_KINDS` is twelve: `RaiseLand`, `LowerLand`, `LevelLand`,
+`TerraformBrushRegion`, `BuildRoad`, `DemolishRoad`, `BuildTrack`,
+`DemolishTrack`, `BuildSignal`, `DemolishSignal`, `BuildWaypoint`,
+`DemolishWaypoint`. What unites them is not that they are cheap: it is that
+everything they change lives in the ten map layers and in the acting company's
+books, so a byte diff plus a money delta IS the inverse.
+
+`NOT_UNDOABLE` carries **every other kind with its reason**, and
+`undoRing.spec.ts` holds the two lists against the real `CommandKind` table in
+both directions (the D-133/D-183 shape), so a kind added later cannot quietly
+become undoable or quietly stop being it. Three reasons appear:
+
+- **not a build** - money, orders, lines, contracts, vehicles. E-12 draws the
+  line at Bau/Abriss/Terraform.
+- **creates an entity** - the five station-module builds. They hand out a
+  station id, join a neighbouring station, derive a catchment and a zone mix,
+  and can be referenced by an order the moment they exist; a competitor
+  building in between makes the array position the id rests on somebody else's.
+  **Named as the next bundle's work rather than half-delivered.**
+- **writes state no layer holds** - `DemolishBuilding` books a demolition into
+  the council's own decaying memory (D-102), and the workshop's town, industry
+  and river commands create towns, works and shorelines out of a named RNG
+  stream.
+
+#### 6. The acceptance, and what it measures
+
+`tests/determinism/undoRedo.spec.ts` runs the clause over **every** undoable
+kind on a GENERATED 128 world (seed 20,260,812) - generated rather than flat,
+because on level ground a terraform moves exactly the corner it was given and
+the cascade the clause names never fires. Each case takes `hashWorld` AND a
+fingerprint over every typed-array layer of the map plus the entity counts and
+the books, runs the command, asserts the hash MOVED (an undo that restores
+nothing is trivially exact), undoes, and compares both. Then it redoes and
+undoes again.
+
+Two cases are the clause's own:
+
+- **a cascade**: the site is found by scanning for a corner whose
+  `estimateTerraform` drags at least three, and the test asserts the recorded
+  patch holds more than one corner cell - so "including a terraform whose
+  cascade pulled neighbouring corners" is a property of the run, not a hope
+  about the map. A second terraform case lowers a corner at the water line, so
+  the derived `oceanMask`/`landmassId` really are recomputed after the undo -
+  the layers `hashWorld` does not cover and the map fingerprint does.
+- **a refusal**: the waypoint case above, refused with `patchStale`, with the
+  world byte-identical afterwards - and then the waypoint is taken away again
+  and **the very same patch applies**, so the refusal is a fact about the world
+  and not a patch that had quietly broken.
+
+**The literal Fertig-wenn sentence** ("50 Bau-Kommandos plus vollstaendigem Undo
+... Kommandolog verschieden, Welt-Hash identisch") is its own test and really
+does play two worlds: one lays fifty roads and takes all fifty back, the other
+does nothing, both run the same 150 ticks, and they end on the same
+`hashWorld` and the same layer fingerprint with logs of 100 and 0 commands.
+
+**The one thing an undo must NOT restore is in the test as an assertion**: the
+two map revision counters go FORWARD. They are the renderer's "something moved"
+flags and the block index's invalidation key (D-232), never saved and never
+hashed; putting them back would be the one restoration that is wrong.
+
+#### 7. Measured
+
+- **Measured by running, all green**: the unit suite is 1,991 tests over 144
+  files (fourteen of them this bundle's), the determinism suite 79 over twelve
+  (sixteen of them this bundle's), `npm run test:balance:full` is
+  **142 tests over fifteen files in 551 s** - every band asserted and none of
+  them touched, which is what a bundle that changes no simulation arithmetic
+  should produce - and `npm run test:soak` replays the recorded quarter century
+  to `64fec78d6bf0cd5e` at 35 commands and sixteen checkpoints.
+- **Main chunk 1,069,575 -> 1,071,641 B** against the 1,080,000 B budget,
+  8,359 B of headroom, **no raise asked for**. Split by deletion: **+1,557 B
+  are the sixteen i18n lines** (eight keys in two languages), +509 B the
+  mechanism - the key branch in `App.tsx`, two `SimClient` methods, two keymap
+  rows and the new reject reasons. `commands/undo.ts` itself never reaches the
+  entry chunk: the interface issues no patch, so nothing in `src/ui` imports it.
+- **The cost of recording, stated rather than hidden**: ten layer copies plus
+  ten layer scans per PLAYER build command, i.e. ~0.65 MB of copying on a 128
+  map and ~10 MB on a 1024 one. It is paid only on the player's own undoable
+  commands in a live session, never on a tick, never by a competitor and never
+  in a headless run - which is why the M25 ledger row stays +0.00 ms and this
+  entry says so instead of quoting a tick measurement the feature cannot reach.
+  The cheaper alternative - a per-kind list of touched cells - is what point 1
+  refuses, and the reason is worth more than the milliseconds.
+- **The largest patch the game can produce is measured, not assumed**: a
+  maximum radius-8 brush on generated ground records far fewer than
+  `UNDO_MAX_PATCH_CELLS` = 40,000 cells (the test pins the comparison). The
+  overflow branch - which CLEARS the ring, because remembering the entry under
+  an unrecordable one would take back the wrong edit - is therefore reachable
+  only by lowering the cap, and the recorder exposes it as a field for exactly
+  that reason (the injected-AudioContext pattern of M9).
+
+#### 8. Two things this bundle changed that are not undo
+
+- **`tests/unit/editorCommands.spec.ts` asserted `Object.keys(CommandKind).length - 42`**
+  to mean "one label per workshop kind". That was the same claim only while the
+  five workshop kinds were the last five the game had; `ApplyPatch` made it red
+  about a milestone it has nothing to do with. It reads the five kinds by name
+  now, so a sixth workshop kind still fails it.
+- **`asIntArray` joins the save parser** beside `asInt`/`asArray`, because a
+  patch is five parallel integer arrays and validating each element by hand at
+  five call sites is how one of them ends up unvalidated.
+
+#### 9. What is NOT covered by a test, and is a human's to confirm
+
+The worker's own issue path - Ctrl+Z reaching `SimClient.undo`, the pop, the
+enqueue and the sentence that comes back when the ring is empty - has no
+harness: `SimWorker.ts` is a module with worker globals and this repository has
+never had a test that drives it (the same reason the frame-rate budgets are
+measured by hand, D-136). What IS held by tests is everything on both sides of
+it: the ring's semantics, the patch's behaviour through the real queue, the
+absence of a UI issuer, and the key binding's presence in the D-114 table.
+**Somebody has to press Ctrl+Z in the running game once.**
+
+#### 10. What M25 still owes after this bundle
+
+The milestone's other five MUSS points are untouched and are their own bundles:
+the sound identity of SPEC.md 18, accessibility and i18n scaling (plural rules,
+OS locale, hatching, reduced motion, roving focus, key REBINDING - this bundle
+adds two rows to the D-114 table but does not make it editable), the web demo
+channel (E-13), the release automation, and the multiplayer groundwork of E-16
+with its protocol bump. Undo of a station build is named above as the next
+bundle's work.

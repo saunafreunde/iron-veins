@@ -20,7 +20,8 @@ import { buildBenchmarkWorld } from './bench/build';
 import { measureBenchmarkWorld } from './bench/measure';
 import { summarise } from './bench/stats';
 import { CommandQueue } from './commands/queue';
-import type { CommandEnvelope, CommandOutcome } from './commands/types';
+import { RejectReason, type CommandEnvelope, type CommandOutcome } from './commands/types';
+import { patchCommand, type RecordedPatch } from './commands/undo';
 import { writeFlowLegs } from './flow';
 import { gameEndMarker, goalMarkers } from './goals/markers';
 import { writeGoalBlock } from './goals/snapshot';
@@ -175,10 +176,36 @@ let publishedGoalCount = -1;
 /** How often the fleet list is refreshed while nothing structural changed. */
 const FLEET_REFRESH_TICKS = 200;
 
+/**
+ * Inverse patches this worker has issued and not yet seen an outcome for
+ * (SPEC2 M25, E-12).
+ *
+ * The ring is popped at ISSUE time, because that is when the player asked and
+ * that is what makes two Ctrl+Z presses in one frame take back two different
+ * things. Where the entry then goes depends on what the simulation says about
+ * it a tick later: an accepted undo becomes a redo, an accepted redo goes back
+ * on the undo ring, and a refused one is DROPPED - a patch the world has moved
+ * underneath can only be refused again, and leaving it on the ring would make
+ * Ctrl+Z a key that does nothing for ever.
+ *
+ * Keyed by the envelope's `seq`, which is unique inside a session by
+ * construction (`CommandQueue.enqueue`).
+ */
+const pendingPatches = new Map<number, { patch: RecordedPatch; direction: number }>();
+
 /** Reused across ticks so command feedback does not allocate per call. */
 const outcomeSink = (envelope: CommandEnvelope, outcome: CommandOutcome): void => {
   if (!outcome.ok) {
     scope.postMessage({ type: 'commandRejected', reasonKey: outcome.reasonKey });
+  }
+  const pending = pendingPatches.get(envelope.seq);
+  if (pending !== undefined) {
+    pendingPatches.delete(envelope.seq);
+    const current = world;
+    if (current !== null && outcome.ok) {
+      if (pending.direction === -1) current.undo.redoStack.push(pending.patch);
+      else current.undo.undoStack.push(pending.patch);
+    }
   }
   // The player's own commands are reported either way. The tutorial of section
   // 17.5 watches them to know when a lesson's goal is met, and the audio of
@@ -1012,6 +1039,14 @@ function abandonReplay(): void {
  * happens to change them.
  */
 function adoptWorld(current: World, sink: SnapshotWriter): void {
+  // The undo ring is SESSION memory about the world that is going away, and
+  // its patches name cells of a map that no longer exists. Recording is on for
+  // a game and off for a recording being played back: a replay's commands come
+  // out of its own log, and a ring built from them could only offer to edit
+  // evidence (D-189).
+  current.undo.clear();
+  current.undo.enabled = replay === null;
+  pendingPatches.clear();
   speedIndex = 0;
   accumulatorMs = 0;
   lastFrameMs = performance.now();
@@ -1162,6 +1197,45 @@ function handleMessage(message: MainToWorkerMessage): void {
         return;
       }
       queue.enqueue(message.command, current.tick);
+      return;
+    }
+
+    // Undo and redo (SPEC2 M25, E-12). The worker is the issuer because the
+    // ring is its memory and the patch is the simulation's own recording; the
+    // interface only asks. Everything below decides WHICH command to enqueue
+    // and nothing about what it will do - that is the payload's business, and
+    // it is what lets a recording be replayed without this ring existing.
+    case 'undo':
+    case 'redo': {
+      const current = world;
+      if (current === null) return;
+      // A recording is not a game (D-189): nothing may write into it, and the
+      // seal underneath would swallow the command silently.
+      if (replay !== null) {
+        scope.postMessage({ type: 'commandRejected', reasonKey: REPLAY_COMMAND_REFUSAL });
+        return;
+      }
+      // The ring is last-in-first-out and its top is decided HERE, so an
+      // unexecuted build still in the queue would mean taking back the edit
+      // under the one the player is looking at. One frame wide, and refused
+      // rather than guessed.
+      if (queue.pendingCount > 0) {
+        scope.postMessage({ type: 'commandRejected', reasonKey: RejectReason.UndoBusy });
+        return;
+      }
+      const undoing = message.type === 'undo';
+      const stack = undoing ? current.undo.undoStack : current.undo.redoStack;
+      const patch = stack.pop();
+      if (patch === undefined) {
+        scope.postMessage({
+          type: 'commandRejected',
+          reasonKey: undoing ? RejectReason.NothingToUndo : RejectReason.NothingToRedo,
+        });
+        return;
+      }
+      const direction = undoing ? -1 : 1;
+      const envelope = queue.enqueue(patchCommand(patch, direction), current.tick);
+      pendingPatches.set(envelope.seq, { patch, direction });
       return;
     }
 

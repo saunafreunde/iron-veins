@@ -66,5 +66,13 @@ export const KEY_BINDINGS: readonly KeyBinding[] = [
   { display: 'F3', descriptionKey: 'ui.key.debug' },
   { display: 'F5', descriptionKey: 'ui.key.quickSave' },
   { display: 'F9', descriptionKey: 'ui.key.quickLoad' },
+  // Undo and redo (SPEC2 M25, E-12). D-114 left these two lines out of the
+  // table on purpose - "the keys are unbound and this is written down rather
+  // than left as a key that does nothing" - because a partial undo would be
+  // worse than none. The inverse-patch ring is what makes them whole, so they
+  // join the table now, on the two combinations every desktop application
+  // gives them.
+  { display: 'Ctrl+Z', descriptionKey: 'ui.key.undo' },
+  { display: 'Ctrl+Y', descriptionKey: 'ui.key.redo' },
   { display: 'Esc', descriptionKey: 'ui.key.escape' },
 ];

@@ -146,6 +146,22 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
       // list keys below cannot shadow one of them. Not while a recording is
       // playing: arming a tool that cannot build anything is an invitation
       // to click at a world that will refuse.
+      // Undo and redo (SPEC2 M25, E-12) - the two bindings D-114 left unbound
+      // because the machinery did not exist. Checked before the tool letters
+      // for the same reason those are checked first, and only with Ctrl: Z and
+      // Y are free in both schemes and neither is a tool.
+      if (event.ctrlKey && !event.altKey) {
+        const lower = event.key.toLowerCase();
+        if (lower === 'z' || lower === 'y') {
+          event.preventDefault();
+          if (!replaying) {
+            if (lower === 'z') client.undo();
+            else client.redo();
+          }
+          return;
+        }
+      }
+
       const tool = TOOL_KEYS[event.key.toLowerCase()];
       if (tool !== undefined && !event.ctrlKey && !event.altKey) {
         if (!replaying) setTool(tool);

@@ -4204,3 +4204,37 @@ export const DIFFICULTY_AI_TRAITS: readonly DifficultyAiTraits[] = [
     exclusiveRightsRating: COUNCIL_EXCLUSIVE_MIN_RATING,
   },
 ];
+
+// ------------------------------------------------ undo and redo (SPEC2 M25, E-12)
+
+/**
+ * How many undoable commands the session ring remembers. [commands]
+ *
+ * SPEC2 M25 names the depth, and 50 is that number rather than a measurement:
+ * it is deep enough to take back a shaping session (a workshop author's brush
+ * strokes, a player's mistaken corridor) and shallow enough that the ring is a
+ * bounded amount of memory whatever the map size - a patch is only the cells a
+ * command really moved, so fifty of them are kilobytes, not megabytes.
+ *
+ * The ring is SESSION-ONLY: it is neither saved nor hashed, and nothing in the
+ * simulation reads it to decide anything (`commands/undo.ts` says why that is
+ * not a Z4 break).
+ */
+export const UNDO_RING_DEPTH = 50;
+
+/**
+ * Largest patch one undo entry may carry. [cells]
+ *
+ * Origin: the biggest edit a single command can make is a maximum terraform
+ * brush - {@link EDITOR_BRUSH_MAX_CELLS} = 289 corners, each dragging at most
+ * {@link MAX_TERRAFORM_CORNERS} = 60 more - i.e. 17,340 corner writes before
+ * the terrain cells the shoreline refresh relabels. 40,000 clears that worst
+ * case with room for the terrain half and is still a payload of a few hundred
+ * kilobytes in the command log.
+ *
+ * A command whose diff exceeds it is NOT recorded, and recording nothing CLEARS
+ * the ring: undo is last-in-first-out, so remembering the entry underneath an
+ * unrecordable one would take back the wrong edit (Fehlerkatalog 30's partial
+ * undo, in the shape it would really appear in).
+ */
+export const UNDO_MAX_PATCH_CELLS = 40_000;
