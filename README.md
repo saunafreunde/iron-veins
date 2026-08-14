@@ -165,6 +165,15 @@ Three documents matter if you are going to change anything:
 - **`CLAUDE.md`** — the ten architecture laws and the traps each milestone
   found. Read it before touching the simulation.
 
+One document matters if you only want to know what changed:
+
+- **`CHANGELOG.md`** — what a player gained per release, plus the known gaps, in
+  "Keep a Changelog" shape. It is written **in German** on purpose, for the
+  owner; the code, the comments and the commit messages stay English. It also
+  carries the version this state proposes for itself and the argument for it.
+  `RELEASE.md` is the other half: how a release is cut, and what an owner still
+  has to decide before one is sold.
+
 The short version of the laws: the simulation never sees the renderer; time
 steps are fixed; determinism is mandatory; money is integer cents; every state
 change goes through a command; nothing allocates in the tick loop.
