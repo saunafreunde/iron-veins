@@ -114,6 +114,24 @@ Neither installer is code-signed. Windows will show a SmartScreen warning on a
 machine that has not seen the binary before; signing needs a certificate this
 project does not have.
 
+### The web build
+
+```bash
+npm run build:web    # notices + typecheck + bundle into dist/
+npm run preview      # http://localhost:5184, with the COOP/COEP headers
+```
+
+`dist/` is a static site and needs a host that sends
+`Cross-Origin-Opener-Policy: same-origin` and
+`Cross-Origin-Embedder-Policy: require-corp`; without them there is no
+`SharedArrayBuffer` and the game says so and stops. On a host that cannot send
+them the shipped service worker adds them and reloads the page once.
+
+**`WEB.md` is the deployment procedure** — importing the project on Vercel,
+what `vercel.json` already settles, how the baked Kenney art reaches a build
+that cannot commit it, switching Deployment Protection on before the link is
+shared, and the four things to check after the first deploy.
+
 ---
 
 ## What the tests hold in place

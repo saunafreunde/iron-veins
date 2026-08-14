@@ -77,7 +77,7 @@ no entry below. A number may appear under several topics.
   D-206, D-209, D-214, D-231, D-234, D-235, D-241, D-242, D-247, D-248
 - **Platform, tooling & build:** D-012, D-014, D-015, D-016, D-017, D-029,
   D-030, D-031, D-160, D-168, D-169, D-170, D-172, D-175, D-192, D-206, D-208,
-  D-227, D-242, D-255, D-257, D-259, D-260, D-261
+  D-227, D-242, D-255, D-257, D-259, D-260, D-261, D-262
 - **Crash safety:** D-132, D-139, D-190
 - **Testing method & fixtures:** D-010, D-038, D-072, D-074, D-084, D-133,
   D-167, D-183, D-186, D-188, D-189, D-190, D-191, D-192, D-193, D-194,
@@ -18102,3 +18102,102 @@ real tag is the acceptance step and it is the owner's. That the signed path
 works, which needs a certificate that does not exist yet. And that the three
 owner decisions in the appendix are the right ones, which is what "owner
 decision" means.
+
+---
+
+## Deployment - the hosted web channel (2026-08-14)
+
+### D-262 The Kenney bake reaches a hosted build as a published artefact, never as a commit and never as a download from kenney.nl
+
+E-13 gave the game a browser channel and M25 bundle 3 built it (D-260); what it
+never had was a HOST. This entry is the deployment half: `vercel.json`, a build
+command with two ends (`tools/web-deploy.mjs`), and the one question that
+actually needed deciding - what a build from a clean clone does about art it is
+forbidden to check in.
+
+**The admission ticket is settled in three places and they are held together by
+a test.** `SharedArrayBuffer` needs a cross-origin-isolated document, which
+needs `Cross-Origin-Opener-Policy: same-origin` and
+`Cross-Origin-Embedder-Policy: require-corp` from the SERVER. `vite.config.ts`
+has sent that pair to the dev server since M0 and its own comment warns that
+"both environments must be configured, otherwise it works in one and breaks in
+the other"; `public/coi-serviceworker.js` sends it for hosts that cannot be
+configured; `vercel.json` now sends it for the host that can.
+`tests/unit/vercelConfig.spec.ts` reads all three files and fails when the
+values drift apart - the warning with something red behind it (D-133/D-183).
+
+**The shim needs no switch and is not disabled.** `ensureCrossOriginIsolation`
+answers `isolated` on its FIRST branch when the document already is, so on a
+host that sends the headers the service worker is never registered and the one
+uncontrolled reload E-13 accepts never happens. It stays in the build because
+it costs 3,271 bytes and buys the case nobody plans for: a `dist/` served from
+somewhere else, or a header configuration that was lost. A browser that
+registered it under an older deployment keeps working, because what it adds is
+the identical pair rather than a competing one.
+
+**The asset question, with the four options priced.** `public/assets-baked/`
+(6,523,117 B) and `assets-cache/` (46.2 MB of zips, 178 MB unpacked) are
+gitignored by E-14/D-140 and `tests/unit/repoAssets.spec.ts` is the guard, so a
+build from a clean clone has no Kenney art.
+
+- **(a) `assets:fetch && assets:bake` inside the build.** Measured on this
+  machine: 6.07 s to verify and unpack a WARM cache and 30.40 s to bake, so the
+  CPU alone is 36.5 s - and a build host has no cache, so the real figure is
+  that plus 46.2 MB over twelve sequential requests to kenney.nl. Refused for
+  the dependency rather than for the seconds: every deploy would then fail, or
+  silently go procedural, on a day a third-party CMS is slow. `assets-bake.ts`
+  also needs Node's type stripping, which makes the build depend on the host's
+  Node MINOR.
+- **(b) publish the BAKED atlases and download those.** 6.52 MB in one request
+  from the host the source already comes from, no bake at build time, git tree
+  unchanged. **Chosen**, as an OPTION: `IRON_VEINS_ATLAS_URL` (with an optional
+  `IRON_VEINS_ATLAS_SHA256` pin, the `assets-fetch.ts` posture) names a release
+  asset, and the variable lives in the dashboard because an `env` block in
+  `vercel.json` is a known way to make an environment value go wrong silently
+  in this workspace - the test asserts there is none.
+- **(c) commit the atlases.** Refused. It is E-14 with its glob test, and the
+  cost is 6.52 MB of binary per bake in the history for ever.
+- **(d) procedural.** Not an option to be chosen against the others, because it
+  is what happens when (b) is not configured or fails - and E-14 requires it to
+  be a working game. It is the default of this deployment and the first
+  deployment will run on it.
+
+**So the rule the prepare step is built on is that it can only ever succeed.**
+No variable, a dead URL, a wrong checksum, a truncated zip, a manifest naming a
+page the archive does not carry: every one of them ends in the same place, a
+procedural build with a log line naming which it was, and a half-unpacked
+directory is deleted rather than shipped. The manifest VERSION is deliberately
+not checked there - `src/render/bakedAtlas.ts` owns that number and already
+refuses a stale bake with its own warning, and a second copy in a build script
+would be a second place for it to be wrong.
+
+**The finish step deletes the source maps, and that is a licence matter rather
+than a size one.** `vite.config.ts` builds them and they inline the complete
+TypeScript source of a project whose README says "not licensed for
+redistribution"; a public URL would publish the source with the game. Measured:
+`dist/` is 19,746,037 B, of which 10,193,192 B are 29 `.map` files and
+6,523,117 B are the atlases - so the deployment falls to 9.55 MB with the art
+and 3.03 MB without it. `npm run build` and the desktop bundle are untouched.
+The same step REFUSES when `dist/index.html` or the shim is missing, because a
+broken build and absent art must not be reported the same way
+(`release.yml`'s `test -s dist/THIRD-PARTY.txt`, one step on).
+
+**No rewrites, deliberately.** A catch-all rewrite to `index.html` is the usual
+SPA line and it would answer a missing `assets-baked/baked-manifest.json` with
+200 and a page of HTML; the loader would then report a manifest that did not
+validate instead of art that is not there. The test asserts the rewrite list is
+empty and says why.
+
+**`npm run attribution` gained `--experimental-strip-types`.** It imports
+`tools/attribution-lib.ts` from a `.mjs` file, which works unflagged only from
+Node 22.18 / 23.6 upwards; the flag is accepted on every Node that can strip
+types at all (verified on the Node 24 this was written on) and makes the build
+independent of which minor a host happens to pin. It widens what works and
+narrows nothing.
+
+**What only the owner can do**, and it is not in this repository at all:
+Deployment Protection. A `*.vercel.app` URL is public to whoever holds it, and
+the switch that changes that is a dashboard setting (Settings → Deployment
+Protection → Vercel Authentication or Password Protection, applied to **all**
+deployments). `WEB.md` carries the exact steps. The licence question underneath
+it is stated and NOT decided here - RELEASE.md's appendix §1 is where it lives.
