@@ -23,7 +23,7 @@ verstehen; er ist da, damit man nachrechnen kann.
 ## [2.0.0] — vorgeschlagen, noch nicht getaggt (Stand 2026-08-13)
 
 Das ist der heutige Stand des Baums: das vollständige Grundspiel plus die
-vollständige Expansion, 263 Entscheidungseinträge und 115 Commits weit. **Es ist
+vollständige Expansion, 263 Entscheidungseinträge und 121 Commits weit. **Es ist
 noch keine Veröffentlichung.** Es existiert kein Git-Tag, es wurde nie ein
 Installer ausgeliefert, und `RELEASE.md` sagt, warum das richtig ist: Ein Tag
 baut die Installer und legt einen **Entwurf** einer Veröffentlichung an;
@@ -360,14 +360,16 @@ Dokumentation. Das hier ist der Stand der Dinge, gemessen und nicht geschätzt:
 - **Ein Verbindungsziel gilt als erreicht, sobald der Fahrplan es nennt** — auch
   wenn kein Fahrzeug die Strecke je fahren kann. Gemessen auf Kampagnenetappe 6:
   Gold für vier Busse, die nirgendwohin kommen (D-256).
-- **Die Webfassung wurde noch nie in einem echten Browser gestartet.** Alles
-  daran ist getestet, was sich ohne Browser testen lässt; dass ein Browser
-  danach wirklich meldet, isoliert zu laufen, hat noch niemand nachgesehen.
+- **Die Webfassung lief bisher genau einmal in einem echten Browser** — beim
+  Einrichten der Vercel-Fassung am 13.08.2026: die Welt entstand, die Uhr lief,
+  der Browser meldete sich als isoliert (D-262). Eine gespielte Partie im
+  Browser gab es damit noch nicht, und auf einem fremden Hoster ist sie nie
+  gelaufen.
 - **Es wurde nie getaggt und nie installiert.** Der Desktop-Installer baut in
   etwa acht Minuten; ihn zu installieren und einmal durchzuspielen ist der
   Abnahmeschritt, den nur ein Mensch machen kann.
-- **Für Entwickler:** `npm run format:check` ist auf 42 Dateien rot (Stand
-  2026-08-13). Nichts davon ist ein Fehler im Spiel — der Formatierer ist auf
+- **Für Entwickler:** `npm run format:check` ist auf 46 Dateien rot (gemessen
+  13.08.2026). Nichts davon ist ein Fehler im Spiel — der Formatierer ist auf
   diesen Dateien schlicht nie gelaufen (D-227, D-257).
 
 ---
