@@ -536,7 +536,22 @@ export interface SimUiState extends SnapshotValues {
    * is a piece of interface, and the camera may have moved on by then.
    */
   lastMapPointer: { readonly x: number; readonly y: number } | null;
-  setLastMapPointer: (point: { readonly x: number; readonly y: number }) => void;
+  setLastMapPointer: (point: { readonly x: number; readonly y: number } | null) => void;
+  /**
+   * Which lesson is open, and how many commands of each kind the player has
+   * issued since it was.
+   *
+   * In the STORE rather than in `TutorialPanel`, and that is the whole repair
+   * (M26): ten of the twenty-two steps are counted commands, the panel covers
+   * the map while it is open, so the only way to do them is to close the
+   * lesson and build - and closing it used to unmount the panel and take the
+   * counts and the chosen lesson with it. The lesson could not be finished by
+   * any route.
+   */
+  tutorialLesson: number | null;
+  tutorialCounts: Readonly<Record<number, number>>;
+  setTutorialLesson: (index: number | null) => void;
+  countCommand: (kind: number) => void;
   setFleet: (vehicles: readonly VehicleMarker[]) => void;
   setSelectedVehicle: (id: number | null) => void;
   setFollowVehicle: (id: number | null) => void;
@@ -820,6 +835,17 @@ export const useSimStore = create<SimUiState>((set) => ({
   setCameraControl: (cameraControl) => set({ cameraControl }),
   lastMapPointer: null,
   setLastMapPointer: (lastMapPointer) => set({ lastMapPointer }),
+  tutorialLesson: null,
+  tutorialCounts: {},
+  // A lesson that is CHOSEN starts counting from zero; leaving the list alone
+  // (index null) keeps what was collected, because closing the panel to go and
+  // build is the intended way through a lesson.
+  setTutorialLesson: (index) =>
+    set(index === null ? { tutorialLesson: null } : { tutorialLesson: index, tutorialCounts: {} }),
+  countCommand: (kind) =>
+    set((state) => ({
+      tutorialCounts: { ...state.tutorialCounts, [kind]: (state.tutorialCounts[kind] ?? 0) + 1 },
+    })),
   setTrackPreview: (preview) => set({ trackPreview: preview }),
   setRoadStopPreview: (preview) => set({ roadStopPreview: preview }),
   setConnectAnchor: (connectAnchor) =>

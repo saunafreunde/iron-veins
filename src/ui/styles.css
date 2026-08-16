@@ -191,6 +191,16 @@ body {
 
 /* Map mode: the canvas takes everything the sidebar does not. */
 .workspace--map {
+  /*
+   * The frame the map's own furniture is measured from (M26).
+   *
+   * The zoom control, the minimap and the pause band are absolutely positioned
+   * children of this element - and without a positioned ancestor they were
+   * measured from the VIEWPORT instead, which put the pause band across the
+   * status bar. The minimap's offsets happened to survive it, which is exactly
+   * why nobody noticed.
+   */
+  position: relative;
   display: grid;
   grid-template-columns: 1fr 23rem;
   padding: 0;

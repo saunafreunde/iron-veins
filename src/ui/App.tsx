@@ -30,6 +30,7 @@ import { bindingFromEvent } from '../shared/keybindings';
 import {
   bindingIndex,
   displayBinding,
+  OVERLAY_SAFE_ACTIONS,
   panVector,
   PAN_OF_ACTION,
   resolveBindings,
@@ -158,12 +159,45 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
   const rejectionAnchor =
     lastMapPointer === null
       ? null
-      : toastAnchorFor(lastMapPointer.x, lastMapPointer.y, window.innerWidth, window.innerHeight);
+      : toastAnchorFor(
+          lastMapPointer.x,
+          lastMapPointer.y,
+          window.innerWidth,
+          window.innerHeight,
+          // The accessibility scale of 17.4 moves the root font size, and the
+          // message is measured in rem - so the clamp has to read the same
+          // number the stylesheet is working in.
+          Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 14,
+        );
 
   // Which key the pause band names - read from the player's own table rather
   // than written into the sentence, so a rebinding moves the hint with it
   // (D-114's rule: one answer to "which key does this").
   const pauseKey = resolveBindings(keyBindings)['pause'];
+
+  /*
+   * The tutorial's command counter, installed ONCE for the whole session (M26).
+   *
+   * It used to live in `TutorialPanel`, which had two consequences and both
+   * were defects. The counts died when the panel closed - and closing it is
+   * how a lesson is done, since the panel covers the map. And the handler is
+   * ONE slot that `audioBridge` also wraps: the panel captured whatever was
+   * installed when it mounted and restored it when it unmounted, so a tutorial
+   * opened at boot (D-270) - that is, BEFORE the first gesture arms the audio -
+   * captured `null`, and closing it wiped the audio handler for the rest of
+   * the session. Installed here, nothing unmounts it and the chain only ever
+   * grows.
+   */
+  useEffect(() => {
+    const previous = client.onCommandExecuted;
+    client.onCommandExecuted = (kind, accepted) => {
+      previous?.(kind, accepted);
+      if (accepted) useSimStore.getState().countCommand(kind);
+    };
+    return () => {
+      client.onCommandExecuted = previous;
+    };
+  }, [client]);
 
   // Space toggles between pause and the speed that was running before.
   const lastRunningSpeed = useRef(1);
@@ -212,21 +246,27 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
       const action = index.get(binding);
       if (action === undefined) return;
 
-      // Everything below this line is a binding the player put there, and no
-      // text field is focused - so the browser's own meaning of the key is
-      // never what was wanted.
-      event.preventDefault();
-
       /*
        * While an overlay is open the map belongs to the panel over it (M26).
        *
        * The world is visible and running behind a menu now, which is the
        * point - but a tool armed under a full-screen panel is a tool the
        * player cannot see and did not mean to arm, and the arrow keys belong
-       * to whatever list the panel is showing. Escape is deliberately not
-       * gated: it is the way back out.
+       * to whatever list the panel is showing. What stays live is what does
+       * not touch the map (`OVERLAY_SAFE_ACTIONS`): the clock, because the
+       * hint under the menu says the game keeps running, and the two keys that
+       * close the overlay they opened.
+       *
+       * The refusal happens BEFORE `preventDefault`, so a key this handler
+       * declines to act on keeps whatever meaning the browser gave it - inside
+       * an overlay that is a scrollable panel and a tab order.
        */
-      if (overlay !== null && action !== 'escape') return;
+      if (overlay !== null && !OVERLAY_SAFE_ACTIONS.has(action)) return;
+
+      // Everything below this line is a binding the player put there, no text
+      // field is focused, and the action is one this handler will really carry
+      // out - so the browser's own meaning of the key is never what was wanted.
+      event.preventDefault();
 
       // The camera keys, before everything else and never blocked by a
       // replay: looking around a recording is exactly as free as looking
@@ -576,9 +616,14 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
 
         Everything else follows from being a layer: the world is visible and
         still running behind the panel, so `ui.menu.hint` ("the game keeps
-        running") is finally true rather than a claim; the layout does not
-        jump; and the tutorial's build steps can be ticked off at all, because
-        there is a map underneath to build on.
+        running") is finally true rather than a claim, and the layout does not
+        jump.
+
+        What it deliberately does NOT do is let the player build through a
+        panel - the scrim swallows every click, which is the whole reason it is
+        there. So a tutorial lesson is still done by closing the panel and
+        building; what M26 changed is that the counts now survive that (the
+        store holds them), which is what makes the lesson finishable at all.
       */}
       {overlay !== null && (
         <div className="overlay">
@@ -609,7 +654,7 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
           )}
           {overlay === 'handbook' && <HandbookPanel onClose={() => setOverlay(null)} />}
           {overlay === 'tutorial' && (
-            <TutorialPanel client={client} onClose={() => setOverlay(null)} />
+            <TutorialPanel onClose={() => setOverlay(null)} />
           )}
         </div>
       )}

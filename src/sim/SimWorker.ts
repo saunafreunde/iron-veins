@@ -1084,14 +1084,20 @@ function adoptWorld(current: World, sink: SnapshotWriter): void {
    * world in which nothing moved, with no indication anywhere that it was
    * paused; the first impression of the game was a still image.
    *
-   * A replay is the exception and stays paused: the player opened a recording
-   * to look at it, the scrub bar is the instrument, and starting the playback
-   * under them takes the first game year away before they can reach for it.
-   * The workshop is paused too, by `SimClient.newGame` on the other side of
-   * the boundary (D-241) - that is control traffic and arrives right after
-   * this.
+   * TWO worlds are the exception and stay paused, and both are asked HERE
+   * rather than from the other side of the boundary.
+   *
+   * A replay: the player opened a recording to look at it, the scrub bar is
+   * the instrument, and starting the playback under them takes the first game
+   * year away before they can reach for it.
+   *
+   * A workshop world: an author is placing towns, not running an economy.
+   * `SimClient.newGame` sends a `setSpeed(0)` for it (D-241) and that is a
+   * RACE rather than a guarantee - the message arrives after this line, and it
+   * is sent only on a NEW workshop world, never on a LOADED one. The rule is
+   * saved and hashed state, so the world itself is the honest place to ask.
    */
-  speedIndex = replay === null ? DEFAULT_SPEED_INDEX : 0;
+  speedIndex = replay === null && !current.editorMode ? DEFAULT_SPEED_INDEX : 0;
   accumulatorMs = 0;
   lastFrameMs = performance.now();
   windowStartMs = lastFrameMs;
@@ -1188,6 +1194,12 @@ async function runBenchmark(mapId: string): Promise<void> {
     const claims = measureBenchmarkWorld(built.world);
 
     adoptWorld(built.world, sink);
+    // Paused, as the note above this function promises. `adoptWorld` starts a
+    // world that arrives (D-266), and a benchmark world is the one kind that
+    // must not run on: the figures on the result screen describe the world at
+    // the tick the measurement ended, and a world still ticking behind them
+    // makes them a description of a moment that has passed.
+    speedIndex = 0;
     scope.postMessage({
       type: 'benchmarkResult',
       mapId: map.id,

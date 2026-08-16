@@ -16,6 +16,8 @@ import {
   rebindAction,
   resolveBindings,
   KEY_ACTIONS,
+  OVERLAY_SAFE_ACTIONS,
+  PAN_OF_ACTION,
   TOOL_OF_ACTION,
   type KeyActionId,
 } from '../../src/ui/keymap';
@@ -216,5 +218,48 @@ describe('the overrides in the settings file', () => {
     const settings = normaliseSettings({ keyBindings: { toolTrack: 'k', nonsense: 5 } });
     expect(settings.keyBindings).toEqual({ toolTrack: 'k' });
     expect(resolveBindings(settings.keyBindings).toolTrack).toBe('k');
+  });
+});
+
+/**
+ * What still works while a full-screen overlay is open (M26).
+ *
+ * The first cut of this gate was "everything except Escape" and it took four
+ * things away that a player needs precisely then: the clock, whose hint under
+ * the menu says the game keeps running, and F1/F2, whose handlers are toggles -
+ * so the key that opened the handbook could no longer close it. The set is
+ * asserted from BOTH sides here, because the defect was an over-broad refusal
+ * and only the "these must stay" half would have caught it.
+ */
+describe('the actions an overlay leaves alive', () => {
+  it('keeps the clock and the two overlay toggles reachable', () => {
+    for (const id of ['escape', 'pause', 'speed1', 'speed2', 'speed3', 'speed4'] as const) {
+      expect(OVERLAY_SAFE_ACTIONS.has(id), `${id} must survive an open overlay`).toBe(true);
+    }
+    // The toggles: their handler closes the overlay it opened, so gating them
+    // makes that branch unreachable.
+    expect(OVERLAY_SAFE_ACTIONS.has('handbook')).toBe(true);
+    expect(OVERLAY_SAFE_ACTIONS.has('replays')).toBe(true);
+  });
+
+  it('refuses everything that would act on a map the player cannot see', () => {
+    for (const action of KEY_ACTIONS) {
+      if (OVERLAY_SAFE_ACTIONS.has(action.id)) continue;
+      const touchesMap =
+        TOOL_OF_ACTION[action.id] !== undefined ||
+        PAN_OF_ACTION[action.id] !== undefined ||
+        ['zoomIn', 'zoomOut', 'undo', 'redo', 'quickSave', 'quickLoad', 'debug', 'assistant',
+         'minimapMode', 'flowAtlas', 'heatmap', 'listVehicles', 'listLines', 'listStations',
+         'listTowns', 'listIndustries'].includes(action.id);
+      expect(touchesMap, `${action.id} is gated but is not a map action - is that right?`).toBe(
+        true,
+      );
+    }
+  });
+
+  it('names only actions this build has', () => {
+    for (const id of OVERLAY_SAFE_ACTIONS) {
+      expect(keyAction(id), `${id} is not an action`).toBeDefined();
+    }
   });
 });

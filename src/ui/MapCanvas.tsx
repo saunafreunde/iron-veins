@@ -244,6 +244,21 @@ export function MapCanvas({ client }: { readonly client: SimClient }): ReactElem
     };
     host.addEventListener('pointerup', notePointer);
 
+    /*
+     * A press anywhere ELSE forgets the map's last one.
+     *
+     * Without this, a refusal issued from a PANEL - buying a vehicle with no
+     * depot, say - would be pinned to whatever tile the player last clicked,
+     * which may be minutes old and half a map away. Null means "this did not
+     * happen anywhere in particular", and the message goes back to the centre.
+     * Capture phase, so it runs before the map's own handler on the way down.
+     */
+    const forgetPointer = (event: PointerEvent): void => {
+      if (event.target instanceof Node && host.contains(event.target)) return;
+      useSimStore.getState().setLastMapPointer(null);
+    };
+    window.addEventListener('pointerdown', forgetPointer, true);
+
     view.onHover = (tile) => {
       const state = useSimStore.getState();
       state.setHoveredTile(tile);
@@ -575,6 +590,7 @@ export function MapCanvas({ client }: { readonly client: SimClient }): ReactElem
     return () => {
       window.clearInterval(audioTimer);
       host.removeEventListener('pointerup', notePointer);
+      window.removeEventListener('pointerdown', forgetPointer, true);
       viewRef.current = null;
       useSimStore.getState().setCameraControl(null);
       view.dispose();

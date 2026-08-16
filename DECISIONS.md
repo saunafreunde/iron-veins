@@ -71,7 +71,7 @@ no entry below. A number may appear under several topics.
   D-126, D-148, D-165, D-166, D-177, D-179, D-180, D-181, D-182, D-183, D-184,
   D-186, D-187, D-189, D-191, D-192, D-193, D-194, D-195, D-196, D-200, D-202,
   D-210, D-241, D-242, D-247, D-254, D-255, D-258, D-259, D-260, D-263, D-265,
-  D-266, D-269, D-270
+  D-266, D-269, D-270, D-271
 - **Performance & measurement:** D-002, D-120, D-135, D-136, D-161, D-162,
   D-163, D-164, D-167, D-170, D-171, D-172, D-173, D-174, D-176, D-177, D-184,
   D-185, D-186, D-187, D-191, D-192, D-193, D-196, D-200, D-201, D-202, D-205,
@@ -18347,11 +18347,17 @@ over the app bar (10) and the tooltips (20) and under the end screen (40).
 closing the menu leaves the same canvas. Before this change the element did not
 exist while a menu was open.
 
-**Three things follow from it and none of them needed code of their own.**
+**Two things follow from it and neither needed code of its own.**
 `ui.menu.hint` ("Esc closes the menu again. The game keeps running.") is true
-for the first time - the world is visible behind the scrim. The layout stops
-jumping. And the tutorial's build steps can be ticked off at all: the panel used
-to REPLACE the map, so "lay a road" was a step whose subject was not on screen.
+for the first time - the world is visible behind the scrim - and the layout
+stops jumping.
+
+**A third claim was made here and it was FALSE**, caught by the verification
+pass and corrected rather than left standing: this entry said the tutorial's
+build steps "can be ticked off at all" because there is now a map underneath.
+There is, but the scrim swallows every click by design, so nothing can be built
+through the panel. A lesson is done by closing it and building - and what makes
+that work is D-271's move of the counts into the store, not this bundle.
 
 **The scrim is what swallows the clicks**, and it has to: the map underneath is
 live, and a press that reached it through a menu would build. Two keyboard
@@ -18460,3 +18466,82 @@ message were verified by reading and by their pure halves, not on screen - the
 browser pane this was checked in runs with a hidden, zero-sized viewport, so no
 frame is drawn and the store never picks up a speed change. A human has to look
 at those two once.
+
+### D-271 What the M26 verification found, including a claim of its own that was false
+
+Four verifiers were set on the M26 diff with instructions to refute rather than
+confirm. They came back with twenty findings; these are the ones that survived
+being read against the code, and **three of them are defects M26 itself
+introduced**. This entry is the correction bundle.
+
+**The overlay keyboard gate was too broad, and the mistake is instructive.**
+D-265 wrote `if (overlay !== null && action !== 'escape') return;` - one line,
+and it took away four things a player needs precisely while a menu is up.
+The clock, whose hint under that very menu says the game keeps running. And F1
+and F2, whose handlers are TOGGLES: the key that opened the handbook could no
+longer close it, because the branch that closes it sits behind the gate that
+the open overlay had just shut. `OVERLAY_SAFE_ACTIONS` is the rule now, and the
+line it draws is what the action ACTS ON: pause, the four speeds and the two
+overlay keys touch no map, so they stay; tools, the camera, the lists, undo and
+the shelf would act on a world the player cannot see. It is asserted from BOTH
+sides in `keybindings.spec.ts`, because an over-broad refusal is invisible to a
+test that only checks that the gated things are gated.
+
+**`preventDefault` moved BELOW the gate.** It ran for every bound key, so a key
+this handler then declined to act on had already lost its browser meaning -
+inside an overlay, which is a scrollable panel with a tab order, that is the
+wrong answer twice over.
+
+**The tutorial could not be finished by any route, and D-265 claimed the
+opposite.** Ten of the twenty-two steps count COMMANDS; the panel covers the
+map and its scrim swallows every click by design; so the only way through a
+lesson is to close the panel, build, and open it again - and `counts` and
+`lessonIndex` were `useState` inside the panel, thrown away the moment it
+closed. The lesson was unfinishable in M9 and has been ever since. Both now
+live in the store. **D-265's sentence "the tutorial's build steps can be ticked
+off at all" is struck** and replaced with what is true: the map stays mounted
+and the renderer is no longer discarded. The verifier is right that a false
+sentence in the tree is worse than the defect it describes.
+
+**And D-270 turned that old defect into a new one.** `client.onCommandExecuted`
+is a single slot that `audioBridge` also wraps by capturing whatever was there
+and calling it. The tutorial panel did the same - and offering the tutorial at
+BOOT put it in the chain BEFORE the first gesture arms the audio, so it
+captured `null` and, on closing, restored `null` over the audio handler:
+**every command sound dead for the rest of the session**. The counter is
+installed once at application level now, where nothing unmounts it and the
+chain only ever grows.
+
+**Two worlds were left running that must not run.** `adoptWorld` starts what
+arrives (D-266), and that reached two places it should not have. A LOADED
+workshop world: `SimClient.newGame` sends a `setSpeed(0)` for a new one (D-241),
+which is a race rather than a guarantee and never fires on a load at all - the
+rule is saved, hashed state, so the world itself is asked now. And the
+benchmark world, whose own doc comment three lines up promises it is left
+paused: a result screen describes the tick the measurement ended on, and a
+world ticking behind it makes those figures a description of a moment that has
+passed.
+
+**Three geometry defects in M26's own new interface.** `.workspace--map` had no
+`position`, so the pause band - and the zoom control of D-263 - were measured
+from the VIEWPORT and the band sat across the status bar; the minimap's offsets
+happened to survive it, which is why it was never noticed. `toastAnchorFor`
+clamped in fixed pixels while `.toast` is capped in rem, so at the 200 % scale
+of 17.4 the message hung off the edge - it takes the root font size now, and a
+test holds that doubling the scale doubles the inset. And its flip rule checked
+the lift alone rather than the room a message really needs above its anchor,
+where it grows upwards.
+
+**`lastMapPointer` was never cleared**, so a refusal issued from a PANEL - a
+vehicle bought with no depot - was pinned to whatever tile had last been
+clicked, possibly minutes old and half a map away. A press outside the map host
+sets it to null, and null means "this did not happen anywhere in particular",
+which is what the centred position is for.
+
+**Measured after the corrections**: unit suite **2,140** tests green in 154
+files, typecheck clean. Two failures seen during the pass were traced and are
+NOT in the tree: a verification agent of a concurrently running workflow had
+written a scratch spec into `tests/unit/` and deleted it mid-run, which took
+out both the file loader and the ESLint sweep. `git status` showed no such file
+afterwards. Said here because the next person to see a phantom spec should
+suspect the same thing rather than their own diff.

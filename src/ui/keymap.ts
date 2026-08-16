@@ -166,6 +166,32 @@ export const PAN_OF_ACTION: Readonly<Partial<Record<KeyActionId, readonly [numbe
 };
 
 /**
+ * The actions that still work while a full-screen overlay is open.
+ *
+ * The first cut of this rule was "everything except Escape", and it took four
+ * things away that a player needs precisely while a menu is up: the clock -
+ * whose hint under the menu SAYS the game keeps running - and the two keys
+ * that CLOSE the overlay they opened, F1 and F2, whose handlers are toggles
+ * and became unreachable the moment the overlay was open.
+ *
+ * The line is what the action ACTS ON. Nothing here touches the map: the four
+ * speeds and pause are control traffic (D-004), the two overlay keys move the
+ * interface, and Escape is the way out. Everything else - tools, the camera,
+ * the lists, undo, the shelf - would act on a world the player cannot see,
+ * under a panel that covers it.
+ */
+export const OVERLAY_SAFE_ACTIONS: ReadonlySet<KeyActionId> = new Set<KeyActionId>([
+  'escape',
+  'pause',
+  'speed1',
+  'speed2',
+  'speed3',
+  'speed4',
+  'handbook',
+  'replays',
+]);
+
+/**
  * Where the camera should be heading, given the pan keys that are DOWN.
  *
  * Normalised, or a diagonal would cross the map 1.41 times as fast as an edge -

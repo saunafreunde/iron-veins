@@ -12,14 +12,21 @@
  * corner.
  */
 
-/** Half the width a message is assumed to need, for clamping. [screen px] */
-const HALF_WIDTH_PX = 150;
+/**
+ * Half the width a message is assumed to need, in ROOT EM. [rem]
+ *
+ * `.toast` is capped at 22rem, so half of it is 11 - and rem rather than px
+ * because the accessibility scale of 17.4 moves the root font size. A fixed
+ * pixel clamp is right at 100 % and lets the message hang off the edge at
+ * 200 %, which is the scale a player who needs it is using.
+ */
+const HALF_WIDTH_REM = 11;
 
-/** How far above the click the message sits, clear of the cursor. [screen px] */
-const LIFT_PX = 18;
+/** How far above the click the message sits, clear of the cursor. [rem] */
+const LIFT_REM = 1.3;
 
-/** Space kept from the top edge, so the status bar never covers it. [screen px] */
-const TOP_MARGIN_PX = 56;
+/** Space kept from the top edge, so the status bar never covers it. [rem] */
+const TOP_MARGIN_REM = 4;
 
 export interface ToastAnchor {
   readonly left: number;
@@ -43,16 +50,26 @@ export function toastAnchorFor(
   y: number,
   viewportWidth: number,
   viewportHeight: number,
+  rootFontPx: number,
 ): ToastAnchor {
-  const min = HALF_WIDTH_PX;
-  const max = viewportWidth - HALF_WIDTH_PX;
+  const halfWidth = HALF_WIDTH_REM * rootFontPx;
+  const lift = LIFT_REM * rootFontPx;
+  const topMargin = TOP_MARGIN_REM * rootFontPx;
+
+  const min = halfWidth;
+  const max = viewportWidth - halfWidth;
   const left = max < min ? viewportWidth / 2 : Math.min(max, Math.max(min, x));
 
-  const above = y - LIFT_PX;
-  const below = above < TOP_MARGIN_PX;
-  const top = below
-    ? Math.min(viewportHeight - LIFT_PX, y + LIFT_PX * 2)
-    : Math.min(viewportHeight - LIFT_PX, above);
+  /*
+   * The message grows UPWARDS from its anchor (`translate(-50%, -100%)`), so
+   * the room that has to be checked above the click is a message's HEIGHT and
+   * not the lift alone - two lines of German at 200 % is a tall label, and a
+   * flip that only cleared the cursor would push its first line off the top of
+   * the window and under the status bar.
+   */
+  const above = y - lift;
+  const below = above - topMargin < 0;
+  const top = below ? Math.min(viewportHeight - lift, y + lift * 2) : Math.max(lift, above);
 
   return { left, top, below };
 }

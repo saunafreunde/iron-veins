@@ -1,43 +1,31 @@
-import { useEffect, useState, type ReactElement } from 'react';
+import type { ReactElement } from 'react';
 import { t } from '../i18n';
-import { LESSONS, type CommandCounts } from './tutorial';
-import type { SimClient } from './SimClient';
+import { LESSONS } from './tutorial';
 import { useSimStore } from './store';
 
 /**
  * The tutorial of section 17.5: five lessons, each a checklist that ticks
  * itself off as the player does the thing.
  *
- * It sits beside the game rather than in front of it. Every lesson is played
- * in the ordinary world with the ordinary tools, so nothing learned here has
- * to be unlearned - and the panel can be closed at any point without leaving
- * the player somewhere they cannot get out of.
+ * Every lesson is played in the ordinary world with the ordinary tools, so
+ * nothing learned here has to be unlearned.
+ *
+ * **The panel covers the map, so a lesson is done by CLOSING it and building.**
+ * Ten of the twenty-two steps count commands, and while this panel is up the
+ * scrim underneath it swallows every click (D-265) - so the intended way
+ * through a lesson is: read it, close it, build, open it again. That only
+ * works because neither the counts nor the chosen lesson live here any more
+ * (M26): they are in the store, and the counting is installed once at
+ * application level. They used to be `useState` in this component, which
+ * meant closing the panel threw both away and the ten steps could never be
+ * ticked by any route at all.
  */
-export function TutorialPanel({
-  client,
-  onClose,
-}: {
-  readonly client: SimClient;
-  readonly onClose: () => void;
-}): ReactElement {
+export function TutorialPanel({ onClose }: { readonly onClose: () => void }): ReactElement {
   useSimStore((s) => s.locale);
   const state = useSimStore((s) => s);
-  const [lessonIndex, setLessonIndex] = useState<number | null>(null);
-  const [counts, setCounts] = useState<CommandCounts>({});
-
-  // Commands are counted here rather than in the store: nothing else wants
-  // them, and a store field would re-render every panel on every build.
-  useEffect(() => {
-    const previous = client.onCommandExecuted;
-    client.onCommandExecuted = (kind, accepted) => {
-      previous?.(kind, accepted);
-      if (!accepted) return;
-      setCounts((current) => ({ ...current, [kind]: (current[kind] ?? 0) + 1 }));
-    };
-    return () => {
-      client.onCommandExecuted = previous;
-    };
-  }, [client]);
+  const lessonIndex = useSimStore((s) => s.tutorialLesson);
+  const counts = useSimStore((s) => s.tutorialCounts);
+  const setLessonIndex = useSimStore((s) => s.setTutorialLesson);
 
   if (lessonIndex === null) {
     return (
@@ -91,10 +79,7 @@ export function TutorialPanel({
         <button
           type="button"
           className="button"
-          onClick={() => {
-            setLessonIndex(null);
-            setCounts({});
-          }}
+          onClick={() => setLessonIndex(null)}
         >
           {t('ui.tutorial.back')}
         </button>
@@ -102,10 +87,7 @@ export function TutorialPanel({
           <button
             type="button"
             className="button"
-            onClick={() => {
-              setLessonIndex(lessonIndex + 1);
-              setCounts({});
-            }}
+            onClick={() => setLessonIndex(lessonIndex + 1)}
           >
             {t('ui.tutorial.next')}
           </button>
