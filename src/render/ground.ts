@@ -370,9 +370,16 @@ export function groundTopOutline(slope: number, bleed = GROUND_SEAM_BLEED_PX): P
 }
 
 /**
- * Height of the bilinear ground surface at (u, v) in tile space, in design px
- * of LIFT above the tile's own base plane - what a grain mark has to follow
- * so a furrow runs up a hillside instead of floating across it.
+ * Height of the BILINEAR ground surface at (u, v), in design px of lift.
+ *
+ * @deprecated for anything that has to sit ON the ground: this is not the
+ * surface the game draws. A tile is drawn as TWO triangles folded along the
+ * higher diagonal (`slopeFaces`), and a bilinear patch is a different surface -
+ * they agree at the four corners and along all four edges, and disagree in the
+ * middle by up to half a height step. Use {@link groundFoldLiftAt}. Kept
+ * because the bilinear form is still the right answer where a smooth field is
+ * wanted rather than the drawn one, and because deleting it would hide which
+ * of the two a caller meant.
  */
 export function groundLiftAt(slope: number, u: number, v: number): number {
   const north = (slope & CORNER_BIT[0]!) !== 0 ? HEIGHT_PX : 0;
@@ -382,9 +389,133 @@ export function groundLiftAt(slope: number, u: number, v: number): number {
   return north * (1 - u) * (1 - v) + east * u * (1 - v) + south * u * v + west * (1 - u) * v;
 }
 
+/**
+ * Height of the surface the game really DRAWS at (u, v), in design px of lift.
+ *
+ * Four planes, one per fold triangle, and the fold predicate is the very one
+ * `slopeFaces` lights the two triangles by - so "the surface" has exactly one
+ * definition in this file and it is the one on screen. That is what a road, a
+ * rail, a lamp post or a grain mark has to follow; anything that follows the
+ * bilinear patch instead floats above the drawn ridge by up to half a height
+ * step on the two diagonal slopes.
+ *
+ * The corners are `HEIGHT_PX` rather than `GROUND_HEIGHT_UNIT`: this answers in
+ * design px on the screen, where `cornerLift` answers in the world units the
+ * normal is solved in.
+ */
+export function groundFoldLiftAt(slope: number, u: number, v: number): number {
+  const north = (slope & CORNER_BIT[0]!) !== 0 ? HEIGHT_PX : 0;
+  const east = (slope & CORNER_BIT[1]!) !== 0 ? HEIGHT_PX : 0;
+  const south = (slope & CORNER_BIT[2]!) !== 0 ? HEIGHT_PX : 0;
+  const west = (slope & CORNER_BIT[3]!) !== 0 ? HEIGHT_PX : 0;
+
+  // The tile is (0,0) north, (1,0) east, (1,1) south, (0,1) west.
+  if (north + south >= east + west) {
+    // Folded along the north-south diagonal, u = v.
+    return u >= v
+      ? north + (east - north) * u + (south - east) * v // N, E, S
+      : north + (south - west) * u + (west - north) * v; // N, S, W
+  }
+  // Folded along the east-west diagonal, u + v = 1.
+  return u + v >= 1
+    ? east + (south - east) * v + (west - south) * (1 - u) // E, S, W
+    : north + (east - north) * u + (west - north) * v; // N, E, W
+}
+
+/**
+ * Which of the two fold triangles a point belongs to: 0 is the one
+ * `slopeFaces` shades as `first`, 1 the one it shades as `second`.
+ *
+ * A point exactly on the fold belongs to the first, which costs nothing: the
+ * two planes agree there by construction.
+ */
+export function groundFoldSideAt(slope: number, u: number, v: number): 0 | 1 {
+  const north = (slope & CORNER_BIT[0]!) !== 0 ? 1 : 0;
+  const east = (slope & CORNER_BIT[1]!) !== 0 ? 1 : 0;
+  const south = (slope & CORNER_BIT[2]!) !== 0 ? 1 : 0;
+  const west = (slope & CORNER_BIT[3]!) !== 0 ? 1 : 0;
+  if (north + south >= east + west) return u >= v ? 0 : 1;
+  return u + v >= 1 ? 0 : 1;
+}
+
+/**
+ * Whether a slope's top face is ONE plane - so a flat drawing of it can be
+ * carried onto the ground by an affine transform alone, with no fold.
+ *
+ * True for five of the sixteen: flat, and the four ramps whose two raised
+ * corners share an edge. `north + south === east + west` is the test, because
+ * that is exactly when the bilinear patch's cross term vanishes.
+ */
+export function groundSlopeIsPlanar(slope: number): boolean {
+  const north = (slope & CORNER_BIT[0]!) !== 0 ? 1 : 0;
+  const east = (slope & CORNER_BIT[1]!) !== 0 ? 1 : 0;
+  const south = (slope & CORNER_BIT[2]!) !== 0 ? 1 : 0;
+  const west = (slope & CORNER_BIT[3]!) !== 0 ? 1 : 0;
+  return north + south === east + west;
+}
+
 /** Screen position of a point of the tile surface, in design px around the centre. */
 export function groundSurfacePoint(slope: number, u: number, v: number): Point {
-  return [(u - v) * (TILE_W / 2), (u + v - 1) * (TILE_H / 2) - groundLiftAt(slope, u, v)];
+  return [(u - v) * (TILE_W / 2), (u + v - 1) * (TILE_H / 2) - groundFoldLiftAt(slope, u, v)];
+}
+
+/**
+ * The affine that carries the FLAT drawing of a tile onto one fold triangle of
+ * a slope: `y' = a*y + b*x + c`, with x unchanged.
+ *
+ * Solved from three points of the triangle through `groundSurfacePoint` rather
+ * than written out, so there is no second definition of the geometry to keep
+ * level with the first. x is untouched because the projection moves a point
+ * only in y: the two tile axes are (+32, +16) and (-32, +16) design px, and a
+ * lift subtracts from y alone.
+ *
+ * For a planar slope both sides answer the same triple, which is what makes
+ * the whole-sprite shear of those five slopes exact rather than approximate.
+ */
+export function groundSurfaceShear(slope: number, foldSide: 0 | 1): [number, number, number] {
+  /*
+   * The triangle's own three CORNERS, by the same index triples `slopeFaces`
+   * splits the quad with - so the affine is solved from the very triangle the
+   * renderer fills. Corners rather than interior points because three points
+   * inside a fold triangle are easy to pick collinear by accident (every point
+   * with u + v = 1 lies on one line, and the first draft of this function
+   * picked three of them, which made the determinant zero).
+   */
+  const north = (slope & CORNER_BIT[0]!) !== 0 ? 1 : 0;
+  const east = (slope & CORNER_BIT[1]!) !== 0 ? 1 : 0;
+  const south = (slope & CORNER_BIT[2]!) !== 0 ? 1 : 0;
+  const west = (slope & CORNER_BIT[3]!) !== 0 ? 1 : 0;
+  const indices: readonly number[] =
+    north + south >= east + west
+      ? foldSide === 0
+        ? [0, 1, 2]
+        : [0, 2, 3]
+      : foldSide === 0
+        ? [1, 2, 3]
+        : [1, 0, 3];
+  const probes = indices.map(
+    (corner) => [CORNER_U[corner]!, CORNER_V[corner]!] as readonly [number, number],
+  );
+
+  // Solve a, b, c from y' = a*y + b*x + c over the three (flat -> lifted) pairs.
+  const rows = probes.map((probe) => {
+    const flat = groundSurfacePoint(0, probe[0], probe[1]);
+    const lifted = groundSurfacePoint(slope, probe[0], probe[1]);
+    return { x: flat[0], y: flat[1], target: lifted[1] };
+  });
+
+  const [p, q, r] = rows as [(typeof rows)[0], (typeof rows)[0], (typeof rows)[0]];
+  const d1y = q.y - p.y;
+  const d1x = q.x - p.x;
+  const d2y = r.y - p.y;
+  const d2x = r.x - p.x;
+  const det = d1y * d2x - d2y * d1x;
+  const t1 = q.target - p.target;
+  const t2 = r.target - p.target;
+  const a = (t1 * d2x - t2 * d1x) / det;
+  const b = (d1y * t2 - d2y * t1) / det;
+  const c = p.target - a * p.y - b * p.x;
+  return [a, b, c];
 }
 
 /**

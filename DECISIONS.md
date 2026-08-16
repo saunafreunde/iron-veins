@@ -66,7 +66,8 @@ no entry below. A number may appear under several topics.
 - **Rendering & art:** D-013, D-014, D-033, D-035, D-112, D-117, D-125, D-127,
   D-136, D-140, D-160, D-161, D-162, D-163, D-164, D-165, D-166, D-169, D-170,
   D-171, D-172, D-173, D-174, D-175, D-177, D-179, D-186, D-202, D-205, D-206,
-  D-208, D-209, D-212, D-214, D-217, D-241, D-246, D-248, D-259, D-260, D-263
+  D-208, D-209, D-212, D-214, D-217, D-241, D-246, D-248, D-259, D-260, D-263,
+  D-272
 - **UI & input:** D-011, D-013, D-015, D-035, D-110, D-113, D-114, D-119,
   D-126, D-148, D-165, D-166, D-177, D-179, D-180, D-181, D-182, D-183, D-184,
   D-186, D-187, D-189, D-191, D-192, D-193, D-194, D-195, D-196, D-200, D-202,
@@ -18545,3 +18546,94 @@ written a scratch spec into `tests/unit/` and deleted it mid-run, which took
 out both the file loader and the ESLint sweep. `git status` showed no such file
 afterwards. Said here because the next person to see a phantom spec should
 suspect the same thing rather than their own diff.
+
+## M27 - a road that lies on the ground (2026-08-16)
+
+### D-272 One ground surface, and it is the one on screen
+
+The owner reported that roads do not line up with the terrain. They do not, and
+the measurement is worse than the report: **only the flat slope is drawn
+correctly - 15 of the 225 combinations that really occur, 6.7 %.** A road cell
+is keyed by its four connection bits and nothing else, so it is drawn flat; and
+it is placed at `baseHeight`, the LOWEST of the tile's four corners. On a slope
+it therefore sits up to a whole height step (16 design px, 8 m) UNDER the
+surface it is meant to lie on, and shows at all only because the road layer is
+painted after the ground.
+
+**The precondition was a defect nobody had reported.** `groundLiftAt` answers
+for a BILINEAR patch, and the game draws two triangles folded along the higher
+diagonal (`slopeFaces`, D-214). Those are different surfaces: they agree at the
+four corners and along all four edges, and disagree in the middle by up to half
+a height step. Everything that had to sit on the ground was being placed against
+a surface the game does not draw - including the terrain's own grain marks,
+which have been up to 8 px off since D-214. `groundFoldLiftAt` is the drawn one,
+derived from the very fold predicate `slopeFaces` splits the quad with;
+`groundSurfacePoint` reads it now, and `groundLiftAt` survives as the bilinear
+form with a `@deprecated` note naming which is which.
+
+**Two findings from writing the proof, both worth keeping.** The tile centre is
+the RIDGE - `max(n+s, e+w)/2` - never the average of the four corners, which is
+what the bilinear patch answers and what put a crossing half a height step under
+its own ground. And **exactly two screen triangles in the whole game are seen
+edge-on**: the valley face of slopes 10 and 14, where the east and west corners
+are up and the north corner is not. The two tile axes project to (+32, +16) and
+(-32, +16) and a raised corner subtracts a full 16 from y, so on that face both
+axes come out horizontal and the triangle collapses to a line. The renderer
+fills a zero-area polygon there, which is right - there is nothing of that face
+to see - but any code that inverts the projection per triangle has to expect a
+singular one, and `groundFold.spec.ts` pins both.
+
+**The cure costs no atlas cell**, which is what decided it against the two
+alternatives. A baked key of `r${roadBits}:${slope}` needs at least 84 cells
+after symmetry, and the detail page stands at exactly 4096x4096 with nine free
+short slots - so it forces a second page at +33 MiB for the slim variant and
++82 MiB for the dense one, to repair 14 % of the road tiles of a 1024 map.
+**D-212's own estimate of "65 new cells and a new atlas page" is superseded**:
+the floor is 84, not 65 - the vertical mirror and the half turn are not
+symmetries here, because `slopeAt` normalises against the tile's own minimum and
+every lift is therefore non-negative - and the page that overflows is the DETAIL
+page, not the base one, which has 1920 px of width in reserve.
+
+Instead the flat drawing is CARRIED onto the ground by an affine.
+`groundSurfaceShear` solves `y' = a*y + b*x + c` from three corners of the
+wanted fold triangle, through `groundSurfacePoint` itself, so there is no second
+geometry to keep level. x is untouched because a lift subtracts from y alone.
+A Sprite has no matrix, so it is expressed through Pixi's own decomposition -
+`skew.y = atan(b)`, `scaleX *= hypot(1, b)`, `scaleY *= a` - and that this
+really composes to `[1, b, 0, a]` is pinned in `roadShear.spec.ts` against
+Pixi's documented composition rather than trusted.
+
+**Rail is fixed on ALL fifteen slopes, not just the planar ones**, and the
+reason is that a track cell is already ONE arm: each half segment runs from the
+tile centre to an edge midpoint or a corner, and every one of those lies wholly
+inside one fold triangle - the axis arms touch the fold only at their far end,
+the diagonal arms run exactly along it. Walked at 25 points per arm over all
+eight directions and all fifteen slopes. The road cannot do this yet only
+because its cell draws all four arms at once, which is what the second half of
+M27 is for.
+
+**Roads are sheared on the five PLANAR slopes** (flat, and the four ramps whose
+raised corners share an edge), where the top face is one plane and the affine is
+exact. The ten folded slopes keep the old flat placement rather than a wrong
+shear - a partial fix that is honest about which half it is.
+
+**The pool leak this introduces has one line and its own test.** A sheared
+sprite goes back into the pool; `place` now resets `skew.y`, because `scale.set`
+covers both axes and a left-over skew would ride into the next borrower of that
+slot, across terrain, trees, buildings and vehicles alike.
+
+**Measured**: main chunk 1,088,141 -> **1,090,082 B** against the 1,094,000 B
+budget, 3,918 B left. Unit suite 2,140 -> **2,156** tests in 156 files.
+Zero atlas cells, zero pages, zero MiB, no SPEC2 6.2 booking; both atlas layout
+pins green and untouched. No sim byte, no save bump, no hash: the whole change
+is in `src/render`.
+
+**What is not done and is named rather than implied**: the ten folded slopes for
+roads (M27's second half, two textured triangles per tile through
+`Graphics.poly().fill`), the point riders that have the same disease - street
+lamps, signal posts, waypoints and catenary masts all compute their position
+with the flat formula - and the frame-time measurement, which this repository
+structurally cannot take: `render.perf.spec.ts` says of itself that it is a
+Pixi-free proxy and cannot see sprite-pool churn inside Pixi. The owner has
+agreed to measure a sixty-second pan at zooms 1, 2 and 4 once the second half
+lands.

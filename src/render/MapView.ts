@@ -385,6 +385,7 @@ import {
   buildDetailAtlas,
   buildTerrainAtlas,
   DETAIL_ATLAS_SCALE,
+  TRACK_DELTA,
   emissiveBuildingFrame,
   emissiveIndustryFrame,
   foamAtlasFrame,
@@ -394,7 +395,12 @@ import {
   type TerrainAtlas,
 } from './TerrainAtlas';
 import { CATENARY_RAIL_TYPE, catenaryMastOffset } from './catenary';
-import { groundValueTint } from './ground';
+import {
+  groundFoldSideAt,
+  groundSlopeIsPlanar,
+  groundSurfaceShear,
+  groundValueTint,
+} from './ground';
 import { collectClaimedBlocks, SIGNAL_ASPECT_TINTS, signalAspect } from './signalAspects';
 import {
   EMISSIVE_MAX_ALPHA,
@@ -3076,6 +3082,10 @@ export class MapView {
     // alpha must never leak onto ordinary world art.
     sprite.blendMode = 'normal';
     sprite.alpha = 1;
+    // And the shear of M27's sloped road and rail: `scale.set` above covers
+    // both axes, but a skew left behind would ride into the next borrower of
+    // this pool slot - across terrain, trees, buildings and vehicles alike.
+    sprite.skew.y = 0;
     // The drawOrder key of section 16.1. Insertion already runs along the
     // diagonals, but only the key orders heights within a diagonal and sorts
     // the vehicles in - and Pixi's zIndex setter is change-detected, so a
@@ -3087,6 +3097,54 @@ export class MapView {
     // agreement between two files, and it broke the moment the atlas grew
     // headroom for a chimney.
     sprite.position.set(worldX - TILE_W / 2, worldY - handle.anchorPx);
+  }
+
+  /**
+   * Place a cell SHEARED onto a sloped tile surface (M27).
+   *
+   * Everything `place` does, plus the affine `y' = a*y + b*x + c` that carries
+   * the flat drawing onto one plane of the ground - solved once per slope by
+   * `groundSurfaceShear` from the very geometry the terrain is drawn with, so
+   * there is no second definition to keep level.
+   *
+   * The transform is expressed through Pixi's own decomposition rather than a
+   * matrix, because a Sprite has no matrix of its own: `skew.y = atan(b)`
+   * tilts the vertical axis, and the two scales then correct the length that
+   * the tilt stretched (`hypot(1, b)`) and apply the vertical squash `a`. That
+   * this really composes to `[1, b, 0, a]` is pinned in `roadShear.spec.ts`
+   * rather than trusted.
+   *
+   * The rotation point is the tile CENTRE, not the sprite's top-left corner:
+   * the affine is defined about the middle of the tile, and shearing about a
+   * corner would slide the whole cell sideways by up to half a tile.
+   */
+  private placeSheared(
+    sprite: Sprite,
+    handle: FrameHandle,
+    worldX: number,
+    worldY: number,
+    zIndex: number,
+    shear: readonly [number, number, number],
+  ): void {
+    this.place(sprite, handle, worldX, worldY, zIndex);
+    const [a, b, c] = shear;
+    if (a === 1 && b === 0 && c === 0) return;
+
+    /*
+     * Pixi composes (rotation 0, skewX 0, skewY t, scaleX sx, scaleY sy) into
+     * the matrix [cos(t)*sx, sin(t)*sx, 0, sy]. With t = atan(b) that is
+     * [sx/hypot(1,b), sx*b/hypot(1,b), 0, sy] - so the stretch in sx is exactly
+     * cancelled by the cosine in the x row, and what survives is [1, b, 0, a]
+     * times the page scale. The x axis is therefore UNSCALED by the shear, and
+     * the translation on it is the same one `place` uses.
+     */
+    const stretch = Math.hypot(1, b);
+    sprite.skew.y = Math.atan(b);
+    sprite.scale.set(handle.invScale * stretch, handle.invScale * a);
+    // Where the tile centre sits inside the cell, in design px.
+    const localX = TILE_W / 2;
+    const localY = handle.anchorPx;
+    sprite.position.set(worldX - localX, worldY + c - a * localY - b * localX);
   }
 
   /**
@@ -3351,13 +3409,37 @@ export class MapView {
 
         const roadBits = map.roadBits[index]!;
         if (roadBits !== 0) {
-          this.place(
-            this.take(used++),
-            this.frameTexture(page, `r${roadBits}`, atlas.roadFrame(roadBits)),
-            world.x,
-            world.y,
-            drawOrder(x, y, height, DrawLayer.Road),
-          );
+          /*
+           * A road lies ON the ground, not beside it (M27).
+           *
+           * The cell is keyed by the four connection bits and nothing else, so
+           * it is drawn flat - and it is placed at `baseHeight`, the LOWEST of
+           * the tile's four corners. On a slope it therefore sat up to a whole
+           * height step under the surface it is meant to be lying on, and only
+           * showed at all because the road layer is painted after the ground.
+           *
+           * For the five planar slopes the fix is exact and costs nothing: the
+           * top face is ONE plane, so the flat drawing reaches it through an
+           * affine, which is a shear of the sprite that is already there. The
+           * ten folded slopes need two triangles and are M27's second half;
+           * until then they keep the old flat placement rather than a wrong
+           * shear.
+           */
+          const roadSlope = map.slopeAt(x, y);
+          const roadFrame = this.frameTexture(page, `r${roadBits}`, atlas.roadFrame(roadBits));
+          const roadOrder = drawOrder(x, y, height, DrawLayer.Road);
+          if (groundSlopeIsPlanar(roadSlope)) {
+            this.placeSheared(
+              this.take(used++),
+              roadFrame,
+              world.x,
+              world.y,
+              roadOrder,
+              groundSurfaceShear(roadSlope, 0),
+            );
+          } else {
+            this.place(this.take(used++), roadFrame, world.x, world.y, roadOrder);
+          }
           // Street lamp (M13): a warm additive pool on every second town
           // road tile, ramped by the night intensity. Country roads stay
           // dark - lit streets are what make a town a town at night.
@@ -3372,14 +3454,34 @@ export class MapView {
         // Track is composited from one half segment per connected direction.
         const trackBits = map.trackBits[index]!;
         if (trackBits !== 0) {
+          /*
+           * And rail is sheared onto the ground for EVERY slope (M27), not
+           * just the planar ones - because a track cell is already one arm.
+           *
+           * Each half segment runs from the tile centre to an edge midpoint or
+           * to a corner, and every one of those lies wholly inside ONE of the
+           * two fold triangles: the axis arms touch the fold only at their
+           * endpoint, and the diagonal arms run exactly along it. So the arm
+           * has a single plane to lie in, and an affine puts it there exactly.
+           * The road cannot do this yet only because its cell draws all four
+           * arms at once.
+           */
+          const trackSlope = map.slopeAt(x, y);
           for (let direction = 0; direction < 8; direction++) {
             if ((trackBits & (1 << direction)) === 0) continue;
-            this.place(
+            const frame = this.frameTexture(page, `k${direction}`, atlas.trackFrame(direction));
+            const order = drawOrder(x, y, height, DrawLayer.Track);
+            const delta = TRACK_DELTA[direction]!;
+            // The MIDPOINT of the arm decides its side: the arm reaches half a
+            // tile step, so its middle is a quarter step from the centre.
+            const side = groundFoldSideAt(trackSlope, 0.5 + delta[0] / 4, 0.5 + delta[1] / 4);
+            this.placeSheared(
               this.take(used++),
-              this.frameTexture(page, `k${direction}`, atlas.trackFrame(direction)),
+              frame,
               world.x,
               world.y,
-              drawOrder(x, y, height, DrawLayer.Track),
+              order,
+              groundSurfaceShear(trackSlope, side),
             );
           }
           // Catenary (M13 B5): wire hints over every connected direction
@@ -4226,13 +4328,23 @@ export class MapView {
 
         const roadBits = map.roadBits[index]!;
         if (roadBits !== 0) {
-          this.place(
-            this.bakeTake(used++),
-            this.frameTexture(page, `r${roadBits}`, atlas.roadFrame(roadBits)),
-            world.x,
-            world.y,
-            drawOrder(x, y, height, DrawLayer.Road),
-          );
+          // The same shear as the live path (M27). It has to be the same, or
+          // zoom 0.5 and zoom 1 are two different worlds.
+          const roadSlope = map.slopeAt(x, y);
+          const roadFrame = this.frameTexture(page, `r${roadBits}`, atlas.roadFrame(roadBits));
+          const roadOrder = drawOrder(x, y, height, DrawLayer.Road);
+          if (groundSlopeIsPlanar(roadSlope)) {
+            this.placeSheared(
+              this.bakeTake(used++),
+              roadFrame,
+              world.x,
+              world.y,
+              roadOrder,
+              groundSurfaceShear(roadSlope, 0),
+            );
+          } else {
+            this.place(this.bakeTake(used++), roadFrame, world.x, world.y, roadOrder);
+          }
           if (bakeEmissive && this.lampTexture !== null && map.townId[index]! >= 0) {
             const lamp = lampOffsetForRoadTile(x, y, roadBits);
             if (lamp !== null) {
@@ -4251,14 +4363,20 @@ export class MapView {
 
         const trackBits = map.trackBits[index]!;
         if (trackBits !== 0) {
+          // Sheared onto the ground exactly as on the live path (M27) - a
+          // baked chunk and a live tile have to be the same picture.
+          const trackSlope = map.slopeAt(x, y);
           for (let direction = 0; direction < 8; direction++) {
             if ((trackBits & (1 << direction)) === 0) continue;
-            this.place(
+            const delta = TRACK_DELTA[direction]!;
+            const side = groundFoldSideAt(trackSlope, 0.5 + delta[0] / 4, 0.5 + delta[1] / 4);
+            this.placeSheared(
               this.bakeTake(used++),
               this.frameTexture(page, `k${direction}`, atlas.trackFrame(direction)),
               world.x,
               world.y,
               drawOrder(x, y, height, DrawLayer.Track),
+              groundSurfaceShear(trackSlope, side),
             );
           }
           // Catenary in the bake (M13 B5): the same wires and masts as the

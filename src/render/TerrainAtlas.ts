@@ -1062,8 +1062,14 @@ const BOX_SPRITES = [
   { key: 'signal', column: SIGNAL_COLUMN, widthTiles: 0.12, heightPx: 14, colour: '#d8d4cc' },
 ] as const;
 
-/** Tile-space offsets of the eight track directions, clockwise from east. */
-const TRACK_DELTA: ReadonlyArray<readonly [number, number]> = [
+/**
+ * Tile-space offsets of the eight track directions, clockwise from east.
+ *
+ * Exported since M27: `MapView` needs the direction an arm runs in to decide
+ * which of a folded tile's two planes it lies on, and a second copy of this
+ * table over there would be a second answer to which way east is.
+ */
+export const TRACK_DELTA: ReadonlyArray<readonly [number, number]> = [
   [1, 0],
   [1, 1],
   [0, 1],
