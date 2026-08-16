@@ -34,6 +34,23 @@ import { EDITOR_DEFAULT_BRUSH_RADIUS, type EditorTool } from './editor/tools';
 import type { EditorOverlay } from './editor/overlays';
 
 /**
+ * The camera controls the interface may reach, wired to the live `MapView`.
+ *
+ * Three verbs and no state: where the camera IS travels the other way, through
+ * `camera`, which the view publishes when it moved (D-166). Keeping the
+ * direction of that flow one-way is what stops a slider and a wheel disagreeing
+ * about the zoom.
+ */
+export interface CameraControl {
+  /** Hold the camera moving at this screen-space velocity; (0, 0) stops it. */
+  readonly pan: (x: number, y: number) => void;
+  /** Zoom by whole steps about the centre of the screen. */
+  readonly zoomBy: (steps: number) => void;
+  /** Go to a step of `ZOOM_LEVELS`. */
+  readonly setZoomStep: (step: number) => void;
+}
+
+/**
  * What a benchmark run reported (SPEC2 M22) - the worker's own message, minus
  * its `type` tag.
  *
@@ -500,6 +517,15 @@ export interface SimUiState extends SnapshotValues {
   /** Wired to the map view so a list row can jump to what it names. */
   centreOnTile: (x: number, y: number) => void;
   setCentreOnTile: (centre: (x: number, y: number) => void) => void;
+  /**
+   * The camera's own controls, wired to the live map view (null before it
+   * mounts). The camera is the VIEW's state and this is a handle to it rather
+   * than a copy of it - a second writable copy in the store would be a second
+   * answer to where the camera is, and the minimap already reads the one the
+   * view publishes through `camera` (D-166).
+   */
+  cameraControl: CameraControl | null;
+  setCameraControl: (control: CameraControl | null) => void;
   setFleet: (vehicles: readonly VehicleMarker[]) => void;
   setSelectedVehicle: (id: number | null) => void;
   setFollowVehicle: (id: number | null) => void;
@@ -779,6 +805,8 @@ export const useSimStore = create<SimUiState>((set) => ({
   toggleList: (list) => set((state) => ({ openList: state.openList === list ? null : list })),
   centreOnTile: () => undefined,
   setCentreOnTile: (centreOnTile) => set({ centreOnTile }),
+  cameraControl: null,
+  setCameraControl: (cameraControl) => set({ cameraControl }),
   setTrackPreview: (preview) => set({ trackPreview: preview }),
   setRoadStopPreview: (preview) => set({ roadStopPreview: preview }),
   setConnectAnchor: (connectAnchor) =>

@@ -27,7 +27,15 @@ import { ScenarioBrowser } from './ScenarioBrowser';
 import { StoredCrashNotice } from './StoredCrashNotice';
 import { TutorialPanel } from './TutorialPanel';
 import { bindingFromEvent } from '../shared/keybindings';
-import { bindingIndex, resolveBindings, TOOL_OF_ACTION } from './keymap';
+import {
+  bindingIndex,
+  panVector,
+  PAN_OF_ACTION,
+  resolveBindings,
+  TOOL_OF_ACTION,
+  type KeyActionId,
+} from './keymap';
+import { ZoomControl } from './ZoomControl';
 import { quickLoad } from './saves';
 import { updateSettings } from './settings';
 import { MapCanvas } from './MapCanvas';
@@ -147,6 +155,19 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
     // application, so the resolve does not: it is a map lookup per press.
     const index = bindingIndex(resolveBindings(keyBindings));
 
+    /**
+     * The pan keys currently down.
+     *
+     * A pan key is the only kind whose RELEASE means something, so it is the
+     * only kind this handler has to remember. The set is what makes two keys
+     * at once a diagonal rather than whichever one was pressed last.
+     */
+    const heldPan = new Set<KeyActionId>();
+    const steerCamera = (): void => {
+      const [x, y] = panVector(heldPan);
+      useSimStore.getState().cameraControl?.pan(x, y);
+    };
+
     const onKeyDown = (event: KeyboardEvent): void => {
       const target = event.target;
       if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return;
@@ -160,6 +181,23 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
       // text field is focused - so the browser's own meaning of the key is
       // never what was wanted.
       event.preventDefault();
+
+      // The camera keys, before everything else and never blocked by a
+      // replay: looking around a recording is exactly as free as looking
+      // around a game (D-189's own sentence about the camera).
+      if (PAN_OF_ACTION[action] !== undefined) {
+        // `repeat` is the operating system's auto-repeat, which this handler
+        // wants none of - the velocity is already held.
+        if (!event.repeat) {
+          heldPan.add(action);
+          steerCamera();
+        }
+        return;
+      }
+      if (action === 'zoomIn' || action === 'zoomOut') {
+        useSimStore.getState().cameraControl?.zoomBy(action === 'zoomIn' ? 1 : -1);
+        return;
+      }
 
       // A build tool the scheme assigns a letter to. Not while a recording is
       // playing: arming a tool that cannot build anything is an invitation to
@@ -267,8 +305,33 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
           return;
       }
     };
+    const onKeyUp = (event: KeyboardEvent): void => {
+      const binding = bindingFromEvent(event);
+      if (binding === null) return;
+      const action = index.get(binding);
+      if (action === undefined || !heldPan.delete(action)) return;
+      steerCamera();
+    };
+
+    /**
+     * A key held while the window goes away never reports its release, and the
+     * camera would slide for ever behind whatever the player switched to.
+     */
+    const onBlur = (): void => {
+      if (heldPan.size === 0) return;
+      heldPan.clear();
+      steerCamera();
+    };
+
     window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    window.addEventListener('blur', onBlur);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('blur', onBlur);
+      onBlur();
+    };
   }, [
     client,
     keyBindings,
@@ -405,6 +468,10 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
       {ready ? (
         <main className="workspace workspace--map">
           <MapCanvas client={client} />
+          {/* The camera's own controls, over the map and out of the sidebar's
+              way: the zoom is a property of what the player is looking at,
+              not a setting on a panel. */}
+          <ZoomControl />
           <Minimap />
           <aside className="sidebar">
             {/* While a recording plays the sidebar IS the playback bar. Every

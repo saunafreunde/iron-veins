@@ -503,6 +503,14 @@ export function MapCanvas({ client }: { readonly client: SimClient }): ReactElem
 
     // A list row jumps to what it names (section 17.1).
     useSimStore.getState().setCentreOnTile((x, y) => view.centreOnTile(x, y));
+    // The camera controls the keyboard and the zoom slider reach. Wired here
+    // with everything else the view publishes, and torn down with the view -
+    // a handle to a disposed renderer is a handle that draws nothing.
+    useSimStore.getState().setCameraControl({
+      pan: (x, y) => view.setPanVelocity(x, y),
+      zoomBy: (steps) => view.zoomBy(steps),
+      setZoomStep: (step) => view.setZoomStep(step),
+    });
     // The minimap's viewport outline follows the camera (SPEC2 M12). The
     // view publishes only when the camera actually moved, so an idle game
     // writes nothing into the store.
@@ -553,6 +561,7 @@ export function MapCanvas({ client }: { readonly client: SimClient }): ReactElem
     return () => {
       window.clearInterval(audioTimer);
       viewRef.current = null;
+      useSimStore.getState().setCameraControl(null);
       view.dispose();
     };
   }, [client]);

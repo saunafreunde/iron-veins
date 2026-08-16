@@ -13,3 +13,5 @@ public/assets-baked/
 # `npm run attribution` at build time, so committing it would commit a derived
 # file that goes stale at the next install.
 public/THIRD-PARTY.txt
+
+.vercel

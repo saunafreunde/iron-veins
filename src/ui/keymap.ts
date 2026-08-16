@@ -21,6 +21,12 @@ import type { Tool } from './store';
 
 /** Every action a key can reach. The id is what the settings file stores. */
 export type KeyActionId =
+  | 'panUp'
+  | 'panDown'
+  | 'panLeft'
+  | 'panRight'
+  | 'zoomIn'
+  | 'zoomOut'
   | 'pause'
   | 'speed1'
   | 'speed2'
@@ -75,6 +81,19 @@ export interface KeyAction {
  */
 export const KEY_ACTIONS: readonly KeyAction[] = [
   { id: 'escape', defaultBinding: 'Escape', descriptionKey: 'ui.key.escape', fixed: true },
+  // The camera comes first in the table because it is the first thing a player
+  // does, and because it was the one thing section 17.2 never gave a key: the
+  // map could be moved with the right mouse button and the minimap and by
+  // nothing else, which reads as a map that cannot be moved.
+  { id: 'panUp', defaultBinding: 'ArrowUp', descriptionKey: 'ui.key.panUp' },
+  { id: 'panDown', defaultBinding: 'ArrowDown', descriptionKey: 'ui.key.panDown' },
+  { id: 'panLeft', defaultBinding: 'ArrowLeft', descriptionKey: 'ui.key.panLeft' },
+  { id: 'panRight', defaultBinding: 'ArrowRight', descriptionKey: 'ui.key.panRight' },
+  // Plus and minus, which are one unshifted key each on a German keyboard and
+  // reachable through Shift on the layouts where they are not - Shift is not
+  // part of a binding, so both arrive as the same character (keybindings.ts).
+  { id: 'zoomIn', defaultBinding: '+', descriptionKey: 'ui.key.zoomIn' },
+  { id: 'zoomOut', defaultBinding: '-', descriptionKey: 'ui.key.zoomOut' },
   { id: 'pause', defaultBinding: 'Space', descriptionKey: 'ui.key.pause' },
   // The four speeds of 17.2 are four actions rather than one row reading
   // "1 - 4": a row that stands for four keys is a row a rebinding screen
@@ -131,6 +150,45 @@ export const KEY_ACTIONS: readonly KeyAction[] = [
  * depends on the mode that is active, which is why the store, not this table,
  * decides what "road" means once it is armed.
  */
+/**
+ * Which way a pan action pushes the camera, as a unit vector in SCREEN space.
+ *
+ * A table rather than a switch, for the reason every other table in this file
+ * is one: the handler has to know which actions are HELD - a pan key is the
+ * only kind whose release means something - and asking this map is the same
+ * question the key-up handler needs to ask.
+ */
+export const PAN_OF_ACTION: Readonly<Partial<Record<KeyActionId, readonly [number, number]>>> = {
+  panUp: [0, -1],
+  panDown: [0, 1],
+  panLeft: [-1, 0],
+  panRight: [1, 0],
+};
+
+/**
+ * Where the camera should be heading, given the pan keys that are DOWN.
+ *
+ * Normalised, or a diagonal would cross the map 1.41 times as fast as an edge -
+ * the classic bug of eight-way movement. Two opposite keys cancel to a standing
+ * camera rather than to whichever was pressed last, which is what a player who
+ * is holding both expects.
+ *
+ * A pure function so the arithmetic is a test rather than something somebody
+ * has to feel out with four fingers on a keyboard.
+ */
+export function panVector(held: Iterable<KeyActionId>): readonly [number, number] {
+  let x = 0;
+  let y = 0;
+  for (const action of held) {
+    const direction = PAN_OF_ACTION[action];
+    if (direction === undefined) continue;
+    x += direction[0];
+    y += direction[1];
+  }
+  const length = Math.hypot(x, y);
+  return length === 0 ? [0, 0] : [x / length, y / length];
+}
+
 export const TOOL_OF_ACTION: Readonly<Partial<Record<KeyActionId, Tool>>> = {
   toolTrack: 'track',
   toolRoad: 'road',

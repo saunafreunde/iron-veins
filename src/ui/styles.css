@@ -908,6 +908,42 @@ body {
 }
 
 /* The overview map of section 17.1, bottom right over the map canvas. */
+/* The zoom control sits in the map's free corner - bottom left, opposite the
+   minimap, which is pushed left by the sidebar. */
+.zoomctl {
+  position: absolute;
+  left: var(--gap);
+  bottom: var(--gap);
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--card) 92%, transparent);
+}
+
+.zoomctl__button {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.zoomctl__slider {
+  width: 120px;
+  accent-color: var(--accent);
+}
+
+.zoomctl__value {
+  min-width: 3.5em;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: var(--muted);
+}
+
 .minimap {
   position: absolute;
   right: calc(23rem + var(--gap));

@@ -549,6 +549,27 @@ let labelFontInstalled = false;
 export const ZOOM_LEVELS = [0.25, 0.5, 1, 2, 4] as const;
 export const DEFAULT_ZOOM_INDEX = 2;
 
+/**
+ * How far a press may travel and still count as a CLICK. [screen px]
+ *
+ * The left button does two jobs now - drag the map, click to build - so
+ * something has to tell them apart, and that something is this radius plus the
+ * RELEASE: a build fires on `pointerup` when the pointer never left it. Four
+ * pixels rather than one, because a hand that is only pressing still moves the
+ * mouse a little, and a road that started one tile off because of that is the
+ * frustration section 17.3 exists to prevent.
+ */
+const CLICK_SLOP_PX = 4;
+
+/**
+ * How fast a held pan key moves the camera. [screen px per second]
+ *
+ * In SCREEN pixels, so the map slides at the same speed whatever the zoom -
+ * a camera that crossed twice as much world at 0.5x would feel like two
+ * different controls. Roughly a screen width every two seconds at 1080p.
+ */
+const KEY_PAN_SPEED_PX_PER_S = 900;
+
 /** Extra tiles drawn beyond the viewport, covering tall ground at the edges. */
 const CULL_MARGIN = MAX_HEIGHT + 4;
 
@@ -914,6 +935,9 @@ export class MapView {
   private industries: readonly IndustryMarker[] = [];
 
   private zoomIndex = DEFAULT_ZOOM_INDEX;
+  /** Held-key camera motion, in screen px per second (see `setPanVelocity`). */
+  private panVX = 0;
+  private panVY = 0;
   private centreX = 0;
   private centreY = 0;
 
@@ -1966,36 +1990,49 @@ export class MapView {
   // ------------------------------------------------------------------ input
 
   private installInput(canvas: HTMLCanvasElement): void {
-    let panning = false;
+    /**
+     * The button that is dragging the map, or -1.
+     *
+     * Every button pans. The left one is the finding rather than a preference:
+     * it used to be reserved for building, so the only ways to move the camera
+     * were the right button, the middle button and the minimap - and a player
+     * who tries the obvious thing first concludes the map cannot be moved at
+     * all. What keeps building exact is `CLICK_SLOP_PX` plus firing on the
+     * RELEASE.
+     */
+    let panButton = -1;
     let lastX = 0;
     let lastY = 0;
+    /** Where the left press started, and whether it has left the slop yet. */
+    let pressX = 0;
+    let pressY = 0;
+    let dragged = false;
 
     canvas.addEventListener('contextmenu', (event) => event.preventDefault());
 
     canvas.addEventListener('pointerdown', (event) => {
-      if (event.button === 2 || event.button === 1) {
-        panning = true;
-        lastX = event.clientX;
-        lastY = event.clientY;
-        canvas.setPointerCapture(event.pointerId);
-      } else if (event.button === 0) {
-        // Vehicles first. They are drawn on top of the ground, so a click that
-        // lands on one has to mean the vehicle - anything else and a lorry
-        // becomes a hole the player builds through.
-        const vehicleId = this.vehicleAtClient(event);
-        if (vehicleId !== null) {
-          this.selectedVehicleId = vehicleId;
-          this.onSelectVehicle?.(vehicleId);
-          return;
-        }
-        this.onSelectVehicle?.(null);
-        this.selected = this.tileAtClient(event);
-        this.onSelect?.(this.infoAt(this.selected));
-      }
+      if (event.button !== 0 && event.button !== 1 && event.button !== 2) return;
+      panButton = event.button;
+      lastX = event.clientX;
+      lastY = event.clientY;
+      pressX = event.clientX;
+      pressY = event.clientY;
+      // A press with a middle or right button is a pan from its first pixel;
+      // a left press is a pan only once it has travelled, because until then
+      // it is still a click that might build something.
+      dragged = event.button !== 0;
+      canvas.setPointerCapture(event.pointerId);
     });
 
     canvas.addEventListener('pointermove', (event) => {
-      if (panning) {
+      if (panButton >= 0) {
+        if (!dragged) {
+          const far =
+            Math.abs(event.clientX - pressX) > CLICK_SLOP_PX ||
+            Math.abs(event.clientY - pressY) > CLICK_SLOP_PX;
+          if (!far) return;
+          dragged = true;
+        }
         // A manual pan takes the wheel back from the follow camera (M14).
         if (this.followVehicleId !== null) {
           this.followVehicleId = null;
@@ -2016,8 +2053,21 @@ export class MapView {
     });
 
     canvas.addEventListener('pointerup', (event) => {
-      panning = false;
+      const button = panButton;
+      panButton = -1;
       if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
+      // The build happens HERE and only when the press stayed put. Firing on
+      // the press instead would mean every attempt to drag the map also laid
+      // whatever the armed tool builds - and it is the release that lets a
+      // player think better of a click and pull away from it.
+      if (button !== 0 || dragged) return;
+      this.selectAtClient(event);
+    });
+
+    // A press that leaves the window without a release must not leave the
+    // camera glued to the pointer.
+    canvas.addEventListener('pointercancel', () => {
+      panButton = -1;
     });
 
     canvas.addEventListener(
@@ -2031,6 +2081,22 @@ export class MapView {
     );
   }
 
+  /** What a left click on the map means. */
+  private selectAtClient(event: PointerEvent): void {
+    // Vehicles first. They are drawn on top of the ground, so a click that
+    // lands on one has to mean the vehicle - anything else and a lorry
+    // becomes a hole the player builds through.
+    const vehicleId = this.vehicleAtClient(event);
+    if (vehicleId !== null) {
+      this.selectedVehicleId = vehicleId;
+      this.onSelectVehicle?.(vehicleId);
+      return;
+    }
+    this.onSelectVehicle?.(null);
+    this.selected = this.tileAtClient(event);
+    this.onSelect?.(this.infoAt(this.selected));
+  }
+
   /** Zoom towards the cursor, so the tile under it stays put. */
   private setZoomIndex(next: number, event: PointerEvent | WheelEvent): void {
     const clamped = Math.min(ZOOM_LEVELS.length - 1, Math.max(0, next));
@@ -2041,6 +2107,58 @@ export class MapView {
     const after = this.clientToWorld(event);
     this.centreX += before.x - after.x;
     this.centreY += before.y - after.y;
+  }
+
+  // ------------------------------------------------------- camera, from outside
+  //
+  // What the keyboard and the zoom control reach. They are methods rather than
+  // a second copy of the camera in the store, because the camera IS this
+  // object's state: the store learns about it through `onCamera` and the
+  // minimap draws what it is told (D-166), and a second writable copy would be
+  // a second answer to "where is the camera".
+
+  /** Which step of `ZOOM_LEVELS` is in force. */
+  get zoomStep(): number {
+    return this.zoomIndex;
+  }
+
+  /**
+   * Zoom in or out by whole steps, about the CENTRE of the screen.
+   *
+   * The wheel zooms about the cursor because there is a cursor; a key and a
+   * slider have no position, and the honest anchor for them is the middle of
+   * what the player is looking at. Which is simply the centre staying put.
+   */
+  zoomBy(steps: number): void {
+    this.setZoomStep(this.zoomIndex + steps);
+  }
+
+  /** Go to a zoom step - what the slider writes. */
+  setZoomStep(step: number): void {
+    const clamped = Math.min(ZOOM_LEVELS.length - 1, Math.max(0, Math.round(step)));
+    this.zoomIndex = clamped;
+  }
+
+  /**
+   * Which way the camera should be sliding, as a direction in [-1, 1].
+   *
+   * A DIRECTION rather than a step per key press: a held arrow key repeats at
+   * whatever rate the operating system was configured for, which is a stutter
+   * with a pause in front of it. The frame loop integrates this at
+   * `KEY_PAN_SPEED_PX_PER_S`, so the map glides at one speed on every machine
+   * - and the speed stays here, where the pixels are, rather than in the panel
+   * that presses the key.
+   */
+  setPanVelocity(x: number, y: number): void {
+    if (x !== 0 || y !== 0) {
+      // Steering by keyboard is a manual pan like any other (M14).
+      if (this.followVehicleId !== null) {
+        this.followVehicleId = null;
+        this.onFollowEnd?.();
+      }
+    }
+    this.panVX = x;
+    this.panVY = y;
   }
 
   private clientToWorld(event: PointerEvent | WheelEvent): { x: number; y: number } {
@@ -2095,6 +2213,16 @@ export class MapView {
         this.centreY = screen.y;
         break;
       }
+    }
+
+    // Held-key panning, integrated over the frame that actually elapsed - so
+    // the camera crosses the same ground per second at 30 fps as at 144. The
+    // wall clock is legitimate here for the reason D-162 gives: this is where
+    // the CAMERA is, which is a fact about the screen, not about the world.
+    if (this.panVX !== 0 || this.panVY !== 0) {
+      const step = (Math.min(this.app.ticker.deltaMS, 100) / 1000) * KEY_PAN_SPEED_PX_PER_S;
+      this.centreX += (this.panVX * step) / this.zoom;
+      this.centreY += (this.panVY * step) / this.zoom;
     }
 
     this.clampCentre(map.size);

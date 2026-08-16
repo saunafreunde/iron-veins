@@ -66,11 +66,11 @@ no entry below. A number may appear under several topics.
 - **Rendering & art:** D-013, D-014, D-033, D-035, D-112, D-117, D-125, D-127,
   D-136, D-140, D-160, D-161, D-162, D-163, D-164, D-165, D-166, D-169, D-170,
   D-171, D-172, D-173, D-174, D-175, D-177, D-179, D-186, D-202, D-205, D-206,
-  D-208, D-209, D-212, D-214, D-217, D-241, D-246, D-248, D-259, D-260
+  D-208, D-209, D-212, D-214, D-217, D-241, D-246, D-248, D-259, D-260, D-263
 - **UI & input:** D-011, D-013, D-015, D-035, D-110, D-113, D-114, D-119,
   D-126, D-148, D-165, D-166, D-177, D-179, D-180, D-181, D-182, D-183, D-184,
   D-186, D-187, D-189, D-191, D-192, D-193, D-194, D-195, D-196, D-200, D-202,
-  D-210, D-241, D-242, D-247, D-254, D-255, D-258, D-259, D-260
+  D-210, D-241, D-242, D-247, D-254, D-255, D-258, D-259, D-260, D-263
 - **Performance & measurement:** D-002, D-120, D-135, D-136, D-161, D-162,
   D-163, D-164, D-167, D-170, D-171, D-172, D-173, D-174, D-176, D-177, D-184,
   D-185, D-186, D-187, D-191, D-192, D-193, D-196, D-200, D-201, D-202, D-205,
@@ -18201,3 +18201,92 @@ the switch that changes that is a dashboard setting (Settings → Deployment
 Protection → Vercel Authentication or Password Protection, applied to **all**
 deployments). `WEB.md` carries the exact steps. The licence question underneath
 it is stated and NOT decided here - RELEASE.md's appendix §1 is where it lives.
+
+## The camera - the map a player can actually move (2026-08-16)
+
+### D-263 Every button drags the map, the arrow keys steer it, and the zoom is a control rather than a wheel gesture
+
+**The owner reported that the map cannot be moved, that the arrow keys do
+nothing and that scrolling does nothing, and two of those three were literally
+true of the shipped build.** They are not three complaints; they are one:
+between M1 and M25 nobody gave this game a camera a player could find.
+
+**What was there, measured against what a player tries first.**
+`MapView.installInput` panned on `event.button === 2 || event.button === 1` -
+the right button and the middle one - and reserved the left button for
+building. The wheel zoomed, through five steps of `ZOOM_LEVELS`, and NOTHING on
+screen said so: no readout, no control, and no key. `KEY_ACTIONS` carried
+twenty-nine actions and not one of them was the camera; `ArrowUp` was in
+`NAMED_KEYS` purely as a key a player MIGHT bind, and the four roving-focus
+handlers in the lists were the only consumers of an arrow key in the
+application. So: left-drag did nothing, the arrows did nothing, and the one
+gesture that did work was invisible and unavailable on hardware that sends no
+wheel event. A player who never finds the camera never leaves the patch of
+ground the game opened on - which is also the honest reading of "why are there
+no houses", because the towns are elsewhere on the map.
+
+**Left-drag pans, and the build moved to the RELEASE.** The two jobs are told
+apart by `CLICK_SLOP_PX` (4 px) plus the release: a press that never leaves the
+radius is a click and builds, a press that leaves it is a pan and builds
+nothing. Firing the build on the press - which is what the old handler did -
+means every attempt to drag the map also lays whatever the armed tool builds,
+and it is the release that lets a player think better of a click and pull the
+pointer away from it. The right and middle buttons pan from their first pixel,
+unchanged, because there is no click of theirs to protect. `pointercancel`
+clears the drag, or a press that leaves the window glues the camera to the
+pointer.
+
+**The keyboard steers a VELOCITY, not a step.** A held arrow key repeats at
+whatever rate the operating system was configured for - a stutter with a pause
+in front of it - so `setPanVelocity` takes a direction in [-1, 1] and the frame
+loop integrates it at `KEY_PAN_SPEED_PX_PER_S` = 900 screen px/s over the frame
+that actually elapsed. Screen pixels rather than world pixels: a camera that
+crossed twice as much ground at 0.5x would feel like two different controls.
+The wall clock is legitimate here for the reason D-162 gives - this decides
+where the CAMERA is, which is a fact about the screen, and no published tick is
+invented from it. `panVector` is a pure function so the arithmetic is a test
+rather than something somebody feels out with four fingers: two opposite keys
+cancel to a standstill, and a diagonal is NORMALISED, or it would cross the map
+at 1.41 times the speed of an edge.
+
+**A key that is held while the window goes away never reports its release**, so
+`blur` clears the set and the effect's own teardown does it again. Without that
+the camera slides for ever behind whatever the player switched to.
+
+**The zoom control is a stepped slider and that is the one thing here worth
+arguing about.** The zoom is not a scale factor applied to a finished picture:
+each step picks an atlas page, decides whether the world is drawn from sprites
+or from baked chunks, and keys the chunk textures themselves (D-161, D-163). A
+continuous slider would ask for artwork that does not exist. So the control has
+the five steps the renderer really has and PRINTS what each one is - 25, 50,
+100, 200, 400 % - which is the "Prozentschieber" the request named, in the only
+form this renderer can honestly offer. `zoomStepOf` reads the step back from
+the camera's float by NEAREST rather than by equality: a lookup that missed
+would put the slider at zero, i.e. tell the player they are zoomed all the way
+out while they are looking at a 4x map.
+
+**One number, three doors.** The slider writes through `cameraControl`, a
+handle to the live `MapView` kept in the store; where the camera IS travels the
+other way, through the `camera` message the view publishes when it moved
+(D-166). Keeping that flow one-way is what stops a slider and a wheel
+disagreeing about the zoom, and it is why the store holds a handle rather than a
+second copy of the camera.
+
+**The camera keys are NOT blocked during a replay**, which is D-189's own
+sentence about the camera applied to the keyboard: looking around a recording
+is exactly as free as looking around a game. The keys sit at the TOP of the
+action switch for that reason.
+
+**Zero simulation contact**: no save bump, no hashed byte, no snapshot byte, no
+RNG draw, no atlas cell, no i18n row outside the eleven new interface strings.
+Every pin stands by construction - not one file under `src/sim` changed. Main
+chunk 1,083,108 -> **1,085,490 B** against the 1,094,000 B budget, 8,510 B of
+headroom, no raise asked for.
+
+**What a test cannot say here, and it is said rather than dressed up.**
+`MapView` has never been headless (D-136), so what `tests/unit/camera.spec.ts`
+holds is everything the camera decides BEFORE it touches a canvas: the pan
+vector's four directions, its cancellation and its normalisation, that all six
+camera actions resolve to a key in the default scheme, and the zoom step
+read-back. Whether 900 px/s is the right speed, and whether a drag ever builds
+when it should not, is a human's to confirm.
