@@ -230,6 +230,20 @@ export function MapCanvas({ client }: { readonly client: SimClient }): ReactElem
     const view = new MapView();
     viewRef.current = view;
 
+    /*
+     * Where the last press on the map landed, for the rejection message (M26).
+     *
+     * On the HOST rather than through a renderer callback: the answer wanted
+     * is a screen coordinate, which is a fact about the browser and not about
+     * the world, and a second callback on `MapView` for one pair of numbers
+     * would put interface geometry into the renderer's API. Pointer UP,
+     * because that is when a click becomes a build (D-263).
+     */
+    const notePointer = (event: PointerEvent): void => {
+      useSimStore.getState().setLastMapPointer({ x: event.clientX, y: event.clientY });
+    };
+    host.addEventListener('pointerup', notePointer);
+
     view.onHover = (tile) => {
       const state = useSimStore.getState();
       state.setHoveredTile(tile);
@@ -560,6 +574,7 @@ export function MapCanvas({ client }: { readonly client: SimClient }): ReactElem
 
     return () => {
       window.clearInterval(audioTimer);
+      host.removeEventListener('pointerup', notePointer);
       viewRef.current = null;
       useSimStore.getState().setCameraControl(null);
       view.dispose();

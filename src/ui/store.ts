@@ -526,6 +526,17 @@ export interface SimUiState extends SnapshotValues {
    */
   cameraControl: CameraControl | null;
   setCameraControl: (control: CameraControl | null) => void;
+  /**
+   * Where on the screen the player last pressed on the map, or null.
+   *
+   * The rejection message is shown there rather than at the bottom of the
+   * window (M26): a build refused at the top left used to answer half a screen
+   * away, and all 84 reasons arrive through the same strip in the same place.
+   * Screen coordinates rather than a tile, because what has to be positioned
+   * is a piece of interface, and the camera may have moved on by then.
+   */
+  lastMapPointer: { readonly x: number; readonly y: number } | null;
+  setLastMapPointer: (point: { readonly x: number; readonly y: number }) => void;
   setFleet: (vehicles: readonly VehicleMarker[]) => void;
   setSelectedVehicle: (id: number | null) => void;
   setFollowVehicle: (id: number | null) => void;
@@ -807,6 +818,8 @@ export const useSimStore = create<SimUiState>((set) => ({
   setCentreOnTile: (centreOnTile) => set({ centreOnTile }),
   cameraControl: null,
   setCameraControl: (cameraControl) => set({ cameraControl }),
+  lastMapPointer: null,
+  setLastMapPointer: (lastMapPointer) => set({ lastMapPointer }),
   setTrackPreview: (preview) => set({ trackPreview: preview }),
   setRoadStopPreview: (preview) => set({ roadStopPreview: preview }),
   setConnectAnchor: (connectAnchor) =>

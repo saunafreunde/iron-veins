@@ -43,7 +43,7 @@ export function roadBuildableAt(map: TileMap, x: number, y: number): string | nu
   if (map.terrain[index] === Terrain.Water) return RejectReason.OnWater;
   if (map.industryId[index] !== -1) return RejectReason.Occupied;
   if (map.buildingKind[index] !== 0) return RejectReason.Occupied;
-  if (slopeRise(map.slopeAt(x, y)) > TOWN_ROAD_MAX_SLOPE) return RejectReason.TooSteep;
+  if (slopeRise(map.slopeAt(x, y)) > TOWN_ROAD_MAX_SLOPE) return RejectReason.RoadTooSteep;
   return null;
 }
 

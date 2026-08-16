@@ -1,4 +1,9 @@
 import { CommandKind } from '../sim/commands/types';
+import { DEFAULT_SPEED_INDEX } from '../sim/constants';
+// From `spec.ts` rather than from the catalogue: it is the import-free leaf
+// that owns the enum, and a lesson needs the four numbers, not the tables
+// (the D-191 rule about what a panel drags into the main chunk).
+import { VehicleKind } from '../sim/vehicles/spec';
 import type { SimUiState } from './store';
 
 /**
@@ -49,7 +54,11 @@ export const LESSONS: readonly Lesson[] = [
     steps: [
       {
         textKey: 'ui.tutorial.basics.step1',
-        done: (state) => state.speedIndex > 0,
+        // The world RUNS from the first tick since M26, so "start the clock"
+        // was a step that ticked itself off before the lesson opened. What is
+        // worth teaching instead is the same control one step further: the
+        // speed keys, which are how a player waits out a payback period.
+        done: (state) => state.speedIndex > DEFAULT_SPEED_INDEX,
       },
       {
         textKey: 'ui.tutorial.basics.step2',
@@ -103,7 +112,14 @@ export const LESSONS: readonly Lesson[] = [
     steps: [
       {
         textKey: 'ui.tutorial.signals.step1',
-        done: (state) => state.fleet.filter((vehicle) => vehicle.kind === 1).length >= 2,
+        // TRAINS, which is what the step asks for in both languages ("buy a
+        // second train for the same line"). It read `kind === 1` - a magic
+        // literal, and the wrong one: 1 is Road and Train is 0 - so two buses
+        // ticked the signal lesson off and two trains never did (M26). No
+        // test had ever run a lesson predicate; `tests/unit/tutorial.spec.ts`
+        // now runs all of them.
+        done: (state) =>
+          state.fleet.filter((vehicle) => vehicle.kind === VehicleKind.Train).length >= 2,
       },
       {
         textKey: 'ui.tutorial.signals.step2',

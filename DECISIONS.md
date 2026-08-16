@@ -40,7 +40,7 @@ no entry below. A number may appear under several topics.
   D-208, D-210, D-230, D-231, D-237
 - **Cargo, payment & routing:** D-036, D-037, D-065, D-067, D-075, D-077,
   D-078, D-118, D-142, D-151, D-176, D-178, D-187, D-207, D-211, D-213,
-  D-215, D-233, D-237
+  D-215, D-233, D-237, D-268
 - **Industry & production:** D-022, D-062, D-063, D-064, D-069, D-071, D-079,
   D-085, D-086, D-174, D-201, D-202, D-205, D-225, D-232, D-239, D-246, D-248,
   D-249
@@ -70,7 +70,8 @@ no entry below. A number may appear under several topics.
 - **UI & input:** D-011, D-013, D-015, D-035, D-110, D-113, D-114, D-119,
   D-126, D-148, D-165, D-166, D-177, D-179, D-180, D-181, D-182, D-183, D-184,
   D-186, D-187, D-189, D-191, D-192, D-193, D-194, D-195, D-196, D-200, D-202,
-  D-210, D-241, D-242, D-247, D-254, D-255, D-258, D-259, D-260, D-263
+  D-210, D-241, D-242, D-247, D-254, D-255, D-258, D-259, D-260, D-263, D-265,
+  D-266, D-269, D-270
 - **Performance & measurement:** D-002, D-120, D-135, D-136, D-161, D-162,
   D-163, D-164, D-167, D-170, D-171, D-172, D-173, D-174, D-176, D-177, D-184,
   D-185, D-186, D-187, D-191, D-192, D-193, D-196, D-200, D-201, D-202, D-205,
@@ -85,7 +86,7 @@ no entry below. A number may appear under several topics.
   D-205, D-207, D-206, D-208, D-209, D-210, D-212, D-213, D-215, D-216,
   D-217, D-219, D-220, D-221, D-222, D-228, D-229, D-230, D-231, D-233,
   D-234, D-235, D-236, D-241, D-242, D-248, D-249, D-250, D-251, D-252,
-  D-253, D-255, D-256, D-257, D-258, D-259, D-260, D-261
+  D-253, D-255, D-256, D-257, D-258, D-259, D-260, D-261, D-267
 - **Process & specification:** D-070, D-123, D-129, D-133, D-138, D-140,
   D-185, D-191, D-197, D-198, D-199, D-203, D-204, D-205, D-206, D-215,
   D-222, D-225, D-226, D-227, D-228, D-229, D-235, D-252, D-253, D-256,
@@ -18326,3 +18327,136 @@ the checksum, unpacked 11 files - and all eleven are byte-identical to the bake
 that was moved aside. The rule D-262 wrote still holds and was not touched:
 every failure on this path ends in the procedural game with a line saying which
 failure it was, never in a broken build.
+
+## M26 - the repair pass (2026-08-16)
+
+### D-265 The overlays are a layer over the running game, not a second screen
+
+**Opening any overlay took the map out of the React tree.** `App.tsx` returned
+early on `overlay !== null` with a tree that held the status bar and one panel;
+`MapCanvas`'s cleanup then ran and called `view.dispose()`, so both atlas pages,
+every baked chunk texture and the whole PixiJS renderer were destroyed and
+rebuilt on the way back - on the key a player presses to cancel a tool. The
+branch is gone. The map, the zoom control, the minimap, the sidebar and the app
+bar are always mounted; the overlay is a `position: fixed` layer at z-index 30,
+over the app bar (10) and the tooltips (20) and under the end screen (40).
+
+**Verified in a real browser rather than argued**: with the menu open,
+`.mapcanvas canvas` is still in the document and its WebGL context reports
+`isContextLost() === false`, and the sidebar and app bar are still mounted;
+closing the menu leaves the same canvas. Before this change the element did not
+exist while a menu was open.
+
+**Three things follow from it and none of them needed code of their own.**
+`ui.menu.hint` ("Esc closes the menu again. The game keeps running.") is true
+for the first time - the world is visible behind the scrim. The layout stops
+jumping. And the tutorial's build steps can be ticked off at all: the panel used
+to REPLACE the map, so "lay a road" was a step whose subject was not on screen.
+
+**The scrim is what swallows the clicks**, and it has to: the map underneath is
+live, and a press that reached it through a menu would build. Two keyboard
+rules go with it - while an overlay is open no tool arms and no camera key
+steers, and Escape is deliberately exempt because it is the way back out.
+
+**A key another component consumed is not ours.** `ListPanel.onListKeyDown`
+moves the roving cursor on the arrow keys with `preventDefault` but without
+`stopPropagation`, so since D-263 gave the camera those keys, walking a vehicle
+list also dragged the map underneath it. The handler reads
+`event.defaultPrevented` now, which is the general form of the rule and costs
+the next widget nothing.
+
+### D-266 A world that arrives is running, and a paused one says so
+
+`DEFAULT_SPEED_INDEX = 1` has been in `constants.ts` since M9, annotated "used
+when a fresh game starts", and **was imported by no file at all**; `SimWorker`
+set `speedIndex = 0` in three places. So every new game, every load and every
+scenario opened on a world in which nothing moved, with nothing on screen
+saying why - the first impression of this game was a still image. Two of the
+three sites now read the constant. The third stays 0 and is not a defect: it is
+the century clock reaching its end.
+
+**A replay is the exception and stays paused.** The player opened a recording to
+look at it, the scrub bar is the instrument, and starting the playback under
+them takes the first game year away before they can reach for it. The workshop
+is paused too, from the other side of the boundary (D-241).
+
+**Speed is control traffic, never a command (D-004), so no hash moved** - the
+determinism suite is green at 79 and no pin was touched.
+
+**And a paused world now says so on the map**: a band above the middle of the
+map, naming the key from the player's own table (D-114) rather than a fixed
+"Space", and not while the end screen is up - there the clock has stopped for a
+reason that screen is already explaining.
+
+### D-267 The tutorial's predicates are executed by a test, and one of them was wrong
+
+`ui.tutorial.signals.step1` asks in both languages for a SECOND TRAIN and tested
+`vehicle.kind === 1`. `VehicleKind.Road` is 1; `Train` is 0. **Two buses ticked
+the signal lesson off and two trains never did**, and the reason nobody noticed
+is the finding: of 2,113 tests, **not one had ever called a `done()`**. A
+predicate is a pure function of the store plus the command counts, so there was
+nothing stopping it - `tests/unit/tutorial.spec.ts` runs all twenty-two, twice,
+against a world where the thing has not been done and against one where it has.
+Its fixture table is held against `LESSONS` in both directions, so a lesson that
+grows a step without a case is a red build (the D-133/D-183 shape). **Falsified
+before it was kept**: with the literal put back, two of its assertions go red.
+
+**The first step of the first lesson changed with D-266.** "Start time with the
+space bar" was a step that ticked itself off before the lesson opened once the
+world ran from the first tick. It asks for a FASTER speed now
+(`speedIndex > DEFAULT_SPEED_INDEX`), which teaches the same control one step
+further along - how a player waits out a payback period - and the test pins it
+at the speed a game really opens on, because the store's own default is 0 and
+would have hidden the mistake.
+
+### D-268 The road's refusal stops naming a runway
+
+`roadBuildableAt` returned `RejectReason.TooSteep`, whose sentence is "Eine
+Landebahn braucht ebenes Gelaende." **Laying a road over a hill is the commonest
+beginner mistake in the game**, and the answer to it named an aircraft the
+player had never touched. `RoadTooSteep` is its own reason with its own text in
+both languages; `TooSteep` keeps the runway's, which is the one build in the
+game that refuses a slope outright (`air.spec.ts` asserts exactly that and is
+untouched). The AI's declared refusal set carries neither reason, so no balance
+fixture moved.
+
+### D-269 The answer to a click appears at the click
+
+All eighty-four rejection reasons arrived through one strip at the bottom
+centre of the window, so a road refused in a corner of the map answered half a
+screen away - and every refusal shared one address, which is what made them read
+as a single undifferentiated "no". The message is anchored at the last press on
+the map now. `toastAnchorFor` is a pure function with the awkward half - the
+window edges - as a test rather than something to be reproduced by clicking
+into a corner: clamped horizontally, flipped BELOW the click when the status bar
+owns the space above, and centred when the window is narrower than the message.
+The press is recorded on the map HOST rather than through a renderer callback,
+because a screen coordinate is a fact about the browser and not about the world.
+Lifetime 4,000 -> 2,500 ms: a message that no longer has to be found does not
+need four seconds.
+
+### D-270 The tutorial offer is made
+
+`offerTutorial` has been a setting with a label since M9 - "show the tutorial
+offer when the application starts" - and the only file that ever read it was the
+options screen that displays it. The tutorial was menu entry nine of twelve, had
+no key, and was opened by no line of code. It is offered at boot now, once, with
+`tutorialSeen` recording that the question was asked; the pair is what lets the
+setting mean what its label says without offering the same lesson every start.
+Marked seen when it is OFFERED rather than when it is finished, because somebody
+who closes the panel has answered. A SETTING rather than a `profile.json` field,
+because that file has no writer for it and losing this costs one dismissed
+panel. **And the tagline stopped being three milestones out of date**: it
+promised "1950 bis 2050" while 1850, 1880 and 1920 have been playable since M23
+and "endless" exists.
+
+**Measured across M26**: main chunk 1,086,845 -> **1,088,141 B** against the
+1,094,000 B budget, 5,859 B of headroom, no raise asked for. Unit suite 2,113 ->
+**2,136** tests, determinism 79 green, every pin unmoved by construction - the
+only files under `src/sim` that changed are the scheduler's speed variable and
+one reject-reason string, neither of which is hashed. **What a test cannot say
+here, and it is said rather than dressed up**: the pause band and the anchored
+message were verified by reading and by their pure halves, not on screen - the
+browser pane this was checked in runs with a hidden, zero-sized viewport, so no
+frame is drawn and the store never picks up a speed change. A human has to look
+at those two once.

@@ -29,6 +29,7 @@ import { TutorialPanel } from './TutorialPanel';
 import { bindingFromEvent } from '../shared/keybindings';
 import {
   bindingIndex,
+  displayBinding,
   panVector,
   PAN_OF_ACTION,
   resolveBindings,
@@ -37,6 +38,7 @@ import {
 } from './keymap';
 import { ZoomControl } from './ZoomControl';
 import { quickLoad } from './saves';
+import { toastAnchorFor } from './toastAnchor';
 import { updateSettings } from './settings';
 import { MapCanvas } from './MapCanvas';
 import { NewsPanel } from './NewsPanel';
@@ -47,8 +49,14 @@ import { StatusBar } from './StatusBar';
 import { SystemPanel } from './SystemPanel';
 import { useSimStore } from './store';
 
-/** How long a rejection toast stays on screen. [ms] */
-const TOAST_LIFETIME_MS = 4000;
+/**
+ * How long a rejection toast stays on screen. [ms]
+ *
+ * Shorter since M26, because it no longer has to be FOUND: it stands at the
+ * click that caused it, so four seconds of a red label in the middle of the
+ * map is longer than anybody needs to read six words.
+ */
+const TOAST_LIFETIME_MS = 2500;
 
 /**
  * The end screen is loaded when the game ends, not when it starts (SPEC2 M17).
@@ -143,6 +151,20 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
   const dismissEnd = useSimStore((s) => s.dismissEnd);
   const ending = showsEndScreen(gameEnd, dismissedEnd, replaying);
 
+  // Where the rejection message goes: at the last press on the map, clamped to
+  // the window (M26). Recomputed when a NEW rejection arrives rather than on
+  // every pointer move - the message belongs to the click that caused it.
+  const lastMapPointer = useSimStore((s) => s.lastMapPointer);
+  const rejectionAnchor =
+    lastMapPointer === null
+      ? null
+      : toastAnchorFor(lastMapPointer.x, lastMapPointer.y, window.innerWidth, window.innerHeight);
+
+  // Which key the pause band names - read from the player's own table rather
+  // than written into the sentence, so a rebinding moves the hint with it
+  // (D-114's rule: one answer to "which key does this").
+  const pauseKey = resolveBindings(keyBindings)['pause'];
+
   // Space toggles between pause and the speed that was running before.
   const lastRunningSpeed = useRef(1);
   useEffect(() => {
@@ -172,6 +194,19 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
       const target = event.target;
       if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return;
 
+      /*
+       * A key another component has already consumed is not ours (M26).
+       *
+       * The lists of 17.1 move their roving cursor on the arrow keys and call
+       * `preventDefault` (ListPanel.onListKeyDown) - but not
+       * `stopPropagation`, so the press still arrives here. Since the camera
+       * took the arrow keys (D-263) that meant walking a vehicle list also
+       * dragged the map underneath it. Reading `defaultPrevented` is the
+       * general form of the rule and costs the next component nothing: a
+       * widget that consumes a key already says so this way.
+       */
+      if (event.defaultPrevented) return;
+
       const binding = bindingFromEvent(event);
       if (binding === null) return;
       const action = index.get(binding);
@@ -181,6 +216,17 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
       // text field is focused - so the browser's own meaning of the key is
       // never what was wanted.
       event.preventDefault();
+
+      /*
+       * While an overlay is open the map belongs to the panel over it (M26).
+       *
+       * The world is visible and running behind a menu now, which is the
+       * point - but a tool armed under a full-screen panel is a tool the
+       * player cannot see and did not mean to arm, and the arrow keys belong
+       * to whatever list the panel is showing. Escape is deliberately not
+       * gated: it is the way back out.
+       */
+      if (overlay !== null && action !== 'escape') return;
 
       // The camera keys, before everything else and never blocked by a
       // replay: looking around a recording is exactly as free as looking
@@ -405,62 +451,6 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
     );
   }
 
-  if (overlay !== null) {
-    return (
-      <div className="app">
-        <StatusBar client={client} />
-        <main className="workspace workspace--overlay">
-          {overlay === 'menu' && (
-            <MainMenu onSelect={(next) => setOverlay(next)} onClose={() => setOverlay(null)} />
-          )}
-          {overlay === 'newGame' && (
-            <NewGameDialog
-              onStart={(options, relief) => {
-                client.newGame(options, relief);
-                setOverlay(null);
-              }}
-              onCancel={ready ? () => setOverlay('menu') : null}
-            />
-          )}
-          {overlay === 'scenarios' && (
-            <ScenarioBrowser client={client} onClose={() => setOverlay('menu')} />
-          )}
-          {overlay === 'campaign' && (
-            <CampaignScreen client={client} onClose={() => setOverlay('menu')} />
-          )}
-          {overlay === 'achievements' && <AchievementPanel onClose={() => setOverlay('menu')} />}
-          {overlay === 'options' && <OptionsPanel onClose={() => setOverlay('menu')} />}
-          {overlay === 'saves' && (
-            <SaveLoadPanel client={client} onClose={() => setOverlay('menu')} />
-          )}
-          {overlay === 'replays' && (
-            <ReplayBrowser client={client} onClose={() => setOverlay(null)} />
-          )}
-          {overlay === 'benchmark' && (
-            <BenchmarkPanel client={client} onClose={() => setOverlay('menu')} />
-          )}
-          {overlay === 'handbook' && <HandbookPanel onClose={() => setOverlay(null)} />}
-          {overlay === 'tutorial' && (
-            <TutorialPanel client={client} onClose={() => setOverlay(null)} />
-          )}
-        </main>
-        {/* The boot-time crash-bundle offer (D-139) rides along with every
-            screen a healthy game shows - the menu included, because the menu
-            is where a freshly restarted player is standing. */}
-        <StoredCrashNotice />
-        {/* The notification host stays mounted behind full-screen overlays
-            too: the game keeps running under the handbook, and a pause-armed
-            alarm that fired while the player was reading must still stop the
-            clock (SPEC2 M14). */}
-        <NotificationHost client={client} />
-        {/* And the achievement watcher of SPEC2 M24, for the same reason: the
-            news that earns one arrives while the player is in a menu just as
-            often as while they are looking at the map. */}
-        <AchievementHost />
-      </div>
-    );
-  }
-
   return (
     <div className="app">
       <StatusBar client={client} />
@@ -472,6 +462,19 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
               way: the zoom is a property of what the player is looking at,
               not a setting on a panel. */}
           <ZoomControl />
+          {/*
+            A paused world says so, over the map rather than in the sidebar
+            (M26). The game used to start at speed 0 and look exactly like a
+            game that had frozen; the clock in the status bar is the only thing
+            that moved, and it is the one thing that does not move when paused.
+            Not while the end screen is up - there the clock has stopped for a
+            reason the screen is already explaining.
+          */}
+          {speedIndex === 0 && !ending && (
+            <div className="pausebar" role="status">
+              {t('ui.hud.paused', { key: displayBinding(pauseKey) })}
+            </div>
+          )}
           <Minimap />
           <aside className="sidebar">
             {/* While a recording plays the sidebar IS the playback bar. Every
@@ -561,11 +564,76 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
         )}
       </footer>
 
-      {rejectionKey !== null && (
-        <div className="toast" role="status">
-          {t(rejectionKey)}
+      {/*
+        The overlays, as a LAYER over the running game rather than as a second
+        screen (M26).
+
+        They used to be an early return that rendered the StatusBar and one
+        panel and nothing else - so opening the menu took `MapCanvas` out of
+        the React tree, and its cleanup disposed the whole PixiJS view: both
+        atlas pages and every baked chunk texture, rebuilt on the way back.
+        On the very key a player presses to cancel a tool.
+
+        Everything else follows from being a layer: the world is visible and
+        still running behind the panel, so `ui.menu.hint` ("the game keeps
+        running") is finally true rather than a claim; the layout does not
+        jump; and the tutorial's build steps can be ticked off at all, because
+        there is a map underneath to build on.
+      */}
+      {overlay !== null && (
+        <div className="overlay">
+          {overlay === 'menu' && (
+            <MainMenu onSelect={(next) => setOverlay(next)} onClose={() => setOverlay(null)} />
+          )}
+          {overlay === 'newGame' && (
+            <NewGameDialog
+              onStart={(options, relief) => {
+                client.newGame(options, relief);
+                setOverlay(null);
+              }}
+              onCancel={ready ? () => setOverlay('menu') : null}
+            />
+          )}
+          {overlay === 'scenarios' && (
+            <ScenarioBrowser client={client} onClose={() => setOverlay('menu')} />
+          )}
+          {overlay === 'campaign' && (
+            <CampaignScreen client={client} onClose={() => setOverlay('menu')} />
+          )}
+          {overlay === 'achievements' && <AchievementPanel onClose={() => setOverlay('menu')} />}
+          {overlay === 'options' && <OptionsPanel onClose={() => setOverlay('menu')} />}
+          {overlay === 'saves' && <SaveLoadPanel client={client} onClose={() => setOverlay('menu')} />}
+          {overlay === 'replays' && <ReplayBrowser client={client} onClose={() => setOverlay(null)} />}
+          {overlay === 'benchmark' && (
+            <BenchmarkPanel client={client} onClose={() => setOverlay('menu')} />
+          )}
+          {overlay === 'handbook' && <HandbookPanel onClose={() => setOverlay(null)} />}
+          {overlay === 'tutorial' && (
+            <TutorialPanel client={client} onClose={() => setOverlay(null)} />
+          )}
         </div>
       )}
+
+      {/*
+        The answer to a click, where the click was (M26). Without a recorded
+        press - a rejection that came from a panel button rather than from the
+        map - it keeps the old centred position, which is the right place for
+        something that did not happen anywhere in particular.
+      */}
+      {rejectionKey !== null &&
+        (rejectionAnchor === null ? (
+          <div className="toast" role="status">
+            {t(rejectionKey)}
+          </div>
+        ) : (
+          <div
+            className={rejectionAnchor.below ? 'toast toast--at toast--below' : 'toast toast--at'}
+            role="status"
+            style={{ left: `${rejectionAnchor.left}px`, top: `${rejectionAnchor.top}px` }}
+          >
+            {t(rejectionKey)}
+          </div>
+        ))}
 
       {/* The M14 notification routing: ticker strip and toast cards over the
           news the store already holds - pure presentation (D-110). */}

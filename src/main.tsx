@@ -11,7 +11,7 @@ import { captureThumbnail } from './ui/Minimap';
 import { refreshReplays, storeReplay } from './ui/replays';
 import { refreshSaves, storeSave } from './ui/saves';
 import { loadProfile } from './ui/profile';
-import { loadSettings } from './ui/settings';
+import { loadSettings, updateSettings } from './ui/settings';
 import { SimClient } from './ui/SimClient';
 import { useSimStore } from './ui/store';
 import './ui/styles.css';
@@ -118,6 +118,28 @@ void ensureCrossOriginIsolation(browserIsolationEnvironment()).then((outcome) =>
 // before the writer is armed and can never fail loudly - a profile that will
 // not parse costs the player their medals and never their game.
 void loadSettings()
+  .then(() => {
+    /*
+     * The tutorial offer of section 17.5, actually made (M26).
+     *
+     * `offerTutorial` has been a setting with a label since M9 - "show the
+     * tutorial offer when the application starts" - and the only file that
+     * ever read it was the options screen that displays it. The tutorial was
+     * menu entry nine of twelve, had no key, and was opened by no line of
+     * code, so a first-time player met a transport tycoon with no explanation
+     * and no visible way to ask for one.
+     *
+     * Marked seen when it is OFFERED rather than when it is finished: the
+     * setting is the player's standing answer to being asked, and somebody who
+     * closes the panel has answered. The lesson stays in the menu for whoever
+     * wants it back.
+     */
+    const settings = useSimStore.getState().settings;
+    if (settings.offerTutorial && !settings.tutorialSeen) {
+      useSimStore.getState().setOverlay('tutorial');
+      updateSettings({ tutorialSeen: true });
+    }
+  })
   .then(() => loadProfile())
   .then(() => refreshSaves())
   .then(() => refreshReplays())

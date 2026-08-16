@@ -733,7 +733,18 @@ export const RejectReason = {
   OutsideMap: 'cmd.reject.outsideMap',
   OnWater: 'cmd.reject.onWater',
   Occupied: 'cmd.reject.occupied',
+  /** A runway needs flat ground - the one build that refuses a slope outright. */
   TooSteep: 'cmd.reject.tooSteep',
+  /**
+   * A slope a ROAD cannot climb.
+   *
+   * Its own reason since M26, and the reason it needed one is what the player
+   * was being told: the road builder returned `TooSteep`, whose sentence is
+   * about a runway. Laying a road over a hill is the commonest beginner
+   * mistake in the game, and the answer to it named an aircraft the player had
+   * never touched.
+   */
+  RoadTooSteep: 'cmd.reject.roadTooSteep',
   NothingToDo: 'cmd.reject.nothingToDo',
   NeedsRoad: 'cmd.reject.needsRoad',
   /**

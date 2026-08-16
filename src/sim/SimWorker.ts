@@ -28,6 +28,7 @@ import { writeGoalBlock } from './goals/snapshot';
 import { writeWeatherBlock } from './weather/snapshot';
 import {
   BANKRUPTCY_MONTHS,
+  DEFAULT_SPEED_INDEX,
   MAX_TICKS_PER_FRAME,
   SPEED_FACTORS,
   STATE_HASH_INTERVAL_TICKS,
@@ -161,7 +162,7 @@ let suspended: Uint8Array | null = null;
  */
 let tickDigests: TickDigestRing | null = null;
 
-let speedIndex = 0;
+let speedIndex = DEFAULT_SPEED_INDEX;
 let accumulatorMs = 0;
 let lastFrameMs = 0;
 
@@ -1074,7 +1075,23 @@ function adoptWorld(current: World, sink: SnapshotWriter): void {
   // tick 4,000 of the world that was here and tick 4,000 of the world that
   // just arrived are two different ticks with one number (SPEC2 E-16).
   tickDigests?.clear();
-  speedIndex = 0;
+  /*
+   * A world that arrives is RUNNING, and a recording that arrives is not (M26).
+   *
+   * `DEFAULT_SPEED_INDEX` has been in `constants.ts` since M9 - annotated "used
+   * when a fresh game starts" - and was imported by nothing at all, while this
+   * line set 0. So every new game, every load and every scenario opened on a
+   * world in which nothing moved, with no indication anywhere that it was
+   * paused; the first impression of the game was a still image.
+   *
+   * A replay is the exception and stays paused: the player opened a recording
+   * to look at it, the scrub bar is the instrument, and starting the playback
+   * under them takes the first game year away before they can reach for it.
+   * The workshop is paused too, by `SimClient.newGame` on the other side of
+   * the boundary (D-241) - that is control traffic and arrives right after
+   * this.
+   */
+  speedIndex = replay === null ? DEFAULT_SPEED_INDEX : 0;
   accumulatorMs = 0;
   lastFrameMs = performance.now();
   windowStartMs = lastFrameMs;

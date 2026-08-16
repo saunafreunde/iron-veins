@@ -547,6 +547,25 @@ body {
   padding: 10px 16px;
   border-radius: var(--radius);
   box-shadow: 0 6px 20px rgb(0 0 0 / 45%);
+  max-width: 22rem;
+  pointer-events: none;
+}
+
+/*
+ * The same message, anchored at the click that caused it (M26).
+ *
+ * `left` and `top` come from `toastAnchorFor`; `bottom: auto` is what releases
+ * it from the rule above, which would otherwise pin it to the window's floor
+ * and quietly ignore the top it was given.
+ */
+.toast--at {
+  bottom: auto;
+  transform: translate(-50%, -100%);
+}
+
+/* Flipped below the click, when there was no room above it. */
+.toast--below {
+  transform: translate(-50%, 0);
 }
 
 /*
@@ -879,16 +898,32 @@ body {
 
 /* ------------------------------------------------------- M9: menus and maps */
 
-/* A full-window overlay: the menu, the options, the save screen, the handbook. */
-.workspace--overlay {
+/*
+ * A full-window overlay: the menu, the options, the save screen, the handbook.
+ *
+ * A LAYER over the running game since M26, not a screen instead of it. It used
+ * to be a `main` element in a branch of its own, which took the map out of the
+ * tree and disposed the renderer with it; now the world is drawn, ticking and
+ * visible behind the scrim.
+ *
+ * The scrim is what makes that readable AND what swallows the clicks: the map
+ * underneath is live, and a press that reached it through a menu would build.
+ * z-index 30 puts it over the appbar (10) and the tooltips (20) and under the
+ * end screen (40), which is the one panel that outranks a menu.
+ */
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
   display: flex;
   justify-content: center;
   align-items: flex-start;
   padding: var(--gap);
   overflow-y: auto;
+  background: color-mix(in srgb, #10141a 78%, transparent);
 }
 
-.workspace--overlay .panel {
+.overlay .panel {
   width: min(52rem, 100%);
 }
 
@@ -908,6 +943,30 @@ body {
 }
 
 /* The overview map of section 17.1, bottom right over the map canvas. */
+/*
+ * "Paused", where the player is looking (M26).
+ *
+ * Over the map and near the top, not in the sidebar: a paused world is a still
+ * picture, and the question it raises ("is this thing broken?") is asked of the
+ * map. It names the key from the player's own table rather than a fixed one.
+ */
+.pausebar {
+  position: absolute;
+  top: calc(var(--gap) * 2);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+  padding: 6px 16px;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  background: color-mix(in srgb, #10141a 82%, transparent);
+  color: var(--text);
+  font-size: 0.875rem;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
 /* The zoom control sits in the map's free corner - bottom left, opposite the
    minimap, which is pushed left by the sidebar. */
 .zoomctl {

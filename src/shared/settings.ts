@@ -122,6 +122,16 @@ export interface AppSettings {
   /** Show the tutorial offer when the application starts. */
   readonly offerTutorial: boolean;
   /**
+   * Whether the tutorial has already been offered on this installation.
+   *
+   * The pair is what makes `offerTutorial` mean what its label says without
+   * offering the same lesson every single boot: the setting is the player's
+   * standing answer, this is the record of having asked. A setting rather than
+   * a profile field, because `profile.json` has no writer for it and because
+   * losing this costs one dismissed panel (M26).
+   */
+  readonly tutorialSeen: boolean;
+  /**
    * Notification routing per news category, indexed by NewsCategory, each a
    * NotificationMode (SPEC2 M14). A setting, never a rule: the log itself is
    * identical whatever is chosen here.
@@ -147,6 +157,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   audioEnabled: true,
   autosave: true,
   offerTutorial: true,
+  tutorialSeen: false,
   notifications: DEFAULT_NOTIFICATIONS,
 };
 
@@ -257,6 +268,10 @@ export function normaliseSettings(raw: unknown): AppSettings {
     audioEnabled: value['audioEnabled'] !== false,
     autosave: value['autosave'] !== false,
     offerTutorial: value['offerTutorial'] !== false,
+    // Default FALSE, unlike its partner above: a settings file written before
+    // M26 has never offered the tutorial, so the honest reading of a missing
+    // field is 'not yet asked'.
+    tutorialSeen: value['tutorialSeen'] === true,
     notifications,
   };
 }
