@@ -91,6 +91,61 @@ export function isDiagonal(direction: TrackDir): boolean {
   return (direction & 1) === 1;
 }
 
+/**
+ * Which other bits of a tile a train arriving on this one can leave by.
+ *
+ * A train that comes IN over bit `a` is travelling in direction `a + 4`, so
+ * leaving over bit `b` turns it by `turnSteps(a + 4, b)`. Allowing at most one
+ * 45 degree step per tile - which is the rule Transport Tycoon has, and the
+ * whole reason its lines look built rather than scribbled - leaves exactly
+ * `b in {a + 3, a + 4, a + 5}`. That is one rotation of `0b00111000` per
+ * direction, and it is a table rather than arithmetic because it is read
+ * inside the pathfinder's inner loop.
+ */
+export const TRACK_PARTNERS: readonly number[] = [0x38, 0x70, 0xe0, 0xc1, 0x83, 0x07, 0x0e, 0x1c];
+
+/**
+ * Can a train that arrives over bit `a` leave over bit `b`?
+ *
+ * The ONE definition of "these two ends of a tile are joined", read by the
+ * pathfinder, by the route assistant and by the build predicate below - so the
+ * three cannot drift apart. Until M28 they each carried their own comparison,
+ * and they disagreed: the builder wrote any bit pair at all, the assistant
+ * allowed up to 90 degrees, and the pathfinder refused everything over 90 -
+ * so a player could pay for track that no train would ever use, and be told
+ * "no route" rather than "too sharp".
+ */
+export function connected(a: TrackDir, b: TrackDir): boolean {
+  return (TRACK_PARTNERS[a]! & (1 << b)) !== 0;
+}
+
+/**
+ * May a tile carry this set of track bits?
+ *
+ * Every bit needs at least ONE partner it can be driven through to; a lone bit
+ * is a dead end, which is legal and necessary (a line has to start somewhere).
+ * What the rule forbids is a bit that no train could ever enter or leave by -
+ * a 135 degree kink, a switchback, a right angle between two straights.
+ *
+ * **Deliberately the loose reading**, and the alternative is worth naming: the
+ * strict one - no PAIR on the tile may exceed 45 degrees - would also forbid
+ * the level crossing `0b01010101` and the trailing point `0b00110001`, and
+ * Transport Tycoon has both. A crossing is two lines that share a tile and not
+ * a junction, which a model with one node per tile cannot express structurally;
+ * this rule keeps the figure and refuses only the connections that are
+ * undrivable. So the tile is more permissive than TTD at a four-way crossing
+ * while every single CONNECTION on it is one TTD would allow.
+ */
+export function trackMaskLegal(bits: number): boolean {
+  // A single bit, or none at all, is a stub and always fine.
+  if ((bits & (bits - 1)) === 0) return true;
+  for (let direction = 0; direction < TRACK_DIR_COUNT; direction++) {
+    if ((bits & (1 << direction)) === 0) continue;
+    if ((bits & TRACK_PARTNERS[direction]!) === 0) return false;
+  }
+  return true;
+}
+
 /** Ground distance covered by one step in this direction. [m] */
 export function stepLengthM(direction: TrackDir): number {
   return isDiagonal(direction) ? TILE_DIAGONAL_M : TILE_SIZE_M;
