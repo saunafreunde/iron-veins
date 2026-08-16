@@ -4,6 +4,9 @@
   "version": "0.1.0",
   "description": "Iron Veins - a modern transport tycoon",
   "type": "module",
+  "engines": {
+    "node": ">=22.6"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
