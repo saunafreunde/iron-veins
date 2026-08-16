@@ -67,6 +67,28 @@ const BAKE_DIR = join(REPO_ROOT, 'public', 'assets-baked');
 const BAKE_MANIFEST = 'baked-manifest.json';
 const DIST_DIR = join(REPO_ROOT, 'dist');
 
+/**
+ * Where the published bake lives, pinned by URL AND by checksum.
+ *
+ * In the repository rather than in a build host's settings, for the reason
+ * `tools/assets-manifest.json` pins the twelve Kenney packs the same way and
+ * `package.json` pins the Node version: a dashboard setting is one that the
+ * next person to import this project never finds, and the failure it produces
+ * - a hosted game that quietly draws itself in flat colours - looks like a
+ * renderer defect rather than a missing variable. `IRON_VEINS_ATLAS_URL` still
+ * overrides it, which is what a fork with its own artwork needs; an override
+ * brings its OWN `IRON_VEINS_ATLAS_SHA256` or none, because this checksum
+ * belongs to this archive and would refuse anybody else's.
+ *
+ * The tag carries the manifest VERSION, so the day `BAKE_MANIFEST_VERSION`
+ * moves this line moves with it rather than serving a bake the loader will
+ * refuse (`src/render/bakedAtlas.ts` is what refuses it, and it says so in the
+ * console - the game still starts, on the procedural cells).
+ */
+const DEFAULT_ATLAS_URL =
+  'https://github.com/saunafreunde/iron-veins/releases/download/assets-v2/iron-veins-atlas-v2.zip';
+const DEFAULT_ATLAS_SHA256 = 'e194c7d05a6ea925dab5469ec9e5419af9c1a926e64282bd89b350e4307e9906';
+
 /** Every line this script writes carries the same prefix, so a build log greps. */
 function say(message) {
   console.log(`web-deploy: ${message}`);
@@ -157,16 +179,20 @@ async function prepare() {
     return;
   }
 
-  const url = process.env.IRON_VEINS_ATLAS_URL;
+  const url = process.env.IRON_VEINS_ATLAS_URL || DEFAULT_ATLAS_URL;
   if (!url) {
     procedural(`${present}; IRON_VEINS_ATLAS_URL is not set`);
     say('see WEB.md if you want the Kenney art in the deployment');
     return;
   }
+  const sha256 =
+    process.env.IRON_VEINS_ATLAS_URL && process.env.IRON_VEINS_ATLAS_URL !== DEFAULT_ATLAS_URL
+      ? process.env.IRON_VEINS_ATLAS_SHA256
+      : process.env.IRON_VEINS_ATLAS_SHA256 || DEFAULT_ATLAS_SHA256;
 
   say(`fetching the pre-baked atlases from ${url}`);
   try {
-    await downloadBake(url, process.env.IRON_VEINS_ATLAS_SHA256);
+    await downloadBake(url, sha256);
   } catch (error) {
     // Whatever we managed to write is not a bake, and a half-unpacked atlas
     // would cost the player pages rather than the whole fallback. It goes.

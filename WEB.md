@@ -76,26 +76,38 @@ art and the game draws itself procedurally.** That is a supported state, not a
 defect: it is what every developer without a filled cache sees, and the build
 never fails over it.
 
-If you want the art in the deployment, publish the bake once and point the
-build at it (D-262):
+**Since 2026-08-16 the published bake is PINNED in the repository** and a
+hosted build needs no setting at all: `tools/web-deploy.mjs` carries
+`DEFAULT_ATLAS_URL` and `DEFAULT_ATLAS_SHA256`, pointing at the
+[`assets-v2`](https://github.com/saunafreunde/iron-veins/releases/tag/assets-v2)
+release. The pin is in the repository for the reason
+`tools/assets-manifest.json` pins the twelve Kenney packs and `package.json`
+pins the Node version — a dashboard setting is one the next person to import
+this project never finds, and the failure it produces is a game that quietly
+draws itself in flat colours.
+
+To publish a NEW bake — whenever `tools/assets-manifest.json` or the baker
+changes, or `BAKE_MANIFEST_VERSION` moves (D-262):
 
 ```bash
 npm run assets:fetch && npm run assets:bake      # ~36 s with the packs cached
 cd public/assets-baked && zip -r ../../assets-baked.zip . && cd ../..
-shasum -a 256 assets-baked.zip                   # optional, for the pin below
+shasum -a 256 assets-baked.zip                   # the pin below
+gh release create assets-v3 assets-baked.zip     # the tag carries the manifest version
 ```
 
-Attach `assets-baked.zip` to a GitHub release (a tag like
-`assets-2026-08-14` does), then in Vercel → Settings → Environment Variables:
+…then move `DEFAULT_ATLAS_URL` and `DEFAULT_ATLAS_SHA256` in
+`tools/web-deploy.mjs` onto the new asset. A stale bake is refused by
+`src/render/bakedAtlas.ts` on its manifest version and costs the art, never the
+game.
 
-| Variable                  | Value                                               |
-| ------------------------- | --------------------------------------------------- |
-| `IRON_VEINS_ATLAS_URL`    | the release asset's download URL                    |
-| `IRON_VEINS_ATLAS_SHA256` | optional; the archive's SHA-256, checked before use |
+Two environment variables still override the pin, which is what a fork with its
+own artwork needs. Vercel → Settings → Environment Variables:
 
-Re-publish the archive whenever `tools/assets-manifest.json` or the baker
-changes. A stale bake is refused by `src/render/bakedAtlas.ts` on its manifest
-version and costs the art, never the game.
+| Variable                  | Value                                                 |
+| ------------------------- | ----------------------------------------------------- |
+| `IRON_VEINS_ATLAS_URL`    | an archive to use instead of the pinned one           |
+| `IRON_VEINS_ATLAS_SHA256` | its own SHA-256; the pinned checksum is not applied to somebody else's archive |
 
 ## 4. Protection — do this before you share the link
 

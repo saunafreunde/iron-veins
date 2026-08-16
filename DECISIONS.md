@@ -77,7 +77,7 @@ no entry below. A number may appear under several topics.
   D-206, D-209, D-214, D-231, D-234, D-235, D-241, D-242, D-247, D-248
 - **Platform, tooling & build:** D-012, D-014, D-015, D-016, D-017, D-029,
   D-030, D-031, D-160, D-168, D-169, D-170, D-172, D-175, D-192, D-206, D-208,
-  D-227, D-242, D-255, D-257, D-259, D-260, D-261, D-262
+  D-227, D-242, D-255, D-257, D-259, D-260, D-261, D-262, D-264
 - **Crash safety:** D-132, D-139, D-190
 - **Testing method & fixtures:** D-010, D-038, D-072, D-074, D-084, D-133,
   D-167, D-183, D-186, D-188, D-189, D-190, D-191, D-192, D-193, D-194,
@@ -18290,3 +18290,39 @@ vector's four directions, its cancellation and its normalisation, that all six
 camera actions resolve to a key in the default scheme, and the zoom step
 read-back. Whether 900 px/s is the right speed, and whether a drag ever builds
 when it should not, is a human's to confirm.
+
+### D-264 The published bake is pinned in the repository, not in a build host's settings
+
+D-262 built the mechanism and left the last step to a dashboard: publish the
+archive, then set `IRON_VEINS_ATLAS_URL` in Vercel. The mechanism worked and
+the step was never taken, so **the hosted game drew itself procedurally for two
+days and the report that came back was "why are there no houses"** - which is
+exactly the failure a dashboard setting produces, because a missing variable
+looks like a renderer defect from the outside.
+
+`tools/web-deploy.mjs` carries `DEFAULT_ATLAS_URL` and `DEFAULT_ATLAS_SHA256`
+now. This is the same argument twice already made in this project: the twelve
+Kenney packs are pinned by URL AND SHA-256 in `tools/assets-manifest.json`
+(D-160), and the Node version is pinned in `package.json` rather than in
+Vercel's runtime dropdown - a setting nobody finds again is a setting that is
+wrong on the next import.
+
+**The checksum belongs to the archive and never travels to somebody else's.**
+An `IRON_VEINS_ATLAS_URL` that differs from the pinned one takes
+`IRON_VEINS_ATLAS_SHA256` alone, or no checksum at all; the pinned hash is
+applied only to the pinned URL. Reversing that would make a fork with its own
+artwork fail a checksum it never chose - and the failure would be silent art
+loss rather than an error, which is the whole class of defect this entry is
+about.
+
+**The tag carries the manifest version** (`assets-v2` for
+`BAKE_MANIFEST_VERSION` 2), so the day the baker's format moves the pin has to
+move with it rather than serving an archive `src/render/bakedAtlas.ts` will
+refuse.
+
+**Verified by running rather than by reading**: the local bake was moved aside,
+`node tools/web-deploy.mjs prepare` fetched 4.93 MB from the release, verified
+the checksum, unpacked 11 files - and all eleven are byte-identical to the bake
+that was moved aside. The rule D-262 wrote still holds and was not touched:
+every failure on this path ends in the procedural game with a line saying which
+failure it was, never in a broken build.
