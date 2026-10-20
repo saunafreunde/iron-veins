@@ -18637,3 +18637,85 @@ structurally cannot take: `render.perf.spec.ts` says of itself that it is a
 Pixi-free proxy and cannot see sprite-pool churn inside Pixi. The owner has
 agreed to measure a sixty-second pan at zooms 1, 2 and 4 once the second half
 lands.
+
+## Android preparation - the game on a phone (2026-10-20)
+
+An external review of `36a0e3f` on an emulated phone (Chrome 155 headless,
+360x780, 412x915 and 780x360, touch on) found the game unplayable by finger and
+too heavy for a mid-range device. This section is what was taken from it, what
+was changed on the way in, and why. Not one file under `src/sim` changed, no
+save bump, no hashed byte, no snapshot byte.
+
+### D-273 A finger is not a mouse: a wider click radius, a pinch that never builds, and a first tap that only previews
+
+**Three defects, all measured by the review against the shipped input
+handler.** `installInput` tracked ONE pointer, so a second finger overwrote the
+first one's press and last position - the camera jumped - and a two-finger tap
+that did not move was a click: with the road tool armed it built **16 times in
+16**. A rolled fingertip travels five to ten pixels during a deliberate tap, so
+at the mouse's `CLICK_SLOP_PX` of 4 a normal tap was a tiny pan and built **0
+times in 16**. And there was no pinch at all.
+
+**The decision moved out of the renderer into a state machine with no canvas.**
+`render/pointerGestures.ts` answers what a press MEANS - ignore, click, pan,
+pinch, hover - from plain pointer records; `MapView` only turns the answer into
+camera moves and callbacks. `MapView` has never been headless (D-136), and the
+part that goes wrong on a phone is exactly the part a desktop developer cannot
+feel out by hand, so it is the part that had to become a test
+(`pointerGestures.spec.ts`, the three measured numbers each a case).
+
+- **A finger gets ten pixels, a mouse keeps four** (`TOUCH_CLICK_SLOP_PX`; the
+  review's rolled tap went from 0 to 15 builds in 16). D-263's mouse radius and
+  its "build on the release" rule are unchanged.
+- **Two fingers are a pinch and a pinch never builds** - not when the second
+  finger lands (the first finger's would-be tap is void), not when one is
+  lifted before the other, not with the last finger. The finger left behind
+  after a pinch steers nothing until it is lifted; letting it pan would start a
+  drag in the middle of a gesture.
+- **The midpoint pans and the spread zooms in the renderer's own steps.** The
+  zoom has five discrete steps (D-263), so the spread is translated into steps:
+  each time the finger distance grows by `PINCH_STEP_RATIO` = 1.4 from where the
+  last step was taken, one step in, anchored at the midpoint; shrinking by its
+  inverse, one step out. 1.4 is close to the square root of two - a spread to
+  roughly twice the distance zooms twice, which is what a hand expects from a
+  picture that doubles per step.
+- **A two-finger pan ends the follow camera exactly like a one-finger or mouse
+  pan (M14)**, through `onFollowEnd`. The patch the review supplied moved the
+  camera without it, so a followed train would have snapped the view back on the
+  next frame while the detail panel still said "following".
+- `touch-action: none` on the map canvas, so the browser never claims the
+  gesture for a page zoom and cancels it.
+
+**A finger has no hover, and the build preview has only ever been a hover.**
+Price, catchment circle, road-stop driveway and the planned track route are all
+drawn by `onHover`; a finger moves only while it presses, and a press is a pan.
+So on a phone the player saw nothing of a build before paying for it. **On a
+touch pointer the first tap on a tile is the hover and a second tap on the same
+tile is the click; a tap on another tile moves the preview there**
+(`tapResolves`). Mouse and pen are untouched - they have a hover. The
+alternative the review offered, a confirmation bar with "build" and "cancel",
+was not taken: it is a second control to find, and it is a second answer to
+"where does this build" beside the tile the player is already looking at.
+
+**Only where a click spends something.** A tap that inspects, selects a
+vehicle, sets the first end of a road or track, or picks one of Connect's two
+stations (which has its own priced confirmation) acts on the first tap -
+asking twice for those would be a confirmation of nothing. Every other tool,
+demolish included, and every armed workshop tool previews first
+(`tapPreviewsFirst` in `ui/tools.ts`, pinned against every row of the tool
+registry). So a track is: tap the start (anchor set), tap the end (route and
+price drawn), tap the end again (built) - and tapping elsewhere in between just
+moves the planned end. **Drag-to-draw was not adopted for the line tools**: one
+finger dragging is the pan everywhere else on the map, and a drag that pans or
+draws depending on the armed tool is the D-263 confusion again in a new place.
+
+**The pending preview is forgotten whenever what a second tap would do
+changed** - another tool, an anchor set or cleared, another workshop tool - so
+a second tap always confirms the thing the first one showed. After an action
+the pending tile is KEPT, exactly as a mouse that clicked has not moved: a
+further tap on the same tile acts again, which is what cycling a signal on one
+tile needs.
+
+**What a test cannot say here**: whether ten pixels and a ratio of 1.4 feel
+right on a real phone. Verified in headless Chrome with touch emulation (see
+the section's last entry); a person with a device has to confirm the feel.

@@ -23,6 +23,7 @@ import { stationAtTile } from './TilePanel';
 import { computeEditorOverlay } from './editor/overlays';
 import { commandForEditorTool } from './editor/tools';
 import { useSimStore, type Tool } from './store';
+import { tapPreviewsFirst } from './tools';
 
 /**
  * How often the audio engine is told where things are. [ms]
@@ -212,6 +213,8 @@ export function MapCanvas({ client }: { readonly client: SimClient }): ReactElem
   const stations = useSimStore((s) => s.stations);
   const companyColorIndex = useSimStore((s) => s.companyColorIndex);
   const tool = useSimStore((s) => s.tool);
+  const roadAnchor = useSimStore((s) => s.roadAnchor);
+  const editorTool = useSimStore((s) => s.editorTool);
   const trackPreview = useSimStore((s) => s.trackPreview);
   const connectPlan = useSimStore((s) => s.connectPlan);
   const roadStopPreview = useSimStore((s) => s.roadStopPreview);
@@ -518,6 +521,16 @@ export function MapCanvas({ client }: { readonly client: SimClient }): ReactElem
       if (command !== null) client.send(command);
     };
 
+    /*
+     * A finger's first tap previews and its second one acts (D-273) - but
+     * only where a click would spend something. Inspecting a tile, picking a
+     * vehicle, setting the first end of a road or track and the two station
+     * taps of Connect (which has its own priced confirmation) cost nothing,
+     * so they act on the first tap: asking twice for those would be a
+     * confirmation of nothing.
+     */
+    view.tapPreviewsFirst = () => tapPreviewsFirst(useSimStore.getState());
+
     // Clicking a vehicle selects it (owed since M2). The renderer decides
     // whether a click hit one; what that MEANS is decided here.
     view.onSelectVehicle = (vehicleId) => {
@@ -622,6 +635,12 @@ export function MapCanvas({ client }: { readonly client: SimClient }): ReactElem
       viewRef.current?.setCatchmentPreview(null);
     }
   }, [tool, trackPreview, connectPlan, roadStopPreview]);
+
+  // What a second tap would confirm changed under the preview (D-273): it
+  // must preview again rather than act on something the player never saw.
+  useEffect(() => {
+    viewRef.current?.clearTapPreview();
+  }, [tool, roadAnchor, editorTool]);
 
   useEffect(() => {
     viewRef.current?.setSelectedVehicle(selectedVehicleId);

@@ -217,6 +217,9 @@ body {
 
 .mapcanvas canvas {
   display: block;
+  /* The map owns every finger on it - one drags, two pinch (D-273). A browser
+     pan or page zoom would take the gesture away with a pointercancel. */
+  touch-action: none;
 }
 
 .sidebar {

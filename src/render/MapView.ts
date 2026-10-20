@@ -478,6 +478,7 @@ import {
 import { DAY_TINT_NEUTRAL, dayNightTint, emissiveIntensity } from './dayNight';
 import { sampleWorldX, sampleWorldY, shouldSnap, SnapshotInterpolator } from './interpolation';
 import { loadBakedAtlas, type BakedCell } from './bakedAtlas';
+import { PointerGestures, tapResolves, type TapTile } from './pointerGestures';
 import {
   bakedZoomFor,
   buildVehicleIndex,
@@ -556,18 +557,6 @@ export const ZOOM_LEVELS = [0.25, 0.5, 1, 2, 4] as const;
 export const DEFAULT_ZOOM_INDEX = 2;
 
 /**
- * How far a press may travel and still count as a CLICK. [screen px]
- *
- * The left button does two jobs now - drag the map, click to build - so
- * something has to tell them apart, and that something is this radius plus the
- * RELEASE: a build fires on `pointerup` when the pointer never left it. Four
- * pixels rather than one, because a hand that is only pressing still moves the
- * mouse a little, and a road that started one tile off because of that is the
- * frustration section 17.3 exists to prevent.
- */
-const CLICK_SLOP_PX = 4;
-
-/**
  * How fast a held pan key moves the camera. [screen px per second]
  *
  * In SCREEN pixels, so the map slides at the same speed whatever the zoom -
@@ -575,6 +564,12 @@ const CLICK_SLOP_PX = 4;
  * different controls. Roughly a screen width every two seconds at 1080p.
  */
 const KEY_PAN_SPEED_PX_PER_S = 900;
+
+/** A point on the screen - the only part of an event the camera maths reads. */
+interface ClientPoint {
+  readonly clientX: number;
+  readonly clientY: number;
+}
 
 /** Extra tiles drawn beyond the viewport, covering tall ground at the edges. */
 const CULL_MARGIN = MAX_HEIGHT + 4;
@@ -1197,6 +1192,17 @@ export class MapView {
    * button and the camera cannot disagree about who is steering.
    */
   onFollowEnd: (() => void) | null = null;
+
+  /**
+   * Whether a FINGER's tap at the current tool would spend anything, so that
+   * the first tap must only preview (D-273). The interface answers, because
+   * which tool is armed is its knowledge, not the renderer's; null answers
+   * "yes" for every tap, the safe side. A mouse never asks - it has a hover.
+   */
+  tapPreviewsFirst: (() => boolean) | null = null;
+
+  /** The tile a finger last previewed; a second tap on it acts (D-273). */
+  private tapPending: TapTile | null = null;
 
   /** Vehicle the camera tracks each frame, or null (SPEC2 M14). */
   private followVehicleId: number | null = null;
@@ -1996,84 +2002,58 @@ export class MapView {
   // ------------------------------------------------------------------ input
 
   private installInput(canvas: HTMLCanvasElement): void {
-    /**
-     * The button that is dragging the map, or -1.
-     *
-     * Every button pans. The left one is the finding rather than a preference:
-     * it used to be reserved for building, so the only ways to move the camera
-     * were the right button, the middle button and the minimap - and a player
-     * who tries the obvious thing first concludes the map cannot be moved at
-     * all. What keeps building exact is `CLICK_SLOP_PX` plus firing on the
-     * RELEASE.
+    /*
+     * Every button pans (D-263) and a finger does too; what a press MEANS -
+     * click, pan, pinch or nothing - is `PointerGestures`' decision (D-273),
+     * so it can be a test rather than something felt out on a phone. This
+     * handler only turns the answer into camera moves and callbacks.
      */
-    let panButton = -1;
-    let lastX = 0;
-    let lastY = 0;
-    /** Where the left press started, and whether it has left the slop yet. */
-    let pressX = 0;
-    let pressY = 0;
-    let dragged = false;
+    const gestures = new PointerGestures();
 
     canvas.addEventListener('contextmenu', (event) => event.preventDefault());
 
     canvas.addEventListener('pointerdown', (event) => {
-      if (event.button !== 0 && event.button !== 1 && event.button !== 2) return;
-      panButton = event.button;
-      lastX = event.clientX;
-      lastY = event.clientY;
-      pressX = event.clientX;
-      pressY = event.clientY;
-      // A press with a middle or right button is a pan from its first pixel;
-      // a left press is a pan only once it has travelled, because until then
-      // it is still a click that might build something.
-      dragged = event.button !== 0;
+      if (gestures.down(event) === 'ignore') return;
       canvas.setPointerCapture(event.pointerId);
     });
 
     canvas.addEventListener('pointermove', (event) => {
-      if (panButton >= 0) {
-        if (!dragged) {
-          const far =
-            Math.abs(event.clientX - pressX) > CLICK_SLOP_PX ||
-            Math.abs(event.clientY - pressY) > CLICK_SLOP_PX;
-          if (!far) return;
-          dragged = true;
+      const move = gestures.move(event);
+      if (move.kind === 'hover') {
+        const tile = this.tileAtClient(event);
+        if (tile?.x !== this.hovered?.x || tile?.y !== this.hovered?.y) {
+          this.hovered = tile;
+          this.onHover?.(this.infoAt(tile));
         }
-        // A manual pan takes the wheel back from the follow camera (M14).
-        if (this.followVehicleId !== null) {
-          this.followVehicleId = null;
-          this.onFollowEnd?.();
-        }
-        // No smoothing: inertia makes precise construction unpleasant.
-        this.centreX -= (event.clientX - lastX) / this.zoom;
-        this.centreY -= (event.clientY - lastY) / this.zoom;
-        lastX = event.clientX;
-        lastY = event.clientY;
         return;
       }
-      const tile = this.tileAtClient(event);
-      if (tile?.x !== this.hovered?.x || tile?.y !== this.hovered?.y) {
-        this.hovered = tile;
-        this.onHover?.(this.infoAt(tile));
+      if (move.kind === 'none') return;
+      // A manual pan takes the wheel back from the follow camera (M14) - and
+      // so does a two-finger one, which moves the camera just the same.
+      if ((move.dx !== 0 || move.dy !== 0) && this.followVehicleId !== null) {
+        this.followVehicleId = null;
+        this.onFollowEnd?.();
+      }
+      // No smoothing: inertia makes precise construction unpleasant.
+      this.centreX -= move.dx / this.zoom;
+      this.centreY -= move.dy / this.zoom;
+      if (move.kind === 'pinch' && move.zoomSteps !== 0) {
+        this.setZoomIndex(this.zoomIndex + move.zoomSteps, { clientX: move.x, clientY: move.y });
       }
     });
 
     canvas.addEventListener('pointerup', (event) => {
-      const button = panButton;
-      panButton = -1;
+      const up = gestures.up(event);
       if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
-      // The build happens HERE and only when the press stayed put. Firing on
-      // the press instead would mean every attempt to drag the map also laid
-      // whatever the armed tool builds - and it is the release that lets a
-      // player think better of a click and pull away from it.
-      if (button !== 0 || dragged) return;
-      this.selectAtClient(event);
+      if (up.kind !== 'click') return;
+      if (up.touch) this.tapAtClient(event);
+      else this.selectAtClient(event);
     });
 
     // A press that leaves the window without a release must not leave the
     // camera glued to the pointer.
-    canvas.addEventListener('pointercancel', () => {
-      panButton = -1;
+    canvas.addEventListener('pointercancel', (event) => {
+      gestures.cancel(event);
     });
 
     canvas.addEventListener(
@@ -2085,6 +2065,31 @@ export class MapView {
       },
       { passive: false },
     );
+  }
+
+  /**
+   * A finger's tap (D-273): the first one on a tile is the hover a finger
+   * does not have - preview, price, catchment - and a second one on the same
+   * tile is the click. A tap that would spend nothing acts at once.
+   */
+  private tapAtClient(event: PointerEvent): void {
+    const tile = this.tileAtClient(event);
+    this.hovered = tile;
+    this.onHover?.(this.infoAt(tile));
+    const outcome = tapResolves(this.tapPending, tile, this.tapPreviewsFirst?.() ?? true);
+    this.tapPending = tile;
+    if (outcome === 'act') this.selectAtClient(event);
+  }
+
+  /**
+   * Forget the tile a finger previewed, so the next tap previews again.
+   *
+   * The interface calls this when what a tap would DO changed under the
+   * preview - another tool, an anchor set or cleared - because a second tap
+   * must confirm the thing the first one showed, never something else.
+   */
+  clearTapPreview(): void {
+    this.tapPending = null;
   }
 
   /** What a left click on the map means. */
@@ -2104,7 +2109,7 @@ export class MapView {
   }
 
   /** Zoom towards the cursor, so the tile under it stays put. */
-  private setZoomIndex(next: number, event: PointerEvent | WheelEvent): void {
+  private setZoomIndex(next: number, event: ClientPoint): void {
     const clamped = Math.min(ZOOM_LEVELS.length - 1, Math.max(0, next));
     if (clamped === this.zoomIndex) return;
 
@@ -2167,7 +2172,7 @@ export class MapView {
     this.panVY = y;
   }
 
-  private clientToWorld(event: PointerEvent | WheelEvent): { x: number; y: number } {
+  private clientToWorld(event: ClientPoint): { x: number; y: number } {
     const rect = this.app.canvas.getBoundingClientRect();
     const screenX = event.clientX - rect.left;
     const screenY = event.clientY - rect.top;
@@ -2177,7 +2182,7 @@ export class MapView {
     };
   }
 
-  private tileAtClient(event: PointerEvent | WheelEvent): { x: number; y: number } | null {
+  private tileAtClient(event: ClientPoint): { x: number; y: number } | null {
     if (this.map === null) return null;
     const world = this.clientToWorld(event);
     return pickTile(this.map, world.x, world.y);

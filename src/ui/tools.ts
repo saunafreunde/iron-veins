@@ -70,3 +70,23 @@ export const TOOL_REGISTRY_COVERS_EVERY_TOOL: Exclude<Tool, RegisteredTool> exte
 export const BUILD_TOOLS: readonly ToolRegistryEntry[] = TOOL_REGISTRY.filter(
   (entry) => entry.id !== 'none',
 );
+
+/**
+ * Whether a finger's first tap must only preview at the armed tool (D-273).
+ *
+ * The line it draws is "does the click spend money or change the world", and
+ * a tool on the wrong side of it would either build on the first touch again
+ * or ask for a pointless second one - so every registered tool is pinned in
+ * `tests/unit/pointerGestures.spec.ts`.
+ */
+export function tapPreviewsFirst(state: {
+  readonly tool: Tool;
+  readonly roadAnchor: { readonly x: number; readonly y: number } | null;
+  readonly editorMode: boolean;
+  readonly editorTool: string;
+}): boolean {
+  if (state.editorMode && state.editorTool !== 'none') return true;
+  if (state.tool === 'none' || state.tool === 'connect') return false;
+  if ((state.tool === 'road' || state.tool === 'track') && state.roadAnchor === null) return false;
+  return true;
+}
