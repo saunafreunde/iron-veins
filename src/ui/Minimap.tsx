@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactElement,
+} from 'react';
 import { t } from '../i18n';
 import {
   MINIMAP_MODE_COUNT,
@@ -228,7 +236,11 @@ export function Minimap(): ReactElement | null {
           </button>
         ))}
       </div>
-      <div className="minimap__frame" style={{ maxWidth: PANEL_PX, maxHeight: PANEL_PX }}>
+      {/* The cap travels as a custom property rather than as an inline
+          max-width, so the stylesheet can still answer it - a phone shrinks
+          the panel to a corner (D-275), and an inline value would outrank
+          every rule there is except `!important`. */}
+      <div className="minimap__frame" style={{ '--minimap-cap': `${PANEL_PX}px` } as CSSProperties}>
         <canvas ref={canvasRef} className="minimap__canvas" aria-hidden="true" />
         <canvas
           ref={overlayRef}

@@ -18742,3 +18742,51 @@ The quick save and quick load of the same finding get no buttons: the save
 screen in the menu already saves by touch and loads any entry on the shelf,
 the quick slot included, and a third and fourth chip would cost a row of the
 phone's app bar for a shortcut to something two taps away.
+
+### D-275 A phone gets its own layout, in CSS alone, and the desktop keeps every pixel
+
+**Measured by the review at 360x780**: the page was laid out 835 px wide and
+shrunk by the browser to fit - the status bar is a row that never wraps and the
+sidebar a fixed 23rem - and in landscape (780x360) the map was 219 px high.
+Not one `@media` rule existed in `src/`, and every one of the 61 buttons was
+under 44 px.
+
+**Three conditions, and none of them reaches a window 1024 px wide or wider.**
+A phone is `max-width: 760px` in portrait or `max-height: 480px` below 1024 px
+wide in landscape; the bound on the width is what makes "the desktop is
+pixel-identical" a property of the selectors rather than of the windows people
+happen to use - a short browser window on a desktop keeps the desktop layout.
+Portrait puts the map on top and the sidebar below it as a sheet of 40 %;
+landscape keeps the sidebar beside the map at `min(23rem, 42vw)`. The status
+bar wraps; the app bar becomes ONE row that scrolls sideways, because three
+rows of shortcuts would be three rows of map.
+
+**Touch targets are a property of the POINTER, not of the screen.** Every
+button, select and text field gets 44 px under `pointer: coarse`, which is a
+touch screen of any size - a tablet included - and never a mouse: a laptop with
+a touch screen reports its primary pointer, the touchpad, and keeps its layout.
+
+**The overview map's six mode buttons stay**, as a strip that scrolls sideways
+above a map shrunk to `min(34vw, 34vh, 140px)` in the top corner. The patch the
+review supplied hid them on a phone, which takes five of the six minimap modes
+away from the device with the least other way to reach them (`N` cycles them,
+and a phone has no `N`).
+
+**The cause of the review's `!important` was removed instead of outranked.**
+`Minimap.tsx` set the frame's 220 px cap as an inline `max-width`, which no
+stylesheet rule can answer, so the patch reached for `!important`. The cap
+travels as the custom property `--minimap-cap` now and the stylesheet applies
+it - same 220 px on a desktop, `100%` in the phone rule, and one number in
+one file (`PANEL_PX`).
+
+**`viewport-fit=cover` and the four safe-area insets go together.** An
+installed full-screen app (D-278) draws under a notch and the gesture bar or
+the system paints a black band; `.app` and the overlay are padded by
+`env(safe-area-inset-*)`, which is zero on every display without a cut-out -
+the desktop included, so that padding costs it nothing either.
+
+**Not done**: the debug-overlay chip (review finding 18) stays in the app bar;
+on a phone it is one more chip in a row that scrolls, and hiding a developer
+tool behind a build flag is its own decision. A sharper canvas at device pixel
+ratio (finding 13) stays off: it multiplies the fill rate by up to 6.9 at the
+very moment this section is taking memory and frames away.

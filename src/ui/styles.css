@@ -66,6 +66,15 @@ body {
   display: grid;
   grid-template-rows: auto 1fr auto;
   height: 100%;
+  /*
+   * The display cut-outs of a phone (D-275). `viewport-fit=cover` in
+   * index.html lets the page draw under a notch and the gesture bar - which an
+   * installed, full-screen app needs, or the system paints a black band - and
+   * these four insets keep the interface itself out from under them. They are
+   * zero on every display without a cut-out, the desktop included.
+   */
+  padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px)
+    env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
 }
 
 /* ------------------------------------------------------------- status bar */
@@ -939,7 +948,10 @@ body {
   display: flex;
   justify-content: center;
   align-items: flex-start;
-  padding: var(--gap);
+  padding: max(var(--gap), env(safe-area-inset-top, 0px))
+    max(var(--gap), env(safe-area-inset-right, 0px))
+    max(var(--gap), env(safe-area-inset-bottom, 0px))
+    max(var(--gap), env(safe-area-inset-left, 0px));
   overflow-y: auto;
   background: color-mix(in srgb, #10141a 78%, transparent);
 }
@@ -1040,6 +1052,8 @@ body {
    cadences from paying for each other. */
 .minimap__frame {
   position: relative;
+  max-width: var(--minimap-cap);
+  max-height: var(--minimap-cap);
 }
 
 .minimap__canvas {
@@ -1354,4 +1368,140 @@ body {
    list that tells the player nothing to play towards. */
 .achievement--locked {
   opacity: 0.55;
+}
+
+/* ------------------------------------------------------ touch and phones */
+
+/*
+ * A finger needs a target of about 44 CSS px (D-275). On a COARSE pointer
+ * only - a touch screen, whatever its size - so a desktop with a mouse keeps
+ * every control exactly as it was. A laptop with a touch screen reports its
+ * primary pointer, which is the touchpad: fine, and unchanged.
+ */
+@media (pointer: coarse) {
+  button,
+  select,
+  input:not([type='range'], [type='checkbox'], [type='radio']) {
+    min-height: 44px;
+  }
+
+  button {
+    min-width: 44px;
+  }
+
+  .zoomctl__button {
+    width: 44px;
+    height: 44px;
+  }
+
+  .zoomctl__slider {
+    height: 44px;
+  }
+
+  .swatch {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
+/*
+ * A phone: portrait up to ~760 CSS px wide, or landscape up to ~480 px high
+ * (D-275). Without these rules the status bar alone was ~835 px of unbreakable
+ * row and the sidebar a fixed 23rem, so the browser shrank the whole interface
+ * to fit and every control ended up a few millimetres tall. Nothing here
+ * reaches a window 1024 px wide or wider, however short it is: the desktop
+ * layout stays pixel for pixel what it was.
+ */
+@media (max-width: 760px), (max-height: 480px) and (max-width: 1023px) {
+  .statusbar {
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    padding: 4px 8px;
+  }
+
+  .statusbar__brand {
+    min-width: 0;
+  }
+
+  .statusbar__facts {
+    gap: 12px;
+  }
+
+  .statusbar__speed {
+    margin-left: 0;
+  }
+
+  .statusbar__version {
+    display: none;
+  }
+
+  /* One row that scrolls sideways rather than three rows of chips: the app
+     bar is a shelf of shortcuts, and every row it takes is a row of map. */
+  .appbar {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    gap: 4px;
+    padding: 4px 8px;
+  }
+
+  .appbar > * {
+    flex: none;
+  }
+
+  /* The overview map shrinks to the top corner instead of covering the
+     middle, and keeps its six mode buttons - as one strip that scrolls
+     sideways, so they cost one row rather than three. */
+  .minimap {
+    top: var(--gap);
+    bottom: auto;
+    width: min(34vw, 34vh, 140px);
+    padding: 4px;
+  }
+
+  .minimap .button-row {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    gap: 4px;
+  }
+
+  .minimap .button-row > * {
+    flex: none;
+  }
+
+  .minimap__frame {
+    max-width: 100%;
+  }
+}
+
+/* Portrait phone: the map on top, the sidebar as a scrollable sheet below. */
+@media (max-width: 760px) and (orientation: portrait) {
+  .workspace--map {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) minmax(0, 40%);
+  }
+
+  .sidebar {
+    border-left: 0;
+    border-top: 1px solid var(--border);
+  }
+
+  .minimap {
+    right: var(--gap);
+  }
+
+  /* The sheet below would cover a control anchored to the bottom. */
+  .zoomctl {
+    bottom: calc(40% + var(--gap));
+  }
+}
+
+/* Landscape phone: the sidebar stays beside the map, but narrower. */
+@media (max-height: 480px) and (max-width: 1023px) and (orientation: landscape) {
+  .workspace--map {
+    grid-template-columns: minmax(0, 1fr) min(23rem, 42vw);
+  }
+
+  .minimap {
+    right: calc(min(23rem, 42vw) + var(--gap));
+  }
 }
