@@ -284,8 +284,28 @@ const DIST = join(REPO_ROOT, 'dist');
  * top-level script, which is the only shape a service worker can have.
  *
  * 1,094,000 is the new measurement plus ~1.1 %.
+ *
+ * **Raised again for the Android preparation (D-273 to D-278)**, with the
+ * measurement and the same rule. Two builds, the tree it branched from
+ * (`9aebd51`) and the finished branch, both `vite build`: **1,090,094 B ->
+ * 1,097,169 B, +7,075 B**, against 3,906 B of headroom. Split by rebuilding
+ * the finished branch with the two catalogues of `9aebd51` (1,096,460 B):
+ *
+ *  - **+709 B are the i18n rows**: the undo and redo captions and the four
+ *    camera hints rewritten for a finger, in two languages.
+ *  - **+6,366 B are the mechanism**: the pointer state machine and the
+ *    tap-to-preview rule (`render/pointerGestures.ts`, `ui/tools.ts`), the
+ *    two app-bar buttons, the background decision (`ui/background.ts`), the
+ *    offline-shell registration in `platform/isolation.ts`, and the deferred
+ *    atlas load with its upload-and-release and context restore in `MapView`.
+ *
+ * **No new static `src/sim` import chain**: every new module imports nothing
+ * from `src/sim` at all. The service worker and the manifest are files in
+ * `public/` and not in this figure, and the icons are emitted assets.
+ *
+ * 1,108,000 is the new measurement plus ~1.0 %.
  */
-const MAIN_CHUNK_BUDGET_BYTES = 1_094_000;
+const MAIN_CHUNK_BUDGET_BYTES = 1_108_000;
 
 /** The verdict, separated from the measuring so a planted size can be judged. */
 interface BudgetVerdict {

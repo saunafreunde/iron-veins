@@ -77,18 +77,18 @@ no entry below. A number may appear under several topics.
   D-163, D-164, D-167, D-170, D-171, D-172, D-173, D-174, D-176, D-177, D-184,
   D-185, D-186, D-187, D-191, D-192, D-193, D-196, D-200, D-201, D-202, D-205,
   D-206, D-209, D-214, D-231, D-234, D-235, D-241, D-242, D-247, D-248, D-276,
-  D-277
+  D-277, D-279
 - **Platform, tooling & build:** D-012, D-014, D-015, D-016, D-017, D-029,
   D-030, D-031, D-160, D-168, D-169, D-170, D-172, D-175, D-192, D-206, D-208,
   D-227, D-242, D-255, D-257, D-259, D-260, D-261, D-262, D-264, D-277, D-278
 - **Crash safety:** D-132, D-139, D-190
 - **Testing method & fixtures:** D-010, D-038, D-072, D-074, D-084, D-133,
-  D-167, D-183, D-186, D-188, D-189, D-190, D-191, D-192, D-193, D-194,
-  D-195, D-196, D-197, D-198, D-199, D-200, D-201, D-202, D-203, D-204,
-  D-205, D-207, D-206, D-208, D-209, D-210, D-212, D-213, D-215, D-216,
-  D-217, D-219, D-220, D-221, D-222, D-228, D-229, D-230, D-231, D-233,
-  D-234, D-235, D-236, D-241, D-242, D-248, D-249, D-250, D-251, D-252,
-  D-253, D-255, D-256, D-257, D-258, D-259, D-260, D-261, D-267
+  D-167, D-183, D-186, D-188, D-189, D-190, D-191, D-192, D-193, D-194, D-195,
+  D-196, D-197, D-198, D-199, D-200, D-201, D-202, D-203, D-204, D-205, D-207,
+  D-206, D-208, D-209, D-210, D-212, D-213, D-215, D-216, D-217, D-219, D-220,
+  D-221, D-222, D-228, D-229, D-230, D-231, D-233, D-234, D-235, D-236, D-241,
+  D-242, D-248, D-249, D-250, D-251, D-252, D-253, D-255, D-256, D-257, D-258,
+  D-259, D-260, D-261, D-267, D-279
 - **Process & specification:** D-070, D-123, D-129, D-133, D-138, D-140,
   D-185, D-191, D-197, D-198, D-199, D-203, D-204, D-205, D-206, D-215,
   D-222, D-225, D-226, D-227, D-228, D-229, D-235, D-252, D-253, D-256,
@@ -18991,3 +18991,70 @@ manifest's media type.
 **Node 24 is now what this rests on**: `tools/make-icons.mjs` imports the
 TypeScript module `icon-art.ts` unflagged, which the `engines` pin of this same
 section guarantees.
+
+### D-279 What the Android preparation was verified on, what it found, and what only a device can say
+
+**Exercised in headless Chrome** (the installed Chrome, SwiftShader, Playwright
+over CDP) against `vite preview` of this branch and of `9aebd51`, with the
+pinned Kenney bake in place. The scripts are not part of the repository; every
+number below was printed by them.
+
+**Phone, 360x780 portrait, touch emulation, DPR 2.625**: the page is 360 px wide
+(was 835); map 360x367 over a 244 px sheet; no visible button under 44 px;
+all six minimap modes present. A spread zoomed 100 % -> 400 %, a pinch back
+50 %. Eight two-finger taps with the road tool armed moved no money (the review
+measured 16 builds in 16). A finger tap that rolled 7 px selected a tile. With
+the depot tool the first tap on a tile changed neither the money nor raised a
+refusal, the second tap on the same tile acted (here: the game's own refusal,
+the tile was not beside a road). **Landscape 780x360**: map 458x254 beside a
+322 px sidebar (the review measured 219 px of map height).
+
+**Desktop, 1280x800, mouse, old build against new**: status bar, workspace,
+map, sidebar, minimap and its frame, zoom control, pause band, app bar and a
+sidebar button have identical boxes to the tenth of a pixel; the only
+difference is the two new app-bar chips of D-274.
+
+**400 % on demand**: no `atlas-z4` page was requested at start; the six were
+requested once, when the pinch reached 400 %, and not again when the slider
+went back there. **A lost and restored WebGL context** (`WEBGL_lose_context`)
+came back with the Kenney art at 400 % and no console error.
+
+**Offline**: the worker controlled the page, the precache held 46 entries, and
+a reload with the network off started the game - `crossOriginIsolated` true,
+`SharedArrayBuffer` present, the Kenney art drawn from the cache, no console
+error. **The first run of this check FAILED**, and the cause is in the tree as
+its own commit: the host sends `Vary: Origin`, the precache had fetched every
+file without an Origin, and the page asks for its module scripts as CORS
+requests with one - so a strict `cache.match` missed the main chunk that was
+sitting in the cache. Every lookup passes `ignoreVary` now, and the fake cache
+of `offlineShell.spec.ts` honours `Vary`, so the case is red without the fix.
+The smoke also moved the pause band on a phone, which ran under the minimap.
+
+**Memory, 412x915 phone emulation, renderer plus GPU process, private bytes**
+(Windows, SwiftShader - so "GPU" memory is process memory here, as it is on a
+phone's unified memory): at 100 % after 25 s, **1,075 MB with the old build,
+764 MB with the new**; the renderer alone 639 -> 269 MB. After zooming to
+400 %, 1,244 -> 1,199 MB: the decoded copies are gone from the renderer
+(662 -> 277 MB) and the 4x pages now sit once, uploaded, in the GPU process
+(532 -> 875 MB), because the release forces every page of a set onto the GPU
+where the old build uploaded only what it drew. One copy per page either way;
+what the deferral buys is that a player who never zooms to 400 % never pays
+for those six pages at all. These are desktop numbers under software GL; what
+a mid-range phone's driver does with the same textures is a device question.
+
+**Suite**: typecheck clean, lint clean, unit suite **2,242 tests in 160 files**
+green (2,166 in 157 before this section), the bundle budget raised with its
+ledger entry (1,090,094 -> 1,097,169 B; `bundleBudget.spec.ts`). No file under
+`src/sim` or `src/shared` changed, so no save bump, no hash, no snapshot byte
+and no determinism pin moved.
+
+**What only a device can say, and is said rather than implied**: whether ten
+pixels and a pinch ratio of 1.4 feel right under a real thumb; how long
+Android lets a hidden worker run and whether the background save's OPFS write
+always lands before a kill; whether the installed app really reports
+`display-mode: fullscreen` on the target devices; real memory and frame times
+on a 3-4 GB phone; and the TWA itself, which needs `assetlinks.json` with the
+Play signing key's fingerprint before Android drops the address bar. Two
+things were seen and deliberately left alone: a button's tooltip that a tap
+opens stays until the next tap elsewhere (the tooltip layer is hover-driven,
+M14), and the debug chip stays in the app bar (D-275).
