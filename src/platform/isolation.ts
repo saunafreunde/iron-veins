@@ -90,6 +90,66 @@ export async function ensureCrossOriginIsolation(
   return 'reloading';
 }
 
+/**
+ * The message that asks the worker to cache the game ahead (D-278). The
+ * worker compares it literally; `webChannel.spec.ts` holds the two copies
+ * together.
+ */
+export const PRECACHE_MESSAGE = 'iron-veins:precache';
+
+/** The registration surface the offline shell needs. */
+export interface OfflineShellEnvironment {
+  /**
+   * A production web build in a browser. Not the dev server, whose files are
+   * not a build and change on every save, and not the desktop shell, which
+   * is offline by construction and must never get a service worker (see
+   * {@link ensureCrossOriginIsolation}).
+   */
+  readonly enabled: boolean;
+  readonly register: ((path: string) => Promise<unknown>) | null;
+  /** The worker once it is active, or null if it never became so. */
+  readonly whenActive: (() => Promise<{ postMessage(message: string): void } | null>) | null;
+}
+
+/**
+ * Install the offline shell (D-278): the SAME worker as the isolation shim,
+ * registered also where the host already isolates the document - a Vercel
+ * deployment, where the shim was never needed and so never installed - and
+ * then asked to cache the game.
+ *
+ * Registering a worker that is already registered is a no-op, so on a host
+ * where {@link ensureCrossOriginIsolation} installed it this costs nothing,
+ * and there is never a second worker. No reload: the worker claims the open
+ * page itself, and caching does not need the page to be controlled. Every
+ * failure is an answer of `false`, never a throw - a game that cannot be
+ * cached is still a game.
+ */
+export async function installOfflineShell(env: OfflineShellEnvironment): Promise<boolean> {
+  if (!env.enabled || env.register === null || env.whenActive === null) return false;
+  try {
+    await env.register(COI_SERVICE_WORKER_PATH);
+    const worker = await env.whenActive();
+    if (worker === null) return false;
+    worker.postMessage(PRECACHE_MESSAGE);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** The real browser, as {@link installOfflineShell} wants to see it. */
+export function browserOfflineShellEnvironment(production: boolean): OfflineShellEnvironment {
+  const hasWindow = typeof window !== 'undefined';
+  const container = hasWindow && 'serviceWorker' in navigator ? navigator.serviceWorker : null;
+  const isDesktop = hasWindow && '__TAURI_INTERNALS__' in window;
+  return {
+    enabled: production && !isDesktop,
+    register: container === null ? null : (path) => container.register(path),
+    whenActive:
+      container === null ? null : () => container.ready.then((registration) => registration.active),
+  };
+}
+
 /** The real browser, as {@link ensureCrossOriginIsolation} wants to see it. */
 export function browserIsolationEnvironment(): IsolationEnvironment {
   const hasWindow = typeof window !== 'undefined';

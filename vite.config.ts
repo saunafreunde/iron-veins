@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { webShell } from './tools/web-shell.ts';
 
 const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as {
   version: string;
@@ -29,7 +30,8 @@ const crossOriginIsolation = {
 const devPort = Number(process.env.PORT) || 5183;
 
 export default defineConfig({
-  plugins: [react()],
+  // The web-app icons and the service worker's precache list (D-278).
+  plugins: [react(), webShell()],
   // Tauri pipes the vite output through its own logger; clearing the screen
   // would swallow rust-side compiler errors.
   clearScreen: false,

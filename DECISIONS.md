@@ -72,7 +72,7 @@ no entry below. A number may appear under several topics.
   D-126, D-148, D-165, D-166, D-177, D-179, D-180, D-181, D-182, D-183, D-184,
   D-186, D-187, D-189, D-191, D-192, D-193, D-194, D-195, D-196, D-200, D-202,
   D-210, D-241, D-242, D-247, D-254, D-255, D-258, D-259, D-260, D-263, D-265,
-  D-266, D-269, D-270, D-271, D-273, D-274, D-275, D-277
+  D-266, D-269, D-270, D-271, D-273, D-274, D-275, D-277, D-278
 - **Performance & measurement:** D-002, D-120, D-135, D-136, D-161, D-162,
   D-163, D-164, D-167, D-170, D-171, D-172, D-173, D-174, D-176, D-177, D-184,
   D-185, D-186, D-187, D-191, D-192, D-193, D-196, D-200, D-201, D-202, D-205,
@@ -80,7 +80,7 @@ no entry below. A number may appear under several topics.
   D-277
 - **Platform, tooling & build:** D-012, D-014, D-015, D-016, D-017, D-029,
   D-030, D-031, D-160, D-168, D-169, D-170, D-172, D-175, D-192, D-206, D-208,
-  D-227, D-242, D-255, D-257, D-259, D-260, D-261, D-262, D-264
+  D-227, D-242, D-255, D-257, D-259, D-260, D-261, D-262, D-264, D-277, D-278
 - **Crash safety:** D-132, D-139, D-190
 - **Testing method & fixtures:** D-010, D-038, D-072, D-074, D-084, D-133,
   D-167, D-183, D-186, D-188, D-189, D-190, D-191, D-192, D-193, D-194,
@@ -18912,3 +18912,82 @@ and Tauri included) and the save/pause decision. What a test cannot say is how
 long Android lets a hidden worker run, or whether the asynchronous OPFS write
 of the background save always finishes before a kill - it is a best effort
 issued at the earliest moment the page is told, which is all a page can do.
+
+### D-278 The web build is an installable app that starts offline: a manifest, ONE service worker that caches the game and isolates its cached answers, and a place ready for the Android proof
+
+**Review finding 6**, checked against the live deployment: `/manifest.webmanifest`
+and `/.well-known/assetlinks.json` answered 404, no service worker was ever
+registered on Vercel (the shim of E-13 only registers where the host does NOT
+isolate the document, D-262), and a reload with the network off ended in
+`ERR_INTERNET_DISCONNECTED`. A Trusted Web Activity - the Android route that
+keeps Chrome's COOP/COEP and therefore `SharedArrayBuffer` (law #10; a plain
+WebView sends neither and would need the single-threaded fallback E-13 forbids)
+- needs all three.
+
+**One worker, not two.** A second service worker cannot share the scope of the
+first - registering it would replace the shim. So `public/coi-serviceworker.js`
+is both: the E-13 shim, unchanged in what it guarantees, and the offline shell.
+`installOfflineShell` registers that SAME path also where the host already
+isolates (registering a registered worker is a no-op, so on a shim host it
+costs nothing) and then asks it to cache. Not in the dev server, whose files
+are not a build, and never in the Tauri shell, which is offline by construction
+and must not get a worker over its own headers.
+
+**Every answer carries COOP and COEP, the cached ones included.** That is the
+whole reason the shim's job and the cache's job have to be one worker: an
+answer from the cache without COEP is a document without `SharedArrayBuffer`,
+and an offline start would end on the fatal "no shared memory" screen.
+`offlineShell.spec.ts` drives the shipped file with the network switched off
+and asserts both headers on the cached shell.
+
+**What is cached, and when.**
+
+- **Navigations go to the network first** and keep the newest `index.html`; only
+  a failed network answers the cached shell. Everything else of this origin is
+  answered from the cache first: the build's files are content-hashed, the
+  atlas is pinned (D-264), and a version of the worker is a version of all of
+  them. Only complete same-origin 200s are kept - a 404 for a missing bake must
+  stay a 404, or E-14's procedural fallback would outlive the deployment that
+  finally ships the art.
+- **The precache runs when the page asks** (`iron-veins:precache`), inside that
+  message's `waitUntil`, NEVER inside `install`. E-13's shim registers and
+  reloads at once, and that reload must find the worker active; a 10 MB
+  download in `install` would make it arrive first and end the game on a host
+  without headers. Each file is fetched on its own, so one failure costs one
+  file; the next start asks again and fills the gap. A deferred 4x page
+  (D-276) is cached ahead like every other file: disk is not the scarce
+  resource, decoded RAM is.
+- **The version is the build.** `tools/web-shell.ts` - a vite plugin - writes
+  the list of shipped files (no source maps, not the worker, not
+  `.well-known/`) and a SHA-256 of their bytes into the copied worker after the
+  build. Any changed byte changes the worker, which is what makes a browser
+  install the new one; its activation deletes every older `iron-veins-` cache
+  and nobody else's. A worker that lost its markers fails the build rather than
+  caching one version for ever. `vercel.json` already sends the worker with
+  `max-age=0`, so a deployment reaches it.
+
+**The manifest** (`public/manifest.webmanifest`): "Iron Veins", start and scope
+`/`, `display: fullscreen`, `orientation: any`, the background and theme
+colours of the game's own sheet (`--surface`, `--card`; the test reads them out
+of `styles.css`). **The icons are not files in the repository**: the artwork of
+`tools/make-icons.mjs` moved into `tools/icon-art.ts`, the desktop icons
+regenerate byte-identical from it (verified: `npm run icons` leaves
+`src-tauri/icons` unchanged), and the build emits 192, 512 and a maskable 512 -
+full bleed, the artwork scaled to 0.6 so its corner stays inside the 0.4 safe
+circle of any launcher shape. E-14's glob test and its allowlist did not have
+to move.
+
+**`assetlinks.json` is deliberately not created.** It must carry the SHA-256
+fingerprint of the Play signing key, which exists only once the app has been
+created in the Play Console. What is done is everything around it: Vercel has
+no rewrites (D-262, asserted), so a file dropped into `public/.well-known/`
+will be served as itself; `vercel.json` sends it as `application/json` with
+`max-age=0` so a key rotation is not hidden behind a cache; vite copies the dot
+directory into `dist/` (checked with a placeholder that was removed again); and
+the precache leaves it out, because Android and Google read it from the
+network, never the game. `vercelConfig.spec.ts` holds the header and the
+manifest's media type.
+
+**Node 24 is now what this rests on**: `tools/make-icons.mjs` imports the
+TypeScript module `icon-art.ts` unflagged, which the `engines` pin of this same
+section guarantees.

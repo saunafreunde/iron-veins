@@ -1,7 +1,12 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { t } from './i18n';
-import { browserIsolationEnvironment, ensureCrossOriginIsolation } from './platform/isolation';
+import {
+  browserIsolationEnvironment,
+  browserOfflineShellEnvironment,
+  ensureCrossOriginIsolation,
+  installOfflineShell,
+} from './platform/isolation';
 import { getPlatformInfo, reportStartupDiagnostics } from './platform/Platform';
 import { DEFAULT_MAP_SIZE, Difficulty, MapClimate } from './sim/constants';
 import { App } from './ui/App';
@@ -97,6 +102,10 @@ client.onTickDigests = (entries) => {
  */
 void ensureCrossOriginIsolation(browserIsolationEnvironment()).then((outcome) => {
   if (outcome === 'reloading') return;
+  // The offline shell (D-278): the same worker, asked to keep a copy of the
+  // game, so a second start works without a network. In the background - the
+  // game starts from the network or the cache either way.
+  void installOfflineShell(browserOfflineShellEnvironment(import.meta.env.PROD));
   client.start({
     // Main-thread randomness is fine - the seed becomes part of the world state
     // and everything downstream of it is derived deterministically.

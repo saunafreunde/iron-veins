@@ -109,4 +109,32 @@ describe('vercel.json, the hosted web build', () => {
   it('rewrites nothing, so a missing atlas stays a 404 and the game goes procedural', () => {
     expect(config.rewrites ?? []).toEqual([]);
   });
+
+  /** The headers a rule with exactly this source sends. */
+  const headersFor = (source: string): Record<string, string> =>
+    Object.fromEntries(
+      ((config.headers ?? []).find((rule) => rule.source === source)?.headers ?? []).map((h) => [
+        h.key,
+        h.value,
+      ]),
+    );
+
+  it('serves the Digital Asset Links file as JSON, ready for the day it exists (D-278)', () => {
+    // The Android app's proof that it owns this origin. It does not exist yet
+    // - its fingerprint exists only once the Play app is created - but the day
+    // it is dropped into public/.well-known/ it must answer as JSON, from the
+    // file, never from a rewrite (asserted above: there are none) and never
+    // from a long-lived cache that would outlast a key rotation.
+    const sent = headersFor('/.well-known/assetlinks.json');
+    expect(sent['Content-Type']).toBe('application/json');
+    expect(sent['Cache-Control']).toMatch(/max-age=0/);
+  });
+
+  it('serves the web app manifest with its own media type (D-278)', () => {
+    expect(headersFor('/manifest.webmanifest')['Content-Type']).toBe('application/manifest+json');
+  });
+
+  it('keeps the service worker uncached, so a new deployment reaches it (D-278)', () => {
+    expect(headersFor('/coi-serviceworker.js')['Cache-Control']).toMatch(/max-age=0/);
+  });
 });
