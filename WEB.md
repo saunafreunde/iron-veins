@@ -22,11 +22,15 @@ from a push to GitHub.
 2. **Framework Preset:** _Other_. `vercel.json` in the repository root already
    states the install command, the build command and the output directory, and
    they win over anything the preset would guess.
-3. **Node.js Version** (Settings → General): **22.x or newer**. The build imports
-   one TypeScript module directly (`tools/attribution-lib.ts`), which needs
-   Node's own type stripping; `npm run attribution` passes
-   `--experimental-strip-types` so that Node 22.6 upwards is enough. If a build
-   ever fails with `Unknown file extension ".ts"`, this setting is why.
+3. **Node.js Version** (Settings → General): **24.x**, the version CI and the
+   release workflow run on, which `package.json` (`engines`) and `.nvmrc` pin.
+   The build imports one TypeScript module directly
+   (`tools/attribution-lib.ts`), which needs Node's own type stripping, so a
+   build that fails with `Unknown file extension ".ts"` is on a Node that is
+   too old. 22.6 would build, but an external review (2026-10-20) measured the
+   unit suite red below 24: on Node 22.23 `goals.spec.ts` measured more than the
+   allocation it allows, and on Node 20.19 `camera.spec.ts` could not load
+   (`navigator` is not a global there).
 4. **Environment variables:** none are required. There is exactly one optional
    variable and section 3 is about it. Set variables in the dashboard, never in
    `vercel.json`.
