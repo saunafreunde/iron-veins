@@ -18790,3 +18790,67 @@ on a phone it is one more chip in a row that scrolls, and hiding a developer
 tool behind a build flag is its own decision. A sharper canvas at device pixel
 ratio (finding 13) stays off: it multiplies the fill rate by up to 6.9 at the
 very moment this section is taking memory and frames away.
+
+### D-276 The 400 % pages load when somebody zooms to 400 %, every page arrives in parallel, and a page on the GPU is not kept a second time in RAM
+
+**Measured by the review**: the ten pages of the published bake are 5.5 MB to
+download and ~397 MiB once decoded, and a renderer process with the Kenney art
+stood at 850 MB against 481 MB without it. The pages were fetched one after the
+other, every one of them at start-up, and each decoded `ImageBitmap` was kept
+for the life of the view after Pixi had uploaded it.
+
+**Where the memory is, from the manifest of the pinned bake**: the four pages of
+the 1x and 2x zooms decode to 105.2 MiB, the six pages of the 4x zoom to
+291.5 MiB - three quarters of the atlas, for one of the five display zooms
+(`bakedZoomFor` serves 400 % and nothing else from them).
+
+**So the 4x pages wait** (`DEFERRED_BAKED_ZOOM_MIN`, `deferredPagesOf`): the
+manifest is read whole and both cell indexes are built from it as before, but
+only the start-up pages are fetched; the camera reaching a display zoom whose
+baked zoom is 4 starts the rest, through `OnDemandLoad` - at most one load at a
+time, none once one succeeded, and a failed one may be asked again by the next
+zoom-in (a human-paced retry, so a dead network is not hammered). A bake whose
+pages are ALL at 4x defers nothing, or it would download art and not draw it.
+
+**Until they arrive, the 400 % zoom draws what a missing page has always drawn.**
+Read off the code rather than chosen: `bakedCellHandle` answers null for a cell
+whose page is not in `bakedPages`, and null is the per-entry fallback of M13 -
+the procedural building, tree or industry cell, the white-box vehicle frame.
+The detail page those come from is built at attach for exactly this zoom
+("the detail page must not stall the first zoom to 4x"), so the first second at
+400 % is the procedural art and then the Kenney art, the same swap every game
+has already made at start-up. The alternative - serving 400 % from the 2x cells
+until the pages land - was not taken: it is an upscale, which D-163 rules out,
+and a third look for the same zoom.
+
+**A failure stays what it was where it was.** A start-up page that fails is the
+whole atlas, procedural, as before (one warning naming the page, every bitmap
+that did decode closed). A 4x page that fails leaves 1x and 2x baked and 400 %
+procedural until the next zoom-in retries - the art already on screen is not
+thrown away for a zoom the player may never use again.
+
+**Every page of a set is requested at once** (`loadBakedPages`, the review's
+patch 05 with its error handling kept): ten round trips in series were the
+start-up wait on a mobile network. The map is still filled in manifest order.
+
+**A page on the GPU is not kept in RAM as well, where Pixi allows it.**
+`uploadPage` forces the upload (`renderer.texture.initSource`) and then closes
+the bitmap. Pixi 8.19 re-uploads from `source.resource` after a lost and
+restored WebGL context (`GlTextureSystem.contextChange` drops every GPU
+texture), and a closed `ImageBitmap` cannot be uploaded again - so it does NOT
+simply allow it, and the release is paid for: on `webglcontextrestored` the
+view drops the baked art (`dropBakedArt`, a generation counter so a load in
+flight across it lands nowhere), clears the chunk caches whose render textures
+the loss emptied, and fetches the pages again - from the HTTP or service-worker
+cache, not the network. Pixi's own restore handler is registered first and runs
+first, and the next frame's update rebuilds before its render, so no sprite
+draws a dropped page. Not on WebGPU (`preference: 'webgl'`, never verified
+there) and not while the context is lost: both keep their bitmap as before.
+Texture garbage collection cannot pull a page off the GPU behind this:
+`autoGarbageCollect` is false on these sources (Pixi's default).
+
+**What a test cannot say**: the memory a phone saves. The loader logic is
+`bakedAtlas.spec.ts` (parallel requests, which pages wait, all-or-nothing with
+the bitmaps closed, the single-flight load); the upload, the release and the
+context restore live in `MapView`, which is not headless (D-136), and were
+exercised in headless Chrome - see the section's last entry.

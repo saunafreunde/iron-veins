@@ -7,9 +7,11 @@ import {
   Particle,
   ParticleContainer,
   Rectangle,
+  RendererType,
   RenderTexture,
   Sprite,
   Texture,
+  type WebGLRenderer,
 } from 'pixi.js';
 import type { IndustryMarker, StationMarker, TownMarker, VehicleMarker } from '../shared/protocol';
 import {
@@ -477,7 +479,14 @@ import {
 } from './chunks';
 import { DAY_TINT_NEUTRAL, dayNightTint, emissiveIntensity } from './dayNight';
 import { sampleWorldX, sampleWorldY, shouldSnap, SnapshotInterpolator } from './interpolation';
-import { loadBakedAtlas, type BakedCell } from './bakedAtlas';
+import {
+  DEFERRED_BAKED_ZOOM_MIN,
+  loadBakedAtlas,
+  loadBakedPages,
+  OnDemandLoad,
+  type BakedCell,
+  type BakedPage,
+} from './bakedAtlas';
 import { PointerGestures, tapResolves, type TapTile } from './pointerGestures';
 import {
   bakedZoomFor,
@@ -1312,8 +1321,20 @@ export class MapView {
    */
   private bakedVehicleZooms: readonly VehicleZoomIndex[] | null = null;
   private bakedStaticZooms: readonly StaticZoomIndex[] | null = null;
-  private bakedPages: ReadonlyMap<string, Texture> | null = null;
+  private bakedPages: Map<string, Texture> | null = null;
   private bakedZoomList: readonly number[] = [];
+  /**
+   * The 4x pages, fetched the first time the camera reaches a zoom they serve
+   * (D-276) - null when the bake deferred nothing or no bake is loaded. Until
+   * they arrive, a cell on them resolves to no handle and the tile draws its
+   * procedural art, which is what a page that is not there has always meant.
+   */
+  private deferredArt: OnDemandLoad | null = null;
+  /**
+   * Bumped whenever the baked art is thrown away (a restored context, a
+   * dispose), so a page load that was in flight across it lands nowhere.
+   */
+  private artGeneration = 0;
   private readonly bakedFrameCache = new Map<string, BakedCellHandle>();
   /** Scratch for one tree's tile-space offset; the placement allocates none. */
   /** Scratch (u, v, scale) one tree placement writes into - see forestTreeAt. */
@@ -1467,6 +1488,17 @@ export class MapView {
     // already running on procedural art, swaps to the baked cells the frame
     // the pages arrive - or never does, in a build without a cache (E-14).
     void this.loadBakedArt();
+    // Their decoded copies are released once uploaded (D-276), so what a lost
+    // context took from the GPU cannot be re-uploaded from memory: the art is
+    // dropped and fetched again - from the HTTP or service-worker cache - when
+    // the context comes back. Pixi's own restore handler was registered first,
+    // at init, and has run by the time this one does; the next frame's update
+    // rebuilds before its render, so no sprite draws a dropped page.
+    this.app.canvas.addEventListener('webglcontextrestored', () => {
+      this.dropBakedArt();
+      this.clearChunkCaches();
+      void this.loadBakedArt();
+    });
 
     // One sorted container for tiles AND vehicles: correct occlusion needs the
     // vehicle sprites interleaved into the tile sequence by their drawOrder
@@ -1811,24 +1843,31 @@ export class MapView {
    * already running - the E-14 floor, not an error path.
    */
   private async loadBakedArt(): Promise<void> {
+    const generation = this.artGeneration;
     const atlas = await loadBakedAtlas();
-    if (atlas === null || !this.live || this.discarded) return;
-    const pages = new Map<string, Texture>();
-    for (const [file, bitmap] of atlas.pages) {
-      const texture = Texture.from(bitmap);
-      // Nearest, like every atlas page: pixels are the look.
-      texture.source.scaleMode = 'nearest';
-      pages.set(file, texture);
-    }
+    if (atlas === null) return;
     const zoomIndexes = buildVehicleIndex(atlas.manifest);
     const staticIndexes = buildStaticIndex(atlas.manifest);
-    if (zoomIndexes.length === 0 && staticIndexes.length === 0) return;
+    const wanted = zoomIndexes.length > 0 || staticIndexes.length > 0;
+    if (!wanted || !this.live || this.discarded || generation !== this.artGeneration) {
+      for (const bitmap of atlas.pages.values()) bitmap.close();
+      return;
+    }
+    const pages = new Map<string, Texture>();
+    for (const [file, bitmap] of atlas.pages) pages.set(file, this.uploadPage(bitmap));
     this.bakedPages = pages;
     this.bakedVehicleZooms = zoomIndexes.length === 0 ? null : zoomIndexes;
     this.bakedStaticZooms = staticIndexes.length === 0 ? null : staticIndexes;
     this.bakedZoomList = (zoomIndexes.length === 0 ? staticIndexes : zoomIndexes).map(
       (entry) => entry.zoom,
     );
+    // The 4x pages wait for the first zoom that needs them (D-276). The
+    // indexes above already name their cells; until the pages are in, those
+    // cells resolve to no handle and the procedural art stands in.
+    this.deferredArt =
+      atlas.deferred.length === 0
+        ? null
+        : new OnDemandLoad(() => this.loadDeferredArt(atlas.deferred, generation));
     // The static art is TILE art: it lives in the sprite pool and inside the
     // baked chunk textures, and both were built from the procedural cells a
     // moment ago. Vehicles need neither invalidation - they are placed from
@@ -1838,6 +1877,78 @@ export class MapView {
     // is stale, which is exactly what a new world means (D-161).
     this.builtRevision = -1;
     this.clearChunkCaches();
+    this.requestArtForZoom();
+  }
+
+  /**
+   * One baked page onto the GPU, and its decoded copy let go (D-276).
+   *
+   * A decoded 4096 page is up to 64 MiB of RAM and the GPU holds its own copy
+   * once uploaded, so keeping the bitmap doubles what the atlas costs - on a
+   * phone, whose GPU memory IS its RAM, literally. The upload is forced here
+   * rather than left to the first frame that draws the page, and only then is
+   * the bitmap closed. Not on WebGPU (never selected - `preference: 'webgl'` -
+   * and not verified) and not on a context that is lost right now, where the
+   * upload would have done nothing: both keep their bitmap, as before.
+   */
+  private uploadPage(bitmap: ImageBitmap): Texture {
+    const texture = Texture.from(bitmap);
+    // Nearest, like every atlas page: pixels are the look.
+    texture.source.scaleMode = 'nearest';
+    const renderer = this.app.renderer;
+    if (renderer.type === RendererType.WEBGL && !(renderer as WebGLRenderer).gl.isContextLost()) {
+      renderer.texture.initSource(texture.source);
+      bitmap.close();
+    }
+    return texture;
+  }
+
+  /** The deferred pages, fetched and added to the live atlas (D-276). */
+  private async loadDeferredArt(pages: readonly BakedPage[], generation: number): Promise<boolean> {
+    const load = await loadBakedPages(pages);
+    if (!load.ok) {
+      console.warn(
+        `bakedAtlas: page ${load.file} failed (${load.reason}); ` +
+          `${DEFERRED_BAKED_ZOOM_MIN}x stays procedural until the next zoom-in`,
+      );
+      return false;
+    }
+    const target = this.bakedPages;
+    if (!this.live || this.discarded || generation !== this.artGeneration || target === null) {
+      for (const bitmap of load.pages.values()) bitmap.close();
+      return true;
+    }
+    for (const [file, bitmap] of load.pages) target.set(file, this.uploadPage(bitmap));
+    // The sprites of this zoom were placed with the procedural stand-ins.
+    this.builtRevision = -1;
+    return true;
+  }
+
+  /** Start the deferred page load when the current zoom is one it serves. */
+  private requestArtForZoom(): void {
+    if (this.deferredArt === null) return;
+    if (bakedZoomFor(this.zoom, this.bakedZoomList) < DEFERRED_BAKED_ZOOM_MIN) return;
+    void this.deferredArt.request();
+  }
+
+  /**
+   * Forget every baked page. On a restored context (D-276) that is the only
+   * honest answer - the bitmaps were closed after upload, so what the GPU
+   * lost cannot be re-uploaded - and the next rebuild draws the procedural
+   * art until the reload lands, as a build without a bake does.
+   */
+  private dropBakedArt(): void {
+    this.artGeneration++;
+    if (this.bakedPages !== null) {
+      for (const texture of this.bakedPages.values()) texture.destroy(true);
+    }
+    this.bakedPages = null;
+    this.bakedVehicleZooms = null;
+    this.bakedStaticZooms = null;
+    this.bakedZoomList = [];
+    this.bakedFrameCache.clear();
+    this.deferredArt = null;
+    this.builtRevision = -1;
   }
 
   /** The baked vehicle index serving the current zoom, or null while procedural. */
@@ -1966,13 +2077,7 @@ export class MapView {
     this.frameCache.clear();
     // The baked pages and the shadow gradient own their texture sources
     // (ImageBitmap / canvas); the app's destroy never saw them.
-    if (this.bakedPages !== null) {
-      for (const texture of this.bakedPages.values()) texture.destroy(true);
-    }
-    this.bakedPages = null;
-    this.bakedVehicleZooms = null;
-    this.bakedStaticZooms = null;
-    this.bakedFrameCache.clear();
+    this.dropBakedArt();
     this.shadowTexture?.destroy(true);
     this.shadowTexture = null;
     this.lampTexture?.destroy(true);
@@ -2118,6 +2223,7 @@ export class MapView {
     const after = this.clientToWorld(event);
     this.centreX += before.x - after.x;
     this.centreY += before.y - after.y;
+    this.requestArtForZoom();
   }
 
   // ------------------------------------------------------- camera, from outside
@@ -2148,6 +2254,7 @@ export class MapView {
   setZoomStep(step: number): void {
     const clamped = Math.min(ZOOM_LEVELS.length - 1, Math.max(0, Math.round(step)));
     this.zoomIndex = clamped;
+    this.requestArtForZoom();
   }
 
   /**

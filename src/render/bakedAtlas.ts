@@ -131,10 +131,85 @@ export function atlasSourceFor(manifest: BakedAtlasManifest | null): AtlasSource
   return 'baked';
 }
 
+/**
+ * The smallest baked zoom whose pages are NOT loaded at start-up (D-276).
+ * [baked zoom factor]
+ *
+ * The 4x pages are six of the ten and ~290 of the ~397 MiB the atlas decodes
+ * to, and they serve exactly one of the five display zooms. Loaded at start
+ * they cost every player that memory whether or not they ever zoom to 400 %,
+ * which on a phone with 3-4 GB is the difference between a game and a tab the
+ * system kills. They are fetched the first time the camera reaches that zoom.
+ */
+export const DEFERRED_BAKED_ZOOM_MIN = 4;
+
+/** Turns a downloaded page into pixels; `createImageBitmap` in a browser. */
+export type PageDecoder = (blob: Blob) => Promise<ImageBitmap>;
+
+const decodeWithBrowser: PageDecoder = (blob) => createImageBitmap(blob);
+
 /** A loaded baked atlas: the manifest plus one decoded bitmap per page. */
 export interface BakedAtlas {
   readonly manifest: BakedAtlasManifest;
+  /** The pages loaded at start-up, keyed by file. */
   readonly pages: ReadonlyMap<string, ImageBitmap>;
+  /**
+   * The pages left for later (D-276), in manifest order - empty when nothing
+   * was deferred. {@link loadBakedPages} fetches them.
+   */
+  readonly deferred: readonly BakedPage[];
+}
+
+/**
+ * Which pages wait until they are needed: every page at or above
+ * {@link DEFERRED_BAKED_ZOOM_MIN} - unless that would be ALL of them, because
+ * a bake with nothing to show at start-up would be a procedural game that
+ * downloads its art and then does not draw it.
+ */
+export function deferredPagesOf(manifest: BakedAtlasManifest): readonly BakedPage[] {
+  const deferred = manifest.pages.filter((page) => page.zoom >= DEFERRED_BAKED_ZOOM_MIN);
+  return deferred.length === manifest.pages.length ? [] : deferred;
+}
+
+/** What {@link loadBakedPages} answers: every page, or the first that failed. */
+export type PageLoad =
+  | { readonly ok: true; readonly pages: Map<string, ImageBitmap> }
+  | { readonly ok: false; readonly file: string; readonly reason: string };
+
+/**
+ * Fetch and decode a set of pages, all at once and all or nothing.
+ *
+ * At once because ten round trips one after the other is what a phone on a
+ * mobile network feels as the start-up wait (review finding 11); the map is
+ * still filled in the order given, so nothing that iterates it sees another
+ * sequence. All or nothing because a half-loaded zoom is a zoom whose cells
+ * point at pages that are not there: one failure closes every bitmap that did
+ * decode and names the first page that failed, for the caller's warning.
+ */
+export async function loadBakedPages(
+  pages: readonly BakedPage[],
+  fetchFn: typeof fetch = fetch,
+  base: string = BAKED_ATLAS_BASE,
+  decode: PageDecoder = decodeWithBrowser,
+): Promise<PageLoad> {
+  const settled = await Promise.allSettled(
+    pages.map(async (page) => {
+      const response = await fetchFn(`${base}/${page.file}`);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return await decode(await response.blob());
+    }),
+  );
+  const loaded = new Map<string, ImageBitmap>();
+  let failed = -1;
+  for (let i = 0; i < settled.length; i++) {
+    const outcome = settled[i]!;
+    if (outcome.status === 'fulfilled') loaded.set(pages[i]!.file, outcome.value);
+    else if (failed < 0) failed = i;
+  }
+  if (failed < 0) return { ok: true, pages: loaded };
+  for (const bitmap of loaded.values()) bitmap.close();
+  const reason = (settled[failed] as PromiseRejectedResult).reason as unknown;
+  return { ok: false, file: pages[failed]!.file, reason: String(reason) };
 }
 
 /**
@@ -142,10 +217,15 @@ export interface BakedAtlas {
  * fallback - whenever the directory is absent, a file is unreadable or the
  * manifest fails validation; the one console warning names the reason so a
  * dev build without a cache is a known state, not a mystery.
+ *
+ * Only the start-up pages are fetched (D-276); the rest are named in
+ * `deferred` for {@link loadBakedPages}. A failure among the start-up pages
+ * is the whole atlas, as it always was: procedural art, never a partial one.
  */
 export async function loadBakedAtlas(
   fetchFn: typeof fetch = fetch,
   base: string = BAKED_ATLAS_BASE,
+  decode: PageDecoder = decodeWithBrowser,
 ): Promise<BakedAtlas | null> {
   let manifest: BakedAtlasManifest | null = null;
   try {
@@ -163,16 +243,46 @@ export async function loadBakedAtlas(
     console.warn('bakedAtlas: manifest did not validate; using procedural art');
     return null;
   }
-  const pages = new Map<string, ImageBitmap>();
-  for (const page of manifest.pages) {
-    try {
-      const response = await fetchFn(`${base}/${page.file}`);
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      pages.set(page.file, await createImageBitmap(await response.blob()));
-    } catch (error) {
-      console.warn(`bakedAtlas: page ${page.file} failed (${String(error)}); using procedural art`);
-      return null;
-    }
+  const deferred = deferredPagesOf(manifest);
+  const eager = manifest.pages.filter((page) => !deferred.includes(page));
+  const load = await loadBakedPages(eager, fetchFn, base, decode);
+  if (!load.ok) {
+    console.warn(`bakedAtlas: page ${load.file} failed (${load.reason}); using procedural art`);
+    return null;
   }
-  return { manifest, pages };
+  return { manifest, pages: load.pages, deferred };
+}
+
+/**
+ * A load that may be asked for many times and runs at most once at a time,
+ * and never again once it has succeeded (D-276).
+ *
+ * What asks is the camera reaching 400 %, which a player does repeatedly; what
+ * must not happen is a second download of 290 MiB of pages while the first is
+ * still decoding, or any download after the pages are in. A load that FAILED
+ * may be asked for again - the next zoom-in retries, a human-paced cadence, so
+ * a dead network is not hammered.
+ */
+export class OnDemandLoad {
+  private state: 'idle' | 'loading' | 'done' = 'idle';
+
+  constructor(private readonly load: () => Promise<boolean>) {}
+
+  get status(): 'idle' | 'loading' | 'done' {
+    return this.state;
+  }
+
+  /** Start the load unless one is running or one already succeeded. */
+  request(): Promise<void> | null {
+    if (this.state !== 'idle') return null;
+    this.state = 'loading';
+    return this.load().then(
+      (ok) => {
+        this.state = ok ? 'done' : 'idle';
+      },
+      () => {
+        this.state = 'idle';
+      },
+    );
+  }
 }
