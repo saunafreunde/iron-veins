@@ -173,7 +173,8 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
   // Which key the pause band names - read from the player's own table rather
   // than written into the sentence, so a rebinding moves the hint with it
   // (D-114's rule: one answer to "which key does this").
-  const pauseKey = resolveBindings(keyBindings)['pause'];
+  const bindings = resolveBindings(keyBindings);
+  const pauseKey = bindings['pause'];
 
   /*
    * The tutorial's command counter, installed ONCE for the whole session (M26).
@@ -568,6 +569,32 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
         </button>
         <button type="button" className="chip" onClick={() => setOverlay('handbook')}>
           {t('ui.menu.handbook')}
+        </button>
+        {/*
+          Undo and redo as buttons (D-274). Since M25 they were two keys and
+          nothing else - unreachable on a phone, which is where a mistaken
+          build is likeliest. The worker owns the ring and answers "nothing to
+          undo" as an ordinary refusal; the one thing this side knows for
+          certain is that a recording cannot be undone, so that is when the
+          buttons are off.
+        */}
+        <button
+          type="button"
+          className="chip"
+          onClick={() => client.undo()}
+          disabled={!ready || replaying}
+          title={`${t('ui.key.undo')} (${displayBinding(bindings['undo'])})`}
+        >
+          {t('ui.undo.button')}
+        </button>
+        <button
+          type="button"
+          className="chip"
+          onClick={() => client.redo()}
+          disabled={!ready || replaying}
+          title={`${t('ui.key.redo')} (${displayBinding(bindings['redo'])})`}
+        >
+          {t('ui.redo.button')}
         </button>
         <span className="appbar__label">{t('ui.locale.label')}</span>
         {LOCALES.map((code) => (

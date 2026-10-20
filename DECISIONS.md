@@ -18719,3 +18719,26 @@ tile needs.
 **What a test cannot say here**: whether ten pixels and a ratio of 1.4 feel
 right on a real phone. Verified in headless Chrome with touch emulation (see
 the section's last entry); a person with a device has to confirm the feel.
+
+### D-274 Undo and redo are buttons as well as keys
+
+Since M25 (D-258) undo and redo were `Ctrl+Z` and `Ctrl+Y` and nothing else -
+unreachable on a phone, which is where a mistaken build is likeliest (review
+finding 10). Two chips in the app bar now, beside the menu and the handbook,
+with the player's own binding in their tooltip (D-114: one answer to "which key
+does this").
+
+**Disabled only where this side KNOWS the answer.** The worker owns the session
+ring and the client never learns its depth; it answers "nothing to undo" and
+"the world has moved" as ordinary refusals, anchored at the press like every
+other (D-269). Publishing the depth would mean a protocol field from
+`SimWorker` for a greyed-out button, and the refusal already says the same
+thing at the moment it matters. What the main thread does know is that a
+recording cannot be undone (`SimClient.undo` refuses during a replay) and that
+there is nothing before a world exists - those two are when the buttons are
+off.
+
+The quick save and quick load of the same finding get no buttons: the save
+screen in the menu already saves by touch and loads any entry on the shelf,
+the quick slot included, and a third and fourth chip would cost a row of the
+phone's app bar for a shortcut to something two taps away.

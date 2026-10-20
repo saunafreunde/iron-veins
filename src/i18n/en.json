@@ -840,6 +840,8 @@
   "ui.key.escape": "Menu / cancel the tool",
   "ui.key.undo": "Take back the last build, demolition or terraform",
   "ui.key.redo": "Put a taken-back step in again",
+  "ui.undo.button": "↶ Undo",
+  "ui.redo.button": "↷ Redo",
   "ui.save.title": "Save and load",
   "ui.save.saveNow": "Save now",
   "ui.save.labelPlaceholder": "Description (optional)",

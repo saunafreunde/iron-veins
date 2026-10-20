@@ -840,6 +840,8 @@
   "ui.key.escape": "Menü / Werkzeug abbrechen",
   "ui.key.undo": "Letzten Bau, Abriss oder Geländezug zurücknehmen",
   "ui.key.redo": "Zurückgenommenen Schritt wiederherstellen",
+  "ui.undo.button": "↶ Rückgängig",
+  "ui.redo.button": "↷ Wiederholen",
   "ui.save.title": "Speichern und Laden",
   "ui.save.saveNow": "Jetzt speichern",
   "ui.save.labelPlaceholder": "Beschreibung (optional)",

@@ -143,7 +143,7 @@ body {
 
 .speed:hover,
 .button:hover:not(:disabled),
-.chip:hover {
+.chip:hover:not(:disabled) {
   border-color: var(--accent);
 }
 
@@ -155,7 +155,8 @@ body {
   font-weight: 600;
 }
 
-.button:disabled {
+.button:disabled,
+.chip:disabled {
   opacity: 0.45;
   cursor: not-allowed;
 }
