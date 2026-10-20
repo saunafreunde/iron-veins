@@ -124,6 +124,15 @@ function isShell(url) {
   return path === scope || path === scope + 'index.html';
 }
 
+/**
+ * How the cache is asked. `ignoreVary`, because a host may send `Vary: Origin`
+ * (vite preview does) and the precache fetched each file WITHOUT an Origin,
+ * while the page's module scripts are CORS requests WITH one - so a strict
+ * match missed the main chunk, and the first offline start failed on the very
+ * file it had cached. Nothing this origin serves differs by request header.
+ */
+const MATCH = { ignoreVary: true };
+
 /** Whether a network answer may be kept: complete, ours, and not partial. */
 function keepable(response) {
   return response.status === 200 && response.type === 'basic';
@@ -140,13 +149,13 @@ async function answer(request) {
       if (keepable(response)) await cache.put(key, response.clone());
       return response;
     } catch (error) {
-      const cached = (await cache.match(key)) ?? (await cache.match(shellUrl()));
+      const cached = (await cache.match(key, MATCH)) ?? (await cache.match(shellUrl(), MATCH));
       if (cached !== undefined) return cached;
       throw error;
     }
   }
 
-  const cached = await cache.match(request);
+  const cached = await cache.match(request, MATCH);
   if (cached !== undefined) return cached;
   const response = await fetch(request);
   if (keepable(response)) await cache.put(request, response.clone());
@@ -164,7 +173,7 @@ async function precache() {
   await Promise.all(
     PRECACHE_FILES.map(async (file) => {
       const url = new URL(file, self.registration.scope).href;
-      if ((await cache.match(url)) !== undefined) return;
+      if ((await cache.match(url, MATCH)) !== undefined) return;
       try {
         const response = await fetch(url, { cache: 'no-cache' });
         if (keepable(response)) await cache.put(url, response);

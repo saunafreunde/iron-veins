@@ -46,9 +46,21 @@ const SCOPE = `${ORIGIN}/`;
 class FakeCache {
   readonly entries = new Map<string, Response>();
 
-  async match(key: string | { url: string }): Promise<Response | undefined> {
+  /**
+   * Honours `Vary` the way a browser's cache does in the one case that bit:
+   * an entry stored under a bare URL (the precache) does not match a CORS
+   * request carrying an Origin (a module script) unless the lookup says
+   * `ignoreVary`.
+   */
+  async match(
+    key: string | { url: string },
+    options?: { ignoreVary?: boolean },
+  ): Promise<Response | undefined> {
     const hit = this.entries.get(typeof key === 'string' ? key : key.url);
-    return hit?.clone();
+    if (hit === undefined) return undefined;
+    const varies = hit.headers.get('Vary') !== null && options?.ignoreVary !== true;
+    if (varies && typeof key !== 'string') return undefined;
+    return hit.clone();
   }
 
   async put(key: string | { url: string }, response: Response): Promise<void> {
@@ -101,8 +113,11 @@ class FakeHost {
     this.asked.push(url);
     if (!this.online) throw new TypeError('Failed to fetch');
     const body = this.files.get(url);
+    // vite preview sends `Vary: Origin` on every file; so may a host.
     const response =
-      body === undefined ? new Response('missing', { status: 404 }) : new Response(body);
+      body === undefined
+        ? new Response('missing', { status: 404 })
+        : new Response(body, { headers: { Vary: 'Origin' } });
     // A same-origin answer as a worker sees it.
     Object.defineProperty(response, 'type', { value: 'basic' });
     return response;
@@ -248,6 +263,19 @@ describe('the offline shell in the service worker (D-278)', () => {
     expect(await (await worker.request(`${ORIGIN}/assets/index-abc.js`)).text()).toBe(
       'console.log(1)',
     );
+  });
+
+  it('finds a precached module script although the host varies on Origin', async () => {
+    // Measured in headless Chrome: the precache fetched the main chunk without
+    // an Origin, the page asked for it as a CORS module script with one, and
+    // a strict match missed it - the first offline start failed on a file
+    // that was in the cache.
+    const files = ['./', 'assets/index-abc.js'];
+    const worker = loadWorker(injectPrecache(WORKER_SOURCE, { version: 'v1', files }));
+    await worker.dispatch('message', { data: PRECACHE_MESSAGE });
+    worker.host.online = false;
+    const response = await worker.request(`${ORIGIN}/assets/index-abc.js`, 'cors');
+    expect(await response.text()).toBe('console.log(1)');
   });
 
   it('ignores any other message', async () => {
