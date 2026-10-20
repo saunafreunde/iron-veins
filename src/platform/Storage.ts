@@ -623,18 +623,26 @@ export async function importReplay(): Promise<Uint8Array | null> {
     return await readFile(path);
   }
 
-  return await new Promise<Uint8Array | null>((resolve) => {
+  const file = await pickBrowserFile(OPENABLE_ACCEPT);
+  return file === null ? null : new Uint8Array(await file.arrayBuffer());
+}
+
+/**
+ * The browser's file picker, as one promise that always settles.
+ *
+ * Null means the player dismissed it. That needs the `cancel` event (Chrome
+ * 113, Firefox 91, Safari 16.4): `change` never fires for a dismissed picker,
+ * so the three callers' "null means they cancelled" was true on the desktop
+ * shell only, and in a browser the promise hung for ever - harmless while
+ * nothing waited on it, and a stuck "loading" for the first thing that does.
+ */
+function pickBrowserFile(accept: string): Promise<File | null> {
+  return new Promise<File | null>((resolve) => {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = OPENABLE_ACCEPT;
-    input.addEventListener('change', () => {
-      const file = input.files?.[0];
-      if (file === undefined) {
-        resolve(null);
-        return;
-      }
-      void file.arrayBuffer().then((buffer) => resolve(new Uint8Array(buffer)));
-    });
+    input.accept = accept;
+    input.addEventListener('cancel', () => resolve(null));
+    input.addEventListener('change', () => resolve(input.files?.[0] ?? null));
     input.click();
   });
 }
@@ -775,22 +783,10 @@ export async function importHeightmap(): Promise<PickedFile | null> {
     return { name: path.slice(cut + 1), bytes };
   }
 
-  return await new Promise<PickedFile | null>((resolve) => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.png,image/png';
-    input.addEventListener('change', () => {
-      const file = input.files?.[0];
-      if (file === undefined) {
-        resolve(null);
-        return;
-      }
-      void file
-        .arrayBuffer()
-        .then((buffer) => resolve({ name: file.name, bytes: new Uint8Array(buffer) }));
-    });
-    input.click();
-  });
+  const file = await pickBrowserFile('.png,image/png');
+  return file === null
+    ? null
+    : { name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) };
 }
 
 /** Take a save file from wherever the player keeps it. Null means they cancelled. */
@@ -806,18 +802,6 @@ export async function importSave(): Promise<Uint8Array | null> {
     return await readFile(path);
   }
 
-  return await new Promise<Uint8Array | null>((resolve) => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = OPENABLE_ACCEPT;
-    input.addEventListener('change', () => {
-      const file = input.files?.[0];
-      if (file === undefined) {
-        resolve(null);
-        return;
-      }
-      void file.arrayBuffer().then((buffer) => resolve(new Uint8Array(buffer)));
-    });
-    input.click();
-  });
+  const file = await pickBrowserFile(OPENABLE_ACCEPT);
+  return file === null ? null : new Uint8Array(await file.arrayBuffer());
 }
