@@ -1471,6 +1471,16 @@ body {
   .minimap__frame {
     max-width: 100%;
   }
+
+  /* The pause band moves to the left edge and wraps, so it never runs under
+     the overview map in the top corner. */
+  .pausebar {
+    top: var(--gap);
+    left: var(--gap);
+    transform: none;
+    max-width: calc(100% - min(34vw, 34vh, 140px) - 3 * var(--gap));
+    white-space: normal;
+  }
 }
 
 /* Portrait phone: the map on top, the sidebar as a scrollable sheet below. */
