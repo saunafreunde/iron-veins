@@ -241,8 +241,8 @@ describe('which tools preview first', () => {
   });
 
   it('previews every armed workshop tool, which reshapes the world', () => {
-    expect(tapPreviewsFirst({ ...base, tool: 'none', editorMode: true, editorTool: 'forest' })).toBe(
-      true,
-    );
+    expect(
+      tapPreviewsFirst({ ...base, tool: 'none', editorMode: true, editorTool: 'forest' }),
+    ).toBe(true);
   });
 });
