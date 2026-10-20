@@ -18854,3 +18854,60 @@ Texture garbage collection cannot pull a page off the GPU behind this:
 the bitmaps closed, the single-flight load); the upload, the release and the
 context restore live in `MapView`, which is not headless (D-136), and were
 exercised in headless Chrome - see the section's last entry.
+
+### D-277 Put away, the game saves everywhere and pauses only as an installed app; a touch device draws at about 60 frames
+
+**The review's finding 7**: nothing in `src/` listened for the page being hidden.
+A phone that switches to a call keeps the worker ticking - spending the
+player's money with nobody watching - and a system that kills the background
+tab takes everything since the last autosave with it: up to six game months,
+thirty minutes of play at 1x.
+
+**Saving and pausing are two answers, and only one of them is universal.**
+
+- **Hidden saves, everywhere** - phone, desktop browser, Tauri. A tab can be
+  killed or closed on any platform, and one autosave-ring write per
+  disappearance is cheap. It is skipped when the published tick has not moved
+  since the last background save (`hiddenActions`), so switching apps five
+  times over a paused game does not push five copies of one moment through the
+  ring and the older, different autosaves out of it. It respects the autosave
+  setting and never fires during a replay, for the reasons the periodic one
+  does not.
+- **Hidden pauses ONLY as an installed app** (`isInstalledApp`): standalone
+  display mode, the manifest's full-screen mode on a touch screen, or a Trusted
+  Web Activity (its `android-app://` referrer). There, being hidden is how the
+  game is put down - the home button, a call. In a browser tab on a desktop, and
+  in the Tauri shell, a hidden window is a player who looked at something else
+  for a moment and expects the trains to have kept running; stopping the clock
+  behind their back would be D-266's still first impression in a new place. The
+  review's patch paused everywhere; that half was not taken.
+  Full screen counts only on a coarse pointer because Chrome reports
+  `display-mode: fullscreen` for a desktop window in F11 as well, and that is
+  still a browser tab.
+- **Nothing resumes by itself** on the way back. The pause band names the key
+  (D-266) and Space returns to the speed the player had; a world that started
+  again under a returning thumb would spend money before they had looked.
+
+Speed is control traffic, never a command (D-004): no hash, no save byte, no
+determinism pin moves.
+
+**The frame limit is a property of the pointer, like the touch targets
+(D-275).** A 90 or 120 Hz phone panel drew up to twice the frames the 60 Hz
+motion of M12 was built for (finding 8). Under `pointer: coarse` the ticker is
+capped at `TOUCH_FRAME_LIMIT_FPS`; a desktop keeps every frame its monitor
+offers, because a 144 Hz desktop is a player who bought those frames and has
+mains power. **64 rather than the 60 the review proposed, measured**: Pixi
+8.19's limiter truncates the elapsed time to whole milliseconds before
+comparing it with 1000/maxFPS, so at exactly 60 a 60 Hz panel - most phones -
+drops a frame whenever the phase wraps. Simulated with the limiter's own
+arithmetic over 20 s of vsync with 0.3 ms jitter: at 60, 35 of 1,165 frames on
+a 60 Hz panel were double-length and a 120 Hz panel had 70 triple-length gaps;
+at 64, the 60 Hz panel drew all 1,200 and the 120 Hz panel never waited longer
+than two refreshes. A 90 Hz panel cannot be paced evenly at 60 by any limit;
+it alternates one and two refreshes either way.
+
+**Tested**: `background.spec.ts` holds the installed-app line case by case (F11
+and Tauri included) and the save/pause decision. What a test cannot say is how
+long Android lets a hidden worker run, or whether the asynchronous OPFS write
+of the background save always finishes before a kill - it is a best effort
+issued at the earliest moment the page is told, which is all a page can do.

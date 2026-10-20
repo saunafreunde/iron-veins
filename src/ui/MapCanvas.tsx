@@ -1,6 +1,7 @@
 import { useEffect, useRef, type ReactElement } from 'react';
 import {
   MapView,
+  TOUCH_FRAME_LIMIT_FPS,
   type StationAmbienceInput,
   type TileInfo,
   type VehicleAudioInput,
@@ -576,6 +577,11 @@ export function MapCanvas({ client }: { readonly client: SimClient }): ReactElem
     view.setDayNight(useSimStore.getState().settings.dayNight);
     view.setColorBlind(useSimStore.getState().settings.colorBlind);
     view.setReducedMotion(useSimStore.getState().settings.reducedMotion);
+    // A touch device draws at about 60 frames however fast its panel is; a
+    // desktop with a 144 Hz monitor keeps every frame it had (D-277).
+    if (window.matchMedia('(pointer: coarse)').matches) {
+      view.frameLimitFps = TOUCH_FRAME_LIMIT_FPS;
+    }
     void view.attach(host);
 
     /**

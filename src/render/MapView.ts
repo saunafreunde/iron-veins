@@ -574,6 +574,23 @@ export const DEFAULT_ZOOM_INDEX = 2;
  */
 const KEY_PAN_SPEED_PX_PER_S = 900;
 
+/**
+ * The frame limit a touch device draws at (D-277). [frames per second]
+ *
+ * The motion is interpolated between 20 Hz snapshots and was built for 60 Hz
+ * (M12); a 90 or 120 Hz phone panel would otherwise draw up to twice the
+ * frames for nothing a player sees, and pay for them in battery and heat.
+ *
+ * 64 and not 60, measured rather than guessed: Pixi 8.19's limiter truncates
+ * the elapsed time to whole milliseconds (`delta | 0`) before comparing it
+ * with 1000/maxFPS, so at exactly 60 a 60 Hz panel - most phones - loses a
+ * frame whenever the phase wraps. Simulated over 20 s of vsync with 0.3 ms
+ * jitter: at 60, 35 of 1,165 frames on a 60 Hz panel were double-length and a
+ * 120 Hz panel had 70 triple-length gaps; at 64, the 60 Hz panel drew every
+ * frame and the 120 Hz one never left a gap longer than two refreshes.
+ */
+export const TOUCH_FRAME_LIMIT_FPS = 64;
+
 /** A point on the screen - the only part of an event the camera maths reads. */
 interface ClientPoint {
   readonly clientX: number;
@@ -1213,6 +1230,13 @@ export class MapView {
   /** The tile a finger last previewed; a second tap on it acts (D-273). */
   private tapPending: TapTile | null = null;
 
+  /**
+   * The frame limit, or 0 for none (D-277). Set before `attach`; the
+   * interface decides, because whether the primary pointer is a finger is a
+   * fact about the device and not about the map.
+   */
+  frameLimitFps = 0;
+
   /** Vehicle the camera tracks each frame, or null (SPEC2 M14). */
   private followVehicleId: number | null = null;
 
@@ -1590,6 +1614,7 @@ export class MapView {
     this.labelFontReady = true;
 
     this.installInput(this.app.canvas);
+    if (this.frameLimitFps > 0) this.app.ticker.maxFPS = this.frameLimitFps;
     this.app.ticker.add(this.update);
   }
 

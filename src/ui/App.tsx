@@ -21,6 +21,7 @@ import { OptionsPanel } from './OptionsPanel';
 import { ReplayBar, ReplayBrowser } from './ReplayPanel';
 import { SaveLoadPanel } from './SaveLoadPanel';
 import { AchievementHost } from './AchievementHost';
+import { browserDisplayEnvironment, hiddenActions, isInstalledApp } from './background';
 import { AchievementPanel } from './AchievementPanel';
 import { CampaignScreen } from './CampaignScreen';
 import { ScenarioBrowser } from './ScenarioBrowser';
@@ -470,6 +471,41 @@ export function App({ client }: { readonly client: SimClient }): ReactElement {
     lastAutosave.current = months;
     client.save(SaveSlotKind.Auto, '');
   }, [client, ready, settings.autosave, year, month, replaying]);
+
+  // ------------------------------------------------------- put away (D-277)
+  //
+  // Hidden: write the autosave slot once - everywhere, because a system may
+  // kill a background tab and a browser may be closed with the tab in it -
+  // and PAUSE only where hidden means the player left: an installed app. In
+  // a browser tab or the desktop shell the trains keep running, as a player
+  // who glanced at another window expects. Nothing resumes by itself on the
+  // way back; the pause band says why the clock stands (D-266). The state is
+  // read from the store at the moment of hiding, so the listener is
+  // installed once rather than on every tick.
+  const lastHiddenSave = useRef(-1);
+  useEffect(() => {
+    const onVisibility = (): void => {
+      if (document.visibilityState !== 'hidden') return;
+      const state = useSimStore.getState();
+      const tick = client.readTick();
+      const actions = hiddenActions({
+        ready: state.ready,
+        replaying: state.replay !== null,
+        autosave: state.settings.autosave,
+        installedApp: isInstalledApp(browserDisplayEnvironment(state.isDesktop)),
+        tick,
+        lastSavedTick: lastHiddenSave.current,
+        speedIndex: state.speedIndex,
+      });
+      if (actions.save) {
+        lastHiddenSave.current = tick;
+        client.save(SaveSlotKind.Auto, '');
+      }
+      if (actions.pause) client.setSpeed(0);
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, [client]);
 
   useEffect(() => {
     if (rejectionKey === null) return;
