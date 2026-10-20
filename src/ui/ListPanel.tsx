@@ -191,7 +191,7 @@ export function ListPanel<T>({
           pattern of SPEC2 M25. `aria-activedescendant` is deliberately not
           used - the focus really moves to the row's own button, so Enter and
           Space keep the meaning the browser gives them. */}
-      <ul className="list" ref={listRef} onKeyDown={onListKeyDown}>
+      <ul className="list list--table" ref={listRef} onKeyDown={onListKeyDown}>
         {visible.map((row, index) => (
           <li key={idOf(row)}>
             <button

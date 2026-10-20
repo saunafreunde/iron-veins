@@ -659,13 +659,20 @@ body {
   overflow-y: auto;
 }
 
-.list .row {
-  display: flex;
+/*
+ * The sortable entity lists (ListPanel) lay their columns side by side. Only
+ * they carry `list--table`: `.row` itself is a column, and the cells shrink to
+ * zero height when this rule reaches the stacked lists (tutorial, deliveries,
+ * line stops, cargo).
+ */
+.list--table .row {
+  flex-direction: row;
+  align-items: center;
   gap: 0.5rem;
   width: 100%;
 }
 
-.list .row > span {
+.list--table .row > span {
   flex: 1 1 0;
   min-width: 0;
   overflow: hidden;
